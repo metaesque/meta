@@ -1,0 +1,8 @@
+
+closure_js_library(
+  name = "FrenchDeck__Meta",
+  srcs = ['FrenchDeck__Meta.js'],
+  deps = ['//demo/cards2:Deck__Meta'],
+  suppress = ['JSC_NULLABLE_RETURN_WITH_NAME'],
+  visibility = ['//visibility:public'],
+)

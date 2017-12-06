@@ -1,0 +1,11 @@
+     1      0 meta.errors.Error:imports                /Users/wmh/src/meta/src/kernel/root.meta
+     4      0 meta.errors.Error:preamble
+     6   2919 meta.errors.Error:class
+     6   2925 meta.errors.Error:parent
+     7   2920 meta.errors.Error:comment
+    13      0 meta.errors.Error:header
+    14   2920 meta.errors.Error:scope
+    15      0 meta.errors.Error.Meta__23_id:method
+    15      1 meta.errors.Error.Meta__23_id:params
+    16      1 meta.errors.Error.Meta__23_id:comment
+    22      0 meta.errors.Error.Meta__23_id:preamble

@@ -1,0 +1,29 @@
+namespace metax.root #:
+  The top-level classes that Meta provides.
+scope:
+
+  class Object #:
+    Except in special circumstances, every class defined within Meta inherits
+    from this class. Every base language provides a specialized implementation
+    that defines functionality useful in implementing Meta-level semantics
+    within that base language. Some of the methods defined here are present in
+    all languages, some are only present in a subset of languages or in just one
+    language.
+  parent<py> ^object
+  metaparent<py> ^type
+  parent<js> ^Object
+  scope:
+  end class Object;
+
+  class Error #:
+    The exception hierarchy is documented in the following places:
+      python: https://docs.python.org/2/library/exceptions.html
+      javascript: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error
+  parent<py> ^Exception
+  parent<js> ^Error
+  scope:
+  end class Error;
+
+end namespace metax.root;
+
+    

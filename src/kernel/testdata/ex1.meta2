@@ -1,0 +1,20 @@
+MetaLanguage Test name Test parent Meta toplevel <test> #:
+  THIS FILE SHOULD STAY FROZEN (it is used verbatim by unittests)
+config:
+
+  Construct cons config:
+    feature Attribute presence : <abstract|concrete> = concrete;
+    primary Attribute cons : id = <required>;
+    secondary Attribute parent : xid = <empty>;
+  end Construct;
+
+  Construct attr config:
+    feature Attribute kind : <undef|feature|primary|secondary> = undef #:
+      There are three kinds of attributes, feature, primary and secondary.
+    primary Attribute attr : id = <required> #:
+      The canonical name of the attribute.
+    secondary Attribute comment: : simple = <empty> aliases <#:> #:
+      A description of the attribute.
+  end Construct;
+
+end MetaLanguage Test;

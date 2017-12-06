@@ -1,0 +1,58 @@
+py_library(
+  name = "main",
+  srcs = [':setup'],
+  visibility = ["//visibility:public"],
+  imports = [''],
+)
+
+genrule(
+  name = "setup",
+  outs = [
+    'lxml_3_6_1/lxml/__init__.py',
+    'lxml_3_6_1/lxml/_elementpath.py',
+    'lxml_3_6_1/lxml/builder.py',
+    'lxml_3_6_1/lxml/cssselect.py',
+    'lxml_3_6_1/lxml/doctestcompare.py',
+    'lxml_3_6_1/lxml/ElementInclude.py',
+    'lxml_3_6_1/lxml/etree.py',
+    'lxml_3_6_1/lxml/etree.so',
+    'lxml_3_6_1/lxml/html/__init__.py',
+    'lxml_3_6_1/lxml/html/_diffcommand.py',
+    'lxml_3_6_1/lxml/html/_html5builder.py',
+    'lxml_3_6_1/lxml/html/_setmixin.py',
+    'lxml_3_6_1/lxml/html/builder.py',
+    'lxml_3_6_1/lxml/html/clean.py',
+    'lxml_3_6_1/lxml/html/defs.py',
+    'lxml_3_6_1/lxml/html/diff.py',
+    'lxml_3_6_1/lxml/html/ElementSoup.py',
+    'lxml_3_6_1/lxml/html/formfill.py',
+    'lxml_3_6_1/lxml/html/html5parser.py',
+    'lxml_3_6_1/lxml/html/soupparser.py',
+    'lxml_3_6_1/lxml/html/usedoctest.py',
+    'lxml_3_6_1/lxml/includes/__init__.py',
+    'lxml_3_6_1/lxml/isoschematron/__init__.py',
+    'lxml_3_6_1/lxml/objectify.py',
+    'lxml_3_6_1/lxml/objectify.so',
+    'lxml_3_6_1/lxml/pyclasslookup.py',
+    'lxml_3_6_1/lxml/sax.py',
+    'lxml_3_6_1/lxml/usedoctest.py',
+  ],
+  # IMPORTANT NOTE: $(@D) is a relative path, so if you do any
+  # changing of directories it no longer refers to what it is
+  # expected to and things will go badly.  By introducing the
+  # absolute ${destdir} we avoid that issue.
+  cmd = """
+    origdir="$$(pwd)";
+    destdir="$${origdir}/$(@D)";
+    cd external/lxmllib/lxml-3.6.1;
+    python setup.py build;
+    pathdir="$${destdir}/lxml_3_6_1/lib/python";
+    export PYTHONPATH="$${pathdir}";
+    rm -rf "$${destdir}/lxml_3_6_1";
+    mkdir -p "$${pathdir}";
+    python setup.py install --home="$${destdir}/lxml_3_6_1";
+    cd "$${destdir}/lxml_3_6_1";
+    rsync -avm --include='*.py' --include='*.so' -f 'hide,! */' lib/python/lxml-3.6.1*.egg/lxml .;
+  """,
+)  
+

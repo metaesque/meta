@@ -1,0 +1,4 @@
+py_library(
+  name = "pillow",
+  visibility = ['//visibility:public'],
+)

@@ -1,0 +1,118 @@
+namespace demo.cards3 #:
+  Playing cards.
+
+  Terminology: https://en.wikipedia.org/wiki/Glossary_of_card_game_terms#stock
+
+    pack:
+      A complete set of cards. A double deck may be used (i.e. 104/108 instead of 52/54)
+    pile:
+      A set of cards placed on a surface so that they partially or completely
+      overlap
+    stack:
+      Cards are placed directly on top of each other, disallowing the player to
+      see any card other than the top. In most cases, these cards are and should
+      be kept hidden. Viewing these cards during a deal is often considered
+      illegal, so they should be dealt face down.
+    stock:
+      A pile of cards, face down, which are left over after setting up the rest
+      of the game (i.e. dealing hands, setting up other layout areas).
+    kitty
+      Additional cards dealt face down in some card games.
+
+    rank: (aka kind)
+      The position of a card relative to others in the same suit. The order of
+      the ranks depends on the game being played.
+    suit:
+      All cards that share the same pips
+    pip:
+      A suit symbol (♠, ♥, ♦, ♣) on a card.
+scope:
+
+  visibility public
+  class Card < meta.root.Object #:
+    A card with suit and rank, belonging to a Deck.
+
+    The Deck is responsible for display functionality.
+  scope:
+    field rank : int #:
+      Rank as simple integer. Pack assigns display semantics to rank values.
+    field suit : int #:
+      Suit as simple integer. Pack assigns display semantics to suit values.
+
+    lifecycle params:
+      var rank : int;
+      var suit : int;
+    scope:
+      self.rankIs(rank)
+      self.suitIs(suit)
+    end lifecycle;
+
+  end class Card;
+
+  public
+  class Pile #:
+    A set of cards placed on a surface so that they partially or completely
+    overlap
+  assocs:
+    cls assoc Card;
+  scope:
+    field cards : vec<Card> #:
+      The Card instances in this Pile
+  end class Pile;
+
+  public
+  class Pack < Pile #:
+    A pre-determined collection of Card instances.
+  scope:
+
+    abstract
+    method asStr : str #:
+      Provide a string representation of a given card.
+    params:
+      var card : Card;
+    end method asStr;
+
+    method shuffle #:
+      http://wikipedia.org/wiki/Fisher-Yates_shuffle
+    scope:
+      cards = self.cards()
+      n = len(cards)
+      for i in range(0, n):
+        /# 0 <= j <= i
+        j = random.randint(0, i)  
+        cards[j], cards[i] = cards[i], cards[j]
+    end method shuffle;
+
+  end class Pack;
+
+  class FrenchPack < Pack #:
+    https://en.wikipedia.org/wiki/French_playing_cards
+  scope:
+
+    meta
+    field Suits : vec<str> #:
+      Indices are suit integers, values are suit names.
+
+    meta
+    field Ranks : vec<str> #:
+      Indices are suit integers, values are suit names.
+
+    meta
+    lifecycle _ scope:
+      meta.Suits = ['', 'Spades', 'Hearts', 'Clubs', 'Diamonds']
+      meta.Ranks = [
+        '', 'Ace', '2', '3', '4', '5', '6', '7', '8', '9',
+        'Ten', 'Jack', 'Queen', 'King']
+    end lifecycle;
+
+    method asStr : str #:
+      Provide a string representation of a given card.
+    params:
+      var card : Card;
+    scope:
+    end method asStr;
+
+  end class FrenchPack;
+
+end namespace demo.cards3;
+

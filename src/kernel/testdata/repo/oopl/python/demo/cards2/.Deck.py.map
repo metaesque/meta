@@ -1,0 +1,10 @@
+/Users/wmh/src/meta/src/kernel/testdata2/cards2.meta2
+         7       85 demo.cards2.Deck:class
+         8       86 demo.cards2.Deck:comment:
+        10       90 demo.cards2.Deck:scope:
+        11        0 demo.cards2.Deck.__init__:method
+        15       92 demo.cards2.Deck.asStr:method
+        16       93 demo.cards2.Deck.asStr:comment:
+        19       98 demo.cards2.Deck.shuffle:method
+        20       99 demo.cards2.Deck.shuffle:comment:
+        21      101 demo.cards2.Deck.shuffle:scope:

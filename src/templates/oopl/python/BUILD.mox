@@ -1,0 +1,6 @@
+py_library(
+  name = "main",
+  srcs = ['mox-0.5.3/mox.py', 'mox-0.5.3/stubout.py'],
+  visibility = ["//visibility:public"],
+  imports = ['mox-0.5.3'],
+)

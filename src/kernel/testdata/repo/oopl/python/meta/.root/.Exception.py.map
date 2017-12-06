@@ -1,0 +1,11 @@
+     1      0 meta.root.Exception:imports              /Users/wmh/src/meta/src/kernel/root.meta
+     5      0 meta.root.Exception:preamble
+     7    406 meta.root.Exception:class
+     7    409 meta.root.Exception:parent
+     8    407 meta.root.Exception:comment
+    11      0 meta.root.Exception:header
+    12    414 meta.root.Exception:scope
+    13      0 meta.root.Exception.Meta__21_id:method
+    13      1 meta.root.Exception.Meta__21_id:params
+    14      1 meta.root.Exception.Meta__21_id:comment
+    20      0 meta.root.Exception.Meta__21_id:preamble

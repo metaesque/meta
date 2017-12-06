@@ -1,0 +1,11 @@
+     1      0 meta.testing.Error:imports               /Users/wmh/src/meta/src/kernel/root.meta
+     4      0 meta.testing.Error:preamble
+     6    541 meta.testing.Error:class
+     6    541 meta.testing.Error:parent
+     7    542 meta.testing.Error:comment
+     7      0 meta.testing.Error:header
+     8    542 meta.testing.Error:scope
+     9      0 meta.testing.Error.Meta__17_id:method
+     9      1 meta.testing.Error.Meta__17_id:params
+    10      1 meta.testing.Error.Meta__17_id:comment
+    16      0 meta.testing.Error.Meta__17_id:preamble

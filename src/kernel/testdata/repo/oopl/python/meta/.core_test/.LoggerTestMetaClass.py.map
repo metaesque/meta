@@ -1,0 +1,6 @@
+     1      0 meta.core_test.LoggerTestMetaClass:imports /Users/wmh/src/meta/src/kernel/root.meta
+     6      0 meta.core_test.LoggerTestMetaClass:preamble
+    11      0 meta.core_test.LoggerTestMetaClass.Meta__50_id:method
+    11      1 meta.core_test.LoggerTestMetaClass.Meta__50_id:params
+    12      1 meta.core_test.LoggerTestMetaClass.Meta__50_id:comment
+    19      0 meta.core_test.LoggerTestMetaClass.Meta__50_id:preamble

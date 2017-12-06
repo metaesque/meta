@@ -1,0 +1,17 @@
+# ----------------------------------------------------------------------
+# Build targets for namespace meta.testing
+
+py_library(
+  name = "testing",
+  srcs = ['testing.py'],
+  data = [
+    ".testing/TestCase_cipherfile",
+    ".testing/TestCase_entry_mre",
+  ],
+  deps = [
+    "//meta:root",
+    "@moxlib//:main",
+    "@pyfakefs//:fake_filesystem",
+  ],
+  visibility = ['//visibility:public'],
+)

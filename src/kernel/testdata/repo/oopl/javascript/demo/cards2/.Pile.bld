@@ -1,0 +1,15 @@
+
+closure_js_library(
+  name = "Pile",
+  srcs = ['Pile.js'],
+  deps = [
+    "//demo/cards2:Card",
+    "//demo/cards2:Pile__Meta",
+    "//meta/root:Object",
+  ],
+  suppress = [
+    "JSC_NULLABLE_RETURN_WITH_NAME",
+    "JSC_EXTRA_REQUIRE_WARNING",
+  ],
+  visibility = ['//visibility:public'],
+)

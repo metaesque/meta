@@ -1,0 +1,10 @@
+/Users/wmh/src/meta/src/kernel/testdata2/cards2.meta2
+         1       76 demo.cards2.Pile:comment:
+         6       80 demo.cards2.Pile:scope:
+        13        0 demo.cards2.Pile.Pile:method
+        26        0 demo.cards2.Pile.cards/get:method
+        27       -1 demo.cards2.Pile.cards/get:scope:
+        36        0 demo.cards2.Pile.cardsIs:method
+        37       -1 demo.cards2.Pile.cardsIs:scope:
+        46        0 demo.cards2.Pile.cardsRef:method
+        47       -1 demo.cards2.Pile.cardsRef:scope:

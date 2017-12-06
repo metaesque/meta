@@ -1,0 +1,11 @@
+exec ${PAGER:-/usr/bin/less} "$0" || exit 1
+-----------------------------------------------------------------------------
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK
+Pack.asStr                               ...demo.cards2.Pack.asStr missing unittest
+      15 us  
+Pack.shuffle                             ...demo.cards2.Pack.shuffle missing unittest
+       4 us  

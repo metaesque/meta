@@ -1,0 +1,10 @@
+
+py_test(
+  name = "errors_test",
+  srcs = ['errors_test.py'],
+  deps = [
+    "//meta:errors",
+    "//meta:testing",
+  ],
+  visibility = ['//visibility:public'],
+)

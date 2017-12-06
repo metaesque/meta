@@ -1,0 +1,14 @@
+py_library(
+  name = "oauth2",
+  srcs = [
+    'oauth2-1.9.0.post1/oauth2/__init__.py',
+    'oauth2-1.9.0.post1/oauth2/_compat.py',
+    'oauth2-1.9.0.post1/oauth2/_version.py',
+    'oauth2-1.9.0.post1/oauth2/clients/__init__.py',
+    'oauth2-1.9.0.post1/oauth2/clients/imap.py',
+    'oauth2-1.9.0.post1/oauth2/clients/smtp.py',
+  ],
+  deps = ['@x_httplib2//:httplib2'],
+  visibility = ['//visibility:public'],
+  imports = ['oauth2-1.9.0.post1'],
+)

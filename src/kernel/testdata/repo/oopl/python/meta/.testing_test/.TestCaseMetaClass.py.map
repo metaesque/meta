@@ -1,0 +1,8 @@
+     1      0 meta.testing_test.TestCaseMetaClass:imports /Users/wmh/src/meta/src/kernel/root.meta
+     4      0 meta.testing_test.TestCaseMetaClass:preamble
+     6   2880 meta.testing_test.TestCaseMetaClass:class
+     6      0 meta.testing_test.TestCaseMetaClass:parent
+     9      0 meta.testing_test.TestCaseMetaClass.Meta__11_id:method
+     9      1 meta.testing_test.TestCaseMetaClass.Meta__11_id:params
+    10      1 meta.testing_test.TestCaseMetaClass.Meta__11_id:comment
+    17      0 meta.testing_test.TestCaseMetaClass.Meta__11_id:preamble

@@ -1,0 +1,13 @@
+Schemas for the various Meta(X) langauges.
+
+----------------------------------------------------------------------
+FILE LISTING:
+
+README:
+  Describes every file.
+
+meta/
+  Schema files for the Meta(Meta) language.
+
+oopl/
+  Schema files for the Meta(Oopl) language.

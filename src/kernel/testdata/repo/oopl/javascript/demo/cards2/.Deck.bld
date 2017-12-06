@@ -1,0 +1,14 @@
+
+closure_js_library(
+  name = "Deck",
+  srcs = ['Deck.js'],
+  deps = [
+    "//demo/cards2:Deck__Meta",
+    "//demo/cards2:Pile",
+  ],
+  suppress = [
+    "JSC_NULLABLE_RETURN_WITH_NAME",
+    "JSC_EXTRA_REQUIRE_WARNING",
+  ],
+  visibility = ['//visibility:public'],
+)

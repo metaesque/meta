@@ -1,0 +1,61 @@
+py_library(
+  name = "fake_filesystem",
+  srcs = ["pyfakefs/fake_filesystem.py"],
+  imports = ['pyfakefs'],
+  visibility = ["//visibility:public"],
+)
+
+py_test(
+  name = "fake_filesystem_test",
+  srcs = ["fake_filesystem_test.py"],
+  deps = [":fake_filesystem"],
+  visibility = ["//visibility:public"],
+  size = "small",
+) 
+
+py_library(
+  name = "fake_filesystem_glob",
+  srcs = ["pyfakefs/fake_filesystem_glob.py"],
+  deps = [":fake_filesystem"],
+  imports = ['pyfakefs'],
+  visibility = ["//visibility:public"],
+)
+
+py_test(
+  name = "fake_filesystem_glob_test",
+  srcs = ["fake_filesystem_glob_test.py"],
+  deps = [":fake_filesystem", ":fake_filesystem_glob"],
+  visibility = ["//visibility:public"],
+  size = "small",
+) 
+
+py_library(
+  name = "fake_filesystem_shutil",
+  srcs = ["pyfakefs/fake_filesystem_shutil.py"],
+  imports = ['pyfakefs'],
+  visibility = ["//visibility:public"],
+)
+
+py_test(
+  name = "fake_filesystem_shutil_test",
+  srcs = ["fake_filesystem_shutil_test.py"],
+  deps = [":fake_filesystem", ":fake_filesystem_shutil"],
+  visibility = ["//visibility:public"],
+  size = "small",
+) 
+
+py_library(
+  name = "fake_tempfile",
+  srcs = ["pyfakefs/fake_tempfile.py"],
+  deps = [":fake_filesystem"],
+  imports = ['pyfakefs'],
+  visibility = ["//visibility:public"],
+)
+
+py_test(
+  name = "fake_tempfile_test",
+  srcs = ["fake_tempfile_test.py"],
+  deps = [":fake_filesystem", ":fake_tempfile"],
+  visibility = ["//visibility:public"],
+  size = "small",
+) 

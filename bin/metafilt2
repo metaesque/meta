@@ -1,0 +1,26 @@
+#!/usr/bin/python
+import os
+import sys
+import metameta2
+
+def Env(var):
+  if var in os.environ:
+    result = os.getenv(var)
+  else:
+    print 'ERROR: Failed to find env var %s' % var
+    sys.exit(1)
+  return result
+
+
+def Main():
+  flags, args = metameta2.ParseFlags()
+  metameta2.Metastrap(version=flags.version)
+  import metax.c
+  metax.c.Compiler.Initialize(flags)
+  metac = metax.c.Compiler(metal=flags.metalang, basel=flags.baselang)
+  baselang = metac.baselang()
+  metac.filterMetaOutput(baselang, cwd=flags.cwd, debug=flags.debug, ifp=sys.stdin)
+
+
+if __name__ == '__main__':
+  Main()

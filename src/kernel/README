@@ -1,0 +1,30 @@
+The core functionality of Meta V2
+
+See ../../README.md for details, reminders, bugs, todos, etc.
+
+################################################################################
+FILE LISTING:
+
+README:
+  Documents each file in the directory.
+
+Makefile:
+  Various targets related to this directory.
+
+.gitignore:
+  Files to ignore in the git repo.
+
+?.meta/
+  Repository of files written by the meta compiler.
+
+parser.meta:
+  The Meta V2 parsing code.
+
+root.meta2:
+  An implementation of the metax.root namespace in Meta. 
+
+test.meta2:
+  An implementation of the metax.test namespace in Meta.
+
+testdata/
+  Testdata for the Meta compiler code base.

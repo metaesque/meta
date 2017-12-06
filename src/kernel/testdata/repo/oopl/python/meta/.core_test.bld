@@ -1,0 +1,10 @@
+
+py_test(
+  name = "core_test",
+  srcs = ['core_test.py'],
+  deps = [
+    "//meta:core",
+    "//meta:testing",
+  ],
+  visibility = ['//visibility:public'],
+)

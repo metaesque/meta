@@ -1,0 +1,12 @@
+
+py_library(
+  name = "A",
+  srcs = [
+    "A.py",
+  ],
+  deps = [
+  ],
+  visibility = [
+    "//visibility:public",
+  ],
+)

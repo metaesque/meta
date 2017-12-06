@@ -1,0 +1,14 @@
+
+py_test(
+  name = "ATest",
+  srcs = [
+    "ATest.py",
+    "ATest.py",
+  ],
+  deps = [
+  ],
+  size = "small",
+  visibility = [
+    "//visibility:public",
+  ],
+)

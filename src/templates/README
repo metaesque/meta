@@ -1,0 +1,24 @@
+This directory contains template files used by Meta for various purposes.
+The meta compiler and meta runtime accesses these files during execution.
+
+----------------------------------------------------------------------
+FILE LISTING:
+
+README:
+  Describes each file.
+
+Makefile:
+  Useful targets
+
+meta-mode-template.el:
+  A template for generating metalang-specific major-modes in emacs. See 'meta2
+  emacs' and metax.Compiler.generateMajorMode().
+
+oopl/
+  The entire directory hierarchy within oopl/ represents the initial structure
+  of $METAREP/oopl. All invocations of 'metac -L oopl' will write additional
+  files into $METAREP/oopl that rely on this initial structure for proper
+  functioning.
+  
+oopl.tgz:
+  A compressed tar of 'oopl/'.

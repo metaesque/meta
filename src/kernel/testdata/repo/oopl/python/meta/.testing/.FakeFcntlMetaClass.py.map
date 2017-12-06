@@ -1,0 +1,7 @@
+     1      0 meta.testing.FakeFcntlMetaClass:imports  /Users/wmh/src/meta/src/kernel/root.meta
+     4      0 meta.testing.FakeFcntlMetaClass:preamble
+     5   2575 meta.testing.Meta__8_id:text
+    11      0 meta.testing.FakeFcntlMetaClass.Meta__15_id:method
+    11      1 meta.testing.FakeFcntlMetaClass.Meta__15_id:params
+    12      1 meta.testing.FakeFcntlMetaClass.Meta__15_id:comment
+    19      0 meta.testing.FakeFcntlMetaClass.Meta__15_id:preamble

@@ -1,0 +1,10 @@
+py_library(
+  name = "poster",
+  srcs = [
+    'poster-0.8.1/poster/__init__.py',
+    'poster-0.8.1/poster/encode.py',
+    'poster-0.8.1/poster/streaminghttp.py'
+  ],
+  visibility = ['//visibility:public'],
+  imports = ['poster-0.8.1'],
+)

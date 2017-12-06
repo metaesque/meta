@@ -1,0 +1,9 @@
+exec ${PAGER:-/usr/bin/less} "$0" || exit 1
+-----------------------------------------------------------------------------
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+FrenchPack__Meta.__init__                ...demo.cards2.FrenchPack__Meta.__init__ missing unittest
+      36 us  

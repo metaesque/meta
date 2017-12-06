@@ -1,0 +1,5 @@
+     1      0 meta.core.Meta__Logger:imports           /Users/wmh/src/meta/src/kernel/root.meta
+     6      0 meta.core.Meta__Logger:preamble
+     8    398 meta.core.Meta__Logger:class
+     8      0 meta.core.Meta__Logger:parent
+     9      1 meta.core.Meta__Logger:comment

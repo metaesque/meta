@@ -1,0 +1,12 @@
+
+py_library(
+  name = "Logger",
+  srcs = [
+    "Logger.py",
+  ],
+  deps = [
+  ],
+  visibility = [
+    "//visibility:public",
+  ],
+)

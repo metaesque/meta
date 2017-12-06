@@ -1,0 +1,6 @@
+     1      0 meta.ex.coverage.TestCase:imports        /Users/wmh/src/meta/src/kernel/ex/coverage.meta
+     2      0 meta.ex.coverage.TestCase:preamble
+     4      8 meta.ex.coverage.TestCase:class
+     4      8 meta.ex.coverage.TestCase:parent
+     5      9 meta.ex.coverage.TestCase:comment
+     6     -1 meta.ex.coverage.TestCase:scope

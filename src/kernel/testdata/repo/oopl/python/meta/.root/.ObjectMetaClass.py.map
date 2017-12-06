@@ -1,0 +1,8 @@
+     1      0 meta.root.ObjectMetaClass:imports        /Users/wmh/src/meta/src/kernel/root.meta
+     4      0 meta.root.ObjectMetaClass:preamble
+     6      6 meta.root.ObjectMetaClass:class
+     6      0 meta.root.ObjectMetaClass:parent
+     9      0 meta.root.ObjectMetaClass.Meta__18_id:method
+     9      1 meta.root.ObjectMetaClass.Meta__18_id:params
+    10      1 meta.root.ObjectMetaClass.Meta__18_id:comment
+    17      0 meta.root.ObjectMetaClass.Meta__18_id:preamble

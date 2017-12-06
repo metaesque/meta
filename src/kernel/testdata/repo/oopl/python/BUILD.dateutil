@@ -1,0 +1,6 @@
+py_library(
+  name = "dateutil",
+  srcs = glob(["dateutil/**"]),
+  visibility = ['//visibility:public'],
+)
+  

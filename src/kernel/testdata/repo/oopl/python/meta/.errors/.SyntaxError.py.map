@@ -1,0 +1,10 @@
+     1      0 meta.errors.SyntaxError:imports          /Users/wmh/src/meta/src/kernel/root.meta
+     6      0 meta.errors.SyntaxError:preamble
+     8   2948 meta.errors.SyntaxError:class
+     8   2948 meta.errors.SyntaxError:parent
+     9   2949 meta.errors.SyntaxError:comment
+     9      0 meta.errors.SyntaxError:header
+    11      0 meta.errors.SyntaxError.Meta__33_id:method
+    11      1 meta.errors.SyntaxError.Meta__33_id:params
+    12      1 meta.errors.SyntaxError.Meta__33_id:comment
+    18      0 meta.errors.SyntaxError.Meta__33_id:preamble

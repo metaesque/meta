@@ -1,0 +1,18 @@
+exec ${PAGER:-/usr/bin/less} "$0" || exit 1
+-----------------------------------------------------------------------------
+.E
+======================================================================
+ERROR: test_asStr (__main__.FrenchPackTest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/var/tmp/_bazel_wmh/8a547b9529defa4d451cf083bf4156d1/bazel-sandbox/e96aaaed-7873-4fb6-a866-0c97391c7dd1-0/execroot/python/bazel-out/local-fastbuild/bin/demo/cards2_test/FrenchPackTest.runfiles/__main__/demo/cards2_test/FrenchPackTest.py", line 13, in test_asStr
+    card = demo.cards2.Card(1, 2)
+AttributeError: 'module' object has no attribute 'Card'
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.001s
+
+FAILED (errors=1)
+FrenchPack.__init__                      ...demo.cards2.FrenchPack.__init__ missing unittest
+      14 us  
+FrenchPack.asStr                         ...     163 us  ERROR

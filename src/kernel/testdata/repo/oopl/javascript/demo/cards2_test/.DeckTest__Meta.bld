@@ -1,0 +1,11 @@
+
+closure_js_library(
+  name = "DeckTest__Meta",
+  srcs = ['DeckTest__Meta.js'],
+  deps = ['//meta/testing:TestCaseMetaClass'],
+  suppress = [
+    "JSC_NULLABLE_RETURN_WITH_NAME",
+    "JSC_EXTRA_REQUIRE_WARNING",
+  ],
+  visibility = ['//visibility:public'],
+)

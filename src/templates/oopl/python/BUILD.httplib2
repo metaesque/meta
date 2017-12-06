@@ -1,0 +1,10 @@
+py_library(
+  name = "httplib2",
+  srcs = [
+    'httplib2-0.9.2/python2/httplib2/__init__.py',
+    'httplib2-0.9.2/python2/httplib2/iri2uri.py',
+    'httplib2-0.9.2/python2/httplib2/socks.py',
+  ],
+  visibility = ['//visibility:public'],
+  imports = ['httplib2-0.9.2/python2'],
+)

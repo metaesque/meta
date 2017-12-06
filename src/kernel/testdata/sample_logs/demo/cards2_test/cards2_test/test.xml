@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="demo/cards2_test/cards2_test" tests="1" failures="0" errors="0">
+    <testcase name="demo/cards2_test/cards2_test" status="run"></testcase>
+  </testsuite>
+</testsuites>

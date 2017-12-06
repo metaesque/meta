@@ -1,0 +1,19 @@
+
+closure_js_test(
+  name = "CardTest",
+  srcs = ['Card_test.js'],
+  deps = [
+    "//demo/cards2:Card",
+    "//demo/cards2_test:CardTest__Meta",
+    "//meta/testing:TestCase",
+    "@io_bazel_rules_closure//closure/library:testing",
+  ],
+  compilation_level = "ADVANCED",
+  size = "small",
+  suppress = [
+    "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_MISSING_PROVIDE",
+  ],
+  testonly = 1,
+  visibility = ['//visibility:public'],
+)

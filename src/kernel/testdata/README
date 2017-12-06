@@ -1,0 +1,36 @@
+----------------------------------------------------------------------
+FILE LISTING:
+
+Makefile:
+  Useful targets
+
+README:
+  Document each file
+
+cards1.meta2:
+  A very sparse meta program without any baselang clauses or code.
+  Frozen (changes will break unittests)
+
+cards2.meta2:
+  A simple implementation of Card, Deck, etc. Exercises various features
+  of Meta.
+
+cards3.meta2:
+  ...?
+
+ex1.meta2:
+  ...?
+
+ex2.meta2:
+  ...?
+
+repo/
+  A copy of a small portion of $METAREP$NEWSUFFIX used for testing purposes.
+  Code should NOT write into this directory (made readonly). See the
+  'refresh_repo' target in Makefile for how to update.
+ 
+repo.bk/
+  The previous incarnation of repo.  Created by 'refresh_repo' Makefile target.
+
+sample_logs/
+  Some example bazel log files used in certain unittests.

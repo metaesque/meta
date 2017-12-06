@@ -1,0 +1,338 @@
+MetaLanguage Meta name Meta toplevel <MetaLanguage|File> #:
+  The constructs in Meta(Meta), the root Meta language that all other Meta
+  languages inherit from.
+
+  Implementation Notes:
+   - any time this file is modified, meta.c.MetaLanguage.Bootstrap() should
+     be updated to reflect the change.
+config:
+
+  Construct MetaLanguage #:
+    The MetaLanguage construct defines the collection of constructs making up
+    a Meta Language.
+  config:
+
+    primary
+    Attribute MetaLanguage : id = <required> #:
+      The name of the Meta language being defined.
+
+    secondary
+    Attribute name : word = <required> #:
+      A human-readable name for this base lang. Any non-whitespace is allowed.
+
+    secondary
+    Attribute parent : xid = <empty> #:
+      Indicates which meta language this schema extends.  If empty, the root
+      language 'Meta' is assumed.
+
+    secondary
+    Attribute toplevel : enum = <empty> #:
+      A list of toplevel constructs that can appear in a program written in
+      this MetaLanguage.
+
+    secondary
+    Attribute comment: : simple = <empty> aliases <#:> #:
+      An arbitrary multi-line comment used to describe the purpose of the
+      Meta language being defined.
+
+    secondary
+    Attribute config: : complex = <empty> children <Construct|BaseLanguage> #:
+      The complex block within which the legal set of constructs for this
+      Meta language resides (instances of Construct).
+
+    secondary
+    Attribute scope: : complex = <empty> aliases <::> #:
+      Each Meta file, as it is parsed, is added to this scope.
+
+  end Construct MetaLanguage;
+
+  Construct Construct #:
+    The construct used to define new constructs within a MetaLanguage config block,
+    and the construct used to modify/augment a pre-existing construct within
+    the complex blocks of constructs that define a 'config' block.
+
+    Any construct that contains one or more complex blocks should always provide
+    a complex-valued 'config' attribute within which Construct instances can
+    appear to change aspects of the construct within all complex blocks of
+    the construct.
+  config:
+
+    feature
+    Attribute presence : <abstract|concrete> = concrete #:
+      Dictates whether this construct can appear in Meta files are not.
+    config:
+      FeatureValue abstract #:
+        Such a construct cannot legally appear in Meta source files, but rather
+        is a collection of attributes that concrete constructs extending this
+        construct all share.
+      FeatureValue concrete #:
+        Such a construct can legally appear in Meta source files.
+
+    primary
+    Attribute Construct : id = <required> #:
+      The construct 'kind'.  Used in many places.
+
+    secondary
+    Attribute parent : xid = <empty> aliases <<> #:
+      The name of the Construct this construct extends.
+
+    secondary
+    Attribute comment: : simple = <empty> aliases <#:> #:
+      A multi-line block describing the purpose of this construct.
+
+    secondary
+    Attribute config: : complex = <empty> children <Attribute|Template> #:
+      Used to define the attributes available within a construct, the
+      order in which they appear, default values, etc.
+
+  end Construct;
+
+  Construct Template #:
+    A template for use in compiling a construct into a base language.
+  config:
+
+    primary
+    Attribute Template : word = <required> #:
+      The id of the Template is used within code to obtain a template for
+      a particular purpose. Names should be baselang ids or baselang ids
+      with a '_test' suffix.
+
+    secondary
+    Attribute comment: : simple = <empty> aliases <#:> #:
+      A multi-line block describing the purpose of this Template.
+
+    secondary
+    Attribute scope: : simple = <empty> aliases <::> #:
+      Specifies the template lines. Variables are denoted with the syntax
+        ${var}
+      and will be replaced with values determined within the code. The
+      indentation before a variable influences how multi-line values are
+      indented.
+
+  end Construct Template;
+
+  Construct Attribute config:
+
+    feature
+    Attribute kind : <undef|feature|primary|secondary> = undef #:
+      There are three kinds of attributes, feature, primary and secondary.
+    config:
+      FeatureValue undef #:
+        A placeholder for indicating that a kind was not explicitly provided.
+      FeatureValue feature #:
+        A feature attribute always appears before the primary attribute.
+        The feature attribute key is always optional (and is very rarely
+        specified, because feature attribute values uniquely identify
+        their associated key).  Feature attribute values are limited to
+        a predefined set of feature-specific words.
+      FeatureValue primary #:
+        A primary attribute always has the name of the construct as its key,
+        and an identifier as its value.
+      FeatureValue secondary #:
+        A secondary attribute always appears after the primary attribute.
+        Some
+    end;
+
+    feature
+    Attribute key : <nokey|showkey|aliaskey> = showkey #:
+      Controls whether the canonical representation of a construct
+      shows the key for this attribute or not.
+    config:
+      FeatureValue nokey #:
+        The canonical representation of instances of this construct do not
+        print the key of this feature attribute.
+      FeatureValue showkey #:
+        The canonical representation of instances of this construct prints
+        out the cnaonical key name of this feature attribute.
+      FeatureValue aliaskey #:
+        The canonical representation of instances of this construct uses the
+        first alias specified in the 'aliases' secondary attribute.
+    end;
+
+    feature
+    Attribute value : <noval|userval|showval> = showval #:
+      Controls whether the canonical representation of a construct shows
+      the value of this attribute or not.
+    config:
+      FeatureValue noval #:
+        Do not show the value. This produces invalid code, but is useful
+        in some situations.
+      FeatureValue userval #:
+        Use the value token provided by user.
+      FeatureValue showval #:
+        Use the canonical value token.
+    end Attribute value;
+
+    primary
+    Attribute Attribute : word = <required> #:
+      The canonical name of the attribute. If an Attribute has a type of
+      'simple' or 'complex', the name must end with ':'. This allows us to
+      be able to add a non-block and block version of the same name, and
+      opens the possibility of allowing more flexibility in syntax in the
+      future.
+
+    secondary
+    Attribute default : word = <empty> aliases <=> #:
+      The default value of this attribute for instances that do not explicitly
+      define the attribute.  This is the most common thing to modify in 'config'
+      blocks.
+
+    secondary
+    Attribute type : word = <empty> aliases <:> #:
+      The type of the attribute.  Legal values are:
+        enum : the value is constrained to be one of a set of predefined words
+        id : an identifier
+        xid : a collection of one or more identifiers separated with '.'
+        word : a collection of characters not containing whitespace
+        expr : an expression
+          num : a literal numbe
+          id : an identifier
+          xid : an identifier
+          plist : a parameter list
+          str : a quoted string
+          list : a list of expressions
+          hash : a dict of expressions
+          call : a callsite
+        type : a Meta type
+        simple : a simple block (i.e. an indented collection of lines)
+        complex : a complex block (i.e. an indented collection of constructs)
+
+    secondary
+    Attribute children : enum = <empty> #:
+      An enum of construct kinds, representing the set of Constructs that can
+      appear within the value of this attribute. Meaningful for attributes of
+      'complex' type and those of 'simple' type that can become complex if given
+      a <*> selector.
+
+    secondary
+    Attribute aliases : enum = <empty> #:
+      A literal enum of abbreviations that can be used in place of
+      the canonical key of this attribute. The normal form is <val1|val2|val3>,
+      but one can also use ,<val1,val2,val3>, #<val1#val2#val3>, etc.
+
+    secondary
+    Attribute autokey : str = <empty> #:
+      Not normally provided. If given, it is a literal string containing a
+      single character that values of this attribute always start with. It
+      indicates that the key associated with the value is not necessary ... if
+      the char specified here is seen when an attribute key is expected, Meta
+      knows it is this attribute that is being identified.
+
+    secondary
+    Attribute replacer : word = <empty> #:
+      Not normally provided, and currently only applicable to primary attributes
+      whose values are optional (value <auto>). If present, it indicates that a
+      value found after a primary key should instead be assigned as the value of
+      an implicitly created attribute whose key is specified by replacer. If
+      an explicit value for that attribute is subsequently parsed, the value
+      is moved back to the primary key.
+
+    secondary
+    Attribute delim : str = <empty> #:
+      Not normally provided. Only used for Attributes of kind feature.
+      If given, it indicates that this feature is multi-valued, separated
+      by the value of this string, which is usually a single char like '+' or
+      '-'. An empty string indicates that the feature value should be split
+      on each character.
+
+    secondary
+    Attribute comment: : simple = <empty> aliases <#:> #:
+      A description of the attribute.
+
+    secondary
+    Attribute config: : complex = <empty> children <FeatureValue> #:
+      For feature attributes, this can contain the collection of FeatureValue
+      instances associated with the attribute.  Ignored for primary and
+      secondary attributes.
+
+  end Construct Attribute;
+
+  Construct FeatureValue #:
+    Each Construct can have zero or more feature attributes (which appear before
+    the primary key). Each feature attribute has a feature key whose value comes
+    from a pre-defined set of string values. The FeatureValue construct allows
+    one to define an individual value, provide documentation for its semantics,
+    allows for aliases to be introduced (useful when wanting to perform
+    renamings), etc.
+  config:
+    primary
+    Attribute FeatureValue : word = <required> #:
+      The canonical feature value.
+
+    secondary
+    Attribute aliases : enum = <empty> #:
+      A literal enum of abbreviations that can be used in place of
+      the canonical key of this attribute. The normal form is <val1|val2|val3>,
+      but one can also use ,<val1,val2,val3>, #<val1#val2#val3>, etc.
+
+    secondary
+    Attribute comment: : simple = <empty> aliases <#:> #:
+      A collection of lines documenting the semantics of the FeatureValue.
+  end Construct FeatureValue;
+
+  Construct File #:
+    A construct containing all constructs within a .meta file. This construct is
+    often NOT explicitly provided (in which case it is implicitly defined). It
+    can, however, be useful to explicit define this construct in situations
+    where one wants to customize constructs and attributes appearing anywhere in
+    the file.
+  config:
+    primary
+    Attribute File : word = <required> #:
+      The absolute (symlink-resolved) path of the meta file.
+
+    secondary
+    Attribute comment: : simple = <empty> aliases <#:> #:
+      A description of the purpose of the meta file.
+
+    secondary
+    Attribute scope: : complex = <empty> aliases <::> #:
+      All top-level constructs appearing in a metafile are added to this
+      block.
+
+    secondary
+    Attribute config: : complex = <empty> #:
+      Modify construct/attribute defaults, etc. across all constructs found
+      within a .meta file.
+
+      Note that the value of the children attribute differs by Meta Language,
+      and is the legal set of top-level constructs within the meta language.
+  end Construct File;
+
+  Construct BaseLanguage #:
+    Each instance of BaseLanguage identifies a pre-existing language that is
+    supported by this MetaLanguage.
+  config:
+    primary
+    Attribute BaseLanguage : id = <required> #:
+      A unique identifier (amongst all baselangs in a metalang) for this
+      baselang. Used in file names, class and variable names, etc., so it must
+      be an identifier.
+
+    secondary
+    Attribute name : word = <required> #:
+      A human-readable name for this base lang. Any non-whitespace is allowed.
+
+    secondary
+    Attribute suffixes : enum = <empty> #:
+      A list of suffixes associated with this baselang. The first suffix is
+      priviledged (it is what is used in attribute key params).
+
+    secondary
+    Attribute comment: : simple = <empty> aliases <#:> #:
+      Notes on how this baselang participates in the metalang.
+
+    secondary
+    Attribute scope: : complex = <empty> aliases <::> #:
+      Class-level constructs to be added to the class associated with this
+      construct.
+
+    secondary
+    Attribute config: : complex = <empty> #:
+      Modify construct/attribute defaults, etc. across all constructs found
+      within a BaseLanguage.
+
+      TODO(wmh): This may not be relevant for BaseLanguage constructs.
+  end Construct BaseLanguage;
+
+end MetaLanguage Meta;

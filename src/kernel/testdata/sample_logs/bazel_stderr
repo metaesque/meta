@@ -1,0 +1,6 @@
+____Loading...
+____Found 8 test targets...
+blaze: Entering directory `/private/var/tmp/_bazel_wmh/8a547b9529defa4d451cf083bf4156d1/execroot/python/'
+FAIL: //demo/cards2_test:FrenchPackTest (see /private/var/tmp/_bazel_wmh/8a547b9529defa4d451cf083bf4156d1/execroot/python/bazel-out/local-fastbuild/testlogs/demo/cards2_test/FrenchPackTest/test.log)
+blaze: Leaving directory `/private/var/tmp/_bazel_wmh/8a547b9529defa4d451cf083bf4156d1/execroot/python/'
+____Elapsed time: 0.315s, Critical Path: 0.22s

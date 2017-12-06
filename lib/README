@@ -1,0 +1,35 @@
+This directory maintains versions of the Meta Library (the collection
+of classes written in Meta).  This includes the compiler itself.
+
+----------------------------------------------------------------------
+FILE LISTING:
+
+README:
+  Describes every file in the directory.
+
+beta/
+  Provides access to the current implementation of Meta in the format
+  expected by current, previous and versions/meta-*.  If the various
+  baselang-specific PATH variables include this path, the most cutting-edge
+  version of the Meta implementation is used.
+
+  Note that this cutting edge version is inherently fragile.
+
+  Note also that we may move to a model where 'alpha' is the cutting-edge
+  version, 'beta' is the previously-alpha version, and 'current' is two
+  versions back from cutting-edge.  We have not yet gone there yet though.
+
+metameta2.py:
+  A bootstrapping file that must be placed somewhere in PYTHONPATH in order
+  for Meta to work.  Will be renamed to metameta.py when we are fully
+  migrated from v1 to v2.
+
+?current@
+  A symlink to some subdir of versions/.  The current meta library.
+
+?previous@
+  A symlink to some subdir of versions/.  The previous meta library.
+
+?versions/
+  The list of meta library versions.
+

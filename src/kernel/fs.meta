@@ -1,0 +1,668 @@
+namespace metax.fs #:
+  When parsing Meta files, all interaction with file systems should occur
+  through this namespace, and in particular metax.fs.Filesystem.
+scope:
+
+  native scope:
+    REQUIRED = object()
+
+  class Error : ^Exception;
+
+  class Filesystem #:
+    Provides functions for interacting with a file system.
+
+    IMPORTANT: All I/O related functionality within the Meta parser/compiler
+    MUST use the methods defined on Filesystem, rather than using any
+    baselang-specific functionality directly (e.g. os, open, etc.). Having
+    all I/O functionality defined by Filesystem provides two huge benefits:
+
+    1. we will be able to provide a Meta(Oopl)* implementation of Meta much
+       easier by abstracting out baselang-specific I/O functionality now.
+
+    2. allows us to provide a memory-only implementation of the parsing/
+       compilation process, for use in GAE, etc.
+
+    assocs:
+      TODO(wmh): Get this working! Do not include fake_filesystem until
+      bazel can handle it ... want to ensure that parser.meta is fully
+      bazelified at all times.
+      lib assoc fake_filesystem;
+  assocs:
+    std assoc os;
+    std assoc glob;
+    std assoc shutil;
+    std assoc tempfile;
+  scope:
+
+    field kind : str #:
+      Identifies the kind of filesystem.  Values are:
+        disk:
+          use the underlying disk filesystem
+        memory: 
+          do not write files to disk, but don't mock out I/O methods.
+        emulate:
+          do not write files to disk, and emulate all I/O methods so that
+          code that uses os, open, glob, etc. writes to memory versions instead.
+
+    field modules : vec<module> #:
+      The modules to replace filesystem-related methods within.
+
+    field origs : map #:
+      Maps conceptual module names to module instances.
+
+    field filemap : @map<str,BaseFile> #:
+      Maps subpaths (relative to metaRepository) to BaseFile instances.
+
+    field metadir : str #:
+      When metac is invoked to compile .meta files into baselang files,
+      the baselang code is written into $CWD/$metadir/$metalang/$baselang/...
+      where $metadir is usually '.meta', a symlink to $METAREP. The --metadir
+      flag qllows us to change that.
+
+    field rootdir : str #:
+      The directory that relative paths are relative to.
+
+    field disk_filesystem : map #:
+      None if we are using a memory filesystem, a map otherwise.
+      Keys are file paths, values are bool True.
+
+    field fake_filesystem : fake_filesystem.FakeFilesystem #:
+      If we are using an in-memory filesystem via fakefilesystem.
+
+    lifecycle params:
+      var kind -> kind = 'disk';
+      var metadir -> metadir = '.meta';
+      var rootdir : str = null;
+    scope:
+      if rootdir is None:
+        rootdir = self.cwd()
+      self.rootdirIs(rootdir)
+
+      /# In case we want to emulate IO, we remember the real I/O modules.
+      self.modulesIs([sys.modules[__name__]])
+      origs = {
+        'os': os,
+        'open': open,
+        'glob': glob,
+        'shutil': shutil,
+        'tempfile': tempfile,
+      }
+      self.origsIs(origs)
+
+      if kind == 'emulate':
+        self.emulateIO()
+
+    end lifecycle;
+
+    method environ : map #:
+      Obtain the map of all environment variable/value pairs.
+    scope:
+      return os.environ
+    test:
+    end method environ;
+
+    method getenv : str #:
+      Obtain an environment variable by name.
+    params:
+      var name : str #:
+        The environment variable name.
+      var default : any = REQUIRED #:
+        If REQUIRED, raise error.
+    scope:
+      result = os.getenv(name, default)
+      if result is REQUIRED:
+        raise Error('Failed to find envar %s' % name)
+      return result
+    test:
+    end method getenv;
+   
+    method setenv : any #:
+      Set an environment variable.
+    params:
+      var name : str #:
+        The environment variable name.
+      var value : str #:
+        The value to set.
+    scope:
+      os.environ[name] = value
+    test:
+    end method setenv;
+   
+    method unsetenv : any #:
+      Unset an environment variable.
+    params:
+      var name : str #:
+        The environment variable name.
+    scope:
+      if name in os.environ:
+        del os.environ[name]
+    test:
+    end method unsetenv;
+
+    method join : str #:
+      Join a collection of path parts.
+    params:
+      vararg var parts : vec;
+    scope:
+      return os.path.join(*parts)
+    test:
+    end method join;
+
+    method split : vec<str> #:
+      Split a file into its parts.
+    params:
+      var path : str;
+    scope:
+      return os.path.split(path)
+    test:
+    end method split;
+
+    method emulateIO #:
+      Make this instance use memory instead of disk.
+    params:
+      var pathmap : map = null #:
+        Maps path strings to path content.  If content is None, it is a request
+        to obtain the contents from disk (using the key as the ile path). This
+        requires read-only access to the underlying filesystem, but after this
+        method returns no such access is available until undoMemory() is
+        invoked.
+      var gae : bool = false #:
+        If True, we are running on Google App Engine, and certain methods
+        need to be disabled.
+    scope:
+      /# GAE does not support os.umask()
+      def umask(val):
+        return val
+      if gae:
+        os.umask = umask
+
+      filesystem = fake_filesystem.FakeFilesystem()
+      self._fake_filesystem = filesystem
+
+      /# Define the required fake filesystem.  We do this before we rebind the
+      /# modules so that we still have access to the real filesystem to get
+      /# data to populate our fake filesystem.
+      for path, contents in pathmap.iteritems():
+        if contents is None:
+          with open(path, 'r') as fp:
+            contents = fp.read()
+        self.addFakeFile(path, contents=contents)
+        logging.info('Populated %d bytes into %s', len(contents), path)
+
+      /# Now rebind the various modules/functions making up the IO interface
+      /# to their fake variants.
+      faux_os = fake_filesystem.FakeOsModule(filesystem)
+      /# TODO(wmh): Add support for the following if unittests require it.
+      /# Hopefully, one can parse the meta file using the real filesystem,
+      /# then switch to a faux filesystem for file generation, which may allow
+      /# us to avoid this hackery.
+      if False:
+        env = os.environ
+        faux_os.getenv = lambda var: env.get(var, None)
+        faux_os.makedirs(faux_os.getenv('METAROOT'), 0755)
+
+      faux_open = fake_filesystem.FakeFileOpen(filesystem)
+      faux_glob = fake_filesystem_glob.FakeGlobModule(filesystem)
+      faux_shutil = fake_filesystem_shutil.FakeShutilModule(filesystem)
+      if not gae:
+        /# GAE uses a replacement tempfile module
+        /#   google-cloud-sdk/platform/google_appengine/google/appengine/dist/tempfile.py
+        /# that does not implement _RandomNameSequence, which is assumed to
+        /# exist in pyfakefs version 3.2
+        faux_tempfile = fake_tempfile.FakeTempfileModule(filesystem)
+
+      for module in self.MODULES_TO_REPLACE_FILESYSTEM_IN:
+        logging.info('REPLACING file modules in %s', module)
+        module.os = faux_os
+        module.open = faux_open
+        module.glob = faux_glob
+        module.shutil = faux_shutil
+        if not gae:
+          module.tempfile = faux_tempfile
+
+      /# print '***** HERE in emulateIO with %s' % faux_os.getenv('METAROOT')
+    end method emulateIO;
+
+    method undoMemory #:
+      Reinstate module remaps.
+    scope:
+      origs = self.origs()
+      for module in self.modules():
+        for key in orgs:
+          setattr(module, key, origs[key])
+    end method undoMemory;
+
+    method addFile : vec<str> #:
+      Add a file to the filesystem.
+
+      TODO(wmh): Decide how to rename this or addFauxFile so as not to be
+      so similar to one another.
+
+      Returns:
+        null if not in disk mode.
+        otherwise first element is always path of basefile. If basefile has
+        mapfile, second element is path of mapfile.
+    params:
+      var basefile : meta.c.BaseFile;
+    scope:
+      result = None
+      self.filemap()[basefile.subpath()] = basefile
+      if self.kind() == 'disk':
+        /# Serialize this file to disk immediately.
+
+        /# Write the basefile to disk
+        /#  - obtain the on-disk path
+        /#  - create the directory of the file if it does not exist.
+        /#  - write the file
+        fullpath, mroot = self.basefilePath(basefile)
+        dirpath = self.dirname(fullpath)
+        if not self.exists(dirpath):
+          print 'NOTE: Creating %s' % dirpath
+          self.makedirs(dirpath, mode=0755)
+        with self.open(fullpath, 'w') as fp:
+          fp.write(basefile.contents())
+        result = [fullpath]
+
+        /# Write the mapfile associated with the file to disk if it exists.
+        mapfile = basefile.mapfile()
+        mappath = None
+        if mapfile:
+          mappath = self.realpath(self.join(mroot, mapfile.path()))
+          mapdir = self.dirname(mappath)
+          if mapdir != dirpath:
+            raise Error('ERROR: %s not in same dir as %s' % (mappath, fullpath))
+          with self.open(mappath, 'w') as fp:
+            mapfile.serialize(fp)
+          result.append(mappath)
+      return result
+    end method addFile;
+
+    method basefilePath : tuple<str,str> #:
+      Obtain the on-disk location of a BaseFile instance.
+
+      Returns:
+       0. The basefile path
+       1. The root dir
+    params:
+      var basefile : meta.c.BaseFile;
+    scope:
+      /# Obtain the absolute real path of the file on disk.
+      metadir = self.metadir()
+      mroot = self.join(self.rootdir(), metadir)
+      if not self.exists(mroot):
+        raise Error('Failed to find "%s"' % mroot)
+      /# TODO(wmh): Need to use self.flags.metadir
+      fullpath = self.realpath(self.join(mroot, basefile.subpath()))
+      /# print 'metadir=%s mroot=%s subpath=%s fullpath=%s' % (metadir, mroot, basefile.subpath(), fullpath)
+      return fullpath, mroot
+    end method basefilePath;
+
+    method subfilePath : tuple<str,str> #:
+      Obtain the on-disk location of a subdir (relative to baselang specific
+      dest dir).
+
+      Returns:
+       0. The full path
+       1. The root dir
+    params:
+      var subpath : str;
+    scope:
+      /# Obtain the absolute real path of the file on disk.
+      metadir = self.metadir()
+      mroot = self.join(self.rootdir(), metadir)
+      if False:
+        /# It would be nice to verify this in production, but we need a way
+        /# of disabling it in unittests where the filesystem is altered.
+        if not self.exists(mroot):
+          raise Error('Failed to find "%s"' % mroot)
+      /# TODO(wmh): Need to use self.flags.metadir
+      fullpath = self.realpath(self.join(mroot, subpath))
+      /# print 'metadir=%s mroot=%s subpath=%s fullpath=%s' % (metadir, mroot, basefile.subpath(), fullpath)
+      return fullpath, mroot
+    end method subfilePath;
+
+    method open #:
+      Open a filehandle.
+    params:
+      var path : str;
+      var mode : str = 'r';
+    scope:
+      return open(path, mode)
+    end method open;
+
+    method close #:
+      Close a filehandle opened with reader() or writer().
+    params:
+      var fp : file #:
+        The filehandle to close.
+      var log : bool = false #:
+        If True, log the closing of the path.
+    scope:
+      /# We either have a writable filesystem or are using a fake filesystem.
+      /# (close normally)
+      fp.close()
+
+      kind = self.kind()
+      if kind == 'emulate':
+        /# FakeFileWrapper.close() in fake_filesystem is not fully implemented,
+        /# in that it does not properly set fp.closed to True.  There is no
+        /# 'closed' defined on FakeFileWrapper, but __getattr__ delegates to
+        /# fp._io, which is a cStringIO.StringIO, which does have 'closed'.
+        /# But fp._io.close() is never called as part of FakeFileWrapper.close().
+        /# The code for close() should be something like:
+        /#   def close(self):
+        /#     """File close."""
+        /#     if self._update:
+        /#       self._file_object.SetContents(self._io.getvalue())
+        /#     self._filesystem.CloseOpenFile(self)
+        /#     self._io.close()  # <---- new code
+        /#     if self._delete_on_close:
+        /#       self._filesystem.RemoveObject(self.name)
+        if not fp._io.closed:
+          fp._io.close()
+    end method close;
+
+    method read : str #:
+      Read a file and return contents
+    params:
+      var path : str;
+    scope:
+      with self.open(path, 'r') as fp:
+        result = fp.read()
+      return result
+    test:
+    end method read;
+
+    method exists : bool #:
+      Determine if path exists.
+
+      If using a memory filesystem, we check both it and disk.
+    params:
+      var path : str #:
+        The path to check for existence.
+    scope:
+      return os.path.exists(path)
+    end method exists;
+
+    method lexists : bool #:
+      Determine if symlink exists.
+
+      If using a memory filesystem, we check both it and disk.
+    params:
+      var path : str #:
+        The path to check for existence.
+    scope:
+      return os.path.lexists(path)
+    end method lexists;
+
+    method basename : str #:
+      The basename of a path
+    params:
+      var path : str;
+    scope:
+      return os.path.basename(path)
+    end method basename;
+
+    method dirname : str #:
+      The dirname of a path
+    params:
+      var path : str;
+    scope:
+      return os.path.dirname(path)
+    end method dirname;
+
+    method abspath : str #:
+      The abspath of a path
+    params:
+      var path : str;
+    scope:
+      return os.path.abspath(path)
+    end method abspath;
+
+    method normpath : str #:
+      The normpath of a path
+    params:
+      var path : str;
+    scope:
+      return os.path.normpath(path)
+    end method normpath;
+
+    method relpath : str #:
+      The relpath of a path
+    params:
+      var path : str;
+    scope:
+      return os.path.relpath(path)
+    end method relpath;
+
+    method realpath : str #:
+      The real path of a path (e.g. remove all symlinks)
+    params:
+      var path : str;
+    scope:
+      return os.path.realpath(path)
+    end method realpath;
+
+    method cwd : str #:
+      The current working directory
+    scope:
+      return os.getcwd()
+    end method cwd;
+
+    method mkdir #:
+      Create a directory
+    params:
+      var thedir : str;
+      var mode : int = 0755;
+    scope:
+      print 'MKDIR: %s' % thedir
+      os.mkdir(thedir, mode)
+    end method mkdir;
+
+    method makedirs #:
+      Create a directory, including missing parents.
+    params:
+      var thedir : str;
+      var mode : int = 0755;
+    scope:
+      os.makedirs(thedir, mode)
+    end method makedirs;
+
+    method unlink : bool #:
+      Remove the specified file.
+    params:
+      var path : str;
+    scope:
+      return os.unlink(path)
+    end method unlink;
+
+    method symlink #:
+      Create a symlink from a real file to a link file
+    params:
+      var realpath : str;
+      var linkpath : str;
+    scope:
+      os.symlink(realpath, linkpath)
+    end method symlink;
+
+    method isdir : bool #:
+      Determine if a path is a symlink
+    params:
+      var path : str;
+    scope:
+      return os.path.isdir(path)
+    end method isdir;
+
+    method isfile : bool #:
+      Determine if a path is a symlink
+    params:
+      var path : str;
+    scope:
+      return os.path.isfile(path)
+    end method isfile;
+
+    method islink : bool #:
+      Determine if a path is a symlink
+    params:
+      var path : str;
+    scope:
+      return os.path.islink(path)
+    end method islink;
+
+    method readlink : str #:
+      Obtain the file that a symlink is linked to
+    params:
+      var path : str;
+    scope:
+      return os.readlink(path)
+    end method readlink;
+
+    method rename #:
+      Rename a file to a new file.
+    params:
+      var oldpath : str;
+      var newpath : str;
+    scope:
+      print 'RENAME: %s %s' % (oldpath, newpath)
+      os.rename(oldpath, newpath)
+    end method rename;
+
+    method listdir #:
+      Obtain the immediate child files/dirs within thedir.
+
+      Supports in-memory filesystems.
+    params:
+      var thedir : str #:
+        The directory to query.
+    scope:
+      return os.listdir(thedir)
+    end method listdir;
+
+    method filesWithinMatching : vec<str> #:
+      Obtain all files within the specified dir matching given pattern.
+
+      Returns:
+        The paths (including 'thedir' if basename is False) of matching files.
+    params:
+      var thedir : str #:
+        The directory to search within (we only return files immediately within
+        the dir).
+      var pattern : any #:
+        The regexp to apply to each base file. Can be a str or regexp obj.
+      var basename : bool = false #:
+        If True, do NOT add 'thedir' to each result.
+    scope:
+      result = []
+      if isinstance(pattern, basestring):
+        pattern = re.compile(pattern)
+      for base in sorted(self.listdir(thedir)):
+        if pattern.search(base):
+          if basename:
+            result.append(base)
+          else:
+            result.append(os.path.join(thedir, base))
+      return result
+    end method filesWithinMatching;
+
+    method summarize #:
+      Print information about the filesystem
+    params:
+      var fp : meta!ostream = meta!out #:
+        Where to write output.
+      var verbose : bool = false #:
+        If true, show contents of files.
+    scope:
+      kind = self.kind()
+      fp.write('\n')
+      if verbose:
+        fp.write('#' * 80 + '\n')
+      fp.write('Filesystem:\n')
+      filemap = self.filemap()
+      for subpath in sorted(filemap):
+        basefile = filemap[subpath]
+        contents = basefile.contents()
+        mapfile = basefile.mapfile()
+        if verbose:
+          fp.write('  ' + '=' * 80 + '\n')
+        subpathstr = subpath if len(subpath) < 60 else subpath[:59] + '$'
+        fp.write(
+          '  %8d %-60s%s\n' %
+          (len(contents), subpathstr, ' map' if mapfile else ''))
+        if verbose:
+          fill = '   |'
+          assert contents[-1] == '\n'
+          fp.write(fill + contents[:-1].replace('\n', '\n' + fill) + '\n')
+          if mapfile:
+            fp.write('  ' + '-' * 80 + '\n')
+            mapfile.serialize(fp=fp, indent='  ')
+            
+      if kind == 'disk':
+        fs = self._disk_filesystem
+        if fs:
+          fp.write('On-disk filesystem\n')
+          for path in sorted(fs):
+            st = os.stat(path)
+            fp.write('  %6d bytes: %s\n' % (st.st_size, path))
+      else:
+        if kind == 'emulate':
+          diskfs = self._disk_filesystem
+          fakefs = self._fake_filesystem
+          if diskfs and fakefs:
+            fp.write('On fake_filesystem\n')
+            for path in sorted(diskfs):
+              fakefile = self.getFakeFile(path)
+              size = len(fakefile.contents)
+              fp.write('  %6d bytes: %s\n' % (size, path))
+    end method summarize;
+
+    method addFauxFile #:
+      Add a new file to our fake filesystem.
+
+      This method is only valid if we are using in-memory with fake filesystem.
+    params:
+      var path : str;
+      var contents : str = '';
+      var perms : int = 0644;
+      var inode : int = null;
+    scope:
+      if self.kind() != 'emulate':
+        raise meta.errors.Error('addFakeFile() only valid when kind=emulate')
+      kwds = {}
+      kwds['st_mode'] = stat.S_IFREG | perms
+      kwds['contents'] = contents
+      if inode is not None:
+        kwds['inode'] = inode
+      kwds['create_missing_dirs'] = True
+      self._fake_filesystem.CreateFile(path, **kwds)
+    end method addFauxFile;
+
+    method addFakeDir #:
+      Add a new directory to our fake filesystem
+    params:
+      var path : str;
+      var perms : int = 0755;
+      var inode : int = null;
+    scope:
+      if self.kind() != 'emulate':
+        raise meta.errors.Error('addFakeDir() only valid when kind=emulate')
+      kwds = {}
+      kwds['perm_bits'] = stat.S_IFREG | perms
+      if inode is not None:
+        kwds['inode'] = inode
+      /#kwds['create_missing_dirs'] = True
+      self._fake_filesystem.CreateDirectory(path, **kwds)
+    end method addFakeDir;
+
+    method getFakeFile #:
+      Obtain a fake file
+    params:
+      var path : str;
+    scope:
+      if self.kind() != 'emulate':
+        raise meta.errors.Error('getFakeFile() only valid when kind=emulate')
+      return self._fake_filesystem.GetObject(path)
+    end method getFakeFile;
+
+  end class Filesystem;
+
+end namespace metax.fs;

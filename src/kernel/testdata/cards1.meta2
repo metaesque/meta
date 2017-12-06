@@ -1,0 +1,44 @@
+namespace demo.cards1 #:
+  Playing cards.
+  CONTENTS TESTED IN UNITTEST. DO NOT MODIFY.
+scope:
+
+  visibility public
+  class Card < metax.root.Object #:
+    A card with suit and rank, belonging to a Deck.
+
+    The Deck is responsible for display functionality.
+  scope:
+
+    field rank : int #:
+      Rank as simple integer. Deck assigns display semantics to rank values.
+    field suit : int #:
+      Suit as simple integer. Deck assigns display semantics to suit values.
+
+    lifecycle params:
+      var rank -> rank;
+      var suit -> suit;
+    scope:
+    end lifecycle;
+
+  end class Card;
+
+  public
+  class Pile #:
+    A set of cards placed on a surface so that they partially or completely
+    overlap
+  assocs:
+    cls assoc Card;
+  scope:
+    field cards : vec<Card> #:
+      The Card instances in this Pile
+  end class Pile;
+
+  public
+  class Pack < Pile #:
+    A pre-determined collection of Card instances.
+  scope:
+  end class Pack;
+
+end namespace demo.cards1;
+

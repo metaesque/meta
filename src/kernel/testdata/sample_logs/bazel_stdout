@@ -1,0 +1,13 @@
+//demo/cards2_test:CardTest                                     (cached) PASSED in 0.3s
+//demo/cards2_test:Card__MetaTest                               (cached) PASSED in 0.3s
+//demo/cards2_test:FrenchPack__MetaTest                         (cached) PASSED in 0.3s
+//demo/cards2_test:PackTest                                     (cached) PASSED in 0.3s
+//demo/cards2_test:Pack__MetaTest                               (cached) PASSED in 0.3s
+//demo/cards2_test:PileTest                                     (cached) PASSED in 0.3s
+//demo/cards2_test:Pile__MetaTest                               (cached) PASSED in 0.2s
+//demo/cards2_test:FrenchPackTest                                        FAILED in 0.2s
+  /private/var/tmp/_bazel_wmh/8a547b9529defa4d451cf083bf4156d1/execroot/python/bazel-out/local-fastbuild/testlogs/demo/cards2_test/FrenchPackTest/test.log
+
+Executed 1 out of 8 tests: 7 tests pass and 1 fails locally.
+Command: cd /Users/wmh/src/wmh/lib/meta2/oopl/python
+Command: bazel test //demo/cards2_test --test_output=summary

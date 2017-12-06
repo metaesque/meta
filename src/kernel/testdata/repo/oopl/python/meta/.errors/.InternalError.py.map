@@ -1,0 +1,10 @@
+     1      0 meta.errors.InternalError:imports        /Users/wmh/src/meta/src/kernel/root.meta
+     6      0 meta.errors.InternalError:preamble
+     8   2947 meta.errors.InternalError:class
+     8   2947 meta.errors.InternalError:parent
+     9   2948 meta.errors.InternalError:comment
+     9      0 meta.errors.InternalError:header
+    11      0 meta.errors.InternalError.Meta__47_id:method
+    11      1 meta.errors.InternalError.Meta__47_id:params
+    12      1 meta.errors.InternalError.Meta__47_id:comment
+    18      0 meta.errors.InternalError.Meta__47_id:preamble

@@ -1,0 +1,13 @@
+
+----------------------------------------------------------------------
+FILE LISTING:
+
+README:
+  Describes each file.
+
+metameta-mode.el:
+  The emacs major-mode code for Meta(Meta).  Generated from
+  $META/src/templates/meta-mode-templates.el by 'meta2 --metalang oopl emacs'
+
+schema.meta:
+  The schema for Meta(Meta).  All other meta-languages are based on this one.

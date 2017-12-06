@@ -1,0 +1,10 @@
+     1      0 meta.errors.ProtectedMethod:imports      /Users/wmh/src/meta/src/kernel/root.meta
+     6      0 meta.errors.ProtectedMethod:preamble
+     8   2954 meta.errors.ProtectedMethod:class
+     8   2954 meta.errors.ProtectedMethod:parent
+     9   2955 meta.errors.ProtectedMethod:comment
+     9      0 meta.errors.ProtectedMethod:header
+    11      0 meta.errors.ProtectedMethod.Meta__37_id:method
+    11      1 meta.errors.ProtectedMethod.Meta__37_id:params
+    12      1 meta.errors.ProtectedMethod.Meta__37_id:comment
+    18      0 meta.errors.ProtectedMethod.Meta__37_id:preamble

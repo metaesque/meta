@@ -1,0 +1,31 @@
+namespace demo.cards0 #:
+  Playing cards.
+scope:
+
+  class Card < meta.root.Object #:
+    A card with suit and rank.
+  scope:
+
+    field rank : int #:
+      Integer encoding of the rank
+    field suit : int #:
+      Integer encoding of the suit.
+
+    lifecycle _ params:
+      var rank -> rank;
+      var suit -> suit;
+    end lifecycle;
+
+    method test : int #:
+      Some method on a card.
+    params:
+      var a : str;
+      var b : int = 1;
+    scope:
+      a = 1
+      return a
+    end method test;
+
+  end class Card;
+
+end namespace demo.cards0;

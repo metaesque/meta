@@ -1,0 +1,108 @@
+# ----------------------------------------------------------------------
+# Python External Dependencies
+
+# So far, I haven't gotten this to work using name 'mox', as the import
+#   import mox
+# ends up resolving to __init__.py instead of mox-0.5.3/mox.py. There is
+# probably a way to do this.  I've experimented with using
+#   strip_prefix = 'mox-0.5.3'
+# but haven't gotten it to work yet.
+new_http_archive(
+  name = 'moxlib',
+  url = 'https://pypi.python.org/packages/0c/a1/64740c638cc5fae807022368f4141700518ee343b53eb3e90bf3cc15a4d4/mox-0.5.3.tar.gz',
+  sha256 = '424ee725ee12652802b4e86571f816059b0d392401ceae70bf6487d65602cba9',
+  build_file = 'BUILD.mox',
+)
+
+# See http://www.bazel.io/docs/be/workspace.html#new_git_repository
+new_git_repository(
+  name = "pyfakefs",
+  commit = '5ede6d5a6a60a2f762d14c521249c6d1bc1458c5',  # 2016-06-13
+  remote = 'https://github.com/jmcgeheeiv/pyfakefs.git',
+  build_file = 'BUILD.pyfakefs',
+)
+
+new_http_archive(
+  name = 'pycrypto',
+  url = 'https://pypi.python.org/packages/60/db/645aa9af249f059cc3a368b118de33889219e0362141e75d4eaf6f80f163/pycrypto-2.6.1.tar.gz',
+  sha256 = 'f2ce1e989b272cfcb677616763e0a2e7ec659effa67a88aa92b3a65528f60a3c',
+  build_file = 'BUILD.pycrypto',
+)
+
+new_http_archive(
+  name = 'lxmllib',
+  url = 'https://pypi.python.org/packages/09/f3/c41293bc181b8c727cc485339dc57af653dae6d17d4c8dbf0cbac53cb4aa/lxml-3.6.1.tar.gz',
+  sha256 = '3eefcfbc548f8df38063b26c9686554268c1eb736e52cd230ff148aa550239d1',
+  build_file = 'BUILD.lxml'
+)
+
+# TODO(wmh): I'm doing something wrong wrt using tag instead of commit
+# Using
+#   git tag -l
+# lists all tags, and I assume I can just add it to the rule with
+#    tag = 'v2.10.0',
+# but that is producing the error:
+#   ERROR: no such package '@requests3p//': 
+#   Invalid branch, tag, or commit: Ref tags/v2.10.0 can not be resolved.
+new_git_repository(
+  name = 'x_requests',
+  tag = 'v2.10.0',
+  remote = 'git://github.com/kennethreitz/requests.git',
+  build_file = 'BUILD.requests',
+)
+
+new_http_archive(
+  name = 'x_poster',
+  url = 'https://pypi.python.org/packages/9f/dc/0683a458d21c3d561ab2f71b4fcdd812bf04e55c54e560b0854cea95610e/poster-0.8.1.tar.gz#md5=2db12704538781fbaa7e63f1505d6fc8',
+  sha256 = 'af5bf45da4a916db2b638cffd9e9d6668b33020e2b8ca9f864db79b49331c6ff',
+  build_file = 'BUILD.poster'
+)
+
+new_http_archive(
+  name = 'x_oauth2',
+  url = 'https://pypi.python.org/packages/64/19/8b9066e94088e8d06d649e10319349bfca961e87768a525aba4a2627c986/oauth2-1.9.0.post1.tar.gz#md5=22d49051d1d19d9ec17df480a463d0bb',
+  sha256 = 'c006a85e7c60107c7cc6da1b184b5c719f6dd7202098196dfa6e55df669b59bf',
+  build_file = 'BUILD.oauth2'
+)
+
+new_http_archive(
+  name = 'x_oauth2client',
+  url = 'https://pypi.python.org/packages/5c/d6/42f18bd74bcc35b3579f08d8b7eb04ee8579b9b16a763b6505f8897c0d6e/oauth2client-2.2.0.tar.gz',
+  sha256 = '',
+  build_file = 'BUILD.oauth2client',
+)
+
+new_http_archive(
+  name = 'x_httplib2',
+  url = 'https://pypi.python.org/packages/ff/a9/5751cdf17a70ea89f6dde23ceb1705bfb638fd8cee00f845308bf8d26397/httplib2-0.9.2.tar.gz#md5=bd1b1445b3b2dfa7276b09b1a07b7f0e',
+  sha256 = 'c3aba1c9539711551f4d83e857b316b5134a1c4ddce98a875b7027be7dd6d988',
+  build_file = 'BUILD.httplib2',
+)
+
+new_http_archive(
+  name = 'x_gdata',
+  url = 'https://pypi.python.org/packages/a8/70/bd554151443fe9e89d9a934a7891aaffc63b9cb5c7d608972919a002c03c/gdata-2.0.18.tar.gz',
+  sha256 = '56e7d22de819c22b13ceb0fe1869729b4287f89ebbd4bb55380d7bcf61a1fdb6',
+  build_file = 'BUILD.gdata',
+)
+
+new_http_archive(
+  name = 'x_six',
+  url = 'https://pypi.python.org/packages/b3/b2/238e2590826bfdd113244a40d9d3eb26918bd798fc187e2360a8367068db/six-1.10.0.tar.gz',
+  sha256 = '105f8d68616f8248e24bf0e9372ef04d3cc10104f1980f54d57b2ce73a5ad56a',
+  build_file = 'BUILD.six',
+)
+
+new_http_archive(
+  name = "x_dateutil",
+  url = "https://github.com/dateutil/dateutil/archive/master.zip",
+  sha256 = 'a437c95160676ca06947c252044813a6429238f6c04d2478ba1e8702e308e0f1',
+  build_file = "BUILD.dateutil",
+)   
+
+new_http_archive(
+  name = 'x_pillow',
+  url = 'https://pypi.python.org/packages/e0/27/f61098a12f14690689924de93ffdd101463083a80bf8ff3e0c218addf05b/Pillow-3.3.0.tar.gz',
+  sha256 = '031e7c9c885a4f343d1ad366c7fd2340449dc70318acb4a28d6411994f0accd1',
+  build_file = 'BUILD.pillow'
+)

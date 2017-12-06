@@ -1,0 +1,10 @@
+     1      0 meta.errors.RequiredAttributeValue:imports /Users/wmh/src/meta/src/kernel/root.meta
+     6      0 meta.errors.RequiredAttributeValue:preamble
+     8   2946 meta.errors.RequiredAttributeValue:class
+     8   2946 meta.errors.RequiredAttributeValue:parent
+     9   2947 meta.errors.RequiredAttributeValue:comment
+     9      0 meta.errors.RequiredAttributeValue:header
+    11      0 meta.errors.RequiredAttributeValue.Meta__35_id:method
+    11      1 meta.errors.RequiredAttributeValue.Meta__35_id:params
+    12      1 meta.errors.RequiredAttributeValue.Meta__35_id:comment
+    18      0 meta.errors.RequiredAttributeValue.Meta__35_id:preamble

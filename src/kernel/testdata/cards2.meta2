@@ -1,0 +1,244 @@
+namespace demo.cards2 #:
+  Playing cards.
+
+  Terminology: https://en.wikipedia.org/wiki/Glossary_of_card_game_terms
+
+    pack:
+      A complete set of cards. A double pack may be used (i.e. 104/108 instead
+      of 52/54).
+    pile:
+      A set of cards placed on a surface so that they partially or completely
+      overlap.
+    stack:
+      Cards are placed directly on top of each other, disallowing the player to
+      see any card other than the top. In most cases, these cards are and should
+      be kept hidden. Viewing these cards during a deal is often considered
+      illegal, so they should be dealt face down.
+    stock:
+      A pile of cards, face down, which are left over after setting up the rest
+      of the game (i.e. dealing hands, setting up other layout areas).
+    kitty:
+      Additional cards dealt face down in some card games.
+    deck:
+      May refer to either pack or stock and is thus ambigous. However, it is
+      more common to refer to a deck of cards than a pack of cards, and since
+      there is already a word for stock, we choose to define deck to mean
+      pack in this code, and name classes representing complete sets of cards
+      using Deck rather than Pack.
+
+    rank: (aka kind)
+      The position of a card relative to others in the same suit. The order of
+      the ranks depends on the game being played.
+    suit:
+      All cards that share the same pips
+    pip:
+      A suit symbol (e.g. spades, hearts, diamonds, clubs) on a card.
+scope:
+
+  visibility public
+  class Card < metax.root.Object #:
+    A card with suit and rank, belonging to a Deck.
+
+    The Deck is responsible for display functionality.
+  assocs:
+    cls assoc demo.cards2.Deck;
+  scope:
+    field rank : int #:
+      Rank as simple integer. Deck assigns display semantics to rank values.
+    field suit : int #:
+      Suit as simple integer. Deck assigns display semantics to suit values.
+    field deck : Deck #:
+      The Deck this Card belongs to.
+
+    lifecycle #:
+      It should not be necessary to create Card instances directly.
+      Instead, one should create instances of Deck, and use the cards
+      it contains.
+    params:
+      var deck : Deck;
+      var rank : int;
+      var suit : int;
+    scope<py>:
+      self.deckIs(deck)
+      self.rankIs(rank)
+      self.suitIs(suit)
+    scope<js>:
+      this.deckIs(deck);
+      this.rankIs(rank);
+      this.suitIs(suit);
+    test:
+    end lifecycle;
+
+  end class Card;
+
+  public
+  class Pile #:
+    A set of cards that partially or completely overlap.
+  assocs:
+    cls assoc demo.cards2.Card;
+  scope:
+    field cards : @vec<Card> #:
+      The Card instances in this Pile
+  end class Pile;
+
+  public
+  class Deck < Pile #:
+    A pre-determined collection of Card instances.
+  assocs:
+    std assoc random;
+  scope:
+
+    abstract
+    method asStr : str #:
+      Provide a string representation of a given card.
+    params:
+      var card : Card;
+    end method asStr;
+
+    method shuffle #:
+      http://wikipedia.org/wiki/Fisher-Yates_shuffle
+    scope<py>:
+      cards = self.cards()
+      n = len(cards)
+      for i in range(0, n):
+        /# 0 <= j <= i
+        j = random.randint(0, i)  
+        tmp = cards[j]
+        cards[j] = cards[i]
+        cards[i] = tmp
+    scope<js>:
+      var cards = this.cards();
+      var n = cards.length;
+      for (var i = 0; i < n; ++i) {
+        /# 0 <= j <= i
+        var j = Math.floor(Math.random() * (i+1));
+        var tmp = cards[j];
+        cards[j] = cards[i];
+        cards[i] = tmp;
+      }
+    test<py>:
+      import random
+      random.seed(0)
+      deck = demo.cards2.FrenchDeck()
+      deck.shuffle()
+      test.iseqvec(
+        [deck.asStr(card) for card in deck.cards()[:10]],
+        ['2H', '4S', 'KD', 'KS', '3D', 'TS', '8D', '6S', '8H', '2D'])
+    test<js>:
+      /# According to
+      /#   https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/random
+      /# there is no way to set the seed used by Math.random().  Big problem!
+    end method shuffle;
+
+  end class Deck;
+
+  class FrenchDeck < Deck #:
+    https://en.wikipedia.org/wiki/French_playing_cards
+  assocs:
+    cls assoc demo.cards2.Card;
+  scope:
+
+    meta
+    field Suits : vec<str> #:
+      Indices are suit integers, values are suit names.
+
+    meta
+    field Ranks : vec<str> #:
+      Indices are suit integers, values are suit names.
+
+    meta
+    lifecycle _
+    scope<py>:
+      meta.SuitsIs(
+        ['Joker', 'Spades', 'Diamonds', 'Clubs', 'Hearts'])
+      meta.RanksIs([
+        'Low',
+        'Ace', '2', '3', '4', '5', '6', '7', '8', '9',
+        'Ten', 'Jack', 'Queen', 'King',
+        'High'])
+    scope<js>:
+      meta.SuitsIs(
+        ['Joker', 'Spades', 'Diamonds', 'Clubs', 'Hearts']);
+      meta.RanksIs([
+        'Low',
+        'Ace', '2', '3', '4', '5', '6', '7', '8', '9',
+        'Ten', 'Jack', 'Queen', 'King',
+        'High']);
+    end lifecycle;
+
+    lifecycle params:
+      var jokers : bool = false #:
+        If true, the deck includes high and low joker.
+    scope<py>:
+      cards = self.cards()
+      for suit in range(1, 5):
+        for rank in range(1, 14):
+          card = demo.cards2.Card(self, rank, suit)
+          cards.append(card)
+      if jokers:
+        lowjoker = Card(self, 0, 0)
+        cards.append(lowjoker)
+        highjoker = Card(self, 14, 0)
+        cards.append(highjoker)
+    scope<js>:
+      var cards = this.cards();
+      for (var suit = 1; suit < 5; ++suit) {
+        for (var rank = 1; rank < 14; ++rank) {
+          var card = new demo.cards2.Card(self, rank, suit);
+          cards.append(card);
+        }
+      }
+      if (jokers) {
+        var lowjoker = new demo.cards2.Card(self, 0, 0);
+        cards.append(lowjoker);
+        var highjoker = new demo.cards2.Card(self, 14, 0);
+        cards.append(highjoker);
+      }
+    end lifecycle;
+
+    override
+    method asStr : str #:
+      Provide a string representation of a given card.
+    params:
+      var card : Card;
+      var full : bool = false #:
+        If true, result is '<rank> of <suit>'. If false,
+        result is two letters.
+    scope<py>:
+      meta = self.__class__
+      if full:
+        result = meta.Ranks()[card.rank()] + ' of ' + meta.Suits()[card.suit()]
+      else:
+        result = meta.Ranks()[card.rank()][0] + meta.Suits()[card.suit()][0]
+      return result
+    scope<js>:
+      var meta = demo.cards2.FrenchDeckClass;
+      var suits = meta.Suits();
+      var ranks = meta.Ranks();
+      var result;
+      if (full) {
+        result = meta.Ranks()[card.rank()] + ' of ' + meta.Suits()[card.suit()];
+      } else {
+        result = meta.Ranks()[card.rank()][0] + meta.Suits()[card.suit()][0];
+      }
+    test<py>:
+      deck = demo.cards2.FrenchDeck()
+      test.iseq('AS', deck.asStr(deck.cards()[0]))
+      test.iseq('5D', deck.asStr(deck.cards()[17]))
+    end method asStr;
+
+  end class FrenchDeck;
+
+  test
+  class TestCase < metax.test.TestCase
+  assocs:
+    std assoc random;
+  scope:
+    meta field TestVar : int;
+
+    lifecycle scope:
+      random.seed(0)
+    end;
+  end class TestCase;
+
+end namespace demo.cards2;

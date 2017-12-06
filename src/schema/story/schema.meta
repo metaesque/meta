@@ -1,0 +1,210 @@
+MetaLanguage Story name Story parent Meta toplevel <story> #:
+  The constructs in Meta(Story).
+config:
+
+  abstract
+  Construct _storyroot_ #:
+    All constructs in MetaStory) inherit from this abstract construct,
+    so the Attribute definitions here are available in subconstructs.
+    However, note that the existence of an Attribute here does NOT mean it
+    is automatically included in the subconstruct ... the subconstruct
+    must specify the primary attribute (and any customization of other
+    values).
+  config:
+    
+    secondary
+    Attribute comment: : simple = <empty> aliases <#:> #:
+      An arbitrary multi-line comment used to describe the purpose of the
+      construct.
+
+    secondary
+    Attribute config: : complex = <empty> children <Construct> #:
+      The complex block within which Construct/Attribute instances can be
+      modified.
+
+    secondary
+    Attribute scope: : complex = <empty> aliases <::> #:
+      The collection of subconstructs.
+
+  end Construct _storyroot_;
+
+  Construct story < _storyroot_ #:
+    Each story is defined by a story construct.
+  config:
+
+    primary
+    Attribute story : word = <required> #:
+      A unique identifier for the story
+
+    secondary
+    Attribute title : str = <required> #:
+      The full title of the story.
+
+    secondary
+    Attribute start : word = <required> #:
+      The start date of the story.
+
+    secondary
+    Attribute owners : word = <required> #:
+      The comma-separated list of owners (google account email addresses).
+      TODO(wmh): Make this a word-list instead of word.
+
+    secondary
+    Attribute collaborators : word = <required> #:
+      The comma-separated list of collaborators (google account email addresses).
+      TODO(wmh): Make this a word-list instead of word.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: children <event|thread|character>;
+
+  end Construct story;
+
+  Construct character < _storyroot_ config:
+
+    feature
+    Attribute gender : <female|male|trans|nongendered> = nongendered #:
+      The gender of the character.
+
+    primary
+    Attribute character : word = <required>;
+
+    secondary 
+    Attribute name : str = <empty> #:
+      The full name of this person.  If not specified, obtained from id.
+
+    secondary 
+    Attribute abbrev : word = <empty> #:
+      A one-or-two-char abbrev for this person.
+
+    secondary 
+    Attribute dob : word = <required> #:
+      Date of birth in YYYY-mm-dd format (with optional THH:MM:SS allowed).
+      Can also be a <ymd> specification relative to start date of story.
+
+    secondary 
+    Attribute age : num = <required> #:
+      The age (in years) of the character at the start of the story.
+      Although redundant relative to dob, it provides a more immediate sense
+      of the character's age relative to other characters than dob does, and
+      offers a basic sanity check between age and dob.
+
+    secondary 
+    Attribute mother : word = <empty> #:
+      The pid of the mother of this character, if the mother is cast in the
+      story.
+    secondary 
+    Attribute father : word = <empty> #:
+      The pid of the father of this character, if the father is cast in the
+      story.
+
+    secondary 
+    Attribute model : str = <empty> #:
+      A search query to send to google to find images representing this
+      character.  Usually the name of some actor, model, etc.  May have
+      additional qualifiers in addition to the name.
+
+    secondary 
+    Attribute summary : str = <empty> #:
+      A one-line summary of this character.
+
+    secondary
+    Attribute metrics: : simple = <empty> #:
+      A general purpose mechanism for specifying date-based metric values (with
+      assumed linear interpolation between values).
+       - Each line starts with a age specifier (e.g. '14y5m10d12:00')
+       - Each line then contains one or more of the following keywords
+         and associated values:
+          size (gender specific semantics)
+            size 34B-32-34  (female)
+            size 5.5x4.8    (male)
+          height <cm>
+          weight <kg>
+          tanner <num>
+          cycle <duration>=<ovulation>[!<conception>+<birth>]
+      TODO(wmh): Should this be made a complex block with defined subconstructs?
+
+    Attribute comment:;
+    Attribute config:;
+
+  end Construct character;
+
+  Construct event < _storyroot_ config:
+
+    primary
+    Attribute event : word = <required>;
+
+    secondary
+    Attribute when : word = <empty>  aliases <@> #:
+      A date (YYYY-mm-dd or YYYY-mm-ddTHH:MM:SS) or a <cname>:<ymd>.
+
+    secondary 
+    Attribute what : str = <empty> aliases <=> #:
+      A one-line summary of this event.
+      Any id preceeded by $ is interpreted as a character baseid and
+      implicitly added to 'who' (and converted to proper name in displays).
+
+    secondary
+    Attribute where : str = <empty> aliases <%> #:
+      A string describing where the event takes place.
+
+    secondary
+    Attribute who : str = <empty> aliases <:> #:
+      Comma-separated list of character baseids.
+      See comment in 'summary' for a shorthand.
+
+    secondary
+    Attribute in : word = <empty> #:
+      Used to establish which chapter this event is in. Used when loading a
+      pre-existing story from a Meta(Story) file. Normally, only the first event
+      in a chapter specifies the chapter, and all subsequent event instances are
+      assumed to be in the same chapter until another event specifies a 'in'
+      attribute. Used to create an implicit 'thread' instance.
+
+    secondary
+    Attribute check: : simple = <empty> #:
+      A collection of specially formatted constraints to be checked during
+      compilation.
+        day <mon|tue|wed|thu|fri|sat|sun>
+        week <1|2|3|4|5>
+        month <jan|feb|mar|...>
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: : simple;
+
+  end Construct event;
+
+  Construct view < _storyroot_ config:
+
+    primary
+    Attribute view = <auto> : word #:
+      The cname of the character whose view this is.
+
+    secondary
+    Attribute from : id = <required> #:
+      The id of the character from whose perspective the view is written.
+
+    secondary
+    Attribute with : word = <empty> #:
+      A comma-separated list of character ids that participate in this view.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: : simple;
+
+  end Construct view;
+
+  Construct thread < _storyroot_ config:
+
+    primary
+    Attribute thread = <required> : word #:
+      The id of the thread.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: : simple;
+
+  end Construct thread;
+
+end MetaLanguage Story;

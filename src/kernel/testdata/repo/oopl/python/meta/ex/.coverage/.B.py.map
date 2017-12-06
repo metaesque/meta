@@ -1,0 +1,13 @@
+     1      0 meta.ex.coverage.B:imports               /Users/wmh/src/meta/src/kernel/ex/coverage.meta
+     2      0 meta.ex.coverage.B:preamble
+     6     95 meta.ex.coverage._betweenAandB:text
+     5     98 meta.ex.coverage.B:class
+     5     98 meta.ex.coverage.B:parent
+     6     99 meta.ex.coverage.B:comment
+     7    101 meta.ex.coverage.B:scope
+    13      0 meta.ex.coverage.B.func2:modifiers
+    13      0 meta.ex.coverage.B.func2:method
+    13    103 meta.ex.coverage.B.func2:params
+    14    103 meta.ex.coverage.B.func2:comment
+    24      0 meta.ex.coverage.B.func2:preamble
+    24    108 meta.ex.coverage.B.func2:scope

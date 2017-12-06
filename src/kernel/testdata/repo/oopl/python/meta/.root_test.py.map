@@ -1,0 +1,9 @@
+     2      1 meta.root_test:comment                   /Users/wmh/src/meta/src/kernel/root.meta
+    12      1 meta.root_test.ObjectTestMetaClass.Meta__30_id:params
+    13      1 meta.root_test.ObjectTestMetaClass.Meta__30_id:comment
+    29      1 meta.root_test.ObjectTest.Meta__53_id:params
+    30      1 meta.root_test.ObjectTest.Meta__53_id:comment
+    42      1 meta.root_test.ExceptionTestMetaClass.Meta__31_id:params
+    43      1 meta.root_test.ExceptionTestMetaClass.Meta__31_id:comment
+    59      1 meta.root_test.ExceptionTest.Meta__54_id:params
+    60      1 meta.root_test.ExceptionTest.Meta__54_id:comment

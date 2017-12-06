@@ -1,0 +1,15 @@
+
+closure_js_library(
+  name = "Card",
+  srcs = ['Card.js'],
+  deps = [
+    "//demo/cards2:Card__Meta",
+    "//demo/cards2:Deck",
+    "//meta/root:Object",
+  ],
+  suppress = [
+    "JSC_NULLABLE_RETURN_WITH_NAME",
+    "JSC_EXTRA_REQUIRE_WARNING",
+  ],
+  visibility = ['//visibility:public'],
+)
