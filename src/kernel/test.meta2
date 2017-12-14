@@ -2,6 +2,275 @@ namespace metax.test #:
   Classes related to unit-testing.
 scope:
 
+  specific
+  class FakeFcntl parent<py> ^object #:
+    A fake fcntl object.
+  assocs<py>:
+    std assoc fcntl;
+  scope<py>:
+
+    meta
+    lifecycle scope:
+      meta.LOCK_UN = fcntl.LOCK_UN
+      meta.LOCK_SH = fcntl.LOCK_SH
+      meta.LOCK_EX = fcntl.LOCK_EX
+    end lifecycle;
+
+    field filesystem : any;
+
+    lifecycle params:
+      var fs : any;
+    scope:
+      self._filesystem = fs
+    test:
+      pass
+    end lifecycle;
+
+    method fcntl params:
+      var fd : any;
+      var op : any;
+      var arg : any = 0;
+    scope:
+      pass
+    test:
+      /# noop
+      /# TODO(wmh): Is there a way to verify this method does nothing?
+      pass
+    end method fcntl;
+
+    method ioctl params:
+      var fd : any;
+      var op : any;
+      var arg : any = 0;
+      var mutate_flag : any = false;
+    scope:
+      pass
+    test:
+      /# noop
+      /# TODO(wmh): Is there a way to verify this method does nothing?
+      pass
+    end method ioctl;
+
+    method flock params:
+      var fd : any;
+      var op : any;
+    scope:
+      pass
+    test:
+      /# noop
+      /# TODO(wmh): Is there a way to verify this method does nothing?
+      pass
+    end method flock;
+
+    method lockf params:
+      var fd : any;
+      var op : any;
+      var length : any = 0;
+      var start : any = 0;
+      var whence : any = 0;
+    scope:
+      pass
+    test:
+      /# noop
+      /# TODO(wmh): Is there a way to verify this method does nothing?
+      pass
+    end method lockf;
+  end class FakeFcntl;
+
+  specific
+  class StubHolder parent<py> ^object
+  comment:
+    Support class for stubbing methods out for unit testing.
+    
+    Sample Usage:
+    
+    You want os.path.exists() to always return true during testing.
+    
+       stubs = StubHolder()
+       stubs.Set(os.path, 'exists', lambda x: 1)
+         ...
+       stubs.CleanUp()
+    
+    The above changes os.path.exists into a lambda that returns 1.  Once
+    the ... part of the code finishes, the CleanUp() looks up the old
+    value of os.path.exists and restores it.
+  scope<py>:
+
+    lifecycle scope:
+      self.cache = []
+      self.stubs = []
+    test:
+      pass
+    end lifecycle;
+
+    method __del__ comment:
+      Do not rely on the destructor to undo your stubs.
+      
+      You cannot guarantee exactly when the destructor will get called without
+      relying on implementation details of a Python VM that may change.
+    scope:
+      self.CleanUp()
+    test:
+      pass
+    end method __del__;
+
+    method __enter__ scope:
+      return self
+    test:
+      pass
+    end method __enter__;
+
+    method __exit__ params:
+      var unused_exc_type : any;
+      var unused_exc_value : any;
+      var unused_tb : any;
+    scope:
+      self.CleanUp()
+    test:
+      pass
+    end method __exit__;
+
+    method CleanUp comment:
+      Undoes all SmartSet() & Set() calls, restoring original definitions.
+    scope:
+      self.SmartUnsetAll()
+      self.UnsetAll()
+    test:
+      pass
+    end method CleanUp;
+
+    method SmartSet params:
+      var obj : any #:
+        The object whose attributes we want to modify.
+      var attr_name : str #:
+        The name of the attribute to modify.
+      var new_attr : any #:
+        The new value for the attribute.
+    comment:
+      Replace obj.attr_name with new_attr.
+      
+      This method is smart and works at the module, class, and instance level
+      while preserving proper inheritance. It will not stub out C types however
+      unless that has been explicitly allowed by the type.
+      
+      This method supports the case where attr_name is a staticmethod or a
+      classmethod of obj.
+      
+      Notes:
+       - If obj is an instance, then it is its class that will actually be
+         stubbed. Note that the method Set() does not do that: if obj is
+         an instance, it (and not its class) will be stubbed.
+       - The stubbing is using the builtin getattr and setattr. So, the __get__
+         and __set__ will be called when stubbing.
+      
+      Raises:
+        AttributeError: If the attribute cannot be found.
+    scope:
+      if (inspect.ismodule(obj) or
+          (not inspect.isclass(obj) and attr_name in obj.__dict__)):
+        orig_obj = obj
+        orig_attr = getattr(obj, attr_name)
+      else:
+        if not inspect.isclass(obj):
+          mro = list(inspect.getmro(obj.__class__))
+        else:
+          mro = list(inspect.getmro(obj))
+
+        mro.reverse()
+
+        orig_attr = None
+        found_attr = False
+
+        for cls in mro:
+          try:
+            orig_obj = cls
+            orig_attr = getattr(obj, attr_name)
+            found_attr = True
+          except AttributeError:
+            continue
+
+        if not found_attr:
+          raise AttributeError('Attribute not found.')
+
+      /# Calling getattr() on a staticmethod transforms it to a 'normal' function.
+      /# We need to ensure that we put it back as a staticmethod.
+      old_attribute = obj.__dict__.get(attr_name)
+      if old_attribute is not None and isinstance(old_attribute, staticmethod):
+        orig_attr = staticmethod(orig_attr)
+
+      self.stubs.append((orig_obj, attr_name, orig_attr))
+      setattr(orig_obj, attr_name, new_attr)
+    test:
+      pass
+    end method SmartSet;
+
+    method SmartUnsetAll comment:
+      Reverses SmartSet() calls, restoring things to original definitions.
+      
+      This method is automatically called when the StubOutForTesting()
+      object is deleted; there is no need to call it explicitly.
+      
+      It is okay to call SmartUnsetAll() repeatedly, as later calls have
+      no effect if no SmartSet() calls have been made.
+    scope:
+      for args in reversed(self.stubs):
+        setattr(*args)
+
+      self.stubs = []
+    test:
+      pass
+    end method SmartUnsetAll;
+
+    method Set params:
+      var parent : *any #:
+        The_context_in_which_the_attribute_child_name_is_to_be_changed.
+      var child_name : *any #:
+        The_name_of_the_attribute_to_change.
+      var new_child : *any #:
+        The_new_value_of_the_attribute
+    comment:
+      In parent, replace child_name's old definition with new_child.
+      
+      The parent could be a module when the child is a function at
+      module scope.  Or the parent could be a class when a class' method
+      is being replaced.  The named child is set to new_child, while the
+      prior definition is saved away for later, when UnsetAll() is
+      called.
+      
+      This method supports the case where child_name is a staticmethod or a
+      classmethod of parent.
+    scope:
+      old_child = getattr(parent, child_name)
+
+      old_attribute = parent.__dict__.get(child_name)
+      if old_attribute is not None and isinstance(old_attribute, staticmethod):
+        old_child = staticmethod(old_child)
+
+      self.cache.append((parent, old_child, child_name))
+      setattr(parent, child_name, new_child)
+    test:
+      pass
+    end method Set;
+
+    method UnsetAll comment:
+      Reverses Set() calls, restoring things to their original definitions.
+      
+      This method is automatically called when the StubOutForTesting()
+      object is deleted; there is no need to call it explicitly.
+      
+      It is okay to call UnsetAll() repeatedly, as later calls have no
+      effect if no Set() calls have been made.
+    scope:
+      /# Undo calls to Set() in reverse order, in case Set() was called on the
+      /# same arguments repeatedly (want the original call to be last one undone)
+      for (parent, old_child, child_name) in reversed(self.cache):
+        setattr(parent, child_name, old_child)
+      self.cache = []
+    test:
+      pass
+    end method UnsetAll;
+  end class StubHolder;
+  
   class TestCase #:
     /# The JUnit testing infrastructure for Java (which came from a testing
     /# infrastructure for Smalltalk) has gained cross-language recognition, and
@@ -85,14 +354,42 @@ scope:
     /#        ctx.configuration.default_shell_env doesn't store --test_env,
     /#        and ctx.configuration.test_env doesn't even exist, contrary to
     /#        https://bazel.build/versions/master/docs/skylark/lib/configuration.html
-    /# 
-    /# Meta:suppress: legacyGoogScopeRequire
   parent<py> ^unittest.TestCase
   parent<js> ^goog.testing.TestCase
   assocs<py>:
+    std assoc cStringIO;
+    std assoc logging;
+    std assoc re;
+    std assoc sys;
+    std assoc time;
     std assoc unittest #:
       TODO(wmh): Why isn't this being implicitly included due to being a
       parent? Because it is '^'?
+
+    resource cipherfile path "testdata/testing/cipherfile";
+    resource entry_mre path "testdata/testing/entry.mre";
+
+  assocs<js>:
+    cls assoc ^goog.testing.TestCase
+    target "@io_bazel_rules_closure//closure/library:testing" #:
+      Defines goog.testing.TestCase, the parent of this class.
+
+    cls assoc ^goog.testing.TestRunner
+    target "@io_bazel_rules_closure//closure/library:testing" #:
+      Defines the test runner.
+
+    lib assoc goog.testing.asserts
+    target "@io_bazel_rules_closure//closure/library:testing,@io_bazel_rules_closure//closure/library:library" #:
+      Introduces the various assert commands.
+
+    lib assoc goog.asserts
+    target "@io_bazel_rules_closure//closure/library:library" #:
+      Introduces the various assert commands.
+
+    cls assoc ^goog.testing.PropertyReplacer
+    target "@io_bazel_rules_closure//closure/library:testing" #:
+      Provides stubbing functionality.
+
   scope:
 
     meta
@@ -106,6 +403,15 @@ scope:
     field WriteGoldens : bool #:
       If true, methods that invoke iseqstrgold() or iseqfilegold() will
       update goldens instead of compare goldens.
+    meta
+    field CanonicalStdout : ostream #:
+      The 'normal' stdout.
+    meta
+    field CanonicalStderr : ostream #:
+      The 'normal' stderr.
+    meta
+    field Interactive : bool #:
+      Set this to True to enable interactive unit tests.      
 
     meta
     lifecycle #:
@@ -128,6 +434,11 @@ scope:
       debug = os.getenv('META_DEBUG', '')
       if ' tests ' in debug:
         meta.DebugIs(True)
+      meta.CanonicalStdoutIs(sys.stdout)
+      meta.CanonicalStderrIs(sys.stderr)
+
+      meta.cStringIOClass = cStringIO.StringIO().__class__
+
     scope<js>:
       /# TODO(wmh): Establish whether there is any way to emulate
       /# class variables in Javascript other than adding them as
@@ -150,11 +461,11 @@ scope:
     field moxlist : @vec<any> #:
       The collection of mocking objects created via newMox.
       TODO(wmh): Rename this something non-python-centric.
-    field stdout : meta!ostream #:
+    field stdout : ostream #:
       The current stream used for stdout.  If null, the default is used.
-    field stderr : meta!ostream #:
+    field stderr : ostream #:
       The current stream used for stderr.  If null, the default is used.
-    field stdin : meta!istream #:
+    field stdin : istream #:
       The current stream used for stdin.  If null, the default is used.
     field fsinfo : @map #:
       Maps module names to dicts containing:
@@ -214,7 +525,7 @@ scope:
       However, a meta class can have a test class, and a test class has a
       meta class.
     params:
-      var method_name type str type<js> @str #:
+      var method_name type<py> str type<js> @str #:
         A name for the test case.
         IMPORTANT: Since the Meta compiler implicitly adds a parameter to
         meta lifecycles of testcase classes, it is important that we ...???
@@ -227,14 +538,190 @@ scope:
       self.uidIs('%s:%d' % (method_name, count))
       self.deblog('Invoking %s initializer for %s' % (self.name(), method_name))
     init<js>:
-      var count = metax.test.TestCase.InstanceCount() + 1;
-      metax.test.TestCase.InstanceCountIs(count);
+      var count = MetaTestCase.InstanceCount() + 1;
+      MetaTestCase.InstanceCountIs(count);
+      console.log('Here with ' + method_name + ' and ' + this.methname());
       this.uidIs(method_name + ':' + count);
       this.deblog(
           'Invoking ' + this.name() + ' initializer for ' + method_name);
     finalize<py>:
       self.deblog('Invoking %s finalizer for %s' % (self.name(), self.methname()))
+    setup<py>:
+      self.deblog('Invoking %s setUp for %s' % (self.name(), self.methname()));
+      testname = '%s.%s' % (self.name(), self.methname())
+      username = re.sub(r'Test\.testx?_?', '.', testname)
+      logging.info('Starting ' + testname)
+
+      visname = username[:39] + '$' if len(username) > 40 else username
+      sys.stdout.write('%-40s ...' % visname)
+      self._start = time.time()
+      /# NOTE: Most fields have been initialized to their default values within
+      /# the initializer.
+      self._stubs = StubHolder()
+      self.maxDiff = None
+    setupcase<py>:
+      if meta.Debug():
+        print 'Invoking %s SetUp' % meta.__name__
+    setup<js>:
+      this.deblog('Invoking ' + this.name() + ' setUp for ' + this.methname());
+      /# TODO(wmh): Look into the stub mechanism provided by
+      /# goog.testing.propertyreplacer.js
+      this._stubs = new /* goog.testing.*/ PropertyReplacer();
+    setupcase<js>:
+      if (/* metax.test.*/ MetaTestCase.Debug()) {
+        console.log('Invoking ' + this.constructor.name + ' SetUp');
+      }
+    teardown<py>:
+      /# Reinstate I/O
+      sys.stdout = TestCase.CanonicalStdout()
+      sys.stderr = TestCase.CanonicalStderr()
+
+      seconds = time.time() - self._start
+      self.deblog('Invoking %s tearDown for %s' % (self.name(), self.methname()))
+      status = self.status()
+      sys.stdout.write('%8d us  %s\n' % (seconds * 1000000, status))
+
+      /# Clean up moxes
+      self.clearMoxes()
+
+      /# Remove stubs
+      self._stubs.CleanUp()
+
+      /# Delete temporary files
+      for tmpfile in self._tmpfiles:
+        if os.path.exists(tmpfile):
+          logging.info('Deleting tmp file %s' % tmpfile)
+          os.unlink(tmpfile)
+      del self._tmpfiles[:]
+
+      /# Delete temporary dirs
+      for tmpdir in self._tmpdirs:
+        if os.path.exists(tmpdir):
+          logging.info('Deleting tmp dir %s' % tmpdir)
+          shutil.rmtree(tmpdir)
+      del self._tmpdirs[:]
+
+      /# Restore filesystem.
+      for modinfo in self._fsinfo.values():
+        self.revertFilesystem(modinfo['module'])
+
+      /# Restore env.vars.
+      for evar in self._envars:
+        if evar in ENV:
+          os.environ[evar] = ENV[evar]
+        else:
+          del os.environ[evar]
+    teardown<js>:
+      /# $CLOSURE_ROOT/library/closure/goog-orig/testing/testcase.js
+      this.deblog(
+        'Invoking ' + this.name() + ' tearDown for ' + this.methname());
+      /# From goog.testing.propertyreplacer.js
+      /# this._stubs.reset();
+    teardowncase<py>:
+      if meta.Debug():
+        print 'Invoking %s TearDown' % cls.__name__
+    teardowncase<js>:
+      if (MetaTestCase.Debug()) {
+        console.log('Invoking ' + this.constructor.name + ' TearDown');
+      }
     end lifecycle;
+
+    specific
+    method runSelfTests #:
+      Initializes the test runner.
+
+      The suggested mechanism for running unittests on a goog.module() is
+      discussed in https://github.com/google/closure-library/wiki/goog.module:-an-ES6-module-like-alternative-to-goog.provide#how-do-i-write-a-unit-test-for-a-googmodule
+        goog.module('goog.baseModuleTest');
+        goog.setTestOnly('goog.baseModuleTest');
+
+        var jsunit = goog.require('goog.testing.jsunit');
+        var testSuite = goog.require('goog.testing.testSuite');
+
+        testSuite({
+          testMethod: function() {},
+        });
+
+      The object passed into testSuite() is the object that defines all the
+      test methods and related infrastructure (any executable starting with
+      'test' is assumed to be a test method).  The code of testSuite() is
+      in $CLOSURE_ROOT/library/closure/goog-orig/testing/testsuite.js:
+          // Runs the lifecycle methods (setUp, tearDown, etc.) and test* methods from
+          // the given object. For use in tests that are written as JavaScript modules
+          // or goog.modules.
+          //
+          // @param {!Object<string, function()>} obj An object with one or more test
+          //     methods, and optional setUp, tearDown and getTestName methods, etc.
+         goog.testing.testSuite = function(obj) {
+           var testCase = goog.labs.testing.Environment.getTestCaseIfActive() ||
+               new goog.testing.TestCase(document.title);
+           testCase.setTestObj(obj);
+           goog.testing.TestCase.initializeTestRunner(testCase);
+         };
+
+      Note that it creates a new TestCase instance, and passes an independent
+      object to that testcase. In Meta, however, the testcase class itself
+      is the object defining the tests.  So in Meta we invoke unittests
+      slightly differently:
+        goog.module('nm.sp.FooTest');
+        goog.setTestOnly('nm.sp.FooTest');
+        const TestCase = goog.require('metax.test.TestCase');
+
+        class FooTest extends TestCase { ... }
+        var tc = new FooTest('nm.sp.FooTest');
+        tc.runSelfTests();
+    scope<js>:
+      /# The object defining the test methods is this TestCase subclass
+      /# instance.
+      this.setTestObj(this);
+      TestCase.initializeTestRunner(this);
+      var testrunner = /** @type {?TestRunner} */ (goog.global['G_testRunner']);
+      testrunner.setStrict(false);
+    test:
+    end method runSelfTests;
+
+    method status : str #:
+      The status of an individual test.
+
+      Returns:
+        One of '', 'FAIL' or 'ERROR'.
+    scope<py>:
+      /# TODO(wmh): This relies on a private method in unittest.TestCase, and
+      /# is thus inherently fragile. Can we do better?  Also, in python 3.4,
+      /# the field is _outcomeForDoCleanups. See
+      /#    https://stackoverflow.com/questions/4414234/getting-pythons-unittest-results-in-a-teardown-method
+      /# for details.  I considered defining the method failureException(msg)
+      /# in metax.test.TestCase ... this would override the field
+      /#   self.failureException
+      /# introduced in unittest.case._AssertRaisesContext and inherited into
+      /# unittest.TestCase.  The code in case.py almost always uses this
+      /# field in the form:
+      /#   raise self.failureException(msg)
+      /# so defining it as a method that accepts a msg param and always returns
+      /# AssertionError should work (the method could then set state as
+      /# desired).  Unfortunately, unittest.TestCase.run() has a single
+      /# use of the field using
+      /#    except self.failureException:
+      /# which wouldn't work properly if it became a method.  But if we were
+      /# to make self.failureException a property, we could insert some
+      /# code in addiiton to returning AssertionError. Note that that approach
+      /# would be much more efficient than the following, which performs
+      /# O(N) searches thru two lists to find matches. However, the lists will
+      /# usually be very small (list of failures and errors). Also, the
+      /# property solution would not capture all failures (for example,
+      /# _UnexpectedSuccess exceptions).
+      text_test_result = self._resultForDoCleanups
+      for tst, err in text_test_result.failures:
+        if self is tst:
+          return 'FAIL'
+      for tst, err in text_test_result.errors:
+        if self is tst:
+          return 'ERROR'
+      return ''
+    scope<js>:
+      /# console.log('Fix TestCase.status in Javascript');
+      return 'FIXME';
+    end method status;
 
     new
     method deblog #:
@@ -339,12 +826,12 @@ scope:
       self._stdout = cStringIO.StringIO()
       sys.stdout = self._stdout
     test<py>:
-      self.assertTrue(sys.stdout is meta.testing.TestCase.STDOUT)
+      self.assertTrue(sys.stdout is metax.test.TestCase.CanonicalStdout())
       self._tc.captureStdout()
-      self.assertTrue(isinstance(sys.stdout, meta.testing.cStringIOClass))
+      self.assertTrue(isinstance(sys.stdout, metax.test.cStringIOClass))
       print 'hello world'
       out = self._tc.getStdout()
-      self.assertTrue(sys.stdout is meta.testing.TestCase.STDOUT)
+      self.assertTrue(sys.stdout is metax.test.TestCase.CanonicalStdout())
       self.assertEqual('hello world\n', out)
     end method captureStdout;
 
@@ -355,11 +842,11 @@ scope:
     scope<py>:
       /# TODO(wmh): Use self._stdout to test.
       cls = sys.stdout.__class__
-      if cls is cStringIOClass or isinstance(sys.stdout, StringIO.StringIO):
+      if cls is TestCase.cStringIOClass or isinstance(sys.stdout, StringIO.StringIO):
         result = sys.stdout.getvalue()
       else:
         result = None
-      sys.stdout = TestCase.STDOUT
+      sys.stdout = TestCase.CanonicalStdout()
       self._stdout = None
       return result
     test<py>:
@@ -375,12 +862,12 @@ scope:
       self._stderr = cStringIO.StringIO()
       sys.stderr = self._stderr
     test<py>:
-      self.assertTrue(sys.stderr is meta.testing.TestCase.STDERR)
+      self.assertTrue(sys.stderr is metax.test.TestCase.CanonicalStderr())
       self._tc.captureStderr()
-      self.assertTrue(isinstance(sys.stderr, meta.testing.cStringIOClass))
+      self.assertTrue(isinstance(sys.stderr, metax.test.cStringIOClass))
       sys.stderr.write('hello world\n')
       err = self._tc.getStderr()
-      self.assertTrue(sys.stderr is meta.testing.TestCase.STDERR)
+      self.assertTrue(sys.stderr is metax.test.TestCase.CanonicalStderr())
       self.assertEqual('hello world\n', err)
     end method captureStderr;
 
@@ -391,11 +878,11 @@ scope:
     scope<py>:
       /# TODO(wmh): Use self._stdout to test.
       cls = sys.stderr.__class__
-      if cls is cStringIOClass or isinstance(sys.stderr, StringIO.StringIO):
+      if cls is TestCase.cStringIOClass or isinstance(sys.stderr, StringIO.StringIO):
         result = sys.stderr.getvalue()
       else:
         result = None
-      sys.stderr = TestCase.STDERR
+      sys.stderr = TestCase.CanonicalStderr()
       self._stderr = None
       return result
     test<py>:
@@ -467,8 +954,8 @@ scope:
 
     new
     method newStr #:
-      Create a new string stream for use anywhere a meta!istream or
-      meta!ostream is required.
+      Create a new string stream for use anywhere a istream or
+      ostream is required.
     params:
       var content : any = null;
     scope<py>:
@@ -482,9 +969,9 @@ scope:
     end method newStr;
 
     new
-    method fp #:
-      Create a new string stream for use anywhere a meta!istream or
-      meta!ostream is required.
+    method fp : ostream #:
+      Create a new string stream for use anywhere a istream or
+      ostream is required.
 
       TODO(wmh): Decide which of 'newStr' or 'fp' to keep.
     params:
@@ -570,8 +1057,8 @@ scope:
     test<py>:
       /# path = os.path.join(
       /#   os.path.dirname(__metafile__), './testdata/testing/cipherfile')
-      path = meta.root.Object.Resource(
-        'cipherfile', fqn='meta.testing.TestCase')
+      path = metax.root.Object.Resource(
+        'cipherfile', fqn='metax.test.TestCase')
       self.assertEqual('aes-128-cbc\ntesting\n', self._tc.fileContents(path))
     scope<js>:
       throw new Error('TestCase.fileContents() not yet implemented');
@@ -582,11 +1069,11 @@ scope:
       Determine whether this TestCase is marked as supporting tests that
       require interactive responses from a user.
     scope<py>:
-      return TestCase.Interactive
+      return TestCase.Interactive()
     test<py>:
       pass
     scope<js>:
-      return meta.testing.TestCase.Interactive;
+      return MetaTestCase.Interactive();
     end method isInteractive;
 
     new
@@ -626,17 +1113,17 @@ scope:
       tc = self._tc
       self.assertEqual(None, tc._fs)
 
-      modules = [meta.testing, sys.modules[__name__]]
+      modules = [metax.test, sys.modules[__name__]]
       tc.setupSharedFilesystem(
           modules, [('/a/b/c', {'contents': 'blah'})])
 
       fsinfo = tc._fsinfo
       self.assertEqual(
-          ['__main__', 'meta.testing'],
+          ['__main__', 'metax.test'],
           sorted(fsinfo.keys()))
       self.assertTrue(
         fsinfo['__main__']['objs'] is
-        fsinfo['meta.testing']['objs'])
+        fsinfo['metax.test']['objs'])
       self.assertNotEqual(None, tc._fs)
     end method setupSharedFilesystem;
 
@@ -700,7 +1187,7 @@ scope:
       tc = self._tc
       self.assertEqual({}, tc._fsinfo)
       tc.setupFilesystem(
-          meta.testing,
+          metax.test,
           path_specs=[
               '/home/bob/file1',
               ('/home/bob/file2',
@@ -713,13 +1200,13 @@ scope:
 
       /# Verify that tc._fsinfo has been augmented.
       self.assertEqual(
-          ['meta.testing'],
+          ['metax.test'],
           tc._fsinfo.keys())
 
       /# Basic test (more thorough testing in testPopulateFilesystem()).
       self.assertEqual(
-          True, meta.testing.os.path.exists('/home/bob/file1'))
-      stat_info = meta.testing.os.stat('/home/bob/file1')
+          True, metax.test.os.path.exists('/home/bob/file1'))
+      stat_info = metax.test.os.stat('/home/bob/file1')
 
       self.assertEqual(0, stat_info.st_size)
       self.assertEqual('100666', '%o' % stat_info.st_mode)
@@ -834,12 +1321,12 @@ scope:
           contents = fp.read()
       else:
         epath = meta.root.Object.Resource(
-          'entry_mre', fqn='meta.testing.TestCase')
+          'entry_mre', fqn='metax.test.TestCase')
         /# print '**** HERE with epath=%s' % epath
         with open(epath, 'r') as fp:
           contents = fp.read()
 
-      /# We mock out the single call to meta.testing.TestCase._ReadFile() which
+      /# We mock out the single call to metax.test.TestCase._ReadFile() which
       /# will be invoked for '/home/bob/file3'
       m = tc.newMox()
       m.StubOutWithMock(tc, '_readFile')
@@ -849,7 +1336,7 @@ scope:
       /# Calling SetupFilesystem() will call PopulateFileSystem(), and it is
       /# easier to test after fully initializing than to test in isolation.
       tc.setupFilesystem(
-          meta.testing,
+          metax.test,
           path_specs=[
               '/home/bob/file1',
               ('/home/bob/file2',
@@ -861,46 +1348,46 @@ scope:
               ('/home/bob/file3',
                {'contents_path': epath}),
           ])
-      package = 'meta.testing'
+      package = 'metax.test'
       self.assertTrue(package in tc._fsinfo)
-      self.assertTrue(meta.testing is tc._fsinfo[package]['module'])
+      self.assertTrue(metax.test is tc._fsinfo[package]['module'])
       for k in ('fs', 'open', 'os', 'fcntl'):
         self.assertTrue(k in tc._fsinfo[package]['objs'])
 
       /# file1 is a file with no content.
       self.assertEqual(
-          True, meta.testing.os.path.exists('/home/bob/file1'))
-      stat_info = meta.testing.os.stat('/home/bob/file1')
+          True, metax.test.os.path.exists('/home/bob/file1'))
+      stat_info = metax.test.os.stat('/home/bob/file1')
       self.assertEqual(0, stat_info.st_size)
       self.assertEqual('100666', '%o' % stat_info.st_mode)
 
       /# file2 is a file with content.
-      fp = meta.testing.open('/home/bob/file2', 'r')
+      fp = metax.test.open('/home/bob/file2', 'r')
       self.assertEqual('hello world\n', fp.read())
       fp.close()
-      stat_info = meta.testing.os.stat('/home/bob/file2')
+      stat_info = metax.test.os.stat('/home/bob/file2')
       self.assertEqual('100640', '%o' % stat_info.st_mode)
 
       /# dir1 is a directory with default permissions.
       self.assertEqual(
-          True, meta.testing.os.path.isdir('/home/bob/dir1'))
-      stat_info = meta.testing.os.stat('/home/bob/dir1')
+          True, metax.test.os.path.isdir('/home/bob/dir1'))
+      stat_info = metax.test.os.stat('/home/bob/dir1')
       self.assertEqual('40777', '%o' % stat_info.st_mode)
 
       /# dir2 is a directory with specific permissions.
       self.assertEqual(
-          True, meta.testing.os.path.isdir('/home/bob/dir2'))
-      stat_info = meta.testing.os.stat('/home/bob/dir2')
+          True, metax.test.os.path.isdir('/home/bob/dir2'))
+      stat_info = metax.test.os.stat('/home/bob/dir2')
       self.assertEqual('40755', '%o' % stat_info.st_mode)
 
       /# link1 is a symlink to file1
-      stat_info = meta.testing.os.stat('/home/bob/link1')
+      stat_info = metax.test.os.stat('/home/bob/link1')
       self.assertEqual('100666', '%o' % stat_info.st_mode)
 
       /# file3 has content initialized from a file.
       self.assertEqual(
-          True, meta.testing.os.path.exists('/home/bob/file3'))
-      stat_info = meta.testing.os.stat('/home/bob/file3')
+          True, metax.test.os.path.exists('/home/bob/file3'))
+      stat_info = metax.test.os.stat('/home/bob/file3')
       self.assertEqual(28, stat_info.st_size)
       self.assertEqual('100666', '%o' % stat_info.st_mode)
 
@@ -928,10 +1415,10 @@ scope:
       tc = self._tc
 
       /# If we don't first call SetupSharedFilesystem, FakeFile() is an error.
-      self.assertRaises(meta.testing.Error, tc.fakeFile, '/any/path')
+      self.assertRaises(metax.test.Error, tc.fakeFile, '/any/path')
 
       fs = tc.setupSharedFilesystem(
-          [meta.testing], [('/a/b/c', {'contents': 'blah'})])
+          [metax.test], [('/a/b/c', {'contents': 'blah'})])
       fake = tc.fakeFile('/a/b/c')
       self.assertTrue(isinstance(fake, fake_filesystem.FakeFile))
       self.assertEqual('blah', fake.contents)
@@ -967,10 +1454,10 @@ scope:
       tc = self._tc
 
       /# If we don't first call SetupSharedFilesystem, FakeContent() is an error.
-      self.assertRaises(meta.testing.Error, tc.fakeContents, '/any/path')
+      self.assertRaises(metax.test.Error, tc.fakeContents, '/any/path')
 
       fs = tc.setupSharedFilesystem(
-          [meta.testing], [('/a/b/c', {'contents': 'blah'})])
+          [metax.test], [('/a/b/c', {'contents': 'blah'})])
       self.assertEqual('blah', tc.fakeContents('/a/b/c'))
     end method fakeContents;
 
@@ -1005,11 +1492,11 @@ scope:
       del fsinfo[mname]
     test<py>:
       tc = self._tc
-      mname = meta.testing.__name__
+      mname = metax.test.__name__
       self.assertFalse(mname in tc._fsinfo)
-      unused_fs = tc.setupFilesystem(meta.testing)
+      unused_fs = tc.setupFilesystem(metax.test)
       self.assertTrue(mname in tc._fsinfo)
-      tc.revertFilesystem(meta.testing)
+      tc.revertFilesystem(metax.test)
       self.assertFalse(mname in tc._fsinfo)
     end method revertFilesystem;
 
@@ -1183,10 +1670,17 @@ scope:
     end method iseqmap;
 
     method iseqtext params:
-      multi var args : vec;
-      multi var kwds : map;
+      var first : str;
+      var second : str;
+      var text : str = null;
     scope<py>:
-      self.assertMultiLineEqual(*args, **kwds)
+      self.assertMultiLineEqual(first, second, msg=text)
+    scope<js>:
+      if (text === null) {
+        assertEquals(first, second);
+      } else {
+        assertEquals(text, first, second);
+      }
     end method iseqtext;
 
     method iseqfile params:
@@ -1265,7 +1759,7 @@ scope:
       self.assertLess(expected, item, message)
     scope<js>:
       if (message == null) {
-        message = '' + expected + ' >= ' + item
+        message = '' + expected + ' >= ' + item;
       }
       assertTrue(message, expected < item);
     end method islt;
@@ -1280,7 +1774,7 @@ scope:
       self.assertLessEqual(expected, item, message)
     scope<js>:
       if (message == null) {
-        message = '' + expected + ' > ' + item
+        message = '' + expected + ' > ' + item;
       }
       assertTrue(message, expected <= item);
     end method isle;
@@ -1295,7 +1789,7 @@ scope:
       self.assertGreater(expected, item, message)
     scope<js>:
       if (message == null) {
-        message = '' + expected + ' <= ' + item
+        message = '' + expected + ' <= ' + item;
       }
       assertTrue(message, expected > item);
     end method isgt;
@@ -1310,7 +1804,7 @@ scope:
       self.assertGreaterEqual(expected, item, message)
     scope<js>:
       if (message == null) {
-        message = '' + expected + ' < ' + item
+        message = '' + expected + ' < ' + item;
       }
       assertTrue(message, expected >= item);
     end method isge;
@@ -1322,15 +1816,26 @@ scope:
       keyword args while the javascript version does not. Need to get 
       varargs supported in javascript before we can try implementing it.
     params:
-      var func : any #:
-        The executable to invoke (with args and kwds).
-      multi var args : vec;
-      multi var kwds : map;
+      var eclass : class #:
+        The exception class raised
+      var func : &function #:
+        The callable object
+      multi var args : vec #:
+        The positional args to pass to func.
+      multi var kwds : map #:
+        The keyword args to pass to func.
     scope<py>:
-      self.assertRaises(func, *args, **kwds)
+      self.assertRaises(eclass, func, *args, **kwds)
     scope<js>:
-      /# TODO(wmh): Fix me.
-      /# assertThrows(func);
+      /# TODO(wmh): goog.testing.asserts.assertThrows() is rather limited:
+      /#  - it only handles methods that that don't require any args
+      /#  - it only detects whether any exception is raised, not whether a
+      /#    specific exception is raised.
+      /# A better version of assertThrows() is certainly possible. Implement
+      /# it.
+      var e = assertThrows(func);
+      /# TODO(wmh): At the very least, we can compare the exception 'e' against
+      /# expected 'eclass'.
     end method raises;
 
     method issame params:
@@ -1439,398 +1944,11 @@ scope:
       super(TestCase, self).fail(msg);
     end;
 
-    new specific
-    method run #:
-      Execute this test case.
-
-      Meta:suppress: constantProperty
-    params:
-      var restr : str = null #:
-        A regexp string. Only methods matching this regexp are considered when
-        looking for test methods to register.
-    scope<js>:
-      this.log('Starting run');
-      var location = goog.global.location;
-      this.log('location = ' + location);
-      if (restr) {
-        this.log('restr = ' + restr);
-      }
-      /# To parallel the junit mechanisms used in Java, Python, etc, in
-      /# Meta<Javascript> we define a subclass <C>Test of goog.testing.TestCase
-      /# for every user-defined class <C>, and implement one or more test
-      /# methods for each method defined on <C> within that <C>Test.
-      /#
-      /# The javascript closure environment uses
-      /#   goog.testing.TestCase.setTestObj()
-      /# to specify the object to search for test methods (e.g. methods
-      /# starting with 'test' and the special 'setUp[Page]' and 'tearDown[Page]'
-      /# method).
-      /#
-      /# For Meta<Javascript> the object containing the test methods is the
-      /# TestCase instance invoking the 'run' method. Rather than invoking
-      /# goog.testing.TestCase.setTestObj(), we provide a new version locally
-      /# named 'registerTests()'.  It is very similar to setTestObj(), but
-      /# provides the ability to limit the set of methods registered based
-      /# on a regexp.
-      //goog.testing.jsunit.AUTO_RUN_ONLOAD = false;  // disable onload handler
-      this.jsunit();
-      this.setTestObj(this, restr);
-      /** @type {!goog.testing.TestRunner} */var gTestRunner = goog.global['G_testRunner'];
-      gTestRunner.setStrict(false);  // allow testsuites with zero tests.
-      goog.testing.TestCase.initializeTestRunner(this);
-      gTestRunner.execute();
-      this.deblog('Finishing run');
-    end method run;
-
-    new specific
-    method jsunit #:
-      A Meta-specific replacement for goog.testing.jsunit.
-
-      See discussion in TestCase comment for details.
-
-      Meta:suppress: reportUnknownTypes
-    scope<js>:
-      this.deblog('Starting jsunit()');
-      var thisTestCase = this;
-
-      /# NOTE: While experimenting with the best way to set up TestCase for
-      /# javascript, the code can run in two versions.  If this.useold() is
-      /# true, the code uses the normal javascript testing idiom as much
-      /# as possible.  If useold() is false, it means we can use new and
-      /# improved implementations where relevant.
-      /#
-      /# For most methods, it is a simple matter of invoking the parent
-      /# version of the method if useold(), and providing a new implementation
-      /# if useold() is false.  But for jsunit, this isn't possible because
-      /# the code is executed via goog.require('goog.testing.jsunit'), which
-      /# is unappealing magically.
-      /#
-      /# This method is a faithful representation of what happens in
-      /# goog.testing.jsunit ... divergences from the default implementation
-      /# are guarded by this.useold() == false.
-
-      /# Base path for JsUnit app files, relative to Closure's base path.
-      /** @type {string} */ var BASE_PATH = '../../third_party/java/jsunit/core/app/';
-
-      /# Filename for the core JS Unit script.
-      /** @type {string} */ var CORE_SCRIPT = BASE_PATH + 'jsUnitCore.js';
-
-      /# If this code is being parsed by JsTestC, we let it disable
-      /# the onload handler to avoid running the test in JsTestC.
-      /** @type {boolean} */ var AUTO_RUN_ONLOAD = true;
-
-      /# Sets a delay in milliseconds after the window onload event
-      /# and running the tests. Used to prevent interference with
-      /# Selenium and give tests with asynchronous operations time to
-      /# finish loading.
-      /** @type {number} */ var AUTO_RUN_DELAY_IN_MS = 500;
-
-      /# Only allow one global test runner to be created on a page.
-      if (goog.global['G_testRunner'] instanceof goog.testing.TestRunner) {
-        /# This can happen, for example, if the test code has goog.requried
-        /# goog.testing.jsunit, which performs this same functionality. 
-        /# The hope is that we can avoid using goog.testing.jsunit in faavor
-        /# of this method, which gives more insight and control over what
-        /# happens and allows us to implement additional features.
-        console.log(
-          'WARNING: G_testRunner initialized ... verify goog.testing.jsunit ' +
-          'is NOT being goog.required');
-        return;
-      }
-
-      /# Increases the maximum number of stack frames in Google Chrome from the
-      /# default 10 to 50 to get more useful stack traces.
-      Error.stackTraceLimit = 50;
-
-      /# Store a reference to the window's timeout so that it can't be overridden
-      /# by tests.
-      /** @type {!Function} */ var realTimeout = window.setTimeout;
-
-      /# Check for JsUnit's test runner (need to check for >2.2 and <=2.2)
-      if (top['JsUnitTestManager'] || top['jsUnitTestManager']) {
-        /# Running inside JsUnit so add support code.
-        var path = goog.basePath + CORE_SCRIPT;
-        document.write(
-            '<script type="text/javascript" src="' + path + '"></' +
-            'script>');
-        this.deblog('Instrumented document with javascript ' + path);
-
-      } else {
-        /# Create a test runner.
-        var tr = new goog.testing.TestRunner();
-        this.deblog('Created new TestRunner');
-
-        /# Export it so that it can be queried by Selenium and tests that use a
-        /# compiled test runner.
-        goog.exportSymbol('G_testRunner', tr);
-        goog.exportSymbol('G_testRunner.initialize', tr.initialize);
-        goog.exportSymbol('G_testRunner.isInitialized', tr.isInitialized);
-        goog.exportSymbol('G_testRunner.isFinished', tr.isFinished);
-        goog.exportSymbol('G_testRunner.isSuccess', tr.isSuccess);
-        goog.exportSymbol('G_testRunner.getReport', tr.getReport);
-        goog.exportSymbol('G_testRunner.getRunTime', tr.getRunTime);
-        goog.exportSymbol('G_testRunner.getNumFilesLoaded', tr.getNumFilesLoaded);
-        goog.exportSymbol('G_testRunner.setStrict', tr.setStrict);
-        goog.exportSymbol('G_testRunner.logTestFailure', tr.logTestFailure);
-        goog.exportSymbol('G_testRunner.getTestResults', tr.getTestResults);
-
-        /# Export debug as a global function for JSUnit compatibility.  This just
-        /# calls log on the current test case.
-        if (!goog.global['debug']) {
-          goog.exportSymbol('debug', goog.bind(tr.log, tr));
-        }
-
-        /# If the application has defined a global error filter, set it now.  This
-        /# allows users who use a base test include to set the error filter before
-        /# the testing code is loaded.
-        if (goog.global['G_errorFilter']) {
-          tr.setErrorFilter(goog.global['G_errorFilter']);
-        }
-
-        /# Add an error handler to report errors that may occur during
-        /# initialization of the page.
-        var onerror = window.onerror;
-
-        /**
-         * An error handler to report errors that may occur during
-         * initialization of the page.
-         * @param {!string} error
-         * @param {!string} url
-         *   The url ... ?
-         * @param {!number} line
-         *   The line number (or is this the line text??)
-         */
-        window.onerror = function(error, url, line) {
-          /# Call any existing onerror handlers.
-          if (onerror) {
-            onerror(error, url, line);
-          }
-          if (typeof error == 'object') {
-            /# Webkit started passing an event object as the only argument to
-            /# window.onerror.  It doesn't contain an error message, url or line
-            /# number.  We therefore log as much info as we can.
-            if (error.target && error.target.tagName == 'SCRIPT') {
-              tr.logError('UNKNOWN ERROR: Script ' + error.target.src);
-            } else {
-              tr.logError('UNKNOWN ERROR: No error information available.');
-            }
-          } else {
-            tr.logError('JS ERROR: ' + error + '\nURL: ' + url + '\nLine: ' + line);
-          }
-        };
-
-        if (this.useold()) {
-          /# This is the original code ... not needed for Meta<javascript>.
-
-          /# Create an onload handler, if the test runner hasn't been
-          /# initialized then no test has been registered with the test runner
-          /# by the test file. We then create a new test case and auto discover
-          /# any tests in the global scope. If this code is being parsed by
-          /# JsTestC, we let it disable the onload handler to avoid running the
-          /# test in JsTestC.
-          if (AUTO_RUN_ONLOAD) {
-            this.deblog('Setting up window.onload');
-            var onload = window.onload;
-            /**
-             * An onload handler.
-             * @param {?Event} e
-             */
-            window.onload = function(e) {
-              /# Call any existing onload handlers.
-              if (onload) {
-                onload(e);
-              }
-              /# Wait so that we don't interfere with WebDriver.
-              realTimeout(function() {
-                if (!tr.initialized) {
-                  thisTestCase.deblog('Initializing test runner');
-                  var testCase = new goog.testing.TestCase(document.title);
-                  goog.testing.TestCase.initializeTestRunner(testCase);
-                }
-                thisTestCase.deblog('Executing test runner');
-                tr.execute();
-              }, AUTO_RUN_DELAY_IN_MS);
-              window.onload = null;
-            };
-          }
-        } else {
-          /# We do not need the onload handler for Meta<javascript>.
-          this.deblog('NOT creating onload handler in jsunit');
-        }
-      }
-      this.deblog('Finishing jsunit()');
-    end method jsunit;
-
-    override specific
-    method setTestObj #:
-      Add specified tests to the TestCase.
-
-      Meta:suppress: accessControls
-    params<js>:
-      var obj : ^Object = null #:
-        The object to search for test and lifecycle methods.  If not specified,
-        'this' is assumed.
-      var restr : str = null #:
-        A regexp string. Only test methods (e.g. methods starting with 'test')
-        whose names subsequently match this regexp will be added.
-    scope<js>:
-      if (obj == null) { obj = this; }
-      this.deblog('Starting setTestObj with ' + obj);
-
-      if (this.useold()) {
-        /# Use original code.
-        this.deblog('  Using original code');
-        goog.testing.TestCase.prototype.setTestObj.call(this, obj);
-      } else {
-        /# Drop any previously added (likely auto-discovered) tests, only one
-        /# source of discovered test and life-cycle methods is allowed.
-        var tests = this.getTests();
-        goog.asserts.assert(
-            tests.length == 0, 'Test methods have already been configured.');
-
-        /# Establish the regexp to use for identifying desired test methods.
-        var fullrestr = '^' + this.getAutoDiscoveryPrefix();
-        if (restr) {
-          if (restr[0] == '^') {
-            restr = restr.substring(1);
-          }
-          fullrestr += '.*' + restr;
-        }
-        var regex = new RegExp(fullrestr);
-
-        /# Register all the test methods matching regex.
-        for (var name in obj) {
-          if (regex.test(name)) {
-            /** @type {function(...*)} */ var testMethod = obj[name];
-            if (goog.isFunction(testMethod)) {
-              this.addNewTest(name, testMethod, obj);
-              /# console.log('Adding test ' + name);
-            }
-          }
-        }
-
-        /# This code (copied from goog.testing.TestCase.setTestObj) is probably
-        /# unnecessary in this implementation.
-        /# TODO(wmh): Delete it?  Seems to work fine without it.
-        if (obj['getTestName']) {
-          var gtn = /** @type {function():string} */ (obj['getTestName']);
-          this.name_ = gtn();
-        }
-
-        /# NOTE: The autoDiscoverLifecycle method looks for certain methods
-        /# defined on 'obj' and replaces the definitions of those methods
-        /# within 'this' with the implementation from 'obj'.  Note that when
-        /# 'obj' == 'this', this method is a noop.
-        if ((this === obj) && (!this.useold())) {
-          this.deblog('Avoiding unnecessary call to autoDiscoverLifecycle');
-        } else {
-          this.autoDiscoverLifecycle(obj);
-        }
-      }
-
-      this.deblog('Finishing setTestObj');
-    end method setTestObj;
-
-    specific postx
-    method setTestsToRun #:
-      Extends parent definition.
-    params:
-      var tests : *map<@str,bool> #:
-        The set of tests to run.  Entries in the set may be test names,
-        like 'testFoo', or numeric indices. Only those tests identified by
-        the names/indices specified will be executed.
-    super (tests)
-    scope<js>:
-      this.deblog('In setTestsToRun:');
-      for (var key in tests) {
-        this.deblog(key);
-      }
-    end method setTestsToRun;
-
-    specific override
-    method autoDiscoverTests #:
-      We override goog.testing.TestCase.autoDiscoverTests() with our own
-      implementation so we hve control over various things.
-
-      Note the the code in goog.testing.testcase.js around auto discovery is a
-      bit muddled. Both setTestObj(obj) and autoDiscoverTests() perform auto
-      detection of test methods (e.g. methods starting with 'test'), and both
-      invoke autoDiscoverLifecycle() to detect setUp(), tearDown(), etc. And
-      yet both methods get invoked during normal control flow:
-        - goog.require('goog.testing.jsunit')
-           - G_testRunner obtained
-           - window.onerror handler created
-           - window.onload handle created that:
-              - initializes ...
-
-      Meta:suppress: reportUnknownTypes, visibility
-    scope<js>:
-      this.deblog('Starting autoDiscoverTests');
-      if (this.useold()) {
-        /# We just use the parent definition.
-        this.deblog('  Using parent definition');
-        goog.testing.TestCase.prototype.autoDiscoverTests.call(this);
-
-      } else {
-        /# We provide our own definition
-        var prefix = this.getAutoDiscoveryPrefix();
-        var testSources = this.getGlobals(prefix);
-
-        var foundTests = [];
-
-        for (var i = 0; i < testSources.length; i++) {
-          var testSource = testSources[i];
-          for (var name in testSource) {
-            if ((new RegExp('^' + prefix)).test(name)) {
-              var ref;
-              try {
-                ref = testSource[name];
-              } catch (ex) {
-                /# NOTE(brenneman): When running tests from a file:// URL on Firefox
-                /# 3.5 for Windows, any reference to goog.global.sessionStorage raises
-                /# an "Operation is not supported" exception. Ignore any exceptions
-                /# raised by simply accessing global properties.
-                ref = undefined;
-              }
-
-              if (goog.isFunction(ref)) {
-                foundTests.push(this.createTestFromAutoDiscoveredFunction(name, ref));
-              }
-            }
-          }
-        }
-
-        for (var i = 0; i < foundTests.length; i++) {
-          this.add(foundTests[i]);
-        }
-        this.orderTests_();
-
-        this.deblog(this.getCount() + ' tests auto-discovered');
-
-        /# The code for goog.testing.TestCase.autoDiscoverLifecycle notes:
-        /#   TODO(user): Do this as a separate call. Unfortunately, a lot of
-        /#   projects currently override autoDiscoverTests and expect lifecycle
-        /#   events to be registered as a part of this call.
-        /# We are not constrained by legacy usecases in Meta, so we can remove
-        /# this here and call it separately where needed.  And since the
-        /# test object is what is being run, autoDiscoverLifecycle() would
-        /# just be copying methods from this into this, so it is a noop
-        /# twice-over.
-        /#### this.autoDiscoverLifecycle();
-      }
-      this.deblog('Finished autoDiscoverTests');
-    end method autoDiscoverTests;
-
-    prex specific
-    method autoDiscoverLifecycle #:
-      Add a bit of functionality to parent definition.
-    scope<js>:
-      this.deblog('In autoDiscoverLifecycle');
-    end method autoDiscoverLifecycle;
-
   end class TestCase;  
 
-  native _ scope<py>:
+  native #:
+    The code needed to run the namespace level tests.
+  scope<py>:
     def main():
       import os
       tsd = os.getenv('TEST_SRCDIR', None)
@@ -1843,7 +1961,10 @@ scope:
       else:
         /# This code IS being executed via bazel
         pass
-      unittest.main()
+      /# By passing verbosity=0, we disable unittest.TextTestRunner's default
+      /# behavior of printing out a '.' (or 'E' or 'F') for each test. Meta
+      /# provides its own output.
+      unittest.main(verbosity=0)
   end native;
 
 end namespace metax.test;

@@ -40,32 +40,40 @@ scope:
     A card with suit and rank, belonging to a Deck.
 
     The Deck is responsible for display functionality.
-  assocs:
-    cls assoc demo.cards2.Deck;
+
+    Meta:suppress: checkTypes,reportUnknownTypes
+  assocs<py>:
+    cls assoc demo.cards2.Deck target "" #:
+      We disable target to avoid circularity issues (Deck requires Card)
+  assocs<js>:
+    cls assoc demo.cards2.Deck target "" #:
+      We disable target to avoid circularity issues (Deck requires Card)
   scope:
     field rank : int #:
       Rank as simple integer. Deck assigns display semantics to rank values.
     field suit : int #:
       Suit as simple integer. Deck assigns display semantics to suit values.
-    field deck : Deck #:
+    field deck : any #:
       The Deck this Card belongs to.
+      Intentionally not typing to avoid circulariy issues in javascript.
 
     lifecycle #:
       It should not be necessary to create Card instances directly.
       Instead, one should create instances of Deck, and use the cards
       it contains.
     params:
-      var deck : Deck;
       var rank : int;
       var suit : int;
+      var deck : any = null #:
+        /# We do not type this variable to avoid bazel circularity issues.
     scope<py>:
-      self.deckIs(deck)
       self.rankIs(rank)
       self.suitIs(suit)
+      self.deckIs(deck)
     scope<js>:
-      this.deckIs(deck);
       this.rankIs(rank);
       this.suitIs(suit);
+      this.deckIs(deck);
     test:
     end lifecycle;
 
@@ -84,7 +92,7 @@ scope:
   public
   class Deck < Pile #:
     A pre-determined collection of Card instances.
-  assocs:
+  assocs<py>:
     std assoc random;
   scope:
 
@@ -157,13 +165,15 @@ scope:
         'Ten', 'Jack', 'Queen', 'King',
         'High'])
     scope<js>:
-      meta.SuitsIs(
-        ['Joker', 'Spades', 'Diamonds', 'Clubs', 'Hearts']);
-      meta.RanksIs([
+      this._Suits = [
+        'Joker', 'Spades', 'Diamonds', 'Clubs', 'Hearts'
+      ];
+      this._Ranks = [
         'Low',
         'Ace', '2', '3', '4', '5', '6', '7', '8', '9',
         'Ten', 'Jack', 'Queen', 'King',
-        'High']);
+        'High'
+      ];
     end lifecycle;
 
     lifecycle params:
@@ -173,32 +183,36 @@ scope:
       cards = self.cards()
       for suit in range(1, 5):
         for rank in range(1, 14):
-          card = demo.cards2.Card(self, rank, suit)
+          card = demo.cards2.Card(rank, suit, deck=self)
           cards.append(card)
       if jokers:
-        lowjoker = Card(self, 0, 0)
+        lowjoker = Card(0, 0, deck=self)
         cards.append(lowjoker)
-        highjoker = Card(self, 14, 0)
+        highjoker = Card(14, 0, deck=self)
         cards.append(highjoker)
     scope<js>:
       var cards = this.cards();
       for (var suit = 1; suit < 5; ++suit) {
         for (var rank = 1; rank < 14; ++rank) {
-          var card = new demo.cards2.Card(self, rank, suit);
-          cards.append(card);
+          var card = new Card(rank, suit, this);
+          cards.push(card);
         }
       }
       if (jokers) {
-        var lowjoker = new demo.cards2.Card(self, 0, 0);
-        cards.append(lowjoker);
-        var highjoker = new demo.cards2.Card(self, 14, 0);
-        cards.append(highjoker);
+        var lowjoker = new Card(0, 0, this);
+        cards.push(lowjoker);
+        var highjoker = new Card(14, 0, this);
+        cards.push(highjoker);
       }
     end lifecycle;
 
     override
     method asStr : str #:
       Provide a string representation of a given card.
+
+      Returns:
+        Testing to see how things work.
+      Meta:suppress: reportUnknownTypes
     params:
       var card : Card;
       var full : bool = false #:
@@ -212,7 +226,7 @@ scope:
         result = meta.Ranks()[card.rank()][0] + meta.Suits()[card.suit()][0]
       return result
     scope<js>:
-      var meta = demo.cards2.FrenchDeckClass;
+      var meta = MetaFrenchDeck;  /** TODO(wmh): Get this.meta() working */
       var suits = meta.Suits();
       var ranks = meta.Ranks();
       var result;
@@ -221,6 +235,7 @@ scope:
       } else {
         result = meta.Ranks()[card.rank()][0] + meta.Suits()[card.suit()][0];
       }
+      return result;
     test<py>:
       deck = demo.cards2.FrenchDeck()
       test.iseq('AS', deck.asStr(deck.cards()[0]))
@@ -231,13 +246,20 @@ scope:
 
   test
   class TestCase < metax.test.TestCase
-  assocs:
+  assocs<py>:
     std assoc random;
   scope:
     meta field TestVar : int;
 
-    lifecycle scope:
+    lifecycle _
+    setup<py>:
       random.seed(0)
+    setup<js>:
+      /# https://stackoverflow.com/questions/521295/seeding-the-random-number-generator-in-javascript
+      /# The default Javascript random number generator does not support
+      /# setting the seed.
+      /# TOOD(wmh): Implement a random number generator that supports setting
+      /# the seed.
     end;
   end class TestCase;
 

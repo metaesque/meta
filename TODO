@@ -1,0 +1,52 @@
+
+- Implement the 'simplex' attribute type
+   - used for block-valued attributes that are of type 'simple'
+     when the selector is a baselang, and are of type 'complex'
+     when the selector is '*'.
+
+- Implement C++ to the point where 'make cards2-cc' works.
+  - need to get C++ unit testing working
+  - may need to improve the type system.
+
+- Get implicit meta-level receiver vars working
+  - each baselang has a hard or soft receiver variable name
+  - meta introduces its own naming convention
+     - self for instance methods in user classes
+     - test for instance methods in test classes
+     - meta for class methods (in either user or test classes)
+  - any reference to the meta names ('self', 'test', 'meta') within
+    baselang-level scopes should be replaced by the appropriate
+    baselang names/syntax.
+     - for example, in C++, if baselang scope code contains 'self.'
+       it should be replaced with '(*this).'
+
+- 'entry' and 'action' constructs
+
+- nested flag/arg parsing
+  - introduce metax.lib.Command class with 'flags', 'args' and 'actions'
+  - A command line is represented by a Command instance
+     - if the application uses actions, the first non-flag identifies the
+       action, for which a new Command instance is created and added to
+       the actions() field of the parent Command.
+     - if the application does not use actions, all non-flag args on the
+       command-line are grouped together into the args() field (and
+       can be interspersed with the flags ... not possible if actions exist).
+
+- html generation
+  - when file.meta is compiled via meta2, create .file.html, which renders
+    the code with syntax highlighting and hyperlinking:
+     - every meta construct is highlighted and linked to its documentation
+     - every meta construct is linked to its associated baselang code
+
+- uml generation
+   - this should use the HTML syntax so that we can draw association lines
+     from field to field rather than just class to class.
+
+- get baseline-to-metaline mapping working
+   - should NOT need to invoke metafilt externally (wherever possible)
+
+- implement 'meta2 shell', which starts an interactive shell within which
+  one can explore meta-level code interactive.
+   - parse/expand/translate/compile metafiles
+   - print out arbitrary constructs
+   - run code in arbitrary baselang

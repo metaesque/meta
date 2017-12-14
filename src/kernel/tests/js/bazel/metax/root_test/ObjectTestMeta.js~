@@ -1,0 +1,26 @@
+goog.module('metax.root_test.ObjectTest__Meta');
+goog.module.declareLegacyNamespace();
+
+/**
+ * metax.root_test.ObjectTest__Meta
+ *   Auto-generated meta class for auto-generated test class metax.root_test.ObjectTest
+ * @public
+ */
+class ObjectTest__Meta extends Object {
+
+  /**
+   * initializer
+   */
+  constructor() {
+    super();
+    var meta = this;
+    // User-provided code follows.
+  };
+
+  meta() {
+    return null;
+  }
+}
+const ObjectTestMeta = new ObjectTest__Meta();
+
+exports = {ObjectTestMeta, ObjectTest__Meta};

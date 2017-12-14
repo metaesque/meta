@@ -2,6 +2,123 @@ namespace metax.root #:
   The top-level classes that Meta provides.
 scope:
 
+  meta  
+  class ObjectMetaRoot #:
+    TODO(wmh): Decide which variant of meta-classes to support in Meta:
+
+      1) The metaclass hierarchy defined by Meta inherits from the metaclass(es)
+         defined by baselangs.
+          - pros:
+             - we aren't maintaining two separate hierarchies in languages
+               that provide 
+             - the features added by Meta integrate seamlessly into the
+               features provided by the baselang, instead of the two sets
+               of features being forced to be independent
+          - cons:
+             - Metaclasses are a required feature, introducing additional
+               classes and complexity without any ability to remove them if
+               they are unused.
+          - notes about ObjectMetaRoot:
+             - This class is for the metaclass hierarchy what Object is for the
+               class hierarchy. All metaclasses in Meta inherit (directly or indirectly)
+               from this class unless the user specifies a metaparent outside the
+               meta metaclass inheritance hierarchy (which limits what Meta can do).
+             - This class acts as a bridge between the Meta world and the non-Meta
+               world, inheriting from whatever baselang-specific class is used
+               for metaclasses. If such a class does not exist, this class
+               inherits from the root class in the baselang. If such a class
+               does not exist, this class inherits from nothing. We 
+               intentionally do NOT have this class inherit from
+               metax.root.Object in such cases because that would mean that
+               metax.root.Object functionality would be available in some
+               baselang metaclasses but not in others.
+
+      2) Meta introduces a metaclass hierarchy that is independent of the
+         metaclass hierarchy of the baselang, and instances of the Meta-defined
+         metaclass hierarchy contain instances of the baselang metaclass
+         instances (for baselangs that have a metaclass concept).
+          - pros:
+             - all metaclasses across all baselangs can inherit from
+               metax.root.Object and benefit from a consistent interface,
+               instead of different functionality existing in different
+               baselangs.
+             - the metaclasses introduced by Meta can be completely decoupled
+               from the user-classes ... they can be used if needed, but
+               do not have any impact on the code if not used. Note however
+               that they are implicitly being used (and thus required) if
+               the user defines any 'meta'-level classic constructs.
+          - cons:
+             - results in an extra hierarchy
+             - *** In Python, we would not be able to set __metaclass__ to
+               the Meta-defined metaclass, and would have to implement all
+               meta-level functionality using @classmethod, etc.
+                - this would be definining an 'Initialize' method and ensuring
+                  it always gets invoked when classes are loaded, etc. ...
+                  not nearly as clean a solution as having the metaclass
+                  initializer perform such initialization.
+                - this con is basically a deal breaker, no?
+  parent<py> ^type
+  parent<js> ^Object
+  parent<cc> null
+  scope:
+
+    field metaname : str #:
+      The name of the class being represented by this metaclass.
+      TODO(wmh): This field is not needed in python ... need a way to
+      have 'specific' fields. But we do want to define metaname() to return
+      the name as stored in the type metaclass.
+      TODO(wmh): This should be a readonly field, so no setter or reffer.
+
+    field metabases : vec<class> #:
+      The parent classes of the class.
+      TODO(wmh): This field is not needed in python ... need a way to
+      have 'specific' fields.  But we do want to define metabases() to return
+      the bases as stored in the type metaclass.
+      TODO(wmh): This should be a readonly field, so no setter or reffer.
+
+    field metasymbols : map #:
+      The symbols available within the class.
+      TODO(wmh): This field is not needed in python ... need a way to
+      have 'specific' fields.  But we do want to define metasymbols() to return
+      the symbols as stored in the type metaclass.
+      TODO(wmh): This should be a readonly field, so no setter or reffer.
+
+    lifecycle #:
+      Every user-defined class has an auto-generated metaclass created for it,
+      and that metaclass inherits (eventually) from this class.  The meta
+      compiler implicitly inserts a params: block in meta class initializers
+      (if users define a meta-level lifecycle construct, they should not
+      specify params:, as that will be an error).
+
+      This signature is currently motivated by the signature of metaclasses in
+      Python. As additional baselangs are added to Meta, we may need to
+      generalize this implicit signature. Note that Javascript and C++ do not
+      have metaclasses, so we are not constrained by these baselangs). But when
+      we add in support for Java, we will need to establish whether
+      java.lang.Class can be subclassed (or whether metax.root.ObjectMeta will
+      need to act as a wrapper around a java.lang.Class instance) and how that
+      influences this signature.
+    params:
+      var name : &str #:
+        The name of the class being created
+      var bases : vec<class> #:
+        The parent classes of the class (instances of metaclasses)
+      var symbols : map #:
+        The symbols available within the class.
+    super<py> (name, bases, symbols)
+    scope<py>:
+    scope<js>:
+      this.metanameIs(name);
+      this.metabasesIs(bases);
+      this.metasymbolsIs(symbols);
+    scope<cc>:
+      this->metanameIs(name);
+      this->metabasesIs(bases);
+      this->metasymbolsIs(symbols);
+    end lifecycle;
+
+  end class ObjectMetaRoot;
+
   class Object #:
     Except in special circumstances, every class defined within Meta inherits
     from this class. Every base language provides a specialized implementation
@@ -9,21 +126,63 @@ scope:
     within that base language. Some of the methods defined here are present in
     all languages, some are only present in a subset of languages or in just one
     language.
+
+    This class does NOT introduce any instance-level state, but does define
+    a significant amount of instance-level and meta-level functionality
+    available to every subclass intance and subclass respectively.
+
+    Note that the metaparent of this class is always ObjectMetaRoot. Any
+    class that inherits from Object will have a metaclass that inherits
+    from ObjectMetaRoot.  Any user-defined meta class by default inherits
+    from ObjectMetaRoot (semantics implemented in
+    metax.c.ClassConstruct.metaClassInfo().
   parent<py> ^object
-  metaparent<py> ^type
   parent<js> ^Object
+  parent<cc> null
+  metaparent metax.root.ObjectMetaRoot
   scope:
+
+    user
+    lifecycle #:
+      Do NOT introduce any instance-level state here.
+    scope:
+    end lifecycle;            
+
+    remark hidden #:
+      We are currently disabling the test class for Object because it adds to
+      the complexity of bootstrapping javascript. Consider reinstating these.
+
+      raw test field obj : metax.root.Object;
+
+      test 
+      lifecycle #:
+        A test lifecycle that creates an Object instance.
+      setup<py>:
+        test.obj = metax.root.Object()
+      setup<js>:
+        test.obj = new metax.root.Object();
+      end;
+
+      test method test_generic
+      scope<py>:
+        print 'here with %s' % test.obj
+      scope<js>:
+        console.log('here with ' + test.obj);
+      end;
+    end remark hidden;
+
   end class Object;
 
+  nometa
   class Error #:
     The exception hierarchy is documented in the following places:
       python: https://docs.python.org/2/library/exceptions.html
       javascript: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error
   parent<py> ^Exception
   parent<js> ^Error
+  parent<cc> null
   scope:
   end class Error;
 
 end namespace metax.root;
 
-    

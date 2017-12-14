@@ -95,6 +95,29 @@ config:
     end Attribute visibility;
 
     feature
+    Attribute autogen : <std|nometa|notest|nometanotest> = std #:
+      Controls which auto-generated classes are generated.
+      TODO(wmh): This should be a regexp-defined attribute of the form:
+        '^(?:[+-](?:meta|test))+$'
+      with the default being '+meta+test'
+    config:
+      FeatureValue std #:
+        If the class has location=user
+         - a metaclass is generated
+         - a testlass is generated
+        If the class has location=meta
+         - a testclass is generated
+        If the class has location=test
+         - a metaclass is generated
+      FeatureValue nometa #:
+        No meta class is generated
+      FeatureValue notest #:
+        No test class is generated
+      FeatureValue nometanotest #:
+        No test class is generated
+    end Attribute autogen;
+
+    feature
     Attribute presence : <concrete|abstract> = concrete #:
       Dictates whether this class can be instantiated or not.
     config:
@@ -104,6 +127,19 @@ config:
       FeatureValue concrete #:
         A class of which instances can be created.
     end Attribute presence;
+
+    feature
+    Attribute span : <general|specific> = general #:
+      Whether the class should be defined in all base languages or only those
+      with a scope block.
+    config:
+      FeatureValue specific #:
+        The compiler does not generate a class for baselangs without a scope
+        block.
+      FeatureValue general #:
+        The compiler reports a warning if the class is being compiled into
+        a baselang and does not have a scope block for that baselang.
+    end Attribute span;
 
     primary
     Attribute class : id = <required> #:
@@ -143,7 +179,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <lifecycle|method|field|native|category>;
+    Attribute scope: children <lifecycle|method|field|native|category|remark>;
 
     secondary
     Attribute flags: : complex = <empty> children <flag> #:
@@ -180,16 +216,57 @@ config:
       >|  metax.test.main()
     end Template python_test;
 
-    Template javascript scope:
+    Template javascript #:
+      How to define javascript classes using ES2015 class sytnax and goog.module().
+      https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes
+      https://github.com/google/closure-library/wiki/goog.module:-an-ES6-module-like-alternative-to-goog.provide
+    scope:
+      >|${overview}
+      >|goog.module('${fqcn}');
+      >|goog.module.declareLegacyNamespace();
+      >|${imports}
+      >|${preamble}
+      >|
+      >|${comment}
+      >|class ${class}${parentspec} {
+      >|  ${header}
+      >|  ${scope}
+      >|}
+      >|${postamble}
+    end Template javascript;
+
+    Template javascript_test #:
+      How to define javascript test classes using ES2015 class sytnax.
+    scope:
+      >|${overview}
+      >|goog.module('${fqcn}');
+      >|goog.setTestOnly('${fqcn}');
+      >|goog.module.declareLegacyNamespace();
+      >|${imports}
+      >|${preamble}
+      >|
+      >|${comment}
+      >|class ${class}${parentspec} {
+      >|  ${header}
+      >|  ${scope}
+      >|}
+      >|${postamble}
+    end Template javascript_test;
+
+    Template javascript_oldstyle #:
+      How to define javascript classes without using ES2015 classes.
+    scope:
       >|${comment}
       >|goog.provide('${fqcn}');
       >|${imports}
       >|${preamble}
       >|${scope}
       >|${postamble}
-    end Template javascript;
+    end Template javascript_oldstyle;
 
-    Template javascript_test scope:
+    Template javascript_test_oldstyle #:
+      How to define javascript test classes without using ES2015 classes.
+    scope:
       >|${comment}
       >|goog.setTestOnly('${namespace}.${class}');
       >|${imports}
@@ -211,7 +288,7 @@ config:
       >|// a hacked solution by passing in a value to metac (which is totally
       >|// the wrong place to be doing this!)
       >|testCase.run(${test_method_restr});
-    end Template javascript_test;
+    end Template javascript_test_oldstyle;
 
     Template cpp scope:
       >|#ifndef ${namespace_under}_${class}_h
@@ -225,14 +302,8 @@ config:
       >|class Meta${class}; // So classes can find their metaclass
       >|
       >|${comment}
-      >|class ${class}${parent_spec} {
+      >|class ${class}${parentspec} {
       >|  ${scope}
-      >|
-      >|  // metaclass accessors.
-      >|  public: Meta${class}* metaptr();
-      >|  public: const Meta${class}* metaptr() const;
-      >|  public: Meta${class}& metacls();
-      >|  public: const Meta${class}& metacls() const;
       >|};
       >|${postamble}
       >|
@@ -253,12 +324,10 @@ config:
       >|${preamble}
       >|
       >|${comment}
-      >|class ${class}${parent_spec} {
+      >|class ${class}${parentspec} {
       >|  ${scope}
       >|};
       >|${postamble}
-      >|
-      >|// No meta-class defined for test classes.
       >|
       >|${end_namespace}
       >|
@@ -292,7 +361,6 @@ config:
     feature
     Attribute kind : <instance|static> = instance #:
       Each ${kind} comes in a variety of levels.
-      TODO(wmh): Rename 'level' to 'kind' or 'type' or 'form'
     config:
       FeatureValue instance #:
         The ${kind} is defined on instances of the class.
@@ -321,9 +389,10 @@ config:
 
       Suppose we use
         r = getter
-        w = getter
+        w = setter
         x = reffer
         i = adj
+        @ = the field itself
 
       We could specify a particular accessor with:
         +r = getter is public
@@ -345,9 +414,16 @@ config:
             x +x -x #x ~x !x
             i +i -i #i ~i !i
           and this feature key allows multiple values separated by ''.
-          (note that 'r' is shorthand for '+r')
+          (note that 'r' is shorthand for '+r').  We may also want to
+          add support for abbrevs for the complete value (e.g. 'raw'
+          is an alias for '!r!w!x!i').
        2. we add support for regexp-based feature values:
-            ([+#~!-]?[rwxi])+
+            ([@+#~!-]?[rwxi])+
+          (we could add special abbrevs to this regexp ... 'raw' means
+           '!r!w!x!i+@' ... but mapping those abbrevs to their actual
+           semantics would need to be hardcoded into the implementation
+           rather than being specified in the schema file unless we provide
+           remapping syntax).
     config:
       FeatureValue ro #:
         The getter is public, setter is protected, no other accessors.
@@ -582,7 +658,7 @@ config:
     Attribute location;
 
     feature
-    Attribute kind : <instance|static|closure|initializer|finalizer> = instance #:
+    Attribute kind : <instance|static|cls|closure|initializer|finalizer> = instance #:
       Identifies one of a variety of mutually exclusive kinds of methods.
 
       TODO(wmh): The fact that executables have a feature attribute named kind',
@@ -597,6 +673,14 @@ config:
         defined at class scope is a function). However, a function can appear
         in more places ... at namespace level, within methods, etc.
         TODO(wmh): Is 'static' just an alias for 'function'?
+      FeatureValue cls #:
+        This is a special case for handling an issue in Python between metaclasses
+        and @classmethods.  It indicates that the method should have a @classmethod
+        decorator. It would be preferable to define such methods as having
+        location 'meta', but in Meta that puts the method in the metaclass instead
+        of being an @classmethod method.  Python does not treat @classmethods
+        entirely as methods on the metaclass, which breaks things, hence the need
+        for this special case.
       FeatureValue closure #:
         A function that has access to the variables in the scope within which
         it is lexically defined.
@@ -698,7 +782,7 @@ config:
     Template javascript scope:
       >|
       >|${comment}
-      >|${method_prefix}${method} = function(${params?, }) {
+      >|${method}(${params?, }) {
       >|  ${preamble}
       >|  ${scope}
       >|  ${postamble}
@@ -707,6 +791,25 @@ config:
     end Template;
 
     Template javascript_test scope:
+      >|
+      >|${comment}
+      >|function ${method}() {
+      >|  ${scope}
+      >|}
+    end Template;
+
+    Template javascript_oldstyle scope:
+      >|
+      >|${comment}
+      >|${method_prefix}${method} = function(${params?, }) {
+      >|  ${preamble}
+      >|  ${scope}
+      >|  ${postamble}
+      >|};
+      >|${postmethod}
+    end Template;
+
+    Template javascript_test_oldstyle scope:
       >|
       >|${comment}
       >|function ${method}() {
@@ -746,6 +849,7 @@ config:
     Attribute mutability;
     Attribute extensibility;
     Attribute dispatch;
+    Attribute inheritance = postx;
     Attribute location;
     Attribute kind;
 
@@ -764,11 +868,29 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: aliases <init:|::> children <_statement_>;
+    Attribute scope: aliases <init:|::> children <_statement_> #:
+      The initializer block.
 
     secondary
-    Attribute finalize: : complex = <empty> aliases <::> #:
-      The collection of subconstructs.
+    Attribute finalize: : simple = <empty> aliases <::> #:
+      A finalizer block for cleaning up the object before garbage
+      collection.
+
+    secondary
+    Attribute setup: : simple = <empty> #:
+      A request to generate a baselang-specific setup unittest method.
+
+    secondary
+    Attribute setupcase: : simple = <empty> #:
+      A request to generate a baselang-specific setup testcase method.
+
+    secondary
+    Attribute teardown: : simple = <empty> #:
+      A request to generate a baselang-specific teardown unittest method.
+
+    secondary
+    Attribute teardowncase: : simple = <empty> #:
+      A request to generate a baselang-specific teardown testcase method.
 
   end Construct lifecycle;
 
@@ -863,7 +985,7 @@ config:
     Attribute remark : id = <auto> #:
       The name of the remark.
 
-    Attribute comment:;
+    Attribute comment: : simple;
 
   end Construct remark;
 
@@ -1001,9 +1123,55 @@ config:
     Attribute resource : id = <required> #:
       The name of the resource.
 
+    secondary
+    Attribute path : str = <empty> #:
+      An explicit bazel target for this assoc. Useful in situations where
+      Meta cannot determine the target itself, and in situations where
+      a circularity needs to be broken (specify an empty string).
+    end Attribute path;
+
     Attribute comment:;
 
   end Construct resource;
+
+  Construct entry < _oopl_ #:
+    The entry construct.
+  config:
+
+    primary
+    Attribute entry : id = <required> #:
+      The name of the entry.
+
+    Attribute comment:;
+    Attribute scope: children <flag|action|block>;
+
+  end Construct entry;
+
+  Construct flag < _oopl_ #:
+    The flag construct.
+  config:
+
+    primary
+    Attribute flag : id = <required> #:
+      The name of the flag.
+
+    Attribute comment:;
+    Attribute scope: : simple;
+
+  end Construct flag;
+
+  Construct action < _oopl_ #:
+    The action construct.
+  config:
+
+    primary
+    Attribute action : id = <required> #:
+      The name of the action.
+
+    Attribute comment:;
+    Attribute scope: : simple;
+
+  end Construct action;
 
   abstract
   Construct _statement_ < _oopl_ #:

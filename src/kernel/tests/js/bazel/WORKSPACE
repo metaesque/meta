@@ -1,0 +1,55 @@
+# ----------------------------------------------------------------------
+# Javascript External Dependencies
+
+# See the following for an excellent hello-world demo of javascript builds
+#   https://github.com/cajun-rat/bazel_closure_test
+# See bazelbuild/rules_closure for details on setup.
+#   https://github.com/bazelbuild/rules_closure/blob/master/README.md
+# Discussion group available at:
+#   https://groups.google.com/forum/#!topic/closure-rules-discuss
+
+# git_repository(
+#     name = "io_bazel_rules_closure",
+#     remote = "https://github.com/bazelbuild/rules_closure.git",
+#     tag = "0.2.5"
+# )
+
+git_repository(
+  name = "io_bazel_rules_closure",
+  remote = "https://github.com/bazelbuild/rules_closure.git",
+  # commit = "64f93d91a11db829d8468e6a476ff047131fb927",
+  commit = "7e0c1ff0da3dc5739f1409faf870986fecf76693",
+  # commit = "172f84fe96e07214fa7337b081648d4a61b45b93",  # 2017-12-07
+  # IMPORTANT: You can find the latest commit by:
+  #  - visiting https://github.com/bazelbuild/rules_closure
+  #  - click the link to the right of 'Latest commit'
+  #  - grabbing everything after commit/ in the resulting url
+  # You may want to perform a 'blaze clean --expunge' to fully
+  # delete old code and ensure new code is loaded.
+)
+
+# Although the above repository (io_bazel_rules_closure) includes phantomjs
+# (for use in implementing closure_js_test), Meta<Javascript> also needs
+# access to phantomjs for its own purposes (javascript binaries can be built
+# with phantomjs linked in).  
+###platform_http_file(
+###  name = "phantomjs",
+###  amd64_url = "http://bazel-mirror.storage.googleapis.com/bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-linux-x86_64.tar.bz2",
+###  amd64_sha256 = "86dd9a4bf4aee45f1a84c9f61cf1947c1d6dce9b9e8d2a907105da7852460d2f",
+###  macos_url = "http://bazel-mirror.storage.googleapis.com/bitbucket.org/ariya/phantomjs/downloads/phantomjs-2.1.1-macosx.zip",
+###  macos_sha256 = "538cf488219ab27e309eafc629e2bcee9976990fe90b1ec334f541779150f8c1",
+###)
+
+# The following triggers
+#   https://github.com/bazelbuild/bazel/issues/1715
+# aka
+#   https://github.com/ariya/phantomjs/issues/13876
+#http_archive(
+#    name = "io_bazel_rules_closure",
+#    sha256 = "59498e75805ad8767625729b433b9409f80d0ab985068d513f880fc1928eb39f",
+#    strip_prefix = "rules_closure-0.3.0",
+#    url = "http://bazel-mirror.storage.googleapis.com/github.com/bazelbuild/rules_closure/archive/0.3.0.tar.gz",
+#)
+
+load("@io_bazel_rules_closure//closure:defs.bzl", "closure_repositories")
+closure_repositories()

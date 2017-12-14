@@ -131,6 +131,10 @@ config:
 
   Construct event < _storyroot_ config:
 
+    feature
+    Attribute day : <any|mon|tue|wed|thu|fri|sat|sun> = any #:
+      The event date should land on this day of the week.
+
     primary
     Attribute event : word = <required>;
 

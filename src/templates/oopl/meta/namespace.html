@@ -1,0 +1,132 @@
+<html>
+  <head>
+    <style>
+    .metafile {
+        font-size: 80%;
+        background-color: wheat;
+        color: black;
+        /* http://crafted-software.blogspot.com/2010/07/css-for-tag-list-of-best-monospaced.html */
+        font-family: /* Pragmata,*/ Menlo, 'DejaVu LGC Sans Mono', 'DejaVu Sans Mono', Consolas, 'Everson Mono', 'Lucida Console', 'Andale Mono', 'Nimbus Mono L', 'Liberation Mono', FreeMono, 'Osaka Monospaced', Courier, 'New Courier', monospace;
+        border: 1px solid blue;
+    }
+    /* https://developer.mozilla.org/en-US/docs/Web/CSS/color_value */
+    /* /usr/X11/share/X11/rgb.txt */
+    .face-class     { color: red; }     /* 255, 0, 0 */
+    .face-behavior  { color: red; }
+    .face-method    { color: orange; }  /* 255, 165, 0 */
+    .face-field     { color: orange; }
+    .face-lifecycle { color: orange; }
+    .face-construct { color: rgb(0, 100, 0); /* darkgreen */ }
+    .face-attrkey   { color: rgb(85, 107, 47);  /* darkolivegreen */ }
+    .face-featval   { color: rgb(139, 58, 98); /* hotpink4 */ }
+    .face-keyword   { color: rgb(255, 20, 147); /* deep pink */ }
+    .face-end       { color: rgb(139, 139, 131); /* ivory4 */ }
+    .face-name      { color: rgb(0, 0, 255); /* blue1 */ }
+    .face-comment   { color: rgb(0, 139, 139); /* cyan4 */ }
+    
+    /**
+     * Each line of code in a .meta program is specified by:
+     *   <div>
+     *     <span class="linenum">LINENUM</span>
+     *     <span class="indentNUM"></span>
+     *     <span class="linetext">SOURCE LINE</span>
+     *   </div>
+     *
+     * Notes:
+     *  - the linenum span is a fixed width and subdued coloring
+     *  - the indentNUM span is used to provide indentation.
+     *  - the linetext span contains the meta source line (appropriately marked up).
+     *
+     * TODO(wmh):
+     *  - Establish why we need to move the linetext span one char to the left
+     *  - Establish why there is a 1ch spacing between the linenum span and
+     *    the indentNUM spans ... it isn't due to margin or padding in either
+     *    of the two spans, as far as I can tell. It is actually working in our
+     *    favor, but I'd like to understand where it is coming from.
+     */
+    .linenum  {
+        display: inline-block; 
+        width: 4ex;
+        text-align: right; 
+        margin: 0px;
+        color: rgb(179, 179, 171);
+        /* border: 1px solid red; */
+    }
+    .indent0 { display: inline-block; width:  0ch; /* border: 1px solid green; */ }
+    .indent1 { display: inline-block; width:  2ch; /* border: 1px solid green; */ }
+    .indent2 { display: inline-block; width:  4ch; /* border: 1px solid green; */ }
+    .indent3 { display: inline-block; width:  6ch; /* border: 1px solid green; */ }
+    .indent4 { display: inline-block; width:  8ch; /* border: 1px solid green; */ }
+    .indent5 { display: inline-block; width: 10ch; /* border: 1px solid green; */ }
+    .indent6 { display: inline-block; width: 12ch; /* border: 1px solid green; */ }
+    .indent7 { display: inline-block; width: 14ch; /* border: 1px solid green; */ }
+    .indent8 { display: inline-block; width: 16ch; /* border: 1px solid green; */ }
+    .indent9 { display: inline-block; width: 18ch; /* border: 1px solid green; */ }
+    .linetext {
+        /* border: 1px solid purple; */
+        margin: 0em -1ch;
+    }
+
+    </style>
+  </head>
+  <body>
+
+<h1>${metafile}</h1>
+
+<div class="metafile">
+  <div>
+    <span class="linenum">1</span>
+    <span class="indent0"></span>
+    <span class="linetext"><span class="face-construct">namespace</span> <span class="face-name">demo.cards1</span> <span class="face-attrkey">#:</span></span>
+  </div>
+  <div class="indent face-comment">
+    <div>
+      <span class="linenum">2</span>
+      <span class="indent1"></span>
+      <span class="linetext">Playing cards.</span>
+    </div>
+    <div>
+      <span class="linenum">3</span>
+      <span class="indent1"></span>
+      <span class="linetext">CONTENTS TESTED IN UNITTEST. DO NOT MODIFY.</span>
+    </div>
+  </div>
+  <div>
+    <span class="linenum">4</span>
+    <span class="indent0"></span>
+    <span class="linetext">scope:</span>
+  </div>
+  <div>
+    <span class="linenum">5</span>
+  </div>
+  <div class="indent">
+    <div>
+      <span class="linenum">6</span>
+      <span class="indent1"></span>
+      <span class="linetext">visibility public</span>
+    </div>
+    <div>
+      <span class="linenum">7</span>
+      <span class="indent1"></span>
+      <span class="linetext">class Card &lt; metax.root.Object #:</span>
+    </div>
+    <div>
+      <span class="linenum">11</span>
+      <span class="indent1"></span>
+      <span class="linetext">scope:</span>
+    </div>
+    <div>
+      <span class="linenum">24</span>
+      <span class="indent1"></span>
+      <span class="linetext">end class Card;</span>
+    </div>
+  </div>
+  <div>
+    <span class="linenum">43</span>
+    <span class="indent0"></span>
+    <span class="linetext">end namespace demo.cards1;</span>
+  </div>
+</div>
+
+  </body>
+</html>
