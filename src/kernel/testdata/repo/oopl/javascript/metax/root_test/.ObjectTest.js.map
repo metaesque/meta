@@ -1,0 +1,7 @@
+/Users/wmh/src/meta2/src/kernel/root.meta2
+        12       -1 metax.root_test.ObjectTest:comment:
+        17        0 metax.root_test.ObjectTest:class
+        18       -1 metax.root_test.ObjectTest:scope:
+        23        0 metax.root_test.ObjectTest.test_constructor:method
+        30        0 metax.root_test.ObjectTest.test_meta:method
+        31       -1 metax.root_test.ObjectTest.test_meta:scope:

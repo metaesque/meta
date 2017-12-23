@@ -1,5 +1,0 @@
-     1      0 meta.testing.Meta__FakeFcntl:imports     /Users/wmh/src/meta/src/kernel/root.meta
-     6      0 meta.testing.Meta__FakeFcntl:preamble
-     8   2424 meta.testing.Meta__FakeFcntl:class
-     8      0 meta.testing.Meta__FakeFcntl:parent
-     9      1 meta.testing.Meta__FakeFcntl:comment

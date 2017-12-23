@@ -1,0 +1,9 @@
+
+cc_library(
+  name = "CardMeta",
+  srcs = ['CardMeta.cc'],
+  hdrs = ['CardMeta.h'],
+  deps = ['//metax/root:ObjectMeta'],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)

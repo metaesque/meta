@@ -1,0 +1,16 @@
+/Users/wmh/src/meta2/src/kernel/test.meta2
+         7        0 metax.test_test.FakeFcntlTest:class
+         8       -1 metax.test_test.FakeFcntlTest:comment:
+        10       -1 metax.test_test.FakeFcntlTest:scope:
+        11        0 metax.test_test.FakeFcntlTest.test___init__:method
+        13       26 metax.test_test.FakeFcntlTest.test___init__:scope:
+        15        0 metax.test_test.FakeFcntlTest.test_fcntl:method
+        17       36 metax.test_test.FakeFcntlTest.test_fcntl:scope:
+        21        0 metax.test_test.FakeFcntlTest.test_ioctl:method
+        23       49 metax.test_test.FakeFcntlTest.test_ioctl:scope:
+        27        0 metax.test_test.FakeFcntlTest.test_flock:method
+        29       60 metax.test_test.FakeFcntlTest.test_flock:scope:
+        33        0 metax.test_test.FakeFcntlTest.test_lockf:method
+        35       74 metax.test_test.FakeFcntlTest.test_lockf:scope:
+        39        0 metax.test_test.FakeFcntlTest.test_meta:method
+        41       -1 metax.test_test.FakeFcntlTest.test_meta:scope:

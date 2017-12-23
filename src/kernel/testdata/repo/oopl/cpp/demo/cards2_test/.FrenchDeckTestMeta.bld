@@ -1,0 +1,9 @@
+
+cc_library(
+  name = "FrenchDeckTestMeta",
+  srcs = ['FrenchDeckTestMeta.cc'],
+  hdrs = ['FrenchDeckTestMeta.h'],
+  deps = ['//metax/test:TestCaseMeta'],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)

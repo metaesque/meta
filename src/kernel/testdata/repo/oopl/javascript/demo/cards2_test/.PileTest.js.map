@@ -1,6 +1,6 @@
-/Users/wmh/src/meta/src/kernel/testdata2/cards2.meta2
-         1       -1 demo.cards2_test.PileTest:comment:
-         2        0 demo.cards2_test.PileTest:class
-        10       -1 demo.cards2_test.PileTest:scope:
-        18        0 demo.cards2_test.PileTest.PileTest:method
-        24        0 demo.cards2_test.PileTest:class
+/Users/wmh/src/meta2/src/kernel/testdata/cards2.meta2
+        12       -1 demo.cards2_test.PileTest:comment:
+        17        0 demo.cards2_test.PileTest:class
+        18       -1 demo.cards2_test.PileTest:scope:
+        23        0 demo.cards2_test.PileTest.test_meta:method
+        24       -1 demo.cards2_test.PileTest.test_meta:scope:

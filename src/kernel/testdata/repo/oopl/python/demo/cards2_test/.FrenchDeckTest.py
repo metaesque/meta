@@ -1,26 +1,29 @@
 import demo.cards2  # target=//demo/cards2:cards2
 import demo.cards2_test  # target=//demo/cards2_test:cards2_test
-import meta.testing  # target=//meta/testing:testing
+import demo.cards2_test  # target=//demo/cards2_test:cards2_test
 ##########  End Imports  ##########
 
 
-class FrenchDeckTest(meta.testing.TestCase):
+class FrenchDeckTest(demo.cards2_test.TestCase):
   """Auto-generated test class for demo.cards2.FrenchDeck"""
-  __metaclass__ = FrenchDeckTest__Meta
+  __metaclass__ = FrenchDeckTestMeta
 
-  def __init__(test, meta__name):
-    super(FrenchDeckTest, test).__init__(meta__name)
-    # User-provided code follows.
-
-  def test___init__(test):
+  def test___init__(self):
+    """here"""
     pass
 
-  def test_asStr(test):
+  def test_asStr(self):
+    """here"""
     deck = demo.cards2.FrenchDeck()
-    test.iseq('DKDK', deck.asStr(deck.cards()[0]))
-    test.iseq('7C', deck.asStr(deck.cards()[17]))
+    self.iseq('AS', deck.asStr(deck.cards()[0]))
+    self.iseq('5D', deck.asStr(deck.cards()[17]))
+
+  def test_meta(self):
+    """here"""
+    # noop
+    pass
 ########## Start Harness ##########
 
 
 if __name__ == '__main__':
-  meta.testing.main()
+  metax.test.main()

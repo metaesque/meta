@@ -1,6 +1,0 @@
-     1      0 meta.root_test.ObjectTestMetaClass:imports /Users/wmh/src/meta/src/kernel/root.meta
-     6      0 meta.root_test.ObjectTestMetaClass:preamble
-    11      0 meta.root_test.ObjectTestMetaClass.Meta__30_id:method
-    11      1 meta.root_test.ObjectTestMetaClass.Meta__30_id:params
-    12      1 meta.root_test.ObjectTestMetaClass.Meta__30_id:comment
-    19      0 meta.root_test.ObjectTestMetaClass.Meta__30_id:preamble

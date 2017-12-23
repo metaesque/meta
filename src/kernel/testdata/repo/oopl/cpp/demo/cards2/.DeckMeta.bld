@@ -1,0 +1,9 @@
+
+cc_library(
+  name = "DeckMeta",
+  srcs = ['DeckMeta.cc'],
+  hdrs = ['DeckMeta.h'],
+  deps = ['//demo/cards2:PileMeta'],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)

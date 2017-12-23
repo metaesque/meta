@@ -1,0 +1,15 @@
+
+cc_test(
+  name = "TestCaseTest",
+  srcs = [
+    "TestCaseTest.cc",
+    "TestCaseTest.h",
+  ],
+  deps = [
+    "//metax/test:TestCase",
+    "//metax/test_test:TestCaseTestMeta",
+  ],
+  copts = ['-Iexternal/gtest/include'],
+  size = "small",
+  visibility = ['//visibility:public'],
+)

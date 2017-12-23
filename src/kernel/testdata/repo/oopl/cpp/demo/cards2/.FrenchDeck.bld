@@ -1,0 +1,13 @@
+
+cc_library(
+  name = "FrenchDeck",
+  srcs = ['FrenchDeck.cc'],
+  hdrs = ['FrenchDeck.h'],
+  deps = [
+    "//demo/cards2:Card",
+    "//demo/cards2:Deck",
+    "//demo/cards2:FrenchDeckMeta",
+  ],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)

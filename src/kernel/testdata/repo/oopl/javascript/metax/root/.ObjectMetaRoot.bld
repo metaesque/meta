@@ -1,0 +1,10 @@
+
+closure_js_library(
+  name = "ObjectMetaRoot",
+  srcs = ['ObjectMetaRoot.js'],
+  suppress = [
+    "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
+  ],
+  visibility = ['//visibility:public'],
+)

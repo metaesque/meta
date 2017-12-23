@@ -1,0 +1,16 @@
+
+cc_test(
+  name = "PileTest",
+  srcs = [
+    "PileTest.cc",
+    "PileTest.h",
+  ],
+  deps = [
+    "//demo/cards2:Pile",
+    "//demo/cards2_test:PileTestMeta",
+    "//demo/cards2_test:TestCase",
+  ],
+  copts = ['-Iexternal/gtest/include'],
+  size = "small",
+  visibility = ['//visibility:public'],
+)

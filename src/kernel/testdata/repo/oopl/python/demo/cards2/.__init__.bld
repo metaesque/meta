@@ -2,6 +2,6 @@
 py_library(
   name = "cards2",
   srcs = ['__init__.py'],
-  deps = ['//meta:root'],
+  deps = ['//metax/root:root'],
   visibility = ['//visibility:public'],
 )

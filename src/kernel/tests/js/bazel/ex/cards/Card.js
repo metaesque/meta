@@ -3,6 +3,7 @@
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes
 // https://github.com/google/closure-library/wiki/goog.module:-an-ES6-module-like-alternative-to-goog.provide
 goog.module('ex.cards.Card');
+//goog.module.declareLegacyNamespace();
 
 /**
  * Class representing a card 
@@ -66,7 +67,7 @@ class Card {
     // the constructor (presumably even more inefficient than just initializing
     // the field normally).
 
-    //this._rank = rank;
+    this._rank = rank;
     this._suit = suit;
     this._deck = deck;
 

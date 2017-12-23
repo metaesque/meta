@@ -1,0 +1,9 @@
+
+cc_library(
+  name = "ObjectTestMeta",
+  srcs = ['ObjectTestMeta.cc'],
+  hdrs = ['ObjectTestMeta.h'],
+  deps = ['//metax/test:TestCaseMeta'],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)

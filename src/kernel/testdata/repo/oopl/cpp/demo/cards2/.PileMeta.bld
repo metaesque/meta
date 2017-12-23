@@ -1,0 +1,9 @@
+
+cc_library(
+  name = "PileMeta",
+  srcs = ['PileMeta.cc'],
+  hdrs = ['PileMeta.h'],
+  deps = ['//metax/root:ObjectMeta'],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)

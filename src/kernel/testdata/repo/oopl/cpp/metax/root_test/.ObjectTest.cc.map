@@ -1,0 +1,5 @@
+/Users/wmh/src/meta2/src/kernel/root.meta2
+         6       -1 metax.root_test.ObjectTest:scope:
+         7        0 metax.root_test.ObjectTest.test_Object:method
+        10        0 metax.root_test.ObjectTest.test_meta:method
+        11       -1 metax.root_test.ObjectTest.test_meta:scope:

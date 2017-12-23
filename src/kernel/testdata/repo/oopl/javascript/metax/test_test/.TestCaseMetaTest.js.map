@@ -1,0 +1,5 @@
+/Users/wmh/src/meta2/src/kernel/test.meta2
+        11       -1 metax.test_test.TestCaseMetaTest:comment:
+        16        0 metax.test_test.TestCaseMetaTest:class
+        17       -1 metax.test_test.TestCaseMetaTest:scope:
+        22        0 metax.test_test.TestCaseMetaTest.test_constructor:method

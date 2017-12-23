@@ -1,0 +1,19 @@
+
+closure_js_test(
+  name = "PileMetaTest",
+  srcs = ['PileMeta_test.js'],
+  deps = [
+    "//demo/cards2:PileMeta",
+    "//demo/cards2_test:TestCase",
+    "@io_bazel_rules_closure//closure/library:testing",
+  ],
+  compilation_level = "SIMPLE",
+  entry_points = ['demo.cards2_test.PileMetaTest'],
+  size = "small",
+  suppress = [
+    "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
+  ],
+  testonly = 1,
+  visibility = ['//visibility:public'],
+)

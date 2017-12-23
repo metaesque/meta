@@ -1,11 +1,13 @@
-/Users/wmh/src/meta/src/kernel/testdata2/cards2.meta2
-         7       75 demo.cards2.Pile:class
-         8       76 demo.cards2.Pile:comment:
-        10       80 demo.cards2.Pile:scope:
+/Users/wmh/src/meta2/src/kernel/testdata/cards2.meta2
+         7       73 demo.cards2.Pile:class
+         8       74 demo.cards2.Pile:comment:
+        10       78 demo.cards2.Pile:scope:
         11        0 demo.cards2.Pile.__init__:method
-        16        0 demo.cards2.Pile.cards/get:method
-        17       -1 demo.cards2.Pile.cards/get:scope:
-        19        0 demo.cards2.Pile.cardsIs:method
-        20       -1 demo.cards2.Pile.cardsIs:scope:
-        23        0 demo.cards2.Pile.cardsRef:method
-        24       -1 demo.cards2.Pile.cardsRef:scope:
+        20       78 demo.cards2.Pile.cards/get:method
+        22       79 demo.cards2.Pile.cards/get:scope:
+        24       78 demo.cards2.Pile.cardsIs:method
+        30       79 demo.cards2.Pile.cardsIs:scope:
+        32       78 demo.cards2.Pile.cardsRef:method
+        34       79 demo.cards2.Pile.cardsRef:scope:
+        36        0 demo.cards2.Pile.meta:method
+        38       -1 demo.cards2.Pile.meta:scope:

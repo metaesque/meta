@@ -5,7 +5,7 @@ py_test(
   srcs = ['__init__.py'],
   deps = [
     "//demo/cards2:cards2",
-    "//meta:testing",
+    "//metax/test:test",
   ],
   size = "small",
   visibility = ['//visibility:public'],

@@ -1,0 +1,16 @@
+/Users/wmh/src/meta2/src/kernel/testdata/cards2.meta2
+         1       39 demo.cards2.Card:class
+         2       39 demo.cards2.Card:class
+        10       40 demo.cards2.Card:comment:
+        15       39 demo.cards2.Card:class
+        16       46 demo.cards2.Card:scope:
+        20       46 demo.cards2.Card.rank/get:method
+        21       46 demo.cards2.Card.rankIs:method
+        22       46 demo.cards2.Card.rankRef:method
+        27       48 demo.cards2.Card.suit/get:method
+        28       48 demo.cards2.Card.suitIs:method
+        29       48 demo.cards2.Card.suitRef:method
+        30       52 demo.cards2.Card.Card:comment:
+        33       51 demo.cards2.Card.Card:method
+        34        0 demo.cards2.Card.meta:method
+        41       39 demo.cards2.Card:class

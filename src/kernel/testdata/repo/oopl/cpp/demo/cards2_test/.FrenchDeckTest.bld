@@ -1,0 +1,16 @@
+
+cc_test(
+  name = "FrenchDeckTest",
+  srcs = [
+    "FrenchDeckTest.cc",
+    "FrenchDeckTest.h",
+  ],
+  deps = [
+    "//demo/cards2:FrenchDeck",
+    "//demo/cards2_test:FrenchDeckTestMeta",
+    "//demo/cards2_test:TestCase",
+  ],
+  copts = ['-Iexternal/gtest/include'],
+  size = "small",
+  visibility = ['//visibility:public'],
+)

@@ -1,0 +1,12 @@
+
+cc_library(
+  name = "Deck",
+  srcs = ['Deck.cc'],
+  hdrs = ['Deck.h'],
+  deps = [
+    "//demo/cards2:DeckMeta",
+    "//demo/cards2:Pile",
+  ],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)

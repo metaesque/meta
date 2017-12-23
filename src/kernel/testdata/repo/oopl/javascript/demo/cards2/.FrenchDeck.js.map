@@ -1,8 +1,11 @@
-/Users/wmh/src/meta/src/kernel/testdata2/cards2.meta2
-         1      136 demo.cards2.FrenchDeck:comment:
-         6      140 demo.cards2.FrenchDeck:scope:
-        15        0 demo.cards2.FrenchDeck.FrenchDeck:method
-        18      184 demo.cards2.FrenchDeck.FrenchDeck:scope:
-        34      201 demo.cards2.FrenchDeck.asStr:comment:
-        45      200 demo.cards2.FrenchDeck.asStr:method
-        46      215 demo.cards2.FrenchDeck.asStr:scope:
+/Users/wmh/src/meta2/src/kernel/testdata/cards2.meta2
+        10      155 demo.cards2.FrenchDeck:comment:
+        15      154 demo.cards2.FrenchDeck:class
+        16      159 demo.cards2.FrenchDeck:scope:
+        22      211 demo.cards2.FrenchDeck.constructor:method
+        25      226 demo.cards2.FrenchDeck.constructor:scope:
+        40      257 demo.cards2.FrenchDeck.asStr:comment:
+        54      256 demo.cards2.FrenchDeck.asStr:method
+        55      275 demo.cards2.FrenchDeck.asStr:scope:
+        73        0 demo.cards2.FrenchDeck.meta:method
+        74       -1 demo.cards2.FrenchDeck.meta:scope:

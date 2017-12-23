@@ -1,0 +1,5 @@
+/Users/wmh/src/meta2/src/kernel/testdata/cards2.meta2
+         6       -1 demo.cards2_test.DeckTest:scope:
+         7        0 demo.cards2_test.DeckTest.test_shuffle:method
+        10        0 demo.cards2_test.DeckTest.test_meta:method
+        11       -1 demo.cards2_test.DeckTest.test_meta:scope:

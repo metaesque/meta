@@ -6,18 +6,25 @@ import random
 
 class Deck(demo.cards2.Pile):
   """A pre-determined collection of Card instances."""
-  __metaclass__ = Deck__Meta
+  __metaclass__ = DeckMeta
 
-  def __init__(self):
-    super(Deck, self).__init__()
-    # User-provided code follows.
+  def asStr(self, card, full=False):
+    """here
+    Provide a string representation of a given card.
 
-  def asStr(self, card):
-    """Provide a string representation of a given card."""
-    pass
+    Args:
+      card: Card
+      full: bool
+        If true, result is '<rank> of <suit>'. If false,
+        result is two letters.
+    """
+    raise NotImplementedError('demo.cards2.Deck.asStr');
+    return ''
 
   def shuffle(self):
-    """http://wikipedia.org/wiki/Fisher-Yates_shuffle"""
+    """here
+    http://wikipedia.org/wiki/Fisher-Yates_shuffle
+    """
     cards = self.cards()
     n = len(cards)
     for i in range(0, n):
@@ -26,3 +33,12 @@ class Deck(demo.cards2.Pile):
       tmp = cards[j]
       cards[j] = cards[i]
       cards[i] = tmp
+
+  def meta(self):
+    """here"""
+    result = self.__class__
+    assert result is Deck
+    assert result is MetaDeck
+    return result
+
+MetaDeck = Deck

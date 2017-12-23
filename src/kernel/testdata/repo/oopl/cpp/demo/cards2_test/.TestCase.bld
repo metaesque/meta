@@ -1,0 +1,9 @@
+
+cc_library(
+  name = "TestCase",
+  srcs = ['TestCase.cc'],
+  hdrs = ['TestCase.h'],
+  deps = ['//metax/test:TestCase'],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)

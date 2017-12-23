@@ -356,6 +356,7 @@ scope:
     /#        https://bazel.build/versions/master/docs/skylark/lib/configuration.html
   parent<py> ^unittest.TestCase
   parent<js> ^goog.testing.TestCase
+  parent<cc> ^.testing.Test
   assocs<py>:
     std assoc cStringIO;
     std assoc logging;
@@ -390,6 +391,11 @@ scope:
     target "@io_bazel_rules_closure//closure/library:testing" #:
       Provides stubbing functionality.
 
+  assocs<cc>:
+    std assoc sstream;
+    std assoc typeinfo;
+    lib assoc gtest.gtest target "@gtest//:main";    
+    cls assoc metax.root.Error;
   scope:
 
     meta
@@ -438,17 +444,18 @@ scope:
       meta.CanonicalStderrIs(sys.stderr)
 
       meta.cStringIOClass = cStringIO.StringIO().__class__
-
     scope<js>:
       /# TODO(wmh): Establish whether there is any way to emulate
       /# class variables in Javascript other than adding them as
       /# instance variables within the meta class.
+    scope<cc>:
+      /# Initialize the class-level vars!
     end lifecycle;
 
     field debug : bool #:
       If True, prints out each invocation of the initializer, setup,
       teardown and finalizer methods.
-    field uid : str #:
+    field uid : @str #:
       The name of the method that this instance of TestCase is
       responsible for testing. Although the parent initializer also
       stores this, each baselang uses a different name for the field.
@@ -474,17 +481,26 @@ scope:
     field envars : @map #:
       Records environment variables modified during a test (so they
       can be reinstated).
+
     field fs #:
       Only initialized if SetupSharedFilesystem() is invoked.
     type<py> fake_filesystem.FakeFilesystem
     type<js> any
+    type<cc> *void
     end field fs;
 
     field stubs #:
       Allows us to stub out methods and have them implicitly reverted.
     type<py> any
     type<js> goog.testing.PropertyReplacer
+    type<cc> *void
     end field stubs;
+ 
+    field method_name : @str #:
+      The name of the method being tested.
+      TODO(wmh): Redundant in Python and Javascript since the superclass
+      defines a similar field. Need a way to define 'specific' fields
+      for only certain baselangs.
 
     lifecycle #:
       In all XUnit testing environments, a TestCase is a class defining
@@ -525,10 +541,13 @@ scope:
       However, a meta class can have a test class, and a test class has a
       meta class.
     params:
-      var method_name type<py> str type<js> @str #:
+      var method_name #:
         A name for the test case.
         IMPORTANT: Since the Meta compiler implicitly adds a parameter to
         meta lifecycles of testcase classes, it is important that we ...???
+      type<py> str
+      type<js> @str 
+      type<cc> &str;
     super<py> (method_name)
     super<js> (method_name)
     init<py>:
@@ -537,6 +556,7 @@ scope:
       metax.test.TestCase.InstanceCountIs(count)
       self.uidIs('%s:%d' % (method_name, count))
       self.deblog('Invoking %s initializer for %s' % (self.name(), method_name))
+      self.method_nameIs(method_name)
     init<js>:
       var count = MetaTestCase.InstanceCount() + 1;
       MetaTestCase.InstanceCountIs(count);
@@ -544,6 +564,14 @@ scope:
       this.uidIs(method_name + ':' + count);
       this.deblog(
           'Invoking ' + this.name() + ' initializer for ' + method_name);
+      this.method_nameIs(method_name);
+    init<cc>:
+      int count = MetaTestCase->InstanceCount() + 1;
+      MetaTestCase->InstanceCountIs(count);
+      this->deblog(
+        std::string("Invoking ") + this->name() + " initializer for "
+        + method_name);
+      this->method_nameIs(method_name);
     finalize<py>:
       self.deblog('Invoking %s finalizer for %s' % (self.name(), self.methname()))
     setup<py>:
@@ -559,17 +587,24 @@ scope:
       /# the initializer.
       self._stubs = StubHolder()
       self.maxDiff = None
-    setupcase<py>:
-      if meta.Debug():
-        print 'Invoking %s SetUp' % meta.__name__
     setup<js>:
       this.deblog('Invoking ' + this.name() + ' setUp for ' + this.methname());
       /# TODO(wmh): Look into the stub mechanism provided by
       /# goog.testing.propertyreplacer.js
       this._stubs = new /* goog.testing.*/ PropertyReplacer();
+    setup<cc>:
+      this->deblog(
+        "Invoking " + this->name() + " setUp for " + this->methname());
+    setupcase<py>:
+      if meta.Debug():
+        print 'Invoking %s SetUp' % meta.__name__
     setupcase<js>:
       if (/* metax.test.*/ MetaTestCase.Debug()) {
         console.log('Invoking ' + this.constructor.name + ' SetUp');
+      }
+    setupcase<cc>:
+      if (MetaTestCase->Debug()) {
+        std::cout << "Invoking " << MetaTestCase->metaname() << " SetUp" << std::endl;
       }
     teardown<py>:
       /# Reinstate I/O
@@ -617,12 +652,18 @@ scope:
         'Invoking ' + this.name() + ' tearDown for ' + this.methname());
       /# From goog.testing.propertyreplacer.js
       /# this._stubs.reset();
+    teardown<cc>:
+      std::cerr << "Fix C++ teardown" << std::endl;
     teardowncase<py>:
       if meta.Debug():
         print 'Invoking %s TearDown' % cls.__name__
     teardowncase<js>:
       if (MetaTestCase.Debug()) {
         console.log('Invoking ' + this.constructor.name + ' TearDown');
+      }
+    teardowncase<cc>:
+      if (MetaTestCase->Debug()) {
+        std::cerr << "Invoking " << MetaTestCase->metaname() << " TearDown" << std::endl;
       }
     end lifecycle;
 
@@ -680,7 +721,7 @@ scope:
     test:
     end method runSelfTests;
 
-    method status : str #:
+    method status : &str #:
       The status of an individual test.
 
       Returns:
@@ -721,34 +762,44 @@ scope:
     scope<js>:
       /# console.log('Fix TestCase.status in Javascript');
       return 'FIXME';
+    scope<cc>:
+      static std::string result("FIXME");
+      return result;
     end method status;
 
     new
     method deblog #:
       Print out a Meta specific log message.
     params:
-      var msg : str;
+      var msg : &str;
+    scope<py>:
+      if self.debug():
+        print '%s: %s' % (self.uid(), msg)
     scope<js>:
       if (this.debug()) {
         this.log(this.uid() + ': ' + msg);
       }
-    scope<py>:
-      if self.debug():
-        print '%s: %s' % (self.uid(), msg)
+    scope<cc>:
+      if (this->debug()) {
+        std::cout << this->uid() << ": " << msg << std::endl;
+      }
     end method deblog;
 
     new
-    method name : str #:
+    method name : &str #:
       The name of this testcase.
       See methname for the name of the method within the testcase.
     scope<py>:
       return self.__class__.__name__
     scope<js>:
       return this.constructor.name;
+    scope<cc>:
+      static std::string result(typeid(*this).name());
+      return result;
     end method name;
 
     new
-    method methname : str #:
+    method methname : &str #:
       The name of the method defined within a subclass of TestCase to be
       invoked as the test.
 
@@ -757,6 +808,8 @@ scope:
       return self._testMethodName
     scope<js>:
       return this.name_;
+    scope<cc>:
+      return this->method_name();
     end method methname;
 
     specific
@@ -792,6 +845,8 @@ scope:
       self.assertEqual(home, os.getenv('HOME', None))
     scope<js>:
       throw new Error('TestCase.setenv() not yet implemented');
+    scope<cc>:
+      throw metax::root::Error("TestCase.setenv() not yet implemented");
     end;
 
     new specific
@@ -953,11 +1008,11 @@ scope:
     end method newMox;
 
     new
-    method newStr #:
+    method newStr : *sstream #:
       Create a new string stream for use anywhere a istream or
       ostream is required.
     params:
-      var content : any = null;
+      var content : str = null;
     scope<py>:
       if content:
         result = cStringIO.StringIO(content)
@@ -966,16 +1021,26 @@ scope:
       return result
     scope<js>:
       throw new Error('TestCase.newStr() not yet implemented');
+    scope<cc>:
+      std::stringstream* result;
+      if (content == nullptr) {
+        result = new std::stringstream();
+      } else {
+        result = new std::stringstream(*content);
+      }
+      /# TODO(wmh): Add result to a C++-specific streams() field. In teardown(),
+      /# iterate over streams() and delete all elements.
+      return result;
     end method newStr;
 
     new
-    method fp : ostream #:
+    method fp : *sstream #:
       Create a new string stream for use anywhere a istream or
       ostream is required.
 
       TODO(wmh): Decide which of 'newStr' or 'fp' to keep.
     params:
-      var content : any = null;
+      var content : str = null;
     scope<py>:
       if content is None:
         result = cStringIO.StringIO()
@@ -986,13 +1051,23 @@ scope:
       pass
     scope<js>:
       throw new Error('TestCase.fp() not yet implemented');
+    scope<cc>:
+      std::stringstream* result;
+      if (content == nullptr) {
+        result = new std::stringstream();
+      } else {
+        result = new std::stringstream(*content);
+      }
+      /# TODO(wmh): Add result to a C++-specific streams() field. In teardown(),
+      /# iterate over streams() and delete all elements.
+      return result;
     end method fp;
 
     new
     method tmpFile #:
       Create a temporary file and return its path.
     params:
-      var create : any = true;
+      var create : bool = true;
     scope<py>:
       fd, tmpfile = tempfile.mkstemp()
       os.close(fd)
@@ -1013,13 +1088,15 @@ scope:
       self.assertFalse(os.path.exists(tmpfile2))
     scope<js>:
       throw new Error('TestCase.tmpFile() not yet implemented');
+    scope<cc>:
+      throw metax::root::Error("TestCase.tmpFile() not yet implemented");
     end method tmpFile;
 
     new
     method tmpDir #:
       Create a temporary directory and return its path.
     params:
-      var create : any = true;
+      var create : bool = true;
     scope<py>:
       tmpdir = tempfile.mkdtemp()
       self._tmpdirs.append(tmpdir)
@@ -1039,6 +1116,8 @@ scope:
       self.assertFalse(os.path.exists(tmpdir2))
     scope<js>:
       throw new Error('TestCase.tmpDir() not yet implemented');
+    scope<cc>:
+      throw metax::root::Error("TestCase.tmpDir() not yet implemented");
     end method tmpDir;
 
     new
@@ -1062,6 +1141,8 @@ scope:
       self.assertEqual('aes-128-cbc\ntesting\n', self._tc.fileContents(path))
     scope<js>:
       throw new Error('TestCase.fileContents() not yet implemented');
+    scope<cc>:
+      throw metax::root::Error("TestCase.fileContents() not yet implemented");
     end method fileContents;
 
     new
@@ -1074,6 +1155,8 @@ scope:
       pass
     scope<js>:
       return MetaTestCase.Interactive();
+    scope<cc>:
+      return MetaTestCase->Interactive();
     end method isInteractive;
 
     new
@@ -1089,6 +1172,8 @@ scope:
       return result
     scope<js>:
       throw new Error('TestCase.allowNetwork() not yet implemented');
+    scope<cc>:
+      throw metax::root::Error("TestCase.allowNetwork() not yet implemented");
     end method allowNetwork;
 
     new specific
@@ -1511,6 +1596,9 @@ scope:
           self.fail('%s = %s != %s' % (k, data[k], v))
     scope<js>:
       throw new Error('TestCase.assertDictContains() not yet implemented');
+    scope<cc>:
+      throw metax::root::Error(
+        "TestCase.assertDictContains() not yet implemented");
     scope<*>:
       remark #:
         keyval iterate over subdata into (k,v) scope:
@@ -1526,7 +1614,6 @@ scope:
               @self.fail('Failed to find ${k} in dict');
             case [data[k] != v] scope:
               @self.fail('${k} = ${data[k]} != ${v}');
-            
     end method assertDictContains;
 
     method startswith params:
@@ -1542,6 +1629,8 @@ scope:
       assertTrue(
         'String\n  \"' + strval + '\"\ndoes not start with\n  \"' + prefix + '\"',
         strval.startsWith(/** @type {!string} */ (prefix)));
+    scope<cc>:
+      throw metax::root::Error("TestCase.startswith() not yet implemented");
     end method startswith;
 
     method endswith params:
@@ -1555,6 +1644,8 @@ scope:
       assertTrue(
         'String\n  \"' + strval + '\"\ndoes not end with\n  \"' + suffix + '\"',
         strval.endsWith(/** @type {!string} */ (suffix)));
+    scope<cc>:
+      throw metax::root::Error("TestCase.endswith() not yet implemented");
     end method endswith;
 
     method contains params:
@@ -1569,6 +1660,8 @@ scope:
       } else {
         assertContains(member, container);
       }
+    scope<cc>:
+      throw metax::root::Error("TestCase.contains() not yet implemented");
     end method contains;
 
     method matches #:
@@ -1584,9 +1677,17 @@ scope:
         self.fail('Expected match failed:\n  %s\n  %s' % (restr, value))
     scope<js>:
       console.log('Fix TestCase.matches in Javascript');
+    scope<cc>:
+      throw metax::root::Error("TestCase.matches() not yet implemented");
     end method matches;
 
-    method iseq params:
+    method iseq #:
+      Compare an arbitrary two entities for equality (not pointer equality!)
+
+      NOTE: This method may not be implementable in C++. Decide whether we
+      want to keep it for use in other baselangs, or if allowing it
+      encourages people to use methods that won't work in <cc> and <*>.
+    params:
       var expected : any;
       var item : any;
       var message : any = null;
@@ -1600,9 +1701,16 @@ scope:
       } else {
         assertEquals(message, expected, item);
       }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseq() not yet implemented");
     end method iseq;
 
-    method noteq params:
+    method noteq #:
+      Compare an arbitrary two entities for non-equality (not pointer equality!)
+
+      See comment in 'eq' about viability in C++ and ramifications on this
+      method.
+    params:
       var expected : any;
       var item : any;
       var message : any = null;
@@ -1616,7 +1724,59 @@ scope:
       } else {
         assertNotEquals(message, expected, item);
       }
+    scope<cc>:
+      throw metax::root::Error("TestCase.noteq() not yet implemented");
     end method noteq;
+
+    method iseqstr #:
+      Compare an arbitrary two entities for equality (not pointer equality!)
+
+      NOTE: This method may not be implementable in C++. Decide whether we
+      want to keep it for use in other baselangs, or if allowing it
+      encourages people to use methods that won't work in <cc> and <*>.
+    params:
+      var expected : &str;
+      var item : &str;
+      var message : str = null;
+    scope<py>:
+      if message is None:
+        message = '%s != %s' % (expected, item)
+      self.assertEqual(expected, item, message)
+    scope<js>:
+      if (message == null) {
+        assertEquals(expected, item);
+      } else {
+        assertEquals(message, expected, item);
+      }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseq() not yet implemented");
+      if (message == nullptr) {
+      } else {
+      }
+    end method iseqstr;
+
+    method noteqstr #:
+      Compare an arbitrary two entities for non-equality (not pointer equality!)
+    params:
+      var expected : &str;
+      var item : &str;
+      var message : str = null;
+    scope<py>:
+      if message is None:
+        message = '%s == %s' % (expected, item)
+      self.assertNotEqual(expected, item, message)
+    scope<js>:
+      if (message == null) {
+        assertNotEquals(expected, item);
+      } else {
+        assertNotEquals(message, expected, item);
+      }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseq() not yet implemented");
+      if (message == nullptr) {
+      } else {
+      }
+    end method noteqstr;
 
     method iseqvec params:
       var expected : vec;
@@ -1630,6 +1790,8 @@ scope:
       } else {
         assertElementsEquals(message, expected, items);
       }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseqvec() not yet implemented");
     end method iseqvec;
 
     method iseqmap params:
@@ -1667,6 +1829,8 @@ scope:
       } else {
         assertHashEquals(expected, data);
       }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseqmap() not yet implemented");
     end method iseqmap;
 
     method iseqtext params:
@@ -1681,6 +1845,8 @@ scope:
       } else {
         assertEquals(text, first, second);
       }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseqtext() not yet implemented");
     end method iseqtext;
 
     method iseqfile params:
@@ -1694,6 +1860,8 @@ scope:
         status == 0, 'Files %s and %s differ' % (file1, file2))
     scope<js>:
       throw new Error('TestCase.() not yet implemented');
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseqfile() not yet implemented");
     end method iseqfile;
 
     method iseqstrgold params:
@@ -1717,6 +1885,8 @@ scope:
           os.unlink(tmpfile)
     scope<js>:
       throw new Error('TestCase.() not yet implemented');
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseqstrgold() not yet implemented");
     end method iseqstrgold;
 
     method iseqfilegold params:
@@ -1730,14 +1900,16 @@ scope:
         self.iseqfile(golden, path)
     scope<js>:
       throw new Error('TestCase.() not yet implemented');
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseqfilegold() not yet implemented");
     end method iseqfilegold;
 
     method isapprox #:
       Compare two float values for closeness.
     params:
-      var f1 : any;
-      var f2 : any;
-      var delta : any = 0.00001;
+      var f1 : double;
+      var f2 : double;
+      var delta : double = 0.00001;
       var msg : str = null;
     scope<py>:
       self.assertAlmostEqual(f1, f2, delta=delta, msg=msg)
@@ -1747,6 +1919,8 @@ scope:
       } else {
         assertRoughlyEquals(f1, f2, delta);
       }
+    scope<cc>:
+      throw metax::root::Error("TestCase.isapprox() not yet implemented");
     end method isapprox;
 
     method islt params:
@@ -1762,6 +1936,8 @@ scope:
         message = '' + expected + ' >= ' + item;
       }
       assertTrue(message, expected < item);
+    scope<cc>:
+      throw metax::root::Error("TestCase.islt() not yet implemented");
     end method islt;
 
     method isle params:
@@ -1777,6 +1953,8 @@ scope:
         message = '' + expected + ' > ' + item;
       }
       assertTrue(message, expected <= item);
+    scope<cc>:
+      throw metax::root::Error("TestCase.isle() not yet implemented");
     end method isle;
 
     method isgt params:
@@ -1792,6 +1970,8 @@ scope:
         message = '' + expected + ' <= ' + item;
       }
       assertTrue(message, expected > item);
+    scope<cc>:
+      throw metax::root::Error("TestCase.isgt() not yet implemented");
     end method isgt;
 
     method isge params:
@@ -1807,6 +1987,8 @@ scope:
         message = '' + expected + ' < ' + item;
       }
       assertTrue(message, expected >= item);
+    scope<cc>:
+      throw metax::root::Error("TestCase.isge() not yet implemented");
     end method isge;
 
     method raises #:
@@ -1818,7 +2000,7 @@ scope:
     params:
       var eclass : class #:
         The exception class raised
-      var func : &function #:
+      var func : &#function #:
         The callable object
       multi var args : vec #:
         The positional args to pass to func.
@@ -1833,9 +2015,11 @@ scope:
       /#    specific exception is raised.
       /# A better version of assertThrows() is certainly possible. Implement
       /# it.
-      var e = assertThrows(func);
+      /* var e = */ assertThrows(func);
       /# TODO(wmh): At the very least, we can compare the exception 'e' against
       /# expected 'eclass'.
+    scope<cc>:
+      throw metax::root::Error("TestCase.raises() not yet implemented");
     end method raises;
 
     method issame params:
@@ -1845,6 +2029,8 @@ scope:
       self.assertTrue(obj1 is obj2, "%s is not %s" % (repr(obj1), repr(obj2)))
     scope<js>:
       assertTrue(obj1 + ' is not ' + obj2, obj1 === obj2);
+    scope<cc>:
+      throw metax::root::Error("TestCase.issame() not yet implemented");
     end method issame;
 
     method notsame params:
@@ -1854,6 +2040,8 @@ scope:
       self.assertFalse(obj1 is obj2, "%s is %s" % (repr(obj1), repr(obj2)))
     scope<js>:
       assertFalse(obj1 + ' is ' + obj2, obj1 === obj2);
+    scope<cc>:
+      throw metax::root::Error("TestCase.notsame() not yet implemented");
     end method notsame;
 
     method istrue #:
@@ -1870,6 +2058,8 @@ scope:
       } else {
         assertTrue(msg, val);
       }
+    scope<cc>:
+      throw metax::root::Error("TestCase.istrue() not yet implemented");
     end method istrue;
 
     method isfalse #:
@@ -1886,6 +2076,8 @@ scope:
       } else {
         assertFalse(val);
       }
+    scope<cc>:
+      throw metax::root::Error("TestCase.isfalse() not yet implemented");
     end method isfalse;
 
     method isnull #:
@@ -1901,6 +2093,8 @@ scope:
       } else {
         assertNull(val);
       }
+    scope<cc>:
+      throw metax::root::Error("TestCase.isnull() not yet implemented");
     end method isnull;
 
     method notnull #:
@@ -1916,6 +2110,8 @@ scope:
       } else {
         assertNotNull(val);
       }
+    scope<cc>:
+      throw metax::root::Error("TestCase.notnull() not yet implemented");
     end method notnull;
 
     method isinst params:
@@ -1932,6 +2128,8 @@ scope:
       this.istrue(
         typeof obj == cls,
         'Expecting ' + obj + ' to be an instance of ' + cls);
+    scope<cc>:
+      throw metax::root::Error("TestCase.isinst() not yet implemented");
     end method isinst;
 
     method fail #:
@@ -1942,6 +2140,8 @@ scope:
       this.istrue(false, msg);
     scope<py>:
       super(TestCase, self).fail(msg);
+    scope<cc>:
+      throw metax::root::Error("TestCase.fail() not yet implemented");
     end;
 
   end class TestCase;  

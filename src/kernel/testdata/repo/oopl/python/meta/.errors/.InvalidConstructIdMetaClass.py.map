@@ -1,6 +1,0 @@
-     1      0 meta.errors.InvalidConstructIdMetaClass:imports /Users/wmh/src/meta/src/kernel/root.meta
-     6      0 meta.errors.InvalidConstructIdMetaClass:preamble
-    11      0 meta.errors.InvalidConstructIdMetaClass.Meta__42_id:method
-    11      1 meta.errors.InvalidConstructIdMetaClass.Meta__42_id:params
-    12      1 meta.errors.InvalidConstructIdMetaClass.Meta__42_id:comment
-    19      0 meta.errors.InvalidConstructIdMetaClass.Meta__42_id:preamble

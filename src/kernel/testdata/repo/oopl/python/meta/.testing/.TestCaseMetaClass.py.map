@@ -1,8 +1,0 @@
-     1      0 meta.testing.TestCaseMetaClass:imports   /Users/wmh/src/meta/src/kernel/root.meta
-     4      0 meta.testing.TestCaseMetaClass:preamble
-     6    543 meta.testing.TestCaseMetaClass:class
-     6      0 meta.testing.TestCaseMetaClass:parent
-     9      0 meta.testing.TestCaseMetaClass.Meta__13_id:method
-     9      1 meta.testing.TestCaseMetaClass.Meta__13_id:params
-    10      1 meta.testing.TestCaseMetaClass.Meta__13_id:comment
-    17      0 meta.testing.TestCaseMetaClass.Meta__13_id:preamble

@@ -1,131 +1,145 @@
-"""Auto-generated test namespace for demo.cards2"""
+"""Auto-generated test namespace for demo.cards2."""
 import demo.cards2
 import demo.cards2_test
-import meta.testing
+import metax.test
+import random
 
 
-class CardTest__Meta(meta.testing.TestCaseMetaClass):
+class TestCase(metax.test.TestCase):
+
+  # field TestVar : int
+
+  def TestVar(self):
+    """here"""
+    return self._TestVar
+
+  def TestVarIs(self, value):
+    """here
+
+    Args:
+      value: int
+    """
+    self._TestVar = value
+
+  def TestVarRef(self):
+    """here"""
+    return self._TestVar
+
+  def __init__(self, meta__name=""):
+    """here
+
+    Args:
+      meta__name: &str
+    """
+    super(TestCase, self).__init__(meta__name)
+    self._TestVar = 0
+    # User-provided code follows.
+
+  def setUp(self):
+    """here"""
+    super(TestCase, self).setUp()
+    # User-provided code follows.
+    random.seed(0)
+
+
+class CardTestMeta(metax.test.TestCaseMeta):
   """Auto-generated meta class for auto-generated test class CardTest"""
 
-  def __init__(meta, meta__name, meta__bases, meta__dict):
-    super(CardTest__Meta, meta).__init__(meta__name, meta__bases, meta__dict)
-    # User-provided code follows.
 
-
-class CardTest(meta.testing.TestCase):
+class CardTest(TestCase):
   """Auto-generated test class for demo.cards2.Card"""
-  __metaclass__ = CardTest__Meta
+  __metaclass__ = CardTestMeta
 
-  def __init__(test, meta__name):
-    super(CardTest, test).__init__(meta__name)
-    # User-provided code follows.
+  def test___init__(self):
+    """here"""
+    pass
 
-  def test___init__(test):
+  def test_meta(self):
+    """here"""
+    # noop
     pass
 
 
-class Card__MetaTest(meta.testing.TestCase):
-  """Auto-generated test class for auto-generated meta class demo.cards2.Card__Meta"""
-
-  def __init__(test, meta__name):
-    super(Card__MetaTest, test).__init__(meta__name)
-    # User-provided code follows.
+class CardMetaTest(TestCase):
+  """Auto-generated test class for auto-generated meta class demo.cards2.CardMeta."""
 
 
-class PileTest__Meta(meta.testing.TestCaseMetaClass):
+class PileTestMeta(metax.test.TestCaseMeta):
   """Auto-generated meta class for auto-generated test class PileTest"""
 
-  def __init__(meta, meta__name, meta__bases, meta__dict):
-    super(PileTest__Meta, meta).__init__(meta__name, meta__bases, meta__dict)
-    # User-provided code follows.
 
-
-class PileTest(meta.testing.TestCase):
+class PileTest(TestCase):
   """Auto-generated test class for demo.cards2.Pile"""
-  __metaclass__ = PileTest__Meta
+  __metaclass__ = PileTestMeta
 
-  def __init__(test, meta__name):
-    super(PileTest, test).__init__(meta__name)
-    # User-provided code follows.
-
-
-class Pile__MetaTest(meta.testing.TestCase):
-  """Auto-generated test class for auto-generated meta class demo.cards2.Pile__Meta"""
-
-  def __init__(test, meta__name):
-    super(Pile__MetaTest, test).__init__(meta__name)
-    # User-provided code follows.
+  def test_meta(self):
+    """here"""
+    # noop
+    pass
 
 
-class DeckTest__Meta(meta.testing.TestCaseMetaClass):
+class PileMetaTest(TestCase):
+  """Auto-generated test class for auto-generated meta class demo.cards2.PileMeta."""
+
+
+class DeckTestMeta(metax.test.TestCaseMeta):
   """Auto-generated meta class for auto-generated test class DeckTest"""
 
-  def __init__(meta, meta__name, meta__bases, meta__dict):
-    super(DeckTest__Meta, meta).__init__(meta__name, meta__bases, meta__dict)
-    # User-provided code follows.
 
-
-class DeckTest(meta.testing.TestCase):
+class DeckTest(TestCase):
   """Auto-generated test class for demo.cards2.Deck"""
-  __metaclass__ = DeckTest__Meta
+  __metaclass__ = DeckTestMeta
 
-  def __init__(test, meta__name):
-    super(DeckTest, test).__init__(meta__name)
-    # User-provided code follows.
-
-  def test_shuffle(test):
+  def test_shuffle(self):
+    """here"""
     import random
     random.seed(0)
     deck = demo.cards2.FrenchDeck()
     deck.shuffle()
-    test.iseqvec(
+    self.iseqvec(
       [deck.asStr(card) for card in deck.cards()[:10]],
-      ['JS', 'AD', '7H', '4S', '4D', '3H', '6S', '2H', 'QC', '4C'])
+      ['2H', '4S', 'KD', 'KS', '3D', 'TS', '8D', '6S', '8H', '2D'])
+
+  def test_meta(self):
+    """here"""
+    # noop
+    pass
 
 
-class Deck__MetaTest(meta.testing.TestCase):
-  """Auto-generated test class for auto-generated meta class demo.cards2.Deck__Meta"""
-
-  def __init__(test, meta__name):
-    super(Deck__MetaTest, test).__init__(meta__name)
-    # User-provided code follows.
+class DeckMetaTest(TestCase):
+  """Auto-generated test class for auto-generated meta class demo.cards2.DeckMeta."""
 
 
-class FrenchDeckTest__Meta(meta.testing.TestCaseMetaClass):
+class FrenchDeckTestMeta(metax.test.TestCaseMeta):
   """Auto-generated meta class for auto-generated test class FrenchDeckTest"""
 
-  def __init__(meta, meta__name, meta__bases, meta__dict):
-    super(FrenchDeckTest__Meta, meta).__init__(meta__name, meta__bases, meta__dict)
-    # User-provided code follows.
 
-
-class FrenchDeckTest(meta.testing.TestCase):
+class FrenchDeckTest(TestCase):
   """Auto-generated test class for demo.cards2.FrenchDeck"""
-  __metaclass__ = FrenchDeckTest__Meta
+  __metaclass__ = FrenchDeckTestMeta
 
-  def __init__(test, meta__name):
-    super(FrenchDeckTest, test).__init__(meta__name)
-    # User-provided code follows.
-
-  def test___init__(test):
+  def test___init__(self):
+    """here"""
     pass
 
-  def test_asStr(test):
+  def test_asStr(self):
+    """here"""
     deck = demo.cards2.FrenchDeck()
-    test.iseq('DKDK', deck.asStr(deck.cards()[0]))
-    test.iseq('7C', deck.asStr(deck.cards()[17]))
+    self.iseq('AS', deck.asStr(deck.cards()[0]))
+    self.iseq('5D', deck.asStr(deck.cards()[17]))
 
-
-class FrenchDeck__MetaTest(meta.testing.TestCase):
-  """Auto-generated test class for auto-generated meta class demo.cards2.FrenchDeck__Meta"""
-
-  def __init__(test, meta__name):
-    super(FrenchDeck__MetaTest, test).__init__(meta__name)
-    # User-provided code follows.
-
-  def test___init__(test):
+  def test_meta(self):
+    """here"""
+    # noop
     pass
 
 
-if __name__ == '__main__':
-  meta.testing.main()
+class FrenchDeckMetaTest(TestCase):
+  """Auto-generated test class for auto-generated meta class demo.cards2.FrenchDeckMeta."""
+
+  def test___init__(self):
+    """here"""
+    pass
+
+
+if __name__ == '__main__':  metax.test.main()

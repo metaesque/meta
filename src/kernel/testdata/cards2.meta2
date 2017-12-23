@@ -37,25 +37,16 @@ scope:
 
   visibility public
   class Card < metax.root.Object #:
-    A card with suit and rank, belonging to a Deck.
+    A card with suit and rank.
 
-    The Deck is responsible for display functionality.
-
-    Meta:suppress: checkTypes,reportUnknownTypes
-  assocs<py>:
-    cls assoc demo.cards2.Deck target "" #:
-      We disable target to avoid circularity issues (Deck requires Card)
-  assocs<js>:
-    cls assoc demo.cards2.Deck target "" #:
-      We disable target to avoid circularity issues (Deck requires Card)
+    In this implementation, Card instances do not know about the Deck they
+    belong to. See cards3.meta2 for a version in which Card maintains a Deck
+    (this introduces a circularity, as Deck needs Card and Card needs Deck).
   scope:
     field rank : int #:
       Rank as simple integer. Deck assigns display semantics to rank values.
     field suit : int #:
       Suit as simple integer. Deck assigns display semantics to suit values.
-    field deck : any #:
-      The Deck this Card belongs to.
-      Intentionally not typing to avoid circulariy issues in javascript.
 
     lifecycle #:
       It should not be necessary to create Card instances directly.
@@ -64,16 +55,15 @@ scope:
     params:
       var rank : int;
       var suit : int;
-      var deck : any = null #:
-        /# We do not type this variable to avoid bazel circularity issues.
     scope<py>:
       self.rankIs(rank)
       self.suitIs(suit)
-      self.deckIs(deck)
     scope<js>:
       this.rankIs(rank);
       this.suitIs(suit);
-      this.deckIs(deck);
+    scope<cc>:
+      this->rankIs(rank);
+      this->suitIs(suit);
     test:
     end lifecycle;
 
@@ -94,13 +84,19 @@ scope:
     A pre-determined collection of Card instances.
   assocs<py>:
     std assoc random;
+  assocs<cc>:
+    std assoc stdlib_h #:
+      TODO(wmh): Use std::random instead.
   scope:
 
     abstract
-    method asStr : str #:
+    method asStr : @str #:
       Provide a string representation of a given card.
     params:
       var card : Card;
+      var full : bool = false #:
+        If true, result is '<rank> of <suit>'. If false,
+        result is two letters.
     end method asStr;
 
     method shuffle #:
@@ -124,6 +120,19 @@ scope:
         cards[j] = cards[i];
         cards[i] = tmp;
       }
+    scope<cc>:
+      /# static std::default_random_engine generator;
+      auto& cards = this->cardsRef();
+      int n = cards.size();
+      for (int i = 0; i < n; ++i) {
+        /# 0 <= j <= i
+        /# std::uniform_int_distribution<int> distribution(0,i);
+        /# int j = distribution(generator);  // generates number in the range 0..i 
+        int j = int(drand48() * (i+1));
+        Card* tmp = cards[j];
+        cards[j] = cards[i];
+        cards[i] = tmp;
+      }
     test<py>:
       import random
       random.seed(0)
@@ -136,6 +145,8 @@ scope:
       /# According to
       /#   https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/random
       /# there is no way to set the seed used by Math.random().  Big problem!
+    test<cc>:
+      
     end method shuffle;
 
   end class Deck;
@@ -147,11 +158,11 @@ scope:
   scope:
 
     meta
-    field Suits : vec<str> #:
+    field Suits : @vec<@str> #:
       Indices are suit integers, values are suit names.
 
     meta
-    field Ranks : vec<str> #:
+    field Ranks : @vec<@str> #:
       Indices are suit integers, values are suit names.
 
     meta
@@ -174,6 +185,27 @@ scope:
         'Ten', 'Jack', 'Queen', 'King',
         'High'
       ];
+    scope<cc>:
+      std::vector<std::string> suits = {
+        "Joker", "Spades", "Diamonds", "Clubs", "Hearts"};
+      this->SuitsIs(suits);
+      std::vector<std::string> ranks = {
+        "Low",
+        "Ace", "2", "3", "4", "5", "6", "7", "8", "9",
+        "Ten", "Jack", "Queen", "King",
+        "High"
+      };
+      this->RanksIs(ranks);
+
+      if (false) {
+        this->SuitsIs({"Joker", "Spades", "Diamonds", "Clubs", "Hearts"});
+        this->RanksIs({
+          "Low",
+          "Ace", "2", "3", "4", "5", "6", "7", "8", "9",
+          "Ten", "Jack", "Queen", "King",
+          "High"
+        });
+      }
     end lifecycle;
 
     lifecycle params:
@@ -183,31 +215,45 @@ scope:
       cards = self.cards()
       for suit in range(1, 5):
         for rank in range(1, 14):
-          card = demo.cards2.Card(rank, suit, deck=self)
+          card = demo.cards2.Card(rank, suit)
           cards.append(card)
       if jokers:
-        lowjoker = Card(0, 0, deck=self)
+        lowjoker = Card(0, 0)
         cards.append(lowjoker)
-        highjoker = Card(14, 0, deck=self)
+        highjoker = Card(14, 0)
         cards.append(highjoker)
     scope<js>:
       var cards = this.cards();
       for (var suit = 1; suit < 5; ++suit) {
         for (var rank = 1; rank < 14; ++rank) {
-          var card = new Card(rank, suit, this);
+          var card = new Card(rank, suit);
           cards.push(card);
         }
       }
       if (jokers) {
-        var lowjoker = new Card(0, 0, this);
+        var lowjoker = new Card(0, 0);
         cards.push(lowjoker);
-        var highjoker = new Card(14, 0, this);
+        var highjoker = new Card(14, 0);
         cards.push(highjoker);
+      }
+    scope<cc>:
+      auto& cards = this->cardsRef();
+      for (int suit = 1; suit < 5; ++suit) {
+        for (int rank = 1; rank < 14; ++rank) {
+          Card* card = new Card(rank, suit);
+          cards.push_back(card);
+        }
+      }
+      if (jokers) {
+        Card* lowjoker = new Card(0, 0);
+        cards.push_back(lowjoker);
+        Card* highjoker = new Card(14, 0);
+        cards.push_back(highjoker);
       }
     end lifecycle;
 
     override
-    method asStr : str #:
+    method asStr : @str #:
       Provide a string representation of a given card.
 
       Returns:
@@ -231,15 +277,33 @@ scope:
       var ranks = meta.Ranks();
       var result;
       if (full) {
-        result = meta.Ranks()[card.rank()] + ' of ' + meta.Suits()[card.suit()];
+        result = ranks[card.rank()] + ' of ' + suits[card.suit()];
       } else {
-        result = meta.Ranks()[card.rank()][0] + meta.Suits()[card.suit()][0];
+        result = ranks[card.rank()][0] + suits[card.suit()][0];
+      }
+      return result;
+    scope<cc>:
+      auto* meta = dynamic_cast<FrenchDeckMeta*>(this->meta());
+      auto& suits = meta->Suits();
+      auto& ranks = meta->Ranks();
+      std::string result;
+      if (full) {
+        result.append(ranks[card->rank()]);
+        result.append(" of ");
+        result.append(suits[card->suit()]);
+      } else {
+        result.push_back(ranks[card->rank()][0]);
+        result.push_back(suits[card->suit()][0]);
       }
       return result;
     test<py>:
       deck = demo.cards2.FrenchDeck()
       test.iseq('AS', deck.asStr(deck.cards()[0]))
       test.iseq('5D', deck.asStr(deck.cards()[17]))
+    test<cc>:
+      demo::cards2::FrenchDeck deck;
+      test.iseqstr("AS", deck.asStr(deck.cards()[0]));
+      test.iseqstr("5D", deck.asStr(deck.cards()[17]));
     end method asStr;
 
   end class FrenchDeck;

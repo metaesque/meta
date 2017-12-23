@@ -1,0 +1,8 @@
+/Users/wmh/src/meta2/src/kernel/testdata/cards2.meta2
+         1        0 demo.cards2_test.PileTest:class
+         2        0 demo.cards2_test.PileTest:class
+        11       -1 demo.cards2_test.PileTest:comment:
+        12        0 demo.cards2_test.PileTest:class
+        14       -1 demo.cards2_test.PileTest:scope:
+        14        0 demo.cards2_test.PileTest.test_meta:method
+        20        0 demo.cards2_test.PileTest:class

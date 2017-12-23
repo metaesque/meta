@@ -1,8 +1,0 @@
-     1      0 meta.testing.StubHolderMetaClass:imports /Users/wmh/src/meta/src/kernel/root.meta
-     4      0 meta.testing.StubHolderMetaClass:preamble
-     6   2653 meta.testing.StubHolderMetaClass:class
-     6      0 meta.testing.StubHolderMetaClass:parent
-     9      0 meta.testing.StubHolderMetaClass.Meta__14_id:method
-     9      1 meta.testing.StubHolderMetaClass.Meta__14_id:params
-    10      1 meta.testing.StubHolderMetaClass.Meta__14_id:comment
-    17      0 meta.testing.StubHolderMetaClass.Meta__14_id:preamble

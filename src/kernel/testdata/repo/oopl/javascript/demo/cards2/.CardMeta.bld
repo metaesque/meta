@@ -1,0 +1,11 @@
+
+closure_js_library(
+  name = "CardMeta",
+  srcs = ['CardMeta.js'],
+  deps = ['//metax/root:ObjectMeta'],
+  suppress = [
+    "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
+  ],
+  visibility = ['//visibility:public'],
+)

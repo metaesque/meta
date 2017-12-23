@@ -1,9 +1,0 @@
-# ----------------------------------------------------------------------
-# Build targets for namespace meta.core
-
-py_library(
-  name = "core",
-  srcs = ['core.py'],
-  deps = ['//meta:root'],
-  visibility = ['//visibility:public'],
-)

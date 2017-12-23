@@ -1,27 +1,29 @@
 import demo.cards2  # target=//demo/cards2:cards2
 import demo.cards2_test  # target=//demo/cards2_test:cards2_test
-import meta.testing  # target=//meta/testing:testing
+import demo.cards2_test  # target=//demo/cards2_test:cards2_test
 ##########  End Imports  ##########
 
 
-class DeckTest(meta.testing.TestCase):
+class DeckTest(demo.cards2_test.TestCase):
   """Auto-generated test class for demo.cards2.Deck"""
-  __metaclass__ = DeckTest__Meta
+  __metaclass__ = DeckTestMeta
 
-  def __init__(test, meta__name):
-    super(DeckTest, test).__init__(meta__name)
-    # User-provided code follows.
-
-  def test_shuffle(test):
+  def test_shuffle(self):
+    """here"""
     import random
     random.seed(0)
     deck = demo.cards2.FrenchDeck()
     deck.shuffle()
-    test.iseqvec(
+    self.iseqvec(
       [deck.asStr(card) for card in deck.cards()[:10]],
-      ['JS', 'AD', '7H', '4S', '4D', '3H', '6S', '2H', 'QC', '4C'])
+      ['2H', '4S', 'KD', 'KS', '3D', 'TS', '8D', '6S', '8H', '2D'])
+
+  def test_meta(self):
+    """here"""
+    # noop
+    pass
 ########## Start Harness ##########
 
 
 if __name__ == '__main__':
-  meta.testing.main()
+  metax.test.main()

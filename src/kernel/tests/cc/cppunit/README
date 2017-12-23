@@ -1,0 +1,19 @@
+Example usage of CppUnit.
+
+See 
+ http://cppunit.sourceforge.net/doc/cvs/cppunit_cookbook.html
+ http://c2.com/cgi/wiki?DirtSimpleCppUnitExample
+ http://www.ibm.com/developerworks/aix/library/au-ctools2_cppunit/
+
+----------------------------------------------------------------------
+Makefile:
+  Useful targets
+
+README:
+  Describes each file
+
+Complex.h:
+  An example C++ class
+
+ComplexTest.h:
+  A CppUnit-based unit testing class for Complex.h

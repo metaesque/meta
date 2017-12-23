@@ -1,0 +1,6 @@
+/Users/wmh/src/meta2/src/kernel/testdata/cards2.meta2
+         6       46 demo.cards2.Card:scope:
+         7       51 demo.cards2.Card.Card:method
+         8       65 demo.cards2.Card.Card:scope:
+        12        0 demo.cards2.Card.meta:method
+        13       -1 demo.cards2.Card.meta:scope:

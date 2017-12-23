@@ -139,6 +139,8 @@
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/.StatementConstructMetaClass.py.map
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/.Stream.py.map
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/.StreamMetaClass.py.map
+/Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/.SymbolConstruct.py.map
+/Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/.SymbolConstructMetaClass.py.map
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/.TemplateConstruct.py.map
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/.TemplateConstructMetaClass.py.map
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/.TestxConstruct.py.map
@@ -295,6 +297,8 @@
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/StatementConstructMetaClass.py
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/Stream.py
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/StreamMetaClass.py
+/Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/SymbolConstruct.py
+/Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/SymbolConstructMetaClass.py
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/TemplateConstruct.py
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/TemplateConstructMetaClass.py
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c/TestxConstruct.py
@@ -436,6 +440,8 @@
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/.StatementConstructTestMetaClass.py.map
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/.StreamTest.py.map
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/.StreamTestMetaClass.py.map
+/Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/.SymbolConstructTest.py.map
+/Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/.SymbolConstructTestMetaClass.py.map
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/.TemplateConstructTest.py.map
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/.TemplateConstructTestMetaClass.py.map
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/.TestCase.py.map
@@ -576,6 +582,8 @@
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/StatementConstructTestMetaClass.py
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/StreamTest.py
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/StreamTestMetaClass.py
+/Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/SymbolConstructTest.py
+/Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/SymbolConstructTestMetaClass.py
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/TemplateConstructTest.py
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/TemplateConstructTestMetaClass.py
 /Users/wmh/src/wmh/lib/meta/oopl/python/metax/.c_test/TestCase.py

@@ -1,0 +1,13 @@
+
+cc_library(
+  name = "Pile",
+  srcs = ['Pile.cc'],
+  hdrs = ['Pile.h'],
+  deps = [
+    "//demo/cards2:Card",
+    "//demo/cards2:PileMeta",
+    "//metax/root:Object",
+  ],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)

@@ -33,6 +33,11 @@ meta-%:
 oopl: 
 	@cd ../templates; make update
 
+# target shell:
+#   Pull up the interactive meta shell
+shell: meta-py
+	meta2 shell
+
 # target emacs:
 #   Create the emacs major mode for a given metalang, version 2
 emacs: meta-py

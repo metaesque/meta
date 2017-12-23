@@ -1,0 +1,11 @@
+/Users/wmh/src/meta2/src/kernel/testdata/cards2.meta2
+         1      154 demo.cards2.FrenchDeck:class
+         2      154 demo.cards2.FrenchDeck:class
+        11      155 demo.cards2.FrenchDeck:comment:
+        12      154 demo.cards2.FrenchDeck:class
+        13      159 demo.cards2.FrenchDeck:scope:
+        13      211 demo.cards2.FrenchDeck.FrenchDeck:method
+        14      257 demo.cards2.FrenchDeck.asStr:comment:
+        19      256 demo.cards2.FrenchDeck.asStr:method
+        20        0 demo.cards2.FrenchDeck.meta:method
+        27      154 demo.cards2.FrenchDeck:class

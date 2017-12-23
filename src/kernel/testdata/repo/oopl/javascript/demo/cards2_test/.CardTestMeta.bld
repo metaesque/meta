@@ -1,0 +1,11 @@
+
+closure_js_library(
+  name = "CardTestMeta",
+  srcs = ['CardTestMeta.js'],
+  deps = ['//metax/test:TestCaseMeta'],
+  suppress = [
+    "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
+  ],
+  visibility = ['//visibility:public'],
+)

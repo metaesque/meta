@@ -1,0 +1,14 @@
+/Users/wmh/src/meta2/src/kernel/testdata/cards2.meta2
+         1        0 demo.cards2.FrenchDeckMeta:class
+         2        0 demo.cards2.FrenchDeckMeta:class
+         9       -1 demo.cards2.FrenchDeckMeta:comment:
+        10        0 demo.cards2.FrenchDeckMeta:class
+        11       -1 demo.cards2.FrenchDeckMeta:scope:
+        15      161 demo.cards2.FrenchDeckMeta.Suits/get:method
+        16      161 demo.cards2.FrenchDeckMeta.SuitsIs:method
+        17      161 demo.cards2.FrenchDeckMeta.SuitsRef:method
+        22      165 demo.cards2.FrenchDeckMeta.Ranks/get:method
+        23      165 demo.cards2.FrenchDeckMeta.RanksIs:method
+        24      165 demo.cards2.FrenchDeckMeta.RanksRef:method
+        25      169 demo.cards2.FrenchDeckMeta.FrenchDeckMeta:method
+        33        0 demo.cards2.FrenchDeckMeta:class

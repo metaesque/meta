@@ -1,0 +1,15 @@
+
+cc_test(
+  name = "ObjectMetaTest",
+  srcs = [
+    "ObjectMetaTest.cc",
+    "ObjectMetaTest.h",
+  ],
+  deps = [
+    "//metax/root:ObjectMeta",
+    "//metax/test:TestCase",
+  ],
+  copts = ['-Iexternal/gtest/include'],
+  size = "small",
+  visibility = ['//visibility:public'],
+)

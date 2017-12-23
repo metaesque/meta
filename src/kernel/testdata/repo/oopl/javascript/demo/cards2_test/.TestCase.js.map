@@ -1,0 +1,12 @@
+/Users/wmh/src/meta2/src/kernel/testdata/cards2.meta2
+         8      312 demo.cards2_test.TestCase:class
+         9      316 demo.cards2_test.TestCase:scope:
+        17      316 demo.cards2_test.TestCase.TestVar/get:method
+        18      317 demo.cards2_test.TestCase.TestVar/get:scope:
+        26      316 demo.cards2_test.TestCase.TestVarIs:method
+        27      317 demo.cards2_test.TestCase.TestVarIs:scope:
+        35      316 demo.cards2_test.TestCase.TestVarRef:method
+        36      317 demo.cards2_test.TestCase.TestVarRef:scope:
+        43      318 demo.cards2_test.TestCase.constructor:method
+        55      321 demo.cards2_test.TestCase.setUp:method
+        58       -1 demo.cards2_test.TestCase.setUp:scope:

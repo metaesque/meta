@@ -1,0 +1,6 @@
+/Users/wmh/src/meta2/src/kernel/test.meta2
+         6        0 metax.test_test.FakeFcntlMetaTest:class
+         7       -1 metax.test_test.FakeFcntlMetaTest:comment:
+         8       -1 metax.test_test.FakeFcntlMetaTest:scope:
+         9        0 metax.test_test.FakeFcntlMetaTest.test___init__:method
+        11       -1 metax.test_test.FakeFcntlMetaTest.test___init__:scope:

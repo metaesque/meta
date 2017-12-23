@@ -1,9 +1,0 @@
-# ----------------------------------------------------------------------
-# Build targets for namespace meta.root
-
-py_library(
-  name = "root",
-  srcs = ['root.py'],
-  deps = ['//meta:errors'],
-  visibility = ['//visibility:public'],
-)

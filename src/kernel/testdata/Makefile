@@ -1,4 +1,6 @@
 NEWSUFFIX := 2
+BAZEL = /usr/local/bin/bazel
+BASELANGS = python javascript cpp
 
 default:
 	echo "Specify explicit target"
@@ -40,23 +42,27 @@ sample_logs:
 
 # target refresh_repo:
 #   Recreate the 'repo' subdir from local live repository.
+#
 #   WARNING: This will probably break tests (they will need to be fixed).
+#
+#   NOTE: We do NOT use the 'meta2' capability of implicitly detecting 
+#   .meta2 and fqns because this target is used when we are first setting
+#   up bazel log parsing code in a new language (the files in the repo
+#   directory will help us parse the logs for a new baselang).
 #
 #   The directory is made read-only to ensure that no tests write into it.
 refresh_repo:
 	find repo | xargs chmod +w
 	rm -rf repo.bk
 	mv repo repo.bk
-	mkdir repo; cd repo; tar xvf ../../../templates2/oopl.tgz
-	for basel in python javascript ; do \
-		meta2 -b $$basel cards2.meta2; \
-		mkdir -p repo/oopl/$$basel/demo; \
-		cp -r $(METAREP)$(NEWSUFFIX)/oopl/$$basel/demo/{cards2,cards2_test} repo/oopl/$$basel/demo; \
+	mkdir repo; cd repo; tar xzf ../../../templates/oopl.tgz
+	for basel in $(BASELANGS) ; do \
+		meta2 -b $$basel --metadir=repo ../root.meta2 ../test.meta2 cards2.meta2; \
+		cd repo/oopl/$${basel}; \
+		$(BAZEL) build //demo/cards2:cards2; \
+		$(BAZEL) test //demo/cards2_test:cards2_test; \
+		cd ../../..; \
 	done
-	touch repo/oopl/python/demo/__init__.py
-	cp -r $(METAREP)$(NEWSUFFIX)/oopl/python/meta repo/oopl/python
-	cd repo/oopl/python; /Users/wmh/src/meta/root/bin/bazel build //demo/cards2:cards2
-	cd repo/oopl/python; /Users/wmh/src/meta/root/bin/bazel test //demo/cards2_test:cards2_test
 	find repo | xargs chmod -w
 
 

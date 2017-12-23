@@ -1,0 +1,16 @@
+
+cc_test(
+  name = "ErrorTest",
+  srcs = [
+    "ErrorTest.cc",
+    "ErrorTest.h",
+  ],
+  deps = [
+    "//metax/root:Error",
+    "//metax/root_test:ErrorTestMeta",
+    "//metax/test:TestCase",
+  ],
+  copts = ['-Iexternal/gtest/include'],
+  size = "small",
+  visibility = ['//visibility:public'],
+)

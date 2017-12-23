@@ -31,117 +31,157 @@ Terminology: https://en.wikipedia.org/wiki/Glossary_of_card_game_terms
   suit:
     All cards that share the same pips
   pip:
-    A suit symbol (e.g. spades, hearts, diamonds, clubs) on a card."""
+    A suit symbol (e.g. spades, hearts, diamonds, clubs) on a card.
+"""
 import demo.cards2
-import meta.root
+import metax.root
 import random
 
 
-class Card__Meta(meta.root.ObjectMetaClass):
-  """Auto-generated meta class for Card"""
-
-  def __init__(meta, meta__name, meta__bases, meta__dict):
-    super(Card__Meta, meta).__init__(meta__name, meta__bases, meta__dict)
-    # User-provided code follows.
+class CardMeta(metax.root.ObjectMeta):
+  """Auto-generated meta class for Card."""
 
 
-class Card(meta.root.Object):
-  """A card with suit and rank, belonging to a Deck.
+class Card(metax.root.Object):
+  """A card with suit and rank.
 
-  The Deck is responsible for display functionality."""
-  __metaclass__ = Card__Meta
+  In this implementation, Card instances do not know about the Deck they
+  belong to. See cards3.meta2 for a version in which Card maintains a Deck
+  (this introduces a circularity, as Deck needs Card and Card needs Deck).
+  """
+  __metaclass__ = CardMeta
+
+  # field rank : int
+  #   Rank as simple integer. Deck assigns display semantics to rank values.
 
   def rank(self):
+    """here"""
     return self._rank
 
   def rankIs(self, value):
+    """here
+
+    Args:
+      value: int
+    """
     self._rank = value
-    return self
 
   def rankRef(self):
+    """here"""
     return self._rank
 
+  # field suit : int
+  #   Suit as simple integer. Deck assigns display semantics to suit values.
+
   def suit(self):
+    """here"""
     return self._suit
 
   def suitIs(self, value):
+    """here
+
+    Args:
+      value: int
+    """
     self._suit = value
-    return self
 
   def suitRef(self):
+    """here"""
     return self._suit
 
-  def deck(self):
-    return self._deck
-
-  def deckIs(self, value):
-    self._deck = value
-    return self
-
-  def deckRef(self):
-    return self._deck
-
-  def __init__(self, deck, rank, suit):
-    """It should not be necessary to create Card instances directly.
+  def __init__(self, rank, suit):
+    """here
+    It should not be necessary to create Card instances directly.
     Instead, one should create instances of Deck, and use the cards
-    it contains."""
+    it contains.
+
+    Args:
+      rank: int
+      suit: int
+    """
     super(Card, self).__init__()
     # User-provided code follows.
-    self.deckIs(deck)
     self.rankIs(rank)
     self.suitIs(suit)
 
+  def meta(self):
+    """here"""
+    result = self.__class__
+    assert result is Card
+    assert result is MetaCard
+    return result
 
-class Pile__Meta(meta.root.ObjectMetaClass):
-  """Auto-generated meta class for Pile"""
-
-  def __init__(meta, meta__name, meta__bases, meta__dict):
-    super(Pile__Meta, meta).__init__(meta__name, meta__bases, meta__dict)
-    # User-provided code follows.
+MetaCard = Card
 
 
-class Pile(meta.root.Object):
+class PileMeta(metax.root.ObjectMeta):
+  """Auto-generated meta class for Pile."""
+
+
+class Pile(metax.root.Object):
   """A set of cards that partially or completely overlap."""
-  __metaclass__ = Pile__Meta
+  __metaclass__ = PileMeta
 
   def __init__(self):
+    """here"""
     super(Pile, self).__init__()
     self._cards = []
     # User-provided code follows.
 
+  # field cards : @vec<Card>
+  #   The Card instances in this Pile
+
   def cards(self):
+    """here"""
     return self._cards
 
   def cardsIs(self, value):
+    """here
+
+    Args:
+      value: @vec<Card>
+    """
     self._cards = value
-    return self
 
   def cardsRef(self):
+    """here"""
     return self._cards
 
+  def meta(self):
+    """here"""
+    result = self.__class__
+    assert result is Pile
+    assert result is MetaPile
+    return result
 
-class Deck__Meta(Pile__Meta):
-  """Auto-generated meta class for Deck"""
+MetaPile = Pile
 
-  def __init__(meta, meta__name, meta__bases, meta__dict):
-    super(Deck__Meta, meta).__init__(meta__name, meta__bases, meta__dict)
-    # User-provided code follows.
+
+class DeckMeta(PileMeta):
+  """Auto-generated meta class for Deck."""
 
 
 class Deck(Pile):
   """A pre-determined collection of Card instances."""
-  __metaclass__ = Deck__Meta
+  __metaclass__ = DeckMeta
 
-  def __init__(self):
-    super(Deck, self).__init__()
-    # User-provided code follows.
+  def asStr(self, card, full=False):
+    """here
+    Provide a string representation of a given card.
 
-  def asStr(self, card):
-    """Provide a string representation of a given card."""
-    pass
+    Args:
+      card: Card
+      full: bool
+        If true, result is '<rank> of <suit>'. If false,
+        result is two letters.
+    """
+    raise NotImplementedError('Deck.asStr');
+    return ''
 
   def shuffle(self):
-    """http://wikipedia.org/wiki/Fisher-Yates_shuffle"""
+    """here
+    http://wikipedia.org/wiki/Fisher-Yates_shuffle
+    """
     cards = self.cards()
     n = len(cards)
     for i in range(0, n):
@@ -151,36 +191,70 @@ class Deck(Pile):
       cards[j] = cards[i]
       cards[i] = tmp
 
+  def meta(self):
+    """here"""
+    result = self.__class__
+    assert result is Deck
+    assert result is MetaDeck
+    return result
 
-class FrenchDeck__Meta(Deck__Meta):
-  """Auto-generated meta class for FrenchDeck"""
+MetaDeck = Deck
 
-  def Suits(meta):
-    return meta._Suits
 
-  def SuitsIs(meta, value):
-    meta._Suits = value
-    return meta
+class FrenchDeckMeta(DeckMeta):
+  """Auto-generated meta class for FrenchDeck."""
 
-  def SuitsRef(meta):
-    return meta._Suits
+  # field Suits : @vec<@str>
+  #   Indices are suit integers, values are suit names.
 
-  def Ranks(meta):
-    return meta._Ranks
+  def Suits(cls):
+    """here"""
+    return cls._Suits
 
-  def RanksIs(meta, value):
-    meta._Ranks = value
-    return meta
+  def SuitsIs(cls, value):
+    """here
 
-  def RanksRef(meta):
-    return meta._Ranks
+    Args:
+      value: @vec<@str>
+    """
+    cls._Suits = value
 
-  def __init__(meta, meta__name, meta__bases, meta__dict):
-    super(FrenchDeck__Meta, meta).__init__(meta__name, meta__bases, meta__dict)
+  def SuitsRef(cls):
+    """here"""
+    return cls._Suits
+
+  # field Ranks : @vec<@str>
+  #   Indices are suit integers, values are suit names.
+
+  def Ranks(cls):
+    """here"""
+    return cls._Ranks
+
+  def RanksIs(cls, value):
+    """here
+
+    Args:
+      value: @vec<@str>
+    """
+    cls._Ranks = value
+
+  def RanksRef(cls):
+    """here"""
+    return cls._Ranks
+
+  def __init__(cls, name, bases, symbols):
+    """here
+
+    Args:
+      name: &str
+      bases: &vec<class>
+      symbols: &map
+    """
+    super(FrenchDeckMeta, cls).__init__(name, bases, symbols)
     # User-provided code follows.
-    meta.SuitsIs(
+    cls.SuitsIs(
       ['Joker', 'Spades', 'Diamonds', 'Clubs', 'Hearts'])
-    meta.RanksIs([
+    cls.RanksIs([
       'Low',
       'Ace', '2', '3', '4', '5', '6', '7', '8', '9',
       'Ten', 'Jack', 'Queen', 'King',
@@ -189,27 +263,53 @@ class FrenchDeck__Meta(Deck__Meta):
 
 class FrenchDeck(Deck):
   """https://en.wikipedia.org/wiki/French_playing_cards"""
-  __metaclass__ = FrenchDeck__Meta
+  __metaclass__ = FrenchDeckMeta
 
   def __init__(self, jokers=False):
+    """here
+
+    Args:
+      jokers: bool
+        If true, the deck includes high and low joker.
+    """
     super(FrenchDeck, self).__init__()
     # User-provided code follows.
     cards = self.cards()
     for suit in range(1, 5):
       for rank in range(1, 14):
-        card = Card(self, rank, suit)
+        card = Card(rank, suit)
         cards.append(card)
     if jokers:
-      lowjoker = Card(self, 0, 0)
+      lowjoker = Card(0, 0)
       cards.append(lowjoker)
-      highjoker = Card(self, 14, 0)
+      highjoker = Card(14, 0)
       cards.append(highjoker)
 
   def asStr(self, card, full=False):
-    """Provide a string representation of a given card."""
+    """here
+    Provide a string representation of a given card.
+
+    Args:
+      card: Card
+      full: bool
+        If true, result is '<rank> of <suit>'. If false,
+        result is two letters.
+
+    Returns:
+      Testing to see how things work.
+    """
     meta = self.__class__
     if full:
       result = meta.Ranks()[card.rank()] + ' of ' + meta.Suits()[card.suit()]
     else:
       result = meta.Ranks()[card.rank()][0] + meta.Suits()[card.suit()][0]
     return result
+
+  def meta(self):
+    """here"""
+    result = self.__class__
+    assert result is FrenchDeck
+    assert result is MetaFrenchDeck
+    return result
+
+MetaFrenchDeck = FrenchDeck

@@ -1,0 +1,8 @@
+/Users/wmh/src/meta2/src/kernel/testdata/cards2.meta2
+         1        0 demo.cards2_test.FrenchDeckMetaTest:class
+         2        0 demo.cards2_test.FrenchDeckMetaTest:class
+        10       -1 demo.cards2_test.FrenchDeckMetaTest:comment:
+        11        0 demo.cards2_test.FrenchDeckMetaTest:class
+        13       -1 demo.cards2_test.FrenchDeckMetaTest:scope:
+        13        0 demo.cards2_test.FrenchDeckMetaTest.test_FrenchDeckMeta:method
+        19        0 demo.cards2_test.FrenchDeckMetaTest:class

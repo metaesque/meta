@@ -4,79 +4,37 @@ scope:
 
   meta  
   class ObjectMetaRoot #:
-    TODO(wmh): Decide which variant of meta-classes to support in Meta:
+    The root of the metaclass hierarchy in Meta. 
 
-      1) The metaclass hierarchy defined by Meta inherits from the metaclass(es)
-         defined by baselangs.
-          - pros:
-             - we aren't maintaining two separate hierarchies in languages
-               that provide 
-             - the features added by Meta integrate seamlessly into the
-               features provided by the baselang, instead of the two sets
-               of features being forced to be independent
-          - cons:
-             - Metaclasses are a required feature, introducing additional
-               classes and complexity without any ability to remove them if
-               they are unused.
-          - notes about ObjectMetaRoot:
-             - This class is for the metaclass hierarchy what Object is for the
-               class hierarchy. All metaclasses in Meta inherit (directly or indirectly)
-               from this class unless the user specifies a metaparent outside the
-               meta metaclass inheritance hierarchy (which limits what Meta can do).
-             - This class acts as a bridge between the Meta world and the non-Meta
-               world, inheriting from whatever baselang-specific class is used
-               for metaclasses. If such a class does not exist, this class
-               inherits from the root class in the baselang. If such a class
-               does not exist, this class inherits from nothing. We 
-               intentionally do NOT have this class inherit from
-               metax.root.Object in such cases because that would mean that
-               metax.root.Object functionality would be available in some
-               baselang metaclasses but not in others.
-
-      2) Meta introduces a metaclass hierarchy that is independent of the
-         metaclass hierarchy of the baselang, and instances of the Meta-defined
-         metaclass hierarchy contain instances of the baselang metaclass
-         instances (for baselangs that have a metaclass concept).
-          - pros:
-             - all metaclasses across all baselangs can inherit from
-               metax.root.Object and benefit from a consistent interface,
-               instead of different functionality existing in different
-               baselangs.
-             - the metaclasses introduced by Meta can be completely decoupled
-               from the user-classes ... they can be used if needed, but
-               do not have any impact on the code if not used. Note however
-               that they are implicitly being used (and thus required) if
-               the user defines any 'meta'-level classic constructs.
-          - cons:
-             - results in an extra hierarchy
-             - *** In Python, we would not be able to set __metaclass__ to
-               the Meta-defined metaclass, and would have to implement all
-               meta-level functionality using @classmethod, etc.
-                - this would be definining an 'Initialize' method and ensuring
-                  it always gets invoked when classes are loaded, etc. ...
-                  not nearly as clean a solution as having the metaclass
-                  initializer perform such initialization.
-                - this con is basically a deal breaker, no?
+    There are two ways we can handle the interaction between metaclasses
+    in Meta and those in the baselang:
+      1) The meta-level metaclass is-a baselang-provided metaclass
+      2) The meta-level metaclass has-a baselang-provided metaclass
+    See ../../README.md for details. Currently implementing variant #1.
   parent<py> ^type
   parent<js> ^Object
-  parent<cc> null
+  parent<cc> void
+  assocs<cc>:
+    std assoc string;
+    std assoc vector;
+    std assoc map;
   scope:
 
-    field metaname : str #:
+    field metaname : @str #:
       The name of the class being represented by this metaclass.
       TODO(wmh): This field is not needed in python ... need a way to
       have 'specific' fields. But we do want to define metaname() to return
       the name as stored in the type metaclass.
       TODO(wmh): This should be a readonly field, so no setter or reffer.
 
-    field metabases : vec<class> #:
+    field metabases : @vec<class> #:
       The parent classes of the class.
       TODO(wmh): This field is not needed in python ... need a way to
       have 'specific' fields.  But we do want to define metabases() to return
       the bases as stored in the type metaclass.
       TODO(wmh): This should be a readonly field, so no setter or reffer.
 
-    field metasymbols : map #:
+    field metasymbols : @map #:
       The symbols available within the class.
       TODO(wmh): This field is not needed in python ... need a way to
       have 'specific' fields.  But we do want to define metasymbols() to return
@@ -101,9 +59,9 @@ scope:
     params:
       var name : &str #:
         The name of the class being created
-      var bases : vec<class> #:
+      var bases : &vec<class> #:
         The parent classes of the class (instances of metaclasses)
-      var symbols : map #:
+      var symbols : &map #:
         The symbols available within the class.
     super<py> (name, bases, symbols)
     scope<py>:
@@ -136,10 +94,14 @@ scope:
     from ObjectMetaRoot.  Any user-defined meta class by default inherits
     from ObjectMetaRoot (semantics implemented in
     metax.c.ClassConstruct.metaClassInfo().
+
+    Meta:suppress: JSC_UNKNOWN_EXPR_TYPE
   parent<py> ^object
   parent<js> ^Object
-  parent<cc> null
+  parent<cc> void
   metaparent metax.root.ObjectMetaRoot
+  assocs<cc>:
+    cls assoc metax.root.ObjectMetaRoot;
   scope:
 
     user
@@ -180,7 +142,10 @@ scope:
       javascript: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error
   parent<py> ^Exception
   parent<js> ^Error
-  parent<cc> null
+  parent<cc> ^std.runtime_error
+  assocs<cc>:
+    cls assoc ObjectMetaRoot;
+    std assoc exception;
   scope:
   end class Error;
 

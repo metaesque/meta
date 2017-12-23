@@ -1,6 +1,0 @@
-     1      0 meta.testing_test.FakeFcntlTestMetaClass:imports /Users/wmh/src/meta/src/kernel/root.meta
-     6      0 meta.testing_test.FakeFcntlTestMetaClass:preamble
-    11      0 meta.testing_test.FakeFcntlTestMetaClass.Meta__27_id:method
-    11      1 meta.testing_test.FakeFcntlTestMetaClass.Meta__27_id:params
-    12      1 meta.testing_test.FakeFcntlTestMetaClass.Meta__27_id:comment
-    19      0 meta.testing_test.FakeFcntlTestMetaClass.Meta__27_id:preamble

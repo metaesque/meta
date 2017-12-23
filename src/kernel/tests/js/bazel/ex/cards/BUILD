@@ -7,7 +7,6 @@ closure_js_library(
   srcs = ['Card.js'],
   deps = [],
   suppress = ["JSC_UNKNOWN_EXPR_TYPE"],
-  language = "ECMASCRIPT6_STRICT",
   visibility = ['//visibility:public'],
 )
 
@@ -15,6 +14,24 @@ closure_js_library(
   name = "Pile",
   srcs = ['Pile.js'],
   deps = [],
-  language = "ECMASCRIPT6_STRICT",
   visibility = ['//visibility:public'],
+)
+
+closure_js_library(
+  name = "play_lib",
+  srcs = ['play.js'],
+  deps = [":Card", ":Pile"],
+  visibility = ['//visibility:public'],
+)
+
+closure_js_binary(
+  name = "main",
+  deps = [
+    ":play_lib",
+    ":Card",
+    ":Pile",
+  ],
+  entry_points = [
+    "goog:ex.cards.game"
+  ],
 )

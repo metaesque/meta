@@ -1,0 +1,8 @@
+
+cc_library(
+  name = "ObjectMetaRoot",
+  srcs = ['ObjectMetaRoot.cc'],
+  hdrs = ['ObjectMetaRoot.h'],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)

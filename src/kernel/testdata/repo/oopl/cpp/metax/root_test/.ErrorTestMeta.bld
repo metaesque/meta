@@ -1,0 +1,9 @@
+
+cc_library(
+  name = "ErrorTestMeta",
+  srcs = ['ErrorTestMeta.cc'],
+  hdrs = ['ErrorTestMeta.h'],
+  deps = ['//metax/test:TestCaseMeta'],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)

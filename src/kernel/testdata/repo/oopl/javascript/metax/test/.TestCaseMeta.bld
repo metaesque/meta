@@ -1,0 +1,11 @@
+
+closure_js_library(
+  name = "TestCaseMeta",
+  srcs = ['TestCaseMeta.js'],
+  deps = ['//metax/root:ObjectMetaRoot'],
+  suppress = [
+    "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
+  ],
+  visibility = ['//visibility:public'],
+)

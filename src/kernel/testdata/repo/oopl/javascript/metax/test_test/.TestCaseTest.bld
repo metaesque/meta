@@ -1,0 +1,19 @@
+
+closure_js_test(
+  name = "TestCaseTest",
+  srcs = ['TestCase_test.js'],
+  deps = [
+    "//metax/test:TestCase",
+    "//metax/test_test:TestCaseTestMeta",
+    "@io_bazel_rules_closure//closure/library:testing",
+  ],
+  compilation_level = "SIMPLE",
+  entry_points = ['metax.test_test.TestCaseTest'],
+  size = "small",
+  suppress = [
+    "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
+  ],
+  testonly = 1,
+  visibility = ['//visibility:public'],
+)

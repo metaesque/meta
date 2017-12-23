@@ -1,6 +1,0 @@
-     1      0 meta.errors.SyntaxErrorMetaClass:imports /Users/wmh/src/meta/src/kernel/root.meta
-     6      0 meta.errors.SyntaxErrorMetaClass:preamble
-    11      0 meta.errors.SyntaxErrorMetaClass.Meta__32_id:method
-    11      1 meta.errors.SyntaxErrorMetaClass.Meta__32_id:params
-    12      1 meta.errors.SyntaxErrorMetaClass.Meta__32_id:comment
-    19      0 meta.errors.SyntaxErrorMetaClass.Meta__32_id:preamble

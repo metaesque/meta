@@ -1,44 +1,57 @@
-// A pre-determined collection of Card instances.
-goog.provide('demo.cards2.Deck');
-goog.require('demo.cards2.Deck__Meta');
-goog.require('demo.cards2.Pile');
+/**
+ * @fileoverview
+ */
+goog.module('demo.cards2.Deck');
+goog.module.declareLegacyNamespace();
+const Pile = goog.require('demo.cards2.Pile');
+const {MetaDeck} = goog.require('demo.cards2.DeckMeta');
 
 /**
- * demo.cards2.Deck.Deck
+ * demo.cards2.Deck
+ *   A pre-determined collection of Card instances.
  * @public
- * @constructor
- * @extends {demo.cards2.Pile}
  */
-demo.cards2.Deck = function() {
-  demo.cards2.Deck.base(this, 'constructor');
-  // User-provided code follows.
-};
-goog.inherits(demo.cards2.Deck, demo.cards2.Pile);
+class Deck extends Pile {
 
-/**
- * demo.cards2.Deck.asStr
- *   Provide a string representation of a given card.
- * @param {?demo.cards2.Card} card
- * @return {?string}
- * @public
- */
-demo.cards2.Deck.prototype.asStr = function(card) {
-  return null;
-};
+  /**
+   * demo.cards2.Deck.asStr
+   *   Provide a string representation of a given card.
+   * @param {?demo.cards2.Card} card
+   * @param {!boolean} [full=false]
+   *   If true, result is '<rank> of <suit>'. If false,
+   *   result is two letters.
+   * @return {!string}
+   * @public
+   */
+  asStr(card, full=false) {
+    throw new Error('NotImplemented: demo.cards2.Deck.asStr');
+  };
 
-/**
- * demo.cards2.Deck.shuffle
- *   http://wikipedia.org/wiki/Fisher-Yates_shuffle
- * @public
- */
-demo.cards2.Deck.prototype.shuffle = function() {
-  var cards = this.cards();
-  var n = cards.length;
-  for (var i = 0; i < n; ++i) {
-    // 0 <= j <= i
-    var j = Math.floor(Math.random() * (i+1));
-    var tmp = cards[j];
-    cards[j] = cards[i];
-    cards[i] = tmp;
-  }
-};
+  /**
+   * demo.cards2.Deck.shuffle
+   *   http://wikipedia.org/wiki/Fisher-Yates_shuffle
+   * @public
+   */
+  shuffle() {
+    var cards = this.cards();
+    var n = cards.length;
+    for (var i = 0; i < n; ++i) {
+      // 0 <= j <= i
+      var j = Math.floor(Math.random() * (i+1));
+      var tmp = cards[j];
+      cards[j] = cards[i];
+      cards[i] = tmp;
+    }
+  };
+
+  /**
+   * demo.cards2.Deck.meta
+   * @return {?metax.root.ObjectMetaRoot}
+   * @public
+   * @override 
+   */
+  meta() {
+    return MetaDeck;
+  };
+}
+exports = Deck;

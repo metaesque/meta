@@ -1,0 +1,16 @@
+
+cc_test(
+  name = "DeckTest",
+  srcs = [
+    "DeckTest.cc",
+    "DeckTest.h",
+  ],
+  deps = [
+    "//demo/cards2:Deck",
+    "//demo/cards2_test:DeckTestMeta",
+    "//demo/cards2_test:TestCase",
+  ],
+  copts = ['-Iexternal/gtest/include'],
+  size = "small",
+  visibility = ['//visibility:public'],
+)

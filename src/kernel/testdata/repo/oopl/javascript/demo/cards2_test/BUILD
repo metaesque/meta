@@ -3,12 +3,24 @@ load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_binary")
 load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_test")
 
 closure_js_library(
-  name = "CardTest__Meta",
-  srcs = ['CardTest__Meta.js'],
-  deps = ['//meta/testing:TestCaseMetaClass'],
+  name = "TestCase",
+  srcs = ['TestCase_test.js'],
+  deps = ['//metax/test:TestCase'],
   suppress = [
-    "JSC_NULLABLE_RETURN_WITH_NAME",
     "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
+  ],
+  testonly = 1,
+  visibility = ['//visibility:public'],
+)
+
+closure_js_library(
+  name = "CardTestMeta",
+  srcs = ['CardTestMeta.js'],
+  deps = ['//metax/test:TestCaseMeta'],
+  suppress = [
+    "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   visibility = ['//visibility:public'],
 )
@@ -18,45 +30,47 @@ closure_js_test(
   srcs = ['Card_test.js'],
   deps = [
     "//demo/cards2:Card",
-    "//demo/cards2_test:CardTest__Meta",
-    "//meta/testing:TestCase",
+    "//demo/cards2_test:CardTestMeta",
+    "//demo/cards2_test:TestCase",
     "@io_bazel_rules_closure//closure/library:testing",
   ],
-  compilation_level = "ADVANCED",
+  compilation_level = "SIMPLE",
+  entry_points = ['demo.cards2_test.CardTest'],
   size = "small",
   suppress = [
     "JSC_EXTRA_REQUIRE_WARNING",
-    "JSC_MISSING_PROVIDE",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   testonly = 1,
   visibility = ['//visibility:public'],
 )
 
 closure_js_test(
-  name = "Card__MetaTest",
-  srcs = ['Card__Meta_test.js'],
+  name = "CardMetaTest",
+  srcs = ['CardMeta_test.js'],
   deps = [
-    "//demo/cards2:Card__Meta",
-    "//meta/testing:TestCase",
+    "//demo/cards2:CardMeta",
+    "//demo/cards2_test:TestCase",
     "@io_bazel_rules_closure//closure/library:testing",
   ],
-  compilation_level = "ADVANCED",
+  compilation_level = "SIMPLE",
+  entry_points = ['demo.cards2_test.CardMetaTest'],
   size = "small",
   suppress = [
     "JSC_EXTRA_REQUIRE_WARNING",
-    "JSC_MISSING_PROVIDE",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   testonly = 1,
   visibility = ['//visibility:public'],
 )
 
 closure_js_library(
-  name = "PileTest__Meta",
-  srcs = ['PileTest__Meta.js'],
-  deps = ['//meta/testing:TestCaseMetaClass'],
+  name = "PileTestMeta",
+  srcs = ['PileTestMeta.js'],
+  deps = ['//metax/test:TestCaseMeta'],
   suppress = [
-    "JSC_NULLABLE_RETURN_WITH_NAME",
     "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   visibility = ['//visibility:public'],
 )
@@ -66,45 +80,47 @@ closure_js_test(
   srcs = ['Pile_test.js'],
   deps = [
     "//demo/cards2:Pile",
-    "//demo/cards2_test:PileTest__Meta",
-    "//meta/testing:TestCase",
+    "//demo/cards2_test:PileTestMeta",
+    "//demo/cards2_test:TestCase",
     "@io_bazel_rules_closure//closure/library:testing",
   ],
-  compilation_level = "ADVANCED",
+  compilation_level = "SIMPLE",
+  entry_points = ['demo.cards2_test.PileTest'],
   size = "small",
   suppress = [
     "JSC_EXTRA_REQUIRE_WARNING",
-    "JSC_MISSING_PROVIDE",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   testonly = 1,
   visibility = ['//visibility:public'],
 )
 
 closure_js_test(
-  name = "Pile__MetaTest",
-  srcs = ['Pile__Meta_test.js'],
+  name = "PileMetaTest",
+  srcs = ['PileMeta_test.js'],
   deps = [
-    "//demo/cards2:Pile__Meta",
-    "//meta/testing:TestCase",
+    "//demo/cards2:PileMeta",
+    "//demo/cards2_test:TestCase",
     "@io_bazel_rules_closure//closure/library:testing",
   ],
-  compilation_level = "ADVANCED",
+  compilation_level = "SIMPLE",
+  entry_points = ['demo.cards2_test.PileMetaTest'],
   size = "small",
   suppress = [
     "JSC_EXTRA_REQUIRE_WARNING",
-    "JSC_MISSING_PROVIDE",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   testonly = 1,
   visibility = ['//visibility:public'],
 )
 
 closure_js_library(
-  name = "DeckTest__Meta",
-  srcs = ['DeckTest__Meta.js'],
-  deps = ['//meta/testing:TestCaseMetaClass'],
+  name = "DeckTestMeta",
+  srcs = ['DeckTestMeta.js'],
+  deps = ['//metax/test:TestCaseMeta'],
   suppress = [
-    "JSC_NULLABLE_RETURN_WITH_NAME",
     "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   visibility = ['//visibility:public'],
 )
@@ -114,45 +130,47 @@ closure_js_test(
   srcs = ['Deck_test.js'],
   deps = [
     "//demo/cards2:Deck",
-    "//demo/cards2_test:DeckTest__Meta",
-    "//meta/testing:TestCase",
+    "//demo/cards2_test:DeckTestMeta",
+    "//demo/cards2_test:TestCase",
     "@io_bazel_rules_closure//closure/library:testing",
   ],
-  compilation_level = "ADVANCED",
+  compilation_level = "SIMPLE",
+  entry_points = ['demo.cards2_test.DeckTest'],
   size = "small",
   suppress = [
     "JSC_EXTRA_REQUIRE_WARNING",
-    "JSC_MISSING_PROVIDE",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   testonly = 1,
   visibility = ['//visibility:public'],
 )
 
 closure_js_test(
-  name = "Deck__MetaTest",
-  srcs = ['Deck__Meta_test.js'],
+  name = "DeckMetaTest",
+  srcs = ['DeckMeta_test.js'],
   deps = [
-    "//demo/cards2:Deck__Meta",
-    "//meta/testing:TestCase",
+    "//demo/cards2:DeckMeta",
+    "//demo/cards2_test:TestCase",
     "@io_bazel_rules_closure//closure/library:testing",
   ],
-  compilation_level = "ADVANCED",
+  compilation_level = "SIMPLE",
+  entry_points = ['demo.cards2_test.DeckMetaTest'],
   size = "small",
   suppress = [
     "JSC_EXTRA_REQUIRE_WARNING",
-    "JSC_MISSING_PROVIDE",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   testonly = 1,
   visibility = ['//visibility:public'],
 )
 
 closure_js_library(
-  name = "FrenchDeckTest__Meta",
-  srcs = ['FrenchDeckTest__Meta.js'],
-  deps = ['//meta/testing:TestCaseMetaClass'],
+  name = "FrenchDeckTestMeta",
+  srcs = ['FrenchDeckTestMeta.js'],
+  deps = ['//metax/test:TestCaseMeta'],
   suppress = [
-    "JSC_NULLABLE_RETURN_WITH_NAME",
     "JSC_EXTRA_REQUIRE_WARNING",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   visibility = ['//visibility:public'],
 )
@@ -162,33 +180,35 @@ closure_js_test(
   srcs = ['FrenchDeck_test.js'],
   deps = [
     "//demo/cards2:FrenchDeck",
-    "//demo/cards2_test:FrenchDeckTest__Meta",
-    "//meta/testing:TestCase",
+    "//demo/cards2_test:FrenchDeckTestMeta",
+    "//demo/cards2_test:TestCase",
     "@io_bazel_rules_closure//closure/library:testing",
   ],
-  compilation_level = "ADVANCED",
+  compilation_level = "SIMPLE",
+  entry_points = ['demo.cards2_test.FrenchDeckTest'],
   size = "small",
   suppress = [
     "JSC_EXTRA_REQUIRE_WARNING",
-    "JSC_MISSING_PROVIDE",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   testonly = 1,
   visibility = ['//visibility:public'],
 )
 
 closure_js_test(
-  name = "FrenchDeck__MetaTest",
-  srcs = ['FrenchDeck__Meta_test.js'],
+  name = "FrenchDeckMetaTest",
+  srcs = ['FrenchDeckMeta_test.js'],
   deps = [
-    "//demo/cards2:FrenchDeck__Meta",
-    "//meta/testing:TestCase",
+    "//demo/cards2:FrenchDeckMeta",
+    "//demo/cards2_test:TestCase",
     "@io_bazel_rules_closure//closure/library:testing",
   ],
-  compilation_level = "ADVANCED",
+  compilation_level = "SIMPLE",
+  entry_points = ['demo.cards2_test.FrenchDeckMetaTest'],
   size = "small",
   suppress = [
     "JSC_EXTRA_REQUIRE_WARNING",
-    "JSC_MISSING_PROVIDE",
+    "JSC_NULLABLE_RETURN_WITH_NAME",
   ],
   testonly = 1,
   visibility = ['//visibility:public'],
@@ -198,12 +218,12 @@ test_suite(
   name = "cards2_test",
   tests = [
     ":CardTest",
-    ":Card__MetaTest",
+    ":CardMetaTest",
     ":PileTest",
-    ":Pile__MetaTest",
+    ":PileMetaTest",
     ":DeckTest",
-    ":Deck__MetaTest",
+    ":DeckMetaTest",
     ":FrenchDeckTest",
-    ":FrenchDeck__MetaTest",
+    ":FrenchDeckMetaTest",
   ],
 )

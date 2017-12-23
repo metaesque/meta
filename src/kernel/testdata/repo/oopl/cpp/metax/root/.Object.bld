@@ -1,0 +1,12 @@
+
+cc_library(
+  name = "Object",
+  srcs = ['Object.cc'],
+  hdrs = ['Object.h'],
+  deps = [
+    "//metax/root:ObjectMeta",
+    "//metax/root:ObjectMetaRoot",
+  ],
+  copts = ['-Iexternal/gtest/include'],
+  visibility = ['//visibility:public'],
+)
