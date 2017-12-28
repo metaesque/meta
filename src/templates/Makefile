@@ -1,4 +1,4 @@
-METAREP = $(shell meta2 config repository_path)
+METAREP := $(shell meta2 config repository_path)
 
 default:
 	@echo "Specify explicit target"
@@ -14,6 +14,6 @@ update: oopl.tgz
 #   $METAREP$NEWSUFFIX/oopl to prepare it.
 oopl.tgz: .FORCE
 	@echo "Building oopl.tgz"
-	@builtin cd oopl; find . -name *~; builtin cd ..; tar czf oopl.tgz oopl
+	@builtin cd oopl; rm -f $$(find . -name *~); builtin cd ..; tar czf oopl.tgz oopl
 
 .FORCE:

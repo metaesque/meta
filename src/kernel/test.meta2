@@ -392,7 +392,7 @@ scope:
       Provides stubbing functionality.
 
   assocs<cc>:
-    std assoc sstream;
+    std assoc strstream;
     std assoc typeinfo;
     lib assoc gtest.gtest target "@gtest//:main";    
     cls assoc metax.root.Error;
@@ -495,6 +495,10 @@ scope:
     type<js> goog.testing.PropertyReplacer
     type<cc> *void
     end field stubs;
+
+    field strstreams : @vec<*strstream> #:
+      A list of strstream instances allocated via fp().  Cleaned up in
+      teardown, and used in out().
  
     field method_name : @str #:
       The name of the method being tested.
@@ -654,6 +658,11 @@ scope:
       /# this._stubs.reset();
     teardown<cc>:
       std::cerr << "Fix C++ teardown" << std::endl;
+
+      /# Delete all strstreams in strstreams()
+      auto& strstreams = this->strstreamsRef();
+      /# More here!
+
     teardowncase<py>:
       if meta.Debug():
         print 'Invoking %s TearDown' % cls.__name__
@@ -1008,33 +1017,21 @@ scope:
     end method newMox;
 
     new
-    method newStr : *sstream #:
+    method newStr : *strstream #:
       Create a new string stream for use anywhere a istream or
       ostream is required.
     params:
       var content : str = null;
     scope<py>:
-      if content:
-        result = cStringIO.StringIO(content)
-      else:
-        result = cStringIO.StringIO()
-      return result
+      return self.fp(content=content)
     scope<js>:
       throw new Error('TestCase.newStr() not yet implemented');
     scope<cc>:
-      std::stringstream* result;
-      if (content == nullptr) {
-        result = new std::stringstream();
-      } else {
-        result = new std::stringstream(*content);
-      }
-      /# TODO(wmh): Add result to a C++-specific streams() field. In teardown(),
-      /# iterate over streams() and delete all elements.
-      return result;
+      return this->fp();
     end method newStr;
 
     new
-    method fp : *sstream #:
+    method fp : *strstream #:
       Create a new string stream for use anywhere a istream or
       ostream is required.
 
@@ -1046,9 +1043,8 @@ scope:
         result = cStringIO.StringIO()
       else:
         result = cStringIO.StringIO(content)
+      self.strstreamsRef().append(result)
       return result
-    test<py>:
-      pass
     scope<js>:
       throw new Error('TestCase.fp() not yet implemented');
     scope<cc>:
@@ -1058,10 +1054,31 @@ scope:
       } else {
         result = new std::stringstream(*content);
       }
-      /# TODO(wmh): Add result to a C++-specific streams() field. In teardown(),
-      /# iterate over streams() and delete all elements.
+      this->strstreamsRef().push_back(result);
       return result;
     end method fp;
+
+    new
+    method out : str #:
+      The output of the most recently created strstream via fp().
+    scope<py>:
+      strstreams = self.strstreams()
+      if strstreams:
+        result = strstreams[-1].getvalue()
+      else:
+        result = None
+      return result
+    scope<js>:
+      throw new Error('TestCase.out() not yet implemented');
+    scope<cc>:
+      auto* strstreams = self.strstreams();
+      int size = strstreams->size()
+      if (size > 0) {
+        return strstreams[size].str();
+      } else {
+        return "";
+      }
+    end method out;
 
     new
     method tmpFile #:
@@ -1693,7 +1710,9 @@ scope:
       var message : any = null;
     scope<py>:
       if message is None:
-        message = '%s != %s' % (str(expected), str(item))
+        eval = str(expected).replace('\n', '\\n')
+        aval = str(item).replace('\n', '\\n')
+        message = '"%s" != "%s"' % (eval, aval)
       self.assertEqual(expected, item, message)
     scope<js>:
       if (message == null) {
@@ -1868,7 +1887,7 @@ scope:
       var content : any;
       var golden : any;
     scope<py>:
-      if self.WriteGoldens:
+      if self.meta().WriteGoldens():
         with open(golden, 'w') as fp:
           fp.write(content)
         print 'Wrote %d bytes to golden %s' % (len(content), golden)
@@ -1876,6 +1895,10 @@ scope:
         if True:
           with open(golden, 'r') as fp:
             content2 = fp.read()
+            /# By comparing the golden on the right, the output produced
+            /# reflects what needs to be done to the passed in 'content',
+            /# not what needs to be done to the golden. For example, '+'
+            /# means add a line to content, '-' means remove a line, etc.
             self.assertMultiLineEqual(content, content2)
         else:
           fd, tmpfile = tempfile.mkstemp()
@@ -1893,7 +1916,7 @@ scope:
       var path : any;
       var golden : any;
     scope<py>:
-      if self.WriteGoldens:
+      if self.meta().WriteGoldens():
         shutil.copyfile(path, golden)
         print 'Copied %s to %s' % (path, golden)
       else:

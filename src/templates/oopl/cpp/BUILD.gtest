@@ -1,16 +1,15 @@
+# https://docs.bazel.build/versions/master/cpp-use-cases.html#including-external-libraries
 cc_library(
-  name = "main",
+  name = 'main',
   srcs = glob(
-    ["src/*.cc"],
-    exclude = ["src/gtest-all.cc"]
+    ['src/*.cc'],
+    exclude = ['src/gtest-all.cc']
   ),
   hdrs = glob([
-    "include/**/*.h",
-    "src/*.h"
+    'include/**/*.h',
+    'src/*.h'
   ]),
-  copts = [
-    "-Iexternal/gtest/include"
-  ],
-  linkopts = ["-pthread"],
-  visibility = ["//visibility:public"],
+  copts = ['-Iexternal/gtest/include'],
+  linkopts = ['-pthread'],
+  visibility = ['//visibility:public'],
 )

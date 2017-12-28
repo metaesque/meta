@@ -1,0 +1,3903 @@
+namespace metax.lib.markdown #:
+  Classes related to parsing and converting Wade's Markdown, an extension
+  of the official markdown syntax.
+
+  Markdown descriptions:
+    Basics: https://daringfireball.net/projects/markdown/syntax
+    Github Flavored Markdown: https://guides.github.com/features/mastering-markdown/
+    Markdown Extra: https://en.wikipedia.org/wiki/Markdown_Extra
+
+  Sites using:
+    Wordpress: (PHP Markdown Extra)
+       https://en.support.wordpress.com/markdown/
+       https://en.support.wordpress.com/markdown-quick-reference/
+    Doxygen: GFM and PHP Markdown Extra
+       https://www.stack.nl/~dimitri/doxygen/manual/markdown.html 
+
+  Planned extensions
+   - The syntax {text} is an indication that 'text' should be surrounded
+     with HTML markup (usually <span> or <code>, etc.) with some set of
+     classes.
+   - At the bottom of the markdown file, one can specify mappings for 
+     text block with the syntax:
+      {regexp}: <code class=\"...\">
+      {regexp}: <span class=\"...\">
+
+  | Concept   | Sub      | How                       | Orig | GFM | PHP  | WMD  |
+  | --------  | ---      | ---                       | :-:  | :-: | :-:- | :-:  |
+
+  | Paragraph |          | separate with empty line  | Y    | Y   | Y    | Y    |
+  | Style     | text     | {text}[css]               | N    | N   | N    | TODO |
+  | Emphasis  | italic   | *i* _i_                   | Y    | Y   | Y    | Y    |
+  |           | bold     | **b** __b__               | Y    | Y   | Y    | Y    |
+  | Link      | inline   | [text](url \"title\")     | Y    | Y   | Y    | TODO |
+  |           | ref      | [title][name]             | Y    | Y   | Y    | TODO |
+  |           |          | [name]: url \"title\"     | .    | .   | .    | .    |
+  | Image     | inline   | ![alt](url \"title\")     | Y    | Y   | Y    | TODO |
+  |           | ref      | ![alt][name]              | Y    | Y   | Y    | TODO |
+  |           |          | [name]: url \"title\"     | .    | .   | .    | .    |
+  |           | linked   | [![title](imgurl)](url)]  | Y    | Y   | Y    | TODO |
+  | Footnote  |          | [^name]                   | ?    | ?   | Y    | TODO |
+  |           |          | [^name]: text             | .    | .   | .    | .    |
+  | Line      | breaks   | end line with 2+ spaces   | Y    | ?   | N    | TODO |
+  | Lists     | bullet   | * item                    | Y    | Y   | Y    | Y    |
+  |           |          | - item                    | Y    | Y   | Y    | Y    |
+  |           | numbered | 1. item                   | Y    | Y   | Y    | Y    |
+  |           | defn     | text                      |      |     | Y    | TODO |
+  |           |          | : text                    | .    | .   | .    | .    |
+  | Block     | quote    | > quoted text             | Y    | Y   | Y    | Y    |
+  |           | code     | ```[lang]                 | Y    | Y   | Y    | Y    |
+  |           |          | text                      | .    | .   | .    | .    |
+  |           |          | ```                       | .    | .   | .    | .    |
+  | HTML      |          | Insert as-is              | Y    | ?   | ?    | Y    |
+  | Preformat |          | start line with 4+ spaces | Y    | Y   | Y(2) | Y    |
+  | Code      |          | `text`                    | Y    | Y   | Y    | TODO |
+  | Headers   | level 1  | # text                    | Y    | Y   | Y    | Y    |
+  |           | level 2  | ## text                   | Y    | Y   | Y    | Y    |
+  |           | level 3  | ### text                  | Y    | Y   | Y    | Y    |
+  |           | level 4  | #### text                 | Y    | Y   | Y    | Y    |
+  |           | level 5  | ##### text                | Y    | Y   | Y    | Y    |
+  |           | level 6  | ###### text               | Y    | Y   | Y    | Y    |
+  | Abbrevs   |          | *[abbrev]: text           | ?    | ?   | Y    | TODO |
+
+  Where
+    - text: what is visible in HTML
+    - url: a URL (relative or absolute)
+    - title: appears when one hovers over the entity in HTML
+    - alt: makes images accessible to visually impaired
+    - name: a symbolic reference defined at bottom of file.
+    - css: a list of comma separate CSS class names.
+
+scope:
+
+  class Error < metax.root.Error;
+
+  class Parser #:
+    A parser for wmh-flavored markdown.
+  assocs:
+    std assoc os;
+    std assoc pprint;
+    usertest std assoc re;
+    std assoc sys #:
+      TODO(wmh): When one uses ostream or out (for example), there
+      is an implicit dependency on 'sys' in python. How do we automatically
+      include these assocs when needed, but not otherwise?
+  scope:
+
+    meta
+    field ListRe : regexp;
+
+    meta
+    lifecycle MetaParser scope:
+      cls.ListReIs(re.compile(
+        r'^(?P<indent> {0,3})'
+        r'(?:(?P<ul>[+*-])|(?P<ol>\d+)\.)'
+        r'(?P<postdent>\s+)'
+        r'(?P<text>.*)'))
+
+      cls.CATEGORIES = [
+        ('empty', re.compile(r'^\s*$'), False),
+        ('html', re.compile(r'^<(?P<tag>[a-zA-Z0-9]+)[ >]'), True),
+        ('section', re.compile(r'^(?P<hash>#{1,6})\s*(?P<title>.*)'), True),
+        ('quote', re.compile(r'^> '), True),
+        ('code', re.compile(r'^    '), True),
+        ('code', re.compile(r'^(?P<code>[`~]{3,})\s*(?P<lang>\S+)?'), True),
+        ('table', re.compile(r'^Table:'), True),
+        ('hr', re.compile(r'^\s*([*+-] ?){3,}\s*$'), False),
+        ('label', re.compile(
+          r'^\s*\[(?P<label>[^ \t\]]+)\]:\s*(?P<url>\S+)'
+          r'(?:\s*\"(?P<title>[^\"]*)\")?'), False),
+        ('list', cls.ListRe(), None),
+        ('page', re.compile(r'^(?:p(?P<page>\d+))?'), False),
+        ('comment', re.compile('^\s*/\#\s*(?P<comment>.*)'), False),
+      ]
+      cls.CATMAP = {trip[0]: trip[1] for trip in cls.CATEGORIES}
+
+    field labels : @map #:
+      A mapping from label name to maps containing:
+        url: str
+          The url associated with the label.
+        title: str
+          The (optional) title associated with the label.
+
+    lifecycle Parser scope:
+    end;
+
+    method registerLabel : void #:
+      Add a new label to the parser.
+    params:
+      var label : str;
+      var url : str;
+      var title : str = null;
+    scope:
+      data = {'url': url}
+      if title:
+        data['title'] = title
+      self._labels[label] = data
+    test:
+      parser = test.md
+      test.iseq({}, parser.labels())
+      parser.registerLabel('label', 'http://metaxy.org', title='metaxy')
+      test.iseq(
+        {'label': {'url': 'http://metaxy.org', 'title': 'metaxy'}},
+        parser.labels())
+    end method registerLabel;
+
+    method clearLabels : void #:
+      Clear all labels.  This allows a parser to be used in two different
+      modes. In one mode, clearLabels() is invoked each time parseFile() is
+      called, so that labels are file-specific.   In another mode, a parser
+      can parse multiple files without clear labels, so that a book described
+      in multiple files can share labels across the individual files.
+    scope:
+      self._labels.clear()
+    test:
+      parser = test.md
+      parser.registerLabel('label', 'http://metaxy.org', title='metaxy')
+      test.iseq(
+        {'label': {'url': 'http://metaxy.org', 'title': 'metaxy'}},
+        parser.labels())
+      parser.clearLabels()
+      test.iseq({}, parser.labels())
+    end method clearLabels;
+
+    method parseFile : Section #:
+      Parse a file into a section.
+
+      Returns:
+        The Section instance containing the text from the given lines.
+        This will be parent if it wasn't null, else a newly created Section.
+    params:
+      var path : str #:
+        Path to file to parse.
+      var parent : *Section = null #:
+        If null, a dummy parent is implicitly created. An externally created
+        Section can be passed in for situations where this file is just one
+        section among many within a multi-file book.
+      var debug : bool = false #:
+        Enable debugging if true.
+        TODO(wmh): Delete this param.
+    scope:
+      with open(path, 'r') as fp:
+        lines = fp.read().replace('\t', '    ').split('\n')
+      return self.parseLines(lines, parent=parent, debug=debug)
+    test:
+      simple = test.parseMarkdown('simple.md')
+      fp = test.newStr()
+      simple.show(fp=fp)
+      test.contains(
+        'This document highlights some markdown features.', fp.getvalue())
+    end method parseFile;
+
+    method _advancePosition : int #:
+      From a start index within a collection of lines, advance forward until
+      a matching condition is/is-not true.
+
+      Returns:
+        the index at which processing stopped.
+    params:
+      var lines : vec<str> #:
+        The lines being parsed. They should not end with a newline.
+      var start : int #:
+        The index within lines to start from. Testing starts at this index
+        (i.e. it is checked against matcher).
+      var matcher : regexp #:
+        The regexp to apply to each line ... consumption stops on
+        the line that first matches (or doesn't match, if reverse is True)
+        this regexp (the failing line is NOT added to output).
+      var reverse : bool = false #:
+        If true, continue while matcher is false, and end when it is first true.
+        Normally, we continue while matcher is true, and end when it is first
+        false.
+      var category : str = null #:
+        If present, we are to print out each consumed line in a specific format
+        (useful for debugging).
+    scope:
+      N = len(lines)
+      j = start
+      while j < N:
+        line = lines[j]
+        if reverse:
+          if re.match(matcher, line):
+            break
+        else:
+          if not re.match(matcher, line):
+            break
+        if category:
+          /# CODETANGLE(debug_parseLines)
+          ln = line[:49] + '$' if len(line) > 50 else line
+          print '%4d:%-50s  %1s %s' % (j+1, ln, ' ', category)
+        j += 1
+      return j
+    test:
+      p = test.md
+      test.iseq(3, 
+        p._advancePosition(
+          ['here', '  abc', '  def', 'hgi'], 1, re.compile(r'^  ')))
+    end method _advancePosition;
+
+    method parseLines : BlockGroup #:
+      Parse a collection of lines as markdown.
+
+      Returns:
+        The Section instance containing the text from the given lines.
+        This will be parent if it wasn't null, else a newly created Section.
+    params:
+      var lines : vec<str> #:
+        The lines to parse.
+      var parent : BlockGroup = null #:
+        If null, a dummy parent is implicitly created. An externally created
+        BlockGroup can be passed in for situations where this file is just one
+        section among many within a multi-file book, or when recursively
+        parsing a list item within a list.  This value is returned.
+      var debug : bool = false #:
+        Enable debugging if true.
+        TODO(wmh): Delete this param.
+      var illegals : vec<str> = null #:
+        Some subset of the keys in Parser.CATEGORIES. Indicates which syntactic
+        entities are not legal for this invocation. If null, all categories are
+        legal.
+    scope:
+      /# The parsing logic is as follows:
+      /# - parse each line one after another
+      /# - at any given point, we are either 'between blocks' or
+      /#   'within a block'. A block is a contiguous collection
+      /#   of non-empty lines.
+      /# - empty lines usually identify the end of a block
+      /# - we keep track of the number of consecutive empty lines seen.
+      /# - if we are not currently in a block, and we see a non-empty line,
+      /#   the first few characters determines what we do:
+      /#    '<': parse an HTML block
+      /#         consume all lines up to '^>'
+      /#    '#': parse a section header (create a new Section)
+      /#         affects only the current line (but prelines reset)
+      /#    '>': parse a blockquote
+      /#         consume all lines starting with '>' and all non-empty
+      /#         lines after last such line.
+      /#    '^    ': a code block
+      /#         consume all lines that are indented 4+ spaces
+      /#         convert &, < and > to &amp; &lt; and &gt;
+      /#    '```(\S+)?': a code block in a named language (start or end)
+      /#    '^Table:.*': start of table
+      /#         Consume lines to end of table
+      /#    '^[*+-]{3,}$': a horizontal rule
+      /#         How to support '* * *'?
+      /#    '^\[\S+\]: (\S+)\s+\'(.*)\': Link label mapping
+      /#         Record the mapping and pretend the line doesn't exist.
+      /#    '^[*+-][ \t]': an unordered list element
+      /#         consume all non-empty non-special lines
+      /#    '^\d+\.[ \t]': an ordered list element
+      /#         consume all non-empty non-special lines
+      /#
+      /# - lines fall into one of these categories
+      /#   - part of a contiguous block
+      /#     - paragraph
+      /#     - html
+      /#     - blockquote
+      /#     - code
+      /#     - table
+      /#     - list (special)
+      /#   - one liners
+      /#     - hr           (adds new HR instance to group)
+      /#     - label        (updates label map, treated as if doesn't exist)
+      /#     - comment      (treated as if it doesn't exist)
+      /#     - page         (updates page map, treated as if doesn't exist)
+      /#     - new section  (new Section created)
+      /#
+      /# - within a paragraph:
+      /#    - If '<' looks like an html reference, do not escape it, but if
+      /#      it isn't an html tag, escape it (same for '>').
+      /#    - Escape '&' as '&amp;' unless it is part of an html escape.
+      /#    - [(.*)](\S+) --> inline link
+      /#    - [(.*)][\S+] --> reference link
+      /#    - convert \*[^*]\* to italics unless either \* is surrounded by
+      /#      whitespace.  Same for '_'
+      /#    - convert \*\*[^*]\*\* to italics unless either \*\* is surrounded by
+      /#      whitespace.  Same for '__'
+      /#    - convert `...` to <code>...</code>
+      /#    - convert <$url> to <a href=$url$url</a>
+      cls = self.__class__
+      categories = cls.CATEGORIES
+      if parent is None:
+        /# print 'WARNING: Making implicit parent section'
+        parent = metax.lib.markdown.Section(
+          None, title='', parser=self, prelines=0)
+      start_blocks = len(parent.blocks())
+      if debug:
+        print '-' * 70
+        print 'Parser.parseLines(): %d lines under %s' % (len(lines), parent)
+
+      /# Maps index within 'lines' to string describing an error.
+      errors = {}
+
+      /# A line representing a table row.
+      table_row_re = re.compile(r'^\s*\|')
+      /# When an html block ends.
+      html_end_re = re.compile(r'^</(?P<tag>[a-zA-Z0-9]+)>')
+      /# When we are in a block quote
+      block_quote_re = re.compile(r'^> ')
+
+      def Record(pos, msg):
+        """Record status of current line."""
+        if debug:
+          /# CODETANGLE(debug_parseLines)
+          cline = lines[pos]
+          ln = cline[:49] + '$' if len(cline) > 50 else cline
+          print '%4d:%-50s  %1s %s' % (
+            pos+1, ln,
+            ' ',  # prelines or ' ',
+            msg)
+
+      def FindEnd(lines, pos):
+        """Backup past empty lines.
+
+        Returns: tuple<int,int>
+         0. one line past the end of the previous non-blank region.
+            this may either be the first blank line, or line[pos+1],
+            depending on whether any blank lines existing before line[pos]
+         1. the number of blank lines found at/before line[pos]
+        """
+        prelines = 0
+        while lines[pos].strip() == '':
+          prelines += 1
+          pos -= 1
+        end = pos+1
+        return end, prelines
+
+      /# The lines making up the current block of text ... when we get to
+      /# a newline, we create an appropriate Block subclass instance and
+      /# reset this list.
+      current_lines = []
+
+      /# The block group within which the block being parsed will be added.
+      current_group = parent
+
+      /# How many empty lines were seen before the current list of
+      /# contiguous lines.
+      /#  - reset to 0 at end of loop below unless current line is empty
+      prelines = 0   
+
+      /# Which line we are currently processing.
+      i = 0
+
+      /# We are done when i reaches this value.
+      N = len(lines)
+
+      iters = 0
+      while i < N:
+        /# Important:
+        /#  - prelines is set to 0 at end of loop unless current line is empty
+        /#    or keep_prelines is True.
+        keep_prelines = False
+
+        /# Obtain the current line and validate it.
+        line = lines[i]
+        if line and line[-1] == '\n':
+          raise Error(
+            'Expecting line %d to NOT end in newline: "%s"' % (i+1, line))
+
+        /# Establish which regexp matches
+        mdata = None
+        kind = None
+        for nm, nmre, needs_new_block in categories:
+          m = nmre.match(line)
+          if m:
+            if needs_new_block is None:
+              /# This is a special case for the 'list' category, allowing us
+              /# to conditionally determine whether an empty line is needed
+              /# before the list or not depending on context.
+              /#  - the original markdown spec 
+              /#      https://daringfireball.net/projects/markdown/syntax#list
+              /#    does not clarify whether the start of a list must be
+              /#    preceeded by an empty line or not, and whether this also
+              /#    applies for nested lists, but in looking at the markdown
+              /#    source for the markdown tutorial, it is clear that at
+              /#    least sub-lists do not need to be preceeded by whitespace.
+              /#  - we can offer different implementations based on whether
+              /#    the parent is a Section or a ListItem, or on whether we
+              /#    want to support the no-empty-line-needed usecase or not.
+              /#    (since the standard requires sub-lists to handle this, we
+              /#    may want to remove some of this conditionality).
+              assert nm == 'list'
+              /#needs_new_block = False if current_group.isListItem() else True
+              needs_new_block = False
+
+            if needs_new_block and current_lines:
+              print (
+                'Line %4d: Ignoring special "%s" semantics because it is not '
+                'preceeded by blank line: %s' % (i+1, nm, line))
+            elif illegals and nm in illegals:
+              print (
+                'Line %4d: %s is not legal in this context '
+                '(ignoring special semantics): %s' % (i+1, nm, line))
+            else:
+              mdata = m.groupdict()
+              kind = nm
+              break
+
+        /# We check for a variety of mutually exclusive possibilities.
+        /#  - i represents the index of the current line.
+        /#  - each elif block is reponsible for adjusting i so that when the
+        /#    block finishes and the code loops back up to the 'while',
+        /#    the next iteration is processing in the correct spot.
+        if kind is None:
+          /# This line does not match anything special, so we just add it to
+          /# current_lines and advance.
+          Record(i, 'default')
+          if not current_lines:
+            /# First line ... remember prelines
+            para_prelines = prelines
+          current_lines.append(line)
+          i += 1
+        
+        elif kind == 'empty':
+          /# We have an empty line:
+          /#  - if we are currently parsing a text block, this ends the block
+          /#    (except table titles actually start a block).
+          /#  - if we are not currently parsing a block, we increment prelines
+          /#    so that when the block is created we remember how many
+          /#    empty lines preceeded it.
+          if current_lines:
+            /# We have been accumulating a block of text, and the current
+            /# empty line indicates we've finished parsing it.  We create
+            /# a Paragraph to contain the lines.
+
+            /# CODETANGLE(add_para): This is a repeat of the code elsewhere.
+            Record(i, 'empty ... block is paragraph')
+            para = metax.lib.markdown.Paragraph(
+              current_group, '\n'.join(current_lines), prelines=para_prelines)
+            current_group.addBlock(para)
+            current_lines = []
+            prelines = 1
+
+          else:
+            /# We are not currently processing a block, so we just advance
+            /# the empty-line counter and advance to next line.
+            Record(i, 'empty')
+            prelines += 1
+
+          /# Advance to next line
+          i += 1
+
+        elif kind == 'table':
+          /# We can consume the entire table here.
+          table_start = i
+          /# We parse lines to end of table.
+          if line.startswith('Table:'):
+            /# We allow an optional empty line.
+            if not lines[i+1].strip():
+              i += 1
+          i += 1
+
+          /# Now we advance past all lines looking like table rows.
+          i = self._advancePosition(
+            lines, i, matcher=table_row_re, category='table' if debug else None)
+
+          /# Create the table
+          terrors = []
+          table = metax.lib.markdown.Table.New(
+            lines[table_start:i], terrors, parent=current_group,
+            prelines=prelines)
+          if terrors:
+            for err in terrors:
+              sys.stderr.write('  ' + err + '\n')
+          else:
+            current_group.addBlock(table)
+
+        elif kind == 'section':
+          /# We have a new section.
+          /#  - it may be a child of current, or it may be a sibling, or it
+          /#    may be an aunt, great-aunt, etc.
+          /#  - if current_group is a ListItem instead of a Section, it is
+          /#    an error to specify a section.
+          Record(i, 'section start')
+
+          if current_group.isSection():
+            current_group = current_group.newNextSection(
+              len(mdata['hash']), mdata['title'], prelines=prelines)
+          else:
+            /# TODO(wmh): We should never get here, because we specify
+            /# illegals=['section'] in the recursive call to parseLines()
+            /# when parsing lists.
+            raise Error('How to handle sections within list items?')
+
+          i += 1
+          assert not current_lines 
+
+        elif kind == 'label':
+          /# A mapping from conceptual name to url.
+          /#  - although they usually appear when NOT currently processing
+          /#    a block, the line containing a label spec is simply ignored and
+          /#    has no effect on the current_lines or prelines so it can appear
+          /#    while we are parsing a block without affecting its status.
+          Record(i, 'label specification')
+          self.registerLabel(mdata['label'], mdata['url'], title=mdata['title'])
+          i += 1
+
+        elif kind == 'code':
+          /# We can parse the entire code block here:
+          /#  - if it started with ``` or ~~~, we look for a matching line.
+          /#  - if it started because the current line has 4 spaces of indentation,
+          /#    consume all lines indented 4+ spaces.
+          code_start = i
+          if 'code' in mdata:
+            /# We have a ``` or ~~~ block.
+            Record(i, 'start of code block')
+            term_re = re.compile(r'^' + mdata['code'][:3])
+            reverse = True
+            code_lang = mdata['lang']
+            code_start += 1
+            i = self._advancePosition(
+              lines, i+1, matcher=term_re, reverse=True,
+              category='code' if debug else None)
+            /# i is now on the line with ``` or ~~~.
+            code_end = i  # one past
+            /# advance past code end line.
+            i += 1
+            /# Should we advance past whitespace here?
+            next_prelines = prelines
+          else:
+            /# We have an indented code block.
+            Record(i, 'start of indented code block')
+            term_re = re.compile(r'^(    |$)')
+            code_lang = None
+            i = self._advancePosition(
+              lines, i+1, matcher=term_re, category='code' if debug else None)
+            code_end, next_prelines = FindEnd(lines, i-1)
+
+          code = metax.lib.markdown.Code(
+            current_group, lines[code_start:code_end], prelines=prelines,
+            language=code_lang)
+          current_group.addBlock(code)
+
+          prelines = next_prelines
+          keep_prelines = True
+
+        elif kind == 'html':
+          /# An html block is terminated by:
+          /#  - the start line being <tag>...</tag>
+          /#  - finding '</tag>' at first column of a subsequent line.
+          tag = mdata['tag']
+          html_start = i
+          if line.strip().endswith('</%s>' % tag):
+            /# We have a one-line HTML block.
+            Record(i, 'one-line HTML block')
+            i += 1
+          else:
+            Record(i, 'start of HTML block')
+            i = self._advancePosition(
+              lines, i, matcher=html_end_re, reverse=True,
+              category='html' if debug else None)
+            /# i is currently on the terminating line, but that is part of the
+            /# html block, so we advance one.
+            i += 1
+
+          /# Handle the html_lines
+          html = metax.lib.markdown.HTML(
+            current_group, lines[html_start:i], prelines=prelines)
+          current_group.addBlock(html)
+          assert not current_lines
+
+        elif kind == 'quote':
+          /# We have a blockquote.
+          quote_start = i
+          i = self._advancePosition(
+            lines, i, matcher=block_quote_re,
+            category='quote' if debug else None)
+          quote = metax.lib.markdown.Quote(
+            current_group, lines[quote_start:i], prelines=prelines)
+          current_group.addBlock(quote)
+
+        elif kind == 'list':
+          /# To simplify parsing, we do something a bit different from the
+          /# original markdown specification (for now):
+          /#  - a list continues until a line is encountered that has a non
+          /#    whitespace first char that does not match the list indicator
+          /#    used in the first listitem (so lines to be kept as part of
+          /#    a list must be indented at least one space for now).
+          /#  - each list item is reparsed with parseLines recursively after
+          /#    stripping off a constant amount of whitespace.
+          nlws = len(mdata['indent'])
+          lkey = 'ol' if mdata['ol'] else 'ul'
+          lchar = mdata[lkey]
+          ordered = lkey == 'ol'
+
+          if current_lines:
+            /# CODETANGLE(add_para): This is a repeat of the code elsewhere.
+            Record(i, 'list (implicit close of paragraph)')
+            para = metax.lib.markdown.Paragraph(
+              current_group, '\n'.join(current_lines), prelines=para_prelines)
+            current_group.addBlock(para)
+            current_lines = []
+            prelines = 0
+
+          else:
+            Record(i, 'list')
+
+          listre = Parser.ListRe()
+
+          list_block = List(
+            current_group, ordered=ordered, mark=lchar, prelines=prelines)
+          current_group.addBlock(list_block)
+          
+          /# Advance to end of list, accumulating indices of list item starts.
+          item_starts = [(i, m)]
+          list_start = i
+          list_end = None  # one past last line in list.
+          redo = False
+          i += 1
+          while i < N:
+            line = lines[i]
+            /# There are various possibilities for this line:
+            /#  1. if it matches listre:
+            /#     - if it has the same indent level:
+            /#       - if it has the same bullet, it is a new item
+            /#       - if it has a different bullet, it is an implicit end of
+            /#         this list (and start of a new one).
+            /#     - if it has a larger indent level (for example, if
+            /#       current has indent 0 and this one has indent 1, 2 or 3)
+            /#       it is a sub-list, part of the current item.
+            /#     - if it has a smaller indent level (for example, if
+            /#       current has indent 2 and this one has indent 0 or 1),
+            /#       it indicates the end of the list.
+            /#  2. if it does not start with a space and the previous line
+            /#     was empty.
+            /#     - it ends the list (and is not part of the list)
+            /#  3. otherwise
+            /#     - the line is part of the current list item.
+            m = listre.match(line)
+
+            if m:
+              /# We have a new list item
+              newdata = m.groupdict()
+              newlkey = 'ol' if newdata['ol'] else 'ul'
+              newlchar = newdata[newlkey]
+              newnlws = len(newdata['indent'])
+
+              if newnlws < nlws:
+                /# The new list item is indented less than the current item.
+                /# It is probably a typo, since both newnlws and nlws are
+                /# less-equal 3, but we interpret it as an implicit end-of-list
+                /# (and start of new list).
+
+                /# The list item is an implicit start-of-new-list.
+                Record(i, 'implicit new list (typo?)')
+                /# We account for any empty lines before 'i'.
+                list_end, prelines = FindEnd(lines, i-1)
+                /# Note that by breaking, we do not increment i, so the
+                /# outer line-parsing loop will reprocess this line and
+                /# create another list.  We set keep_prelines True so that
+                /# we do not tromp on the prelines calculated above.
+                keep_prelines = True
+                break
+         
+              elif newnlws > nlws:
+                /# The new list item is indented more than the current line,
+                /# so it is part of the current list. It may be a typo, but
+                /# is probably a sub-item indented fewer than 4 spaces.
+                Record(i, 'list item cont (sub item?)')
+
+              elif (newlkey == 'ol' and ordered) or (newlchar == lchar):
+                /# The list item is a continuation of the current list.
+                Record(i, 'list item')
+                item_starts.append((i, m))
+
+              else:
+                /# The list item is an implicit start-of-new-list.
+                Record(i, 'implicit new list')
+                /# We account for any empty lines before 'i'.
+                list_end, prelines = FindEnd(lines, i-1)
+                /# Note that by breaking, we do not increment i, so the
+                /# outer line-parsing loop will reprocess this line and
+                /# create another list.  We set keep_prelines True so that
+                /# we do not tromp on the prelines calculated above.
+                keep_prelines = True
+                break
+
+            elif line and line[0] != ' ' and not lines[i-1].strip():
+              /# This line starts with non-whitespace and the previous line
+              /# is blank, so this ends the list (and is not part of it).
+              list_end, prelines = FindEnd(lines, i-1)
+              /# Note that by breaking, we finish the parsing of the list and do
+              /# not increment i ... the outer line-parsing loop will reprocess
+              /# this line, as intended.
+              keep_prelines = True
+              break
+
+            else:
+              /# This line is a continuation of the current list item (later, we
+              /# will back up before this empty line if it turns out to be a
+              /# blank line after the list before a different entity).
+              Record(i, 'list item cont')
+
+            i += 1
+
+          /# We now create ListItem instances based on item_starts
+          /#  - need to remove the initial indentation prefix from each line
+          /#  - need to handle trailing empty lines properly (becomes prelines
+          /#    of next listitem).
+          item_prelines = 0  # the first listitem in a list never has prelines, because the list itself handles those prelines.
+          numis = len(item_starts)
+          for k, pair in enumerate(item_starts):
+            item_start, m = pair
+
+            if k == numis - 1:
+              /# Last list item ... end of list item is 'i' (the line that
+              /# ended the entire list).
+              item_end = i
+            else:
+              /# End of list is the line of the next list item.
+              item_end = item_starts[k+1][0]
+            line = lines[item_start]
+            item_end, next_prelines = FindEnd(lines, item_end-1)
+            item_pre = m.start('text')  # continuation lines are usually indented this much
+            /#print '*** %4d %4d %d = %s [%s %d]' % (item_start+1, item_end+1, item_prelines, line, m.groupdict(), item_pre)
+            
+            item_lines = []
+            item_lines.append(m.group('text'))
+            for ii in range(item_start+1, item_end):
+              line = lines[ii]
+              /# The first item_pre spaces of line are to be ignored (but
+              /# if a non-space appears before this, it is kept).
+              jj = 0
+              nn = min(len(line), item_pre)
+              while jj < nn and line[jj] == ' ':
+                jj += 1
+              item_lines.append(line[jj:])
+
+            if False:
+              print '#' * 40
+              for l in item_lines:
+                print l
+              print '-' * 40
+            listitem = ListItem(list_block, prelines=item_prelines)
+            list_block.addItem(listitem)
+            /# Add final empty line so last block gets processed properly.
+            item_lines.append('')
+            self.parseLines(
+              item_lines, parent=listitem, debug=debug, illegals=('section',))
+
+            /# Setup for next listitem.
+            item_prelines = next_prelines                                
+
+        elif kind == 'hr':
+          /# We have an HR line
+          Record(i, 'horizontal ruler')
+          hr = HR(current_group, line, prelines=prelines)
+          current_group.addBlock(hr)
+          i += 1
+
+        elif kind == 'comment':
+          /# We have a comment.
+          Record(i, 'comment')
+          i += 1
+          
+        elif kind == 'page':
+          /# We have an explicit page break.
+          Record(i, 'page break')
+          /# TODO(wmh): Add some processing here to support page numbers.
+          m = pre.match(line)
+          i += 1
+
+        else:
+          print '#' * 70
+          print line
+          print '#' * 70
+          raise Error('How did we get here?')
+
+        if kind != 'empty' and not keep_prelines:
+          /# The current line isn't empty, so we reset the empty line counter.
+          prelines = 0
+
+      if debug:
+        print 'Parsed %d blocks' % (len(parent.blocks()) - start_blocks)
+      return parent
+
+    test:
+      md = test.md
+      test.maxDiff = None
+
+      respath = metax.root.Object.Resource(
+        'simple.md', fqn='metax.lib.markdown_test.TestCase')
+      with open(respath, 'r') as fp:
+        content = fp.read()
+
+      lines = content.split('\n')
+      if False:
+        print '#' * 80
+        for i, line in enumerate(lines, start=1):
+          print '%4d: %s' % (i, line)
+        print '#' * 80
+      root = md.parseLines(lines, debug=False)
+
+      section = root.find('A Simple Document/Blocks/Lists')
+      listblock = section.block(3)
+      test.istrue(listblock.isList())
+      item = listblock.item(1)
+      test.istrue(item.isListItem())
+      test.iseq('banana', item.block(0).text())
+      sublist = item.block(1)
+      test.istrue(sublist.isList())
+      subitem = sublist.item(0)
+
+      /# Format the file in ascii and compare it with a golden file.
+      fp = test.newStr()
+      root.show(fp=fp)
+      golden = metax.root.Object.Resource(
+        'simple_golden', fqn='metax.lib.markdown_test.TestCase')
+      test.iseqstrgold(fp.getvalue(), golden)
+
+      /# Now some additional experiments.
+      section = md.parseLines("""
+        >|# Header 1
+        >|
+        >|This is a __first__ paragraph
+        >|short and sweet.
+        >|
+        >|Another **paragraph** but with explict  
+        >|line break here.
+        >|
+        >|* * *
+        >|
+        >|<table>
+        >|  <tr><td>An HTML block</td></tr>
+        >|</table>
+        >|
+        >|<div>
+        >|  <h1>Another HTML block</h1>
+        >|  <h2>And a third HTML block</h2>
+        >|</div>
+        >|
+        >|Here's a pretty picture of red trees.
+        >|![red-leaved trees in a row](https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg)
+        >|[which can be found here](https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg) and
+        >|![this][sunlit-trees] is a beautiful sunlit tree ([it can be found here][sunlit-trees])
+        >|
+        >|- Apple
+        >|   1. way out
+        >|   2. last thing
+        >|- Banana
+        >|   1. not fair
+        >|   2. having a life
+        >|- Cantelope
+        >|   * nested bullet with multiple lines
+        >|     to see how it works
+        >|   * another nested bullet with indented
+        >|     second line.
+        >|
+        >|How do we determine when a list ends?  When we encounter text at
+        >|left margin? (or, in the case of code blocks, at code level?)
+        >|
+        >|    class Person(object):
+        >|      def __init__(self, name):
+        >|        self._name = name
+        >|
+        >|[sunlit-trees]: http://www.designzzz.com/wp-content/uploads/2016/02/oaks-are-beautiful-trees.jpg "Beautiful sunlit tree"
+        >|""".split('\n'),
+        debug=False)
+
+      /# TODO(wmh): finish up this test by ensuring that html support
+      /# in C.show() is implemented for all subclasses C of Text.
+      fp = test.newStr()
+      section.show(fp=fp, aspect='ascii')
+      golden = metax.root.Object.Resource(
+        'raw_txt_golden', fqn='metax.lib.markdown_test.TestCase')
+      test.iseqstrgold(fp.getvalue(), golden)
+
+      /# TODO(wmh): finish up this test by ensuring that html support
+      /# in C.show() is implemented for all subclasses C of Text.
+      fp = test.newStr()
+      section.show(fp=fp, aspect='html')
+      golden = metax.root.Object.Resource(
+        'raw_html_golden', fqn='metax.lib.markdown_test.TestCase')
+      test.iseqstrgold(fp.getvalue(), golden)
+
+      simple = """
+        >|# Header 1
+        >|
+        >|+ Apple
+        >|  - more
+        >|  - stuff
+        >|  - here
+        >|+ Banana
+        >|  * and
+        >|    + level3
+        >|    + works
+        >|    + too
+        >|  * here
+        >|+ Cantelope
+        >|"""
+
+      section = md.parseLines(simple.split('\n'))
+      section.show(fp=test.fp(), aspect='ascii')
+      test.iseqtext(simple, test.out())
+      /#section.show(aspect='html')
+
+    end method parseLines;
+
+    method parseList : List #:
+      Parse a collection of lines making up a list into a List instance.
+    params:
+      var lines : vec<str> #:
+        The lines making up the list.
+      var start : int #:
+        The line number of the first line within lines;
+      var parent : Object #:
+        The Section or List that this list belongs to.
+    scope:
+      ordered = False
+      result = List(parent, ordered)
+
+      /# TODO(wmh): Continue here ... need to parse the lines making up the
+      /# lists.
+
+      /# pprint.pprint(lines)
+
+      /# We first identify all of the items at top level within lines.
+      /# We will then be able to parse each item as a BlockGroup to support
+      /# all of markdown within each item.
+      listre = metax.lib.markdown.Parser.ListRe()
+      pretext = []
+      items = []
+      indent = None
+      for i in range(0, len(lines)):
+        line = lines[i]
+        m = listre.match(line)
+        if m:
+          /# We've found a new list item.
+          if indent is None:
+            /# This is the first list item, so the indentation of this one
+            /# dictates the indentation of all subsequent items at the same
+            /# level.
+            indent = m.group('indent')
+          if m.group('indent') == indent:
+            /# We have a 'top-level' item.
+            items.append({
+              'm': m.groupdict(),
+              'body': [m.group('text')],
+              'sublines': []})
+          else:
+            /# This is a sub-item within the current item.
+            items[-1]['sublines'].append(line)
+        else:
+          /# This is not the start of a top-level item.
+
+          if indent is None:
+            /# This line is initial text before the first item. This cannot
+            /# happen on an initial call from Parser.parseLines(), but can
+            /# occur during recursive calls.
+            pretext.append(line)
+          else:
+            items[-1]['sublines'].append(line)
+
+      /# Now create ListItem instances for the top level and recursively
+      /# parse the subtext of those elements.
+      for item in items:
+        elem = ListItem(parent, prelines=0)
+        para = Paragraph(parent, '\n'.join(item['body']), implicit=True)
+        elem.addBlock(para)
+        result.addItem(elem)
+
+      /#result.show(aspect='html')
+      /#pprint.pprint(pretext)
+      /#pprint.pprint(items)
+
+      return result
+    test:
+      section = test.root
+      md = test.md
+      result = md.parseList(
+        >|"""* Apple:
+        >|    A tasty red fruit.
+        >|    1. way out
+        >|    2. last thing
+        >|- Banana
+        >|    A tasty yellow fruit.
+        >|    1. not fair
+        >|    2. having a life
+        >|+ Cantelope
+        >|    * another nested bullet with indented
+        >|      second line.
+        >|    * nested bullet with multiple lines
+        >|    to see how it works
+        >|
+        >|""".split('\n'),
+        101,
+        section)
+      fp = test.newStr()
+      result.show(fp=fp, aspect='html')
+      
+      test.iseqtext(
+        >|"""<ul>
+        >|  <li>
+        >|  Apple:
+        >|  </li>
+        >|  <li>
+        >|  Banana
+        >|  </li>
+        >|  <li>
+        >|  Cantelope
+        >|  </li>
+        >|</ul>
+        >|""",
+        fp.getvalue())
+
+    end method parseList;
+
+    method loadBook params:
+      var paths : vec #:
+        The files to load up as sections in the book.
+      var bookname : str = 'Book' #:
+        The name of the book containing all the paths.
+    scope:
+      book = metax.lib.markdown.Section(None, title=bookname, parser=self)
+      for path in paths:
+        if os.path.exists(path):
+          section = self.parseFile(path, book)
+        else:
+          print 'WARNING: Path %s does not exist' % path
+      return book
+    test:
+      /# NOTE: test.parseBook() invokes test.md.loadBook()
+      book = test.parseBook(['simple.md'])
+      test.iseq(1, len(book.children()))
+    end method loadBook;
+
+    command main scope:
+
+      flag destdir : str = '' #:
+        Where to write output files.
+
+      flag aspect @ a : str = 'html' #:
+        How to format the input.
+        TODO(wmh): The metax.root.flags.Flag class understands enum types,
+        but there is currently no way to specify such types when the 'flag'
+        construct has a 'type' field that is of type 'type' (instead of 'str').
+        Consider changing the type, or provide some other mechanism for being
+        able to specify an enum type like:
+          enum<title|title*|ascii|text|canonical|html>
+
+      flag arg_files : vec<str> = '' #:
+        The files to process.
+        TODO(wmh): This should be
+          arg files : vec<str> = null;
+        but we need to fix some things in Meta:
+         - currently aliases for primary constructs aren't working for some
+           reason, so the 'arg' alias for 'flag' isn't being recognized.
+         - we need to handle 'null' for vec<str>.
+
+      flag debug : bool = false #:
+        If true, print out a summary of each parsed file.
+
+      block #:
+        Initial setup.
+      scope:
+        def FilterFiles(filelist):
+          mds = []
+          others = []
+          for path in filelist:
+            if path.endswith('.wmd') or path.endswith('.md'):
+              dirmd, basesuff = os.path.split(path)
+              base, suffix = os.path.splitext(basesuff)
+              mds.append({
+                'path': path, 'dir': dirmd, 'base': base, 'suffix': suffix[1:]})
+            else:
+              print 'WARNING: Ignoring non-markdown file %s' % path
+              others.append(path)
+          return mds, others
+
+        mds, others = FilterFiles(flags.files)
+        aspect = flags.aspect
+        suffix = '.html' if aspect == 'html' else '.txt'
+        parser = metax.lib.markdown.Parser()
+        for spec in mds:
+          mdfile = parser.parseFile(spec['path'], debug=flags.debug)
+          if flags.debug:
+            mdfile.show(aspect='title*')
+          base = spec['base']
+          mddir = flags.destdir or spec['dir']
+          outpath = os.path.join(mddir, spec['base'] + suffix)
+          with open(outpath, 'w') as fp:
+            mdfile.show(aspect=aspect, fp=fp)
+            print 'Wrote ' + outpath
+
+    end command;
+  end class Parser;
+
+  abstract
+  class Object #:
+    Abstract superclass of Section and Block.
+  scope:
+
+    field prelines : int #:
+      The number of empty lines found before this block started.
+      Used to establish how much spacing is desired in formatted output,
+      and to properly re-render the markdown itself.
+
+    lifecycle params:
+      var prelines -> prelines = 0;
+    scope:
+    end;
+
+    method isBlock : bool scope:
+      return False
+    test:
+      /# TODO(wmh): Testing methods in abstract classes won't be possible
+      /# in C++ and Java, but is possible in Python, Javascript, Perl, etc.
+      /# which don't disallow creation of abstract classes. Solution is of
+      /# course to create instances of concrete subclasses.
+      obj = metax.lib.markdown.Object()
+      test.isfalse(obj.isBlock())
+    end method isBlock;
+
+    method isSection : bool scope:
+      return False
+    test:
+      test.makeLists()
+      test.istrue(test.section.isSection())
+      test.isfalse(test.p1.isSection())
+      test.isfalse(test.ul.isSection())
+      test.isfalse(test.item3.isSection())
+    end method isSection;
+
+    method isPara : bool scope:
+      return False
+    test:
+      test.isfalse(test.section.isPara())
+      test.istrue(test.p1.isPara())
+    end method isPara;
+
+    method isList : bool scope:
+      return False
+    test:
+      test.makeLists()
+      test.isfalse(test.section.isList())
+      test.isfalse(test.p1.isList())
+      test.istrue(test.ul.isList())
+      test.istrue(test.ol.isList())
+    end method isList;
+
+    method isListItem : bool scope:
+      return False
+    test:
+      test.makeLists()
+      test.isfalse(test.section.isListItem())
+      test.isfalse(test.p1.isListItem())
+      test.isfalse(test.ul.isListItem())
+      test.istrue(test.item1.isListItem())
+    end method isListItem;
+
+    method ancestorSection : Section #:
+      Find the nearest ancestor (excluding self) that is a Section.
+    scope:
+      result = self.parent()
+      while result and not result.isSection():
+        result = result.parent()
+      return result
+    test:
+      test.makeLists()
+      test.issame(test.section, test.subsection.ancestorSection())
+      test.issame(test.root, test.section.ancestorSection())
+      test.issame(test.subsection, test.ul.ancestorSection())
+      test.issame(test.subsection, test.item3.ancestorSection())
+    end method ancestorSection;
+
+    abstract
+    method title : str #:
+      The title of this Object.  Every subclass must provide this method.
+    end;
+
+    method abbrev : str #:
+      The abbrev associated with the title. Some subclasses support this,
+      some do not.  By default, we assume no abbrev exists.
+    scope:
+      return None
+    test:
+      test.makeLists()
+      test.isnull(test.ul.abbrev())
+      test.isnull(test.section.abbrev())
+      test.iseq('suba', test.subsection.abbrev())
+    end method abbrev;
+
+    abstract
+    method keys : map #:
+      The nested collection of titles and abbrevs.  Used to implement
+      find, findre, etc.
+
+    method find : Object #:
+      Obtain some named portion of this section.
+
+      This method relies on the hierarchy of objects being searched being
+      able to respond to the following methods:
+        title(): the title associated with an object (titles are what can be searched on)
+        keys(): maps legal keys (the titles of child objects) to child objects
+    params:
+      var spec : str #:
+        The name(s) desired.
+    scope:
+      parts = spec.split('/')
+      obj = self
+
+      for part in parts:
+        /# Exact match ... there can only be one possible result.
+        keys = obj.keys()
+        if part in keys:
+          obj = keys[part]
+        else:
+          print 'Failed to find child "%s" of "%s"' % (part, obj.title())
+          obj = None
+          break
+      return obj
+    test:
+      root = test.root
+      section = root.find('Section 1')
+      test.issame(test.section, section)
+      subsection = root.find('Section 1/SubSection A')
+      test.issame(test.subsection, subsection)
+    end method find;
+
+  end class Object;
+
+  abstract 
+  class Block < Object #:
+    Abstract superclass of all Markdown classes representing text.
+    This includes:
+      Paragraph (a section of consecutive lines of related text)
+      List (an (ordered or unordered) list of items)
+      Code (pre-formatted text, possibly in a particular prog lang).
+      Blockquote (quoted text)
+      Table (a table of N rows with fixed-width columns)
+
+    Each of these subclasses has an associated concept of what it means to
+    be titled:
+      - paragraphs are title if they start with **<text>**.
+      - lists currently always return None for title()
+      - code currently always returns None for title(), but we can easily
+        add a concept of title code ... 'Code: <code title>'?
+      - blockquotes current always return None for title()
+      - tables are titled if they have a line of the form 'Table: <table title>'
+        before the header specification, separated from the header by a single
+        empty line (usually there is also an empty line before the 'Table:').
+  scope:
+
+    field parent : Object #:
+      The section that this text object belongs to (or, for Row instances,
+      the Table it belongs to).
+
+    field endpage : bool #:
+      True if there is a page break at the end of this text block.
+
+    field uid : str #:
+      A unique identifier for this block.
+
+    lifecycle params:
+      var parent : Object #:
+        The parent of this text object.
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.        
+      var uid : str = null #:
+        A unique identifier for this block.
+    super (prelines=prelines)
+    scope:
+      /# self.endpageIs(False)
+      self.parentIs(parent)
+      self.uidIs(uid)
+
+    abstract
+    method title : str #:
+      Either None if the text element does not have a title.
+
+    method fulltitle : str #:
+      The fully qualified title of this text object.
+    scope:
+      return self.parent().fulltitle() + '/' + self.title()
+    test:
+      test.iseq('/Section 1/SubSection A', test.subsection.fulltitle())
+    end method fulltitle;
+
+    method isBlock : bool #:
+      Return true if this is a block.
+    scope:
+      return True
+    test:
+      test.istrue(test.section)
+      hr = metax.lib.markdown.HR(test.subsection, '* * *', prelines=1)
+      test.isfalse(hr.isBlock())
+    end method isBlock;
+
+    abstract
+    method show #:
+      Write this paragraph.
+    params:
+      var fp : ostream = out;
+      var indent : str = '';
+      var aspect : str = 'ascii' #:
+        What to show. Valid values are:
+          titles: show only titles (indented by level)
+          markdown: recreate the markdown text
+          ...
+    end method show;
+
+  end class Block;
+
+  class BlockGroup < Block #:
+    A collection of Block instances that can be treated as a Block.
+  scope:
+
+    field blocks : @vec<Block>;
+
+    lifecycle params:
+      var parent : Object #:
+        The parent of this block object.
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.        
+    super (parent, prelines=prelines)
+    scope:
+    end;
+
+    method title : str #:
+      The title of this blockgroup (always null for now).
+    scope:
+      return None
+    test:
+      group = test.group
+      test.isnull(group.title())
+    end method title;
+
+    method block : Block #:
+      Obtain the block with given index.
+    params:
+      var index : int #:
+        The index of the block desired, from 0.
+    scope:
+      blocks = self.blocks()
+      if index < len(blocks):
+        result = blocks[index]
+      else:
+        result = None
+      return result
+    test:
+      section = test.section
+      test.isnull(section.block(0))
+      section.addBlock(test.p1)
+      test.issame(test.p1, section.block(0))
+      test.isnull(section.block(1))
+    end method block;
+
+    method addBlock : Block params:
+      var block : Block;
+    scope:
+      self.blocks().append(block)
+      return block
+    test:
+      /# setup has called adBlock twice.
+      group = test.group
+      test.iseq(2, len(group.blocks()))
+    end method addBlock;
+
+    method show #:
+      Write this html block.
+    params:
+      var fp : ostream = out;
+      var indent : str = '';
+      var aspect : str = 'ascii' #:
+        What to show. Valid values are:
+          titles: show only titles (indented by level)
+          markdown: recreate the markdown text
+    scope:
+      /# TODO(wmh): We may need to provide some support for a prefix before
+      /# the first block.
+      for block in self.blocks():
+        block.show(fp=fp, indent=indent, aspect=aspect)
+    test:
+      fp = test.newStr()
+      test.group.show(fp=fp)
+    end method show;
+
+    test
+    lifecycle setup:
+      group = metax.lib.markdown.BlockGroup(test.subsection)
+      p1 = metax.lib.markdown.Paragraph(
+        group,
+        'This is an example paragraph containing a few lines\n'
+        'of text including a **bold** word and _italize phrase_.')
+      p2 = metax.lib.markdown.Paragraph(
+        group,
+        '**Some Title**. This is an example paragraph with a\n'
+        'title (the first one is not titled)')
+      test.iseq(0, len(group.blocks()))
+      group.addBlock(p1)
+      group.addBlock(p2)
+      test.group = group
+    end lifecycle;
+
+  end class BlockGroup;
+
+  class Paragraph < Block #:
+    A collection of consecutive lines of text. Contains
+     - the lines of text (as a multi-line string)
+     - the Section within which the Paragraph resides
+     - the start/end position of bold, italic and bold-italic text
+     - hyperlink references
+
+    A paragraph can have a title (if the first bold annotation starts at
+    position 0).
+
+    A paragraph ends when any of the following are encountered:
+     - an empty line
+     - a line starting an ordered or unordered list
+
+  scope:
+
+    meta
+    field ImageHtmlFunc : function = null #:
+      A function used to generate HTML from image data. See Image2Html()
+      below for details on signature.
+    scope:
+      accessor get lazy:
+        -> cls.Image2Html
+    end field;
+
+    meta
+    field AnnRe : regexp = null #:
+      This regexp matches against *<text>*, _<text>_, **<text>**, and __<text>__
+      where <text> does not contain either '*' or '_'. This can be used
+      recursively to identify nested bold/italic specs.  Note that this does
+      not handle strike-thru (~~).
+
+    meta
+    field UrlRe : regexp = null #:
+      A regexp matching against inline url references (including image
+      references) and supporting both inline and reference links. The named
+      groups this regexp provides are:
+        text: str
+          The visible text (alt text for image urls, link text for urls)
+        nl: str or None
+          The newline and whitespace before the markdown url spec, if such
+          a newline exists
+        img: str or None
+          Either '!' or None ... indicates whether this is an image url.
+        label: str or None
+          If present, the url is a reference link, and this key contains the
+          name of the url label to use.
+        xwidth: int or None
+          Only present if the url is a reference link (and then only optionally),
+          it indicates the desired display width of the image identified by
+          'label'.
+        xheight: int or None
+          Only present if the url is a reference link (and then only optionally),
+          it indicates the desired display height of the image identified by
+          'label'.
+        url: str or None
+          Only present if the url is an inline link, it specifies the url itself.
+        title: str or None
+          Only present if the url is an inline link, it specifies a tooltip
+          to associate with the url.
+        width: int or None
+          Only present if the url is an inline link, it indicates the desired
+          display width of the image identified by 'url'.
+        height: int or None
+          Only present if the url is an inline link, it indicates the desired
+          display height of the image identified by 'url'.
+        class: str or None
+          The CSS class(es) to associate with the image (inline image)
+        xclass: str or None
+          The CSS class(es) to associate with the image (reference image)
+    end field;
+
+    meta
+    lifecycle scope:
+      /# TODO(wmh): The original markdown specification says
+      /#    But if you surround an `*` or `_` with spaces, it'll be treated as a
+      /#    literal asterisk or underscore.
+      /# this means that ' * ', ' ** ', ' _ ', and ' __ ' do not represent
+      /# emphasis ... this RE does NOT handle this.
+      cls.AnnReIs(re.compile(r'(?P<d>([*_])\2?)(?P<text>[^*_]+)(?P=d)'))
+
+      cls.UrlReIs(re.compile(
+        r'(?P<nl>\n[ \t]*)?'     # if the url spec starts on a newline, we don't need to add a newline
+        r'(?P<img>!)?'           # if present, this is an embedded image
+        r'\[(?P<text>[^\]]*)\]'  # the visible text (alt text for images, link text for urls)
+        r' {0,1}'                # a space can separate the text from url
+        r'(?:'
+        r'\['
+        r'(?P<label>[^ \]]+)'
+        r'(?:\s+(?P<xwidth>\d*)x(?P<xheight>\d*))?'
+        r'(?:\s+\[(?P<xclass>[^\[\]]+)\])?'
+        r'\]'
+        r'|'
+        r'\('
+        r'(?P<url>\S+)'                            # an inline url
+        r'(?:\s*\"(?P<title>[^\"]+)\")?'           # optional tooltip
+        r'(?:\s+(?P<width>\d*)x(?P<height>\d*))?'  # optional display width/height
+        r'(?:\s+\[(?P<class>[^\[\]]+)\])?'
+        r'\)'
+        r')'))
+
+    end lifecycle;
+
+    meta
+    method Image2Html : str params:
+      var data : map #:
+        The sole argument
+        to the function should be a dict containing:
+          url: str
+            The url of the image
+          class: str
+            The CSS class to attach to the outer <div>
+          imgcls: str (optional)
+            The CSS class to attach to the <img>
+          tooltip: str
+            The text to associate with the image when one hovers over it.
+          width: int (optional)
+            The actual width of the image.
+          height: int (optional)
+            The actual height of the image.
+          display_width: int (optional)
+            The width with which to display (not necessarily the actual width
+            of the image)                                           
+          display_height: int (optional)
+            The height with which to display (not necessarily the actual height
+            of the image)                                           
+          header: str = null
+            Text to add above the image
+          headercls : str = 'fixedwidth'
+            The CSS class to use for the header
+          footer: str = null
+            Text to add below the image
+          footercls : str = 'fixedwidth'
+            The CSS class to use for the footer
+          indent: str (optional)
+            How much indentation to insert at the beginning of each html line.
+      var edit : bool = false #:
+        If True, include <input> and other form input elements for editing
+        the image data.
+    scope:
+      /# TODO(wmh): This should be moved to a generic library that both
+      /# markdown.meta and story.meta (and anyone else) can use.
+
+      if edit:
+        logging.warning(
+          'Not yet implementing edit semantics in Paragraph.Image2Html')
+
+      indent = data.get('indent', '')
+      
+      /# Form the attributes of the <img> tag.
+      imgattrs = {'src': data['url']}
+      tooltip = data.get('tooltip', '')
+      if tooltip:
+        imgattrs['title'] = tooltip
+      header = data.get('header', None)
+      if header:
+        imgattrs['alt'] = header
+      display_width = data.get('display_width', None)
+      if display_width:
+        imgattrs['width'] = display_width
+      display_height = data.get('display_height', None)
+      if display_height:
+        imgattrs['height'] = display_height
+      imgattrstr = ' '.join(
+        ['%s=%s' % (attr, imgattrs[attr]) for attr in sorted(imgattrs)])
+
+      /# If actual image dimensions are provided, format a string for them.
+      width = data.get('width', None)
+      height = data.get('height', None)
+      dims = ' (%d x %d)' % (width, height) if width and height else ''
+
+      /# Form the lines of HTML.
+      lines = []
+      lines.append('')
+      lines.append(
+        '%s<div class=\"%s\">' % (indent, data.get('class', 'image')))
+
+      /# If a header is provided, render it above the image
+      header = data.get('header', '')
+      if header or dims:
+        lines.append(
+          '%s  <div class="%s">%s%s</div>' %
+          (indent, data.get('headercls', 'fixedwidth'), header, dims))
+
+      /# Render the <img> (wrapped in an <a> linking to actual url).
+      lines.append('%s  <a href="%s">' % (indent, data['url']))
+      lines.append('%s    <img %s>' % (indent, imgattrstr))
+      lines.append('%s  </a>' % indent)
+
+      /# If a footeris provided, render it below the image
+      footer = data.get('footer', None)
+      if footer:
+        lines.append(
+          '%s  <div class="%s">%s</div>' %
+          (indent, data.get('footercls', 'fixedwidth'), footer))
+
+      /# End the outer div.
+      lines.append('%s</div>' % indent)
+      
+      /# Return
+      return '\n'.join(lines) + '\n'
+    end method Image2Html;
+
+    meta
+    method TextToHtml : str #:
+      Convert a multi-line string to html by escaping bold and italic requests,
+      escaping special chars, replacing url and image markdown with HTML for
+      those urls and images, etc.
+    params:
+      var text : str #:
+        The text string to convert to tex.
+      var parser : Parser = null #:
+        The parser instance.
+      var indent : str = "";
+    scope:
+      orig = text
+      urlmap = {'': 0}
+
+      /# Now handle url replacement. This is a three-step process:
+      /#  1. identify the url and image references and compute the desired
+      /#     HTML. Assign a special string to this html, and replace the
+      /#     markdown text for the url/image with the special string.
+      /#  2. Replace other special characters (underscores, asterisks, etc.)
+      /#     in the text as appropriate (note that any such characters within
+      /#     urls, especially underscores, were hidden away in 1 above).
+      /#  3. Replace the special strings from #1 with the actual HTML.
+
+      def ReplUrl(m):
+        d = m.groupdict()
+        error = None
+        url = None
+        title = None
+        text = d['text']
+        label = d['label']
+        if label:
+          csscls = d.get('xclass', None)
+          if parser:
+            labelinfo = parser.labels().get(label, None)
+            if labelinfo:
+              url = labelinfo['url']
+              title = labelinfo.get('title', None)
+            else:
+              error = 'Failed to find label "%s"' % label
+          else:
+            /#raise Error('here')
+            error = 'Failed to find label "%s" (no parser)' % label
+        else:
+          url = d['url']
+          title = d['title']
+          csscls = d.get('class', None)
+
+        data = {
+          'indent': '',
+          'class': csscls or 'image bgblack right',
+          'url': url,
+          'header': text,
+          'tooltip': title,
+        }
+          
+        for k in ('width', 'height'):
+          for prefix in ('', 'x'):
+            if d[prefix + k]:
+              data['display_' + k] = d[prefix + k]
+          
+        if error:
+          result = 'ERROR{%s}' % error
+        elif d['img']:
+          /# We are to inline an image.
+          result = cls.Image2Html(data)
+        else:
+          data['csscls'] = ' class="%s"' % csscls if csscls else ''
+          /# Although the adding of newline-indent was meant to make certain
+          /# code more readable, I'm finding that it produces less readable
+          /# code in various situations, so as of 2017-12-27 I'm disabling
+          /# it.
+          result = (
+            '%(indent)s<a href="%(url)s"%(csscls)s>%(header)s</a>' % data)
+
+        key = '<<<URLKEY%d>>>' % urlmap['']
+        urlmap[''] += 1
+        urlmap[key] = result
+        return key
+
+      url_re = cls.UrlRe()
+      text = url_re.sub(ReplUrl, text or '')
+
+      /# Replace *, _ and `.
+      text = cls.ReplaceEmphasis(text)
+
+      /# Handle ampersand escapes.
+      /#  - do not replace ampersands that are HTML escapes.
+      def ReplaceAmpersand(m):
+        html = m.group('html')
+        if html:
+          result = '&' + html
+        else:
+          result = '&amp;'
+        return result
+      amp_re = re.compile('&(?:(?P<html>[a-zA-Z]+;))?')
+      text = amp_re.sub(ReplaceAmpersand, text)
+
+      /# Handle < and > escapes.
+      /#  - if they are part of an html tag, leave them as-is
+      def ReplaceBracket(m):
+        pass
+
+      /# Now replace the html keys with actual html.
+      keyre = re.compile(r'(?P<key><<<URLKEY\d+>>>)')
+      def KeyRepl(m):
+        return urlmap[m.group('key')]
+      text = keyre.sub(KeyRepl, text)
+
+      return text
+    test:
+      func = metax.lib.markdown.Paragraph.TextToHtml
+
+      test.iseqtext(
+        >|r"""hello! <em>how</em> are <em>you today</em>?
+        >|this is <b>a test</b> to <b>see how</b> things work
+        >|""",
+        metax.lib.markdown.Paragraph.TextToHtml(
+          'hello! *how* are _you today_?\n'
+          'this is __a test__ to **see how** things work\n',
+          parser=test.md, indent=''))
+
+      html = func("""
+        >|[An example link](http://www.google.com)
+        >|![](http://some.site/path/to/image.jpg 200x)
+        >|""")
+      test.iseqtext(
+        >|"""<a href="http://www.google.com">An example link</a>
+        >|<div class="image bgblack right">
+        >|  <a href="http://some.site/path/to/image.jpg">
+        >|    <img src=http://some.site/path/to/image.jpg width=200>
+        >|  </a>
+        >|</div>
+        >|
+        >|""",
+        html)
+
+    end method TextToHtml;
+
+    meta
+    method ReplaceEmphasis : str #:
+      Replace asterisk, ...
+    params:
+      var text : str;
+    scope:
+      debug = 0
+
+      /# We add chars before/after in order to avoid having to special
+      /# case access at start and end of value.  If Python implements
+      /# strings via cords this will be efficient, otherwise not.
+      text = '!!' + text + '!!'
+
+      N = len(text) - 4
+      target = None
+      istwo = False
+      start = None
+      reason = None
+      replist = []
+
+      i = 2
+      while i < N:
+        c = text[i]
+        /# print '%4d: %s' % (i, c)
+
+        if c == '*' or c == '_' or c == '`':
+          /# Determine if this c represents a valid start/end of emphasis.
+          special = True
+          active = start is not None  # we've started a region.
+          p = text[i-1]
+          n = text[i+1]
+
+          if active and c != text[start]:
+            /# We are already parsing a special and the current one doesn't
+            /# match.
+            special = False
+            reason = 'Currently processing "%s" not "%s"' % (text[start], c)
+          elif active and n != c and istwo:
+            /# We are parsing a two-char token so we ignore this single-char version.
+            special = False
+            reason = 'Currently parsing two-char %s so ignoring single %s' % (
+              text[start], c)
+          elif p == '\\':
+            /# The char is escaped and doesn't represent emphasis.
+            special = False
+            reason = 'char has been escaped'
+          elif c != '`':
+            /# If * or _ is surrounded by spaces it doesn't represent emphasis.
+            if p == ' ':
+              if n == ' ':
+                special = False
+                reason = 'surrounded by spaces'
+              elif n == c and text[i+2] == ' ':
+                special = False
+                reason = 'double is surrounded by spaces'
+              
+          if special:
+            if n == c:
+              istwo = True
+
+            if start is None:
+              /# We have found the start of an emphasis region.
+              start = i
+              if debug > 1:
+                print 'Marking %d as start: "%s"' % (i, text[i-2:i+3])
+              if istwo:
+                i += 1
+            else:
+              /# We have found the end of an emphasis region.
+              end = i + 1
+              if istwo:
+                end += 1
+
+              if debug:
+                print 'Found %d-%d: "%s"' % (start, end, text[start:end])
+
+              /# Obtain the conversion data.
+              tag = 'code' if c == '`' else ('b' if istwo else 'em')
+              adj = 2 if istwo else 1
+              inner = text[start+adj:end-adj]
+              replist.append((start, end, '<%s>%s</%s>' % (tag, inner, tag)))
+
+              /# Reset
+              i = end
+              start = None
+              istwo = None
+
+          else:
+            if debug:
+              print 'Position %d is not special: "%s" [%s]' % (
+                i, text[i-2:i+3], reason)
+            if n == c:
+              i += 1
+
+        i += 1
+
+      parts = []
+      i = 0
+      for start, end, repl in replist:
+        if i < start:
+          parts.append(text[i:start])
+        parts.append(repl)
+        i = end
+      parts.append(text[i:len(text)])
+        
+      text = ''.join(parts)
+      return text[2:-2]
+    test:
+      func = metax.lib.markdown.Paragraph.ReplaceEmphasis
+      text = (
+       >|"""This is a *big* test to **see** how things _work when_ we mark up
+       >|text __with annotations__. This * and _ and ** and __ are not special.
+       >|Oh, and **this * should work** and __this _ also__.
+       >|Oh, and **this *should work** and __this _also__.
+       >|Now `code` and ``more code`` and ` testing ` and `` ` ``.""")
+
+      test.iseqtext(
+        >|"""This is a <em>big</em> test to <b>see</b> how things <em>work when</em> we mark up
+        >|text <b>with annotations</b>. This * and _ and ** and __ are not special.
+        >|Oh, and <b>this * should work</b> and <b>this _ also</b>.
+        >|Oh, and <b>this *should work</b> and <b>this _also</b>.
+        >|Now <code>code</code> and <code>more code</code> and <code> testing </code> and <code> ` </code>.""",
+        func(text))
+    end method ReplaceEmphasis;
+
+    meta
+    method TextToTex : str #:
+      Convert a multi-line string to tex by escaping bold and italic requests,
+      escaping special chars, etc.
+    params:
+      var text : str #:
+        The text string to convert to tex.
+      var parser : Parser = null #:
+        The parser instance.
+    scope:
+      /# TODO(wmh): Use the extract annotations instead of doing it here.
+      r = cls.AnnRe()
+      while True:
+        m = r.search(text)
+        if m:
+          all = m.group(0)
+          d = m.group('d')
+          kwd = 'textit' if len(d) == 1 else 'textbf'
+          text = text.replace(all, '\\' + kwd + '{' + m.group('text') + '}')
+        else:
+          break
+      text = text.replace('&', '\\&').replace('_', '\\_').replace('  \n', '\\\\\n')
+      return text
+    test:
+      test.iseqtext(
+        >|r"""hello! \textit{how} are \textit{you today}?
+        >|this is \textbf{a test} to \textbf{see how} things work
+        >|""",
+        metax.lib.markdown.Paragraph.TextToTex(
+          'hello! *how* are _you today_?\n'
+          'this is __a test__ to **see how** things work\n'))
+    end method TextToTex;
+
+    meta
+    method ExtractAnnotations : map #:
+      Find emphasis indicators within specified text.
+    params:
+      var text : str;
+    scope:
+      result = []
+      special = '`'
+      r = cls.AnnRe()
+      while True:
+        m = r.search(text)
+        if m:
+          d = m.group('d')
+          t = m.group('text')
+          f = special * len(d)
+          s = m.start(0)
+          e = m.end(0)
+          text = text.replace(m.group(0), f + t + f, 1)
+          entry = {
+            'd': d,
+            's': m.start(0),
+            'e': m.end(0), 
+            'v': m.group('text').replace(special, ''),
+          }
+          result.append(entry)
+        else:
+          break
+      return sorted(result, key=lambda e: e['s'])
+    test:
+      meth = metax.lib.markdown.Paragraph.ExtractAnnotations
+      test.iseq(
+        [{'d': '**', 'e': 14, 's': 0, 'v': 'Title Here'}],
+        meth('**Title Here**. This is a test'))
+      test.iseq(
+        [{'d': '**', 'e': 20, 's': 8, 'v': 'a test'},
+        {'d': '_', 'e': 18, 's': 12, 'v': 'test'},
+        /# TODO(wmh): This needs extending, as we will not be able to
+        /# properly convert the text to HTML or latex as-is ... we've
+        /# last the fact that the '_' encases the '**'.
+        {'d': '_', 'e': 42, 's': 32, 'v': 'this'},
+        {'d': '**', 'e': 41, 's': 33, 'v': 'this'}],
+        meth('This is **a _test_** to see how _**this**_ works.'))
+
+    field text : str #:
+      The text within the paragraph.
+
+    field annotations : vec<map> #:
+      Details on bold, italic, and strike-thru elements.
+      Each element contains the start, end, delim and text of the markup.
+
+    field implicit : bool = false #:
+      If True, this collection of lines should not be delineated as a
+      paragraph (e.g. no <p> or </p> in html renditions, etc.)
+
+    lifecycle params:
+      var parent : Section;
+      var text -> text;
+      var implicit -> implicit = false;
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.        
+    super (parent, prelines=prelines)
+    scope:
+      if text[-1] == '\n':
+        print (
+          'WARNING: Paragraphs should not pass in a trailing newline (%s)' %
+          parent.fulltitle())
+        text = text.rstrip()
+      self.annotationsIs(metax.lib.markdown.Paragraph.ExtractAnnotations(text))
+    end lifecycle;
+
+    method isPara : bool scope:
+      return True
+    test:
+      test.isfalse(test.section.isPara())
+      test.istrue(test.p1.isPara())
+    end method isPara;
+
+    method show #:
+      Write this paragraph.
+    params:
+      var fp : ostream = out;
+      var indent : str = '';
+      var aspect : str = 'ascii' #:
+        What to show. Valid values are:
+          titles: show only titles (indented by level)
+          markdown: recreate the markdown text
+      var nofirst : bool = false #:
+        A special param only defined on Paragraph. If true, and aspect is ascii,
+        do not insert 'indent' before the first line of output (but do so for
+        all others).
+    scope:
+      implicit = self.implicit()
+      prelines = self.prelines()
+      if aspect == 'ascii':
+        if prelines:
+          fp.write('\n' * prelines)
+        if indent:
+          sep = '\n' + indent
+          if not nofirst:
+            fp.write(indent)
+          fp.write(self.text().replace('\n', sep) + '\n')
+        else:
+          fp.write(self.text() + '\n')
+      elif aspect == 'html':
+        text = self.__class__.TextToHtml(
+          self.text(), parser=self.parent().parser(), indent=indent)
+        sep = '\n' + indent
+        if prelines:
+          fp.write('\n' * prelines)
+        if implicit:
+          fp.write(indent + text.replace('\n', sep) + '\n')
+        else:
+          fp.write(indent + '<p>' + text.replace('\n', sep) + '</p>\n')
+      elif aspect == 'tex':
+        text = self.__class__.TextToTex(self.text())
+        fp.write(text + '\n')
+      else:
+        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+    test:
+      fp = test.newStr()
+      test.p2.show(fp=fp, aspect='ascii')
+      test.iseqtext(
+        >|"""**Some Title**. This is an example paragraph with a
+        >|title (the first one is not titled)
+        >|""",
+        fp.getvalue())
+
+      fp = test.newStr()
+      test.p2.show(fp=fp, aspect='html')
+      test.iseqtext(
+        >|"""<p><b>Some Title</b>. This is an example paragraph with a
+        >|title (the first one is not titled)</p>
+        >|""",
+        fp.getvalue())
+    end method show;
+
+    method title : str #:
+      Establish if this paragraph is titled.
+    scope:
+      result = None
+      anns = self._annotations
+      if anns and anns[0]['s'] == 0 and anns[0]['d'] == '**':
+        result = anns[0]['v']
+      return result
+    test:
+      test.iseq(None, test.p1.title())
+      test.iseq('Some Title', test.p2.title())
+    end method title;
+
+  end class Paragraph;
+
+  class Quote < Block #:
+    A block quote.
+  scope:
+
+    field lines : vec<str> #:
+      The lines making up the block quote. No newlines in elements.
+
+    lifecycle params:
+      var parent : Section #:
+        The section this code block belongs to.
+      var lines -> lines;
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.        
+    super (parent, prelines=prelines)
+    scope:
+      /# TODO(wmh): Either strip the '> ' from each line here, or require
+      /# the caller to do so.
+      self.linesIs(lines)
+    end lifecycle;
+ 
+    method title : str #:
+      Establish if this list is titled.
+
+      For now, we don't have a concept of titled lists, but we may want to
+      add such a concept.
+    scope:
+      return None
+    test:
+      quote = metax.lib.markdown.Quote(test.section, ['> quote'])
+      test.isnull(quote.title())
+    end method title;
+
+    method show #:
+      Write this quote.
+    params:
+      var fp : ostream = out;
+      var indent : str = '';
+      var aspect : str = 'ascii' #:
+        What to show. Valid values are:
+          titles: show only titles (indented by level)
+          markdown: recreate the markdown text
+    scope:
+      prelines = self.prelines()
+      if aspect == 'ascii':
+        if prelines:
+          fp.write('\n' * prelines)
+        for line in self.lines():
+          fp.write(indent + line + '\n')
+      elif aspect == 'html':
+        fp.write('%s<blockquote>\n' % indent)
+        for line in self.lines():
+          fp.write(line[2:] + '\n')
+        fp.write('%s</blockquote>\n' % indent)
+      elif aspect == 'tex':
+        fp.write('Not yet handling blockquotes in tex\n')
+      else:
+        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+    test:
+      quote = metax.lib.markdown.Quote(test.section, ['> quote', '> more quote'])
+      fp = test.newStr()
+      quote.show(fp=fp)
+      test.iseqtext('> quote\n> more quote\n', fp.getvalue())
+    end method show;
+
+  end class Quote;
+
+  class List < Block #:
+    A list (ordered or unordered).
+  assocs:
+    std assoc math;
+  scope:
+
+    field ordered : bool #:
+      True if this list is ordered.
+
+    field mark : str #:
+      One of '*', '+' or '-' if unordered, or an integer if ordered.
+      Note that currently we do NOT store the integers of every list item
+      in the list, just of the first one (for unordered lists this is
+      unnecessary because all list items must use the same mark for 
+      unordered lists).
+
+    field items : @vec<ListItem> #:
+      The collection of items making up the list.  Each item consists
+      of one or more blocks.
+
+    lifecycle params:
+      var parent : Object #:
+        This is a Section if the list is top-level, or a List if the
+        list is nested.
+      var ordered -> ordered = false;
+      var mark -> mark = null;
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.        
+    super (parent, prelines=prelines)
+    scope:
+    end;
+
+    method isList : bool scope:
+      return True
+    test:
+      test.makeLists()
+      test.isfalse(test.section.isList())
+      test.isfalse(test.p1.isList())
+      test.istrue(test.ul.isList())
+      test.istrue(test.ol.isList())
+    end method isList;
+
+    method item : ListItem #:
+      Obtain the item with given index.
+    params:
+      var index : int #:
+        The index of the item desired, from 0.
+    scope:
+      items = self.items()
+      if index < len(items):
+        result = items[index]
+      else:
+        result = None
+      return result
+    test:
+      test.makeLists()
+      ul = test.ul
+      test.issame(test.item1, ul.item(0))
+      test.issame(test.item2, ul.item(1))
+      test.issame(test.item3, ul.item(2))
+      test.isnull(ul.item(3))
+    end method item;
+
+    method addItem : void #:
+      Add a list item.
+    params:
+      var elem : ListItem;
+    scope:
+      self.items().append(elem)
+    test:
+      test.makeLists()
+    end method addItem;
+
+    method newItem : ListItem #:
+      Create and register a ListItem.
+    params:
+      var blocks : vec<Block> = null #:
+        The Block instances in the ListItem. Parents are updated.
+      var paras : vec<str> = null #:
+        A list of mult-line paragraphs representing to-be-created Paragraph
+        instances (elements should not end with newline). Normally one does not
+        specify both blocks and paras (one or the other). If both are specified,
+        blocks are added first, then the paras are created and added.
+      var prelines : int = 0;
+    scope:
+      result = ListItem(self, prelines=prelines)
+      if blocks:
+        for block in blocks:
+          result.addBlock(block)
+      if paras:
+        for text in paras:
+          para = Paragraph(result, text, prelines=0)
+          result.addBlock(para)
+      self.addItem(result)
+      return result
+    test:
+      /# makeLists() calls newItem() multiple times.
+      test.makeLists()
+      test.iseq(3, len(test.ul.items()))
+    end method newItem;
+
+    method title : str #:
+      Establish if this list is titled.
+
+      For now, we don't have a concept of titled lists, but we may want to
+      add such a concept.
+    scope:
+      return None
+    test:
+      test.makeLists()
+      test.isnull(test.ul.title())
+    end method title;
+
+    method show #:
+      Write this html block.
+    params:
+      var fp : ostream = out;
+      var indent : str = '';
+      var aspect : str = 'ascii' #:
+        What to show. Valid values are:
+          titles: show only titles (indented by level)
+          markdown: recreate the markdown text
+    scope:
+      /# How much spacing before the list item indicator? In the past I've
+      /# usually done one space, but I'm looking into using 0 spaces.
+      pre_indicator_indent = ''
+      prelines = self.prelines()
+
+      subindent = indent + '  '
+      ordered = self.ordered()
+      if aspect == 'html':
+        tag = 'ol' if ordered else 'ul'
+        if prelines:
+          fp.write('\n' * prelines)
+        fp.write('%s<%s>\n' % (indent, tag))
+        for item in self.items():
+          item.show(fp=fp, indent=subindent, aspect=aspect)
+        fp.write('%s</%s>\n' % (indent, tag))
+      elif aspect == 'ascii':
+        /# For ascii, the amount of extra indentation (beyond 'indent') is
+        /# customizable, and depends on various things. First, let's consider
+        /# the case where we want text on subsequent lines within an item
+        /# to align with the column on which the text appears in the first
+        /# line. This requires us to know how many characters are needed for
+        /# the "list item indicator".
+        /#  - how much whitespace do we want inserted before the list item
+        /#    indicator (usually 0 or 1)?
+        /#  - how many characters in the list indicator (1 for unordered lists,
+        /#    but can be 1, 2, 3 or more for large ordered lists ... depends
+        /#    on list size).
+        /#  - ordered lists have a '.' after the number
+        /#  - there must be at least one space after the indicator.
+        items = self.items()
+        if ordered:
+          nitems = len(items)
+          largest_num = int(self.mark()) + nitems
+          num_digits = int(math.log10(largest_num)+1)
+          /# Create a format that will accept a 'num' parameter representing
+          /# the number of the ordered list item ... instantiating should
+          /# produce the number with appropriate spaces before and after.
+          /# Note that left-justifying the number will require a different
+          /# mechanism because the '.' has to appear immediately after the
+          /# last digit.  Using right justification will break if the result
+          /# has 4 or more spaces before the number (that will get interpreted
+          /# as a code block not a lit).
+          mark_format = '%s%%(num)%dd. ' % (pre_indicator_indent, num_digits)
+        else:
+          mark_format = '%s%s ' % (pre_indicator_indent, self.mark())
+          /# If we want to enforce a certain amount of indentation, we
+          /# can add additional spaces to mark_format.
+
+        if prelines:
+          fp.write('\n' * prelines)
+        for i, item in enumerate(items):
+          if ordered:
+            mark = mark_format % {'num': (i + int(self.mark()))}
+          else:
+            mark = mark_format
+          item.show(fp=fp, indent=indent, aspect=aspect, mark=mark)
+      elif aspect == 'tex':
+        fp.write('List.show() not implemented for aspect=%s\n' % aspect)
+      elif aspect == 'markdown':
+        fp.write('List.show() not implemented for aspect=%s\n' % aspect)
+      else:
+        print 'ERROR: Unknown aspect %s for List.show()' % aspect
+    test:
+      test.makeLists()
+
+      fp = test.newStr()
+      test.ul.show(fp=fp, aspect='html')
+      test.iseqtext(
+        >|"""<ul>
+        >|  <li>
+        >|  <p>Apple</p>
+        >|  </li>
+        >|  <li>
+        >|  <p>Banana</p>
+        >|  </li>
+        >|  <li>
+        >|  <p>Cantelope</p>
+        >|  </li>
+        >|</ul>
+        >|""",
+        fp.getvalue())
+    end method show;
+
+  end class List;
+
+  class ListItem < BlockGroup #:
+    An item within a list. Contains zero or more Block instances.
+
+    The parent field contains a List instance.  
+  scope:
+
+    method isListItem : bool scope:
+      return True
+    test:
+      test.makeLists()
+      test.isfalse(test.section.isListItem())
+      test.isfalse(test.p1.isListItem())
+      test.isfalse(test.ul.isListItem())
+      test.istrue(test.item1.isListItem())
+    end method isListItem;
+
+    method show #:
+      Write this html block.
+    params:
+      var fp : ostream = out;
+      var indent : str = '';
+      var aspect : str = 'ascii' #:
+        What to show. Valid values are:
+          titles: show only titles (indented by level)
+          markdown: recreate the markdown text
+      var mark : str = null #:
+        What to use to indicate the list item. It will:
+         - start with 0 or more spaces
+         - then either '*', '+' or '-' (for unordered lists) or an
+           integer followed by '.' (for ordered lists)
+         - then at least one space (but maybe more)
+        The length of mark is used to determine the indentation of
+        subsequent lines/blocks within the listitem.
+
+        Currently only relevant for aspect 'ascii'.
+    scope:
+      parent = self.parent()
+
+      if aspect == 'ascii':
+        /# Things are complicated here by the fact that we need to print out
+        /# a list-item indicator at the start of the first block, and indent
+        /# each additional block appropriately.
+        /#  - we require that the first block of a ListItem be a Paragraph,
+        /#    and add a special 'nofirst' param that knows not to insert
+        /#    indentation before first line.
+        /#  - blocks are indented using subindent = indent + extra_dent
+        if mark is None: mark = ' ? '
+        extra_dent = len(mark)
+        subindent = indent + (' ' * extra_dent)
+        prelines = self.prelines()
+
+        if prelines:
+          fp.write('\n' * prelines)          
+        for i, block in enumerate(self.blocks()):
+          if i == 0:
+            /# This is the first block in the listitem, so we add the listitem
+            /# indicator.
+            if not block.isPara():
+              raise Error(
+                'Expecting paragraph but found %s in %s' %
+                (type(block), block.ancestorSection().fulltitle()))
+            fp.write(indent + mark)
+            block.show(fp=fp, indent=subindent, aspect=aspect, nofirst=True)
+          else:
+            block.show(fp=fp, indent=subindent, aspect=aspect)
+
+      elif aspect == 'tex':
+        fp.write('ListItem.show() for aspect text not yet implemented\n')
+
+      elif aspect == 'html':
+        fp.write('%s<li>\n' % indent)
+        for block in self.blocks():
+          block.show(fp=fp, indent=indent, aspect=aspect)
+        fp.write('%s</li>\n' % indent)
+
+      elif aspect == 'markdown':
+        pass
+
+      else:
+        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+    test:
+      test.makeLists()
+
+      fp = test.newStr()
+      test.item3.show(fp=fp, aspect='ascii')
+      test.iseqtext(' ? Cantelope\n', fp.getvalue())
+
+      fp = test.newStr()
+      test.item3.show(fp=fp, aspect='html')
+      test.iseqtext('<li>\n<p>Cantelope</p>\n</li>\n', fp.getvalue())
+    end method show;
+
+    method parser : Parser #:
+      Obtain the parser associated with this ListItem.
+    scope:
+      result = None
+      /# We do not store parsers in ListItems. Instead, we search up to
+      /# the nearest section, which contains a parser.
+      section = self.ancestorSection()
+      if section:
+        result = section.parser()
+      return result
+    test:
+      test.makeLists()
+      test.issame(test.md, test.item3.parser())
+    end method parser;
+
+  end class ListItem;
+
+  class Code < Block #:
+    A code block.
+  scope:
+
+    field lines : vec<str> #:
+      The lines making up the code block.
+
+    field language : str #:
+      The language the code is written in.  This is null for the indented
+      form of the Code construct, and is a string (maybe empty) for the
+      quoted form of the Code construct.
+
+    lifecycle params:
+      var parent : Section #:
+        The section this code block belongs to.
+      var lines : vec<str> #:
+        The lines making up the code block. No newlines in elements.
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.        
+      var language -> language = null;
+    super (parent, prelines=prelines)
+    scope:
+      self.linesIs(lines)
+    end lifecycle;
+
+    method title : str #:
+      Establish if this code block is titled.
+
+      For now, we don't have a concept of titled code blocks, but we may want to
+      add such a concept.
+    scope:
+      return None
+    test:
+      test.isnull(test.code.title())
+    end method title;
+
+    method show #:
+      Write this html block.
+    params:
+      var fp : ostream = out;
+      var indent : str = '';
+      var aspect : str = 'ascii' #:
+        What to show. Valid values are:
+          titles: show only titles (indented by level)
+          markdown: recreate the markdown text
+    scope:
+      prelines = self.prelines()
+      lines = self.lines()
+      if aspect == 'html':
+        if prelines:
+          fp.write('\n' * prelines)
+        lang = self.language()
+        if lang is None:
+          /# The indented form
+          fp.write('%s<pre><code>' % indent)
+          for line in lines:
+            if line:
+              assert line.startswith('    ')
+              /# TODO(wmh): Use translate instead of multiple replace calls()
+              codeline = line[4:].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+              fp.write(codeline + '\n')
+            else:
+              fp.write('\n')
+        else:
+          /# The quoted form.
+          cstr = ' class="%s"' % lang if lang else ''
+          fp.write('%s<pre><code%s>' % (indent, cstr))
+          for line in lines:
+            /# TODO(wmh): Use translate instead of multiple replace calls()
+            codeline = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            fp.write(codeline + '\n')
+        fp.write('</code></pre>\n')
+      elif aspect == 'ascii':
+        if prelines:
+          fp.write('\n' * prelines)
+        lang = self.language()
+        if lang is None:
+          /# The indented form
+          for line in lines:
+            assert line.startswith('    ')
+            fp.write(indent + line + '\n')
+        else:
+          /# The quoted form.
+          fp.write('%s~~~%s\n' % (indent, lang))
+          for line in lines:
+            fp.write(indent + line + '\n')
+          fp.write('%s~~~\n' % indent)
+
+      elif aspect == 'tex':
+        fp.write('%sFIX tex CODE\n' % indent)
+      elif aspect == 'markdown':
+        fp.write('%sFIX markdown CODE\n' % indent)
+      else:
+        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+    test:
+      fp = test.newStr()
+      test.code.show(fp=fp, aspect='ascii')
+      test.iseqtext(
+        '~~~python\n'
+        'if a == 1:\n'
+        '  return False\n'
+        'else:\n'
+        '  return True\n'
+        '~~~\n',
+        fp.getvalue())
+
+      fp = test.newStr()
+      test.code.show(fp=fp, aspect='html')
+      test.iseqtext(
+        '<pre><code class="python">if a == 1:\n'
+        '  return False\n'
+        'else:\n'
+        '  return True\n'
+        '</code></pre>\n',
+        fp.getvalue())
+    end method show;
+
+    test
+    lifecycle setup:
+      self.code = metax.lib.markdown.Code(
+        test.subsection,
+        ['if a == 1:',
+         '  return False',
+         'else:',
+         '  return True'
+        ],
+        language='python')
+    end lifecycle;
+  end class Code;
+
+  class HR < Object #:
+    A horizontal rule.
+  scope:
+
+    field text : str #:
+      The exact text used to describe the rule.
+
+    lifecycle params:
+      var parent : Section #:
+        The section this hr belongs to.
+      var text -> text;
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.        
+    super (prelines=prelines)
+    scope:
+    end lifecycle;
+
+    method title : str #:
+      Establish if this code block is titled.
+
+      For now, we don't have a concept of titled code blocks, but we may want to
+      add such a concept.
+    scope:
+      return None
+    test:
+      test.isnull(test.hr.title())
+    end method title;
+
+    method show #:
+      Write this html block.
+    params:
+      var fp : ostream = out;
+      var indent : str = '';
+      var aspect : str = 'ascii' #:
+        What to show. Valid values are:
+          titles: show only titles (indented by level)
+          markdown: recreate the markdown text
+    scope:
+      prelines = self.prelines()
+      if aspect == 'html':
+        if prelines:
+          fp.write('\n' * prelines)
+        fp.write('%s<hr/>\n' % indent)
+      elif aspect == 'ascii':
+        if prelines:
+          fp.write('\n' * prelines)
+        fp.write('%s%s\n' % (indent, '-' * (70 - len(indent))))
+      elif aspect == 'tex':
+        fp.write('%s\\hline\n' % indent)
+      elif aspect == 'markdown':
+        fp.write('%s%s' % (indent, self.text()))
+      else:
+        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+    test:
+      fp = test.newStr()
+      test.hr.show(fp=fp, aspect='ascii')
+      test.iseq(
+        '\n----------------------------------------------------------------------\n',
+        fp.getvalue())
+
+      fp = test.newStr()
+      test.hr.show(fp=fp, aspect='html')
+      test.iseq('\n<hr/>\n', fp.getvalue())
+    end method show;
+
+    test
+    lifecycle setup:
+      self.hr = metax.lib.markdown.HR(test.section, '* * *', prelines=1)
+    end lifecycle;
+
+  end class HR;
+
+  class HTML < Block #:
+    An html block.
+  scope:
+
+    field lines : vec<str> #:
+      The lines in the html block.      
+
+    lifecycle params:
+      var parent : Section #:
+        The section this code block belongs to.
+      var lines : vec<str> #:
+        The lines in the html block.
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.        
+    super (parent, prelines=prelines)
+    scope:
+      self.linesIs(lines)
+      /# print 'Have HTML block with %d lines starting: %s' % (len(lines), lines[0])
+    end lifecycle;
+
+    method title : str #:
+      Establish if this code block is titled.
+
+      For now, we don't have a concept of titled code blocks, but we may want to
+      add such a concept.
+    scope:
+      return None
+    test:
+      test.isnull(test.html.title())
+    end method title;
+
+    method show #:
+      Write this html block.
+    params:
+      var fp : ostream = out;
+      var indent : str = '';
+      var aspect : str = 'ascii' #:
+        What to show. Valid values are:
+          titles: show only titles (indented by level)
+          markdown: recreate the markdown text
+    scope:
+      prelines = self.prelines()
+      lines = self.lines()
+      if aspect == 'ascii':
+        if prelines:
+          fp.write('\n' * prelines)
+        for line in lines:
+          fp.write('%s%s\n' % (indent, line))
+      elif aspect == 'html':
+        if prelines:
+          fp.write('\n' * prelines)
+        for line in lines:
+          fp.write('%s%s\n' % (indent, line))
+      elif aspect == 'tex':
+        fp.write('%s\\begin{comment}\n' % indent)
+        for line in lines:
+          fp.write('%s%s\n' % (indent, line))
+        fp.write('%s\\end{comment}\n' % indent)
+      else:
+        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+    test:
+      fp = test.newStr()
+      test.html.show(fp=fp)
+      test.iseq('<p>blah</p>\n', fp.getvalue())
+    end method show;
+
+    test
+    lifecycle setup:
+      self.html = metax.lib.markdown.HTML(
+        test.section, ['<p>blah</p>'])
+    end;
+  end class HTML;
+
+  class Table < Block #:
+    A table.
+    See https://help.github.com/articles/organizing-information-with-tables
+
+    The conceptual children of a table (for purposes of the find() method)
+    are the titles of each data Row, and the title of a Row is the value of
+    its unique-key column (for now, always column 0).
+  assocs:
+    std assoc string;
+    std assoc pprint;
+
+  scope:
+    meta
+    field TableRe : regexp;
+
+    meta
+    field ColRe : regexp;
+
+    meta
+    lifecycle scope:
+      cls.TableReIs(re.compile(r'^[-<|: ]{5,}$'))
+      cls.ColReIs(re.compile(
+        r'^\s*(?P<all>(?P<left>:)?-+(?P<right>:)?(?P<maxw><)?)\s*$'))
+
+    meta
+    method New : Table #:
+      Parse a list of strings into a table.
+
+      Returns null if the input lines do not represent a table, writing
+      error information to the 'errors' output parameter if provided.
+    params:
+      var lines : vec<str> #:
+        A collection of lines potentially representing a markdown table. If
+        they do, the first, third or fourth line will establish this,
+        depending on whether an optional title (followed by empty line) and
+        optional header line are specified).
+          - optional title line
+          - optional empty line (required if title line is present)
+          - optional column header list
+          - required column specification
+        See https://help.github.com/articles/organizing-information-with-tables
+        for the basics (the optional title is a wmh add-on).
+      var errors : vec<str> = null #:
+        An optional out parameter that parsing errors are written to.
+      var parent : *Section = null #:
+        The section this table belongs to.
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.        
+    scope:
+      if errors is None:
+        errors = []
+
+      /# If the lines represent a table, the 1st, 3rd or 4th line
+      /# must contain the column spec, so we look for it in those lines.
+      m = None
+      spec = None
+      for i in range(0, min(4, len(lines))):
+        m = cls.TableRe().match(lines[i])
+        if m:
+          spec = lines[i]
+          break
+
+      if m:
+        columns = []
+        delim_re = re.compile(r'\s*\|\s*')
+        /# TODO(wmh): The ignore string is used to specify which chars to
+        /# remove from the front and back of each table row. Having '|'
+        /# in this list makes it convenient when splitting so that we don't
+        /# have to ignore first and last element. However, this also means that
+        /# when the first or last table cell is empty, we end up deleting it
+        /# entirely.
+        /#
+        /# Fixing this is not as simple as not using 'ignore' and dealing with
+        /# the extra elements in split lists, because the (github) markdown
+        /# spec allows both:
+        /#    | Column1 | Column2 |
+        /# and
+        /#      Column1 | Column2 
+        /# as legal table specifiers.
+        /#
+        /# If we require tables to have left and right borders, we can just
+        /# delete ignore, split on whitespace, remove first and last elements
+        /# from lists resulting from splitting, lstrip first element, and rstrip
+        /# last element. But if we want to allow non-border delimiters we'll
+        /# need something more.
+
+        ignore = '| \n'
+
+        /# Parse the column specification
+        xspec = spec.strip()
+        for colspec in delim_re.split(xspec)[1:-1]:
+          m = cls.ColRe().match(colspec)
+          if m:
+            align = ''
+            if m.group('left'):
+              align = 'center' if m.group('right') else 'left'
+            elif m.group('right'):
+              align = 'right'
+            all = m.group('all')
+            cdata = {'align': align}
+            if m.group('maxw'):
+              cdata['maxwidth'] = len(all)
+            else:
+              cdata['minwidth'] = len(all)
+            columns.append(cdata)
+          else:
+            errors.append(
+              '"%s" is not a valid colspec in "%s"' % (colspec, xspec))
+        numcols = len(columns)
+
+        /# Parse the column headers, if they exist.
+        if i > 0:
+          headers = delim_re.split(lines[i-1].strip())[1:-1]
+          if len(headers) != numcols:
+            errors.append(
+              'Found %d headers but %d columns: %s' % 
+              (len(headers), numcols, lines[i-1]))
+          else:
+            for j in range(0, numcols):
+              columns[j]['header'] = headers[j].strip()
+
+        /# Obtain the table title.
+        title = None
+        csscls = None
+        tblid = None
+        if i == 3:
+          title = lines[0].strip()
+          m = re.match(
+            '^Table: (?P<title>[^\[\]]+)(?:\s*\[(?P<class>.*)\])?', title)
+          if m:
+            title = m.group('title')
+            csscls = m.group('class')
+            if csscls:
+              css = []
+              for part in csscls.split():
+                if part[0] == '=':
+                  /# This is an id specifier.
+                  if tblid is None:
+                    tblid = part[1:]
+                  else:
+                    raise Error('multiple table ids specified!')
+                else:
+                  css.append(part)
+              csscls = ' '.join(css)
+
+        /# Parse the remaining lines as rows in the table.
+        rows = []
+        for r in range(i+1, len(lines)):
+          row = delim_re.split(lines[r].strip())[1:-1]
+          if row:
+            row[0] = row[0].lstrip()
+            row[-1] = row[-1].rstrip()
+          if len(row) != numcols:
+            /# print row
+            errors.append(
+              'For row %d, found %d columns when expecting %d: %s' %
+              (r - i, len(row), numcols, lines[r].rstrip()))
+          rows.append(row)
+      else:
+        errors.append('Not a table')
+
+      /# Return a Table instance if no errors, or None if errors.
+      result = (
+        None if errors
+        else cls(
+          parent, columns, rows, title=title, prelines=prelines,
+          csscls=csscls, uid=tblid))
+      return result
+    test:
+      table, errors = self.newTable()
+      test.iseq(
+        [{'minwidth': 3, 'align': '', 'header': 'Name'},
+         {'minwidth': 4, 'align': 'left', 'header': 'Age'},
+         {'minwidth': 4, 'align': 'right', 'header': 'Height'},
+         {'minwidth': 5, 'align': 'center', 'header': 'Fruit'}],
+        table.columns())
+      test.iseq(
+        [['Alice', '25', '1.7m', 'Kiwi'],
+         ['Bob', '23', '1.9m', 'Apple']],
+        [row.data() for row in table.rows()])
+      test.iseq('Table Title', table.title())
+
+      table2, errors2 = self.newTable(
+        lines=['blahdk dkd s', 'dk skdks ks', 'skkdd s s skd', 'ds kdk s dk'])
+      test.iseq(None, table2)
+      test.iseq(['Not a table'], errors2)
+
+      table3, errors3 = self.newTable(
+        ['| Name | Age | ', '| --- | ---| ', '| Bob | 23 | extra |', 'Alice'])
+      test.iseq(None, table3)
+      test.iseq(
+        ['For row 1, found 3 columns when expecting 2: | Bob | 23 | extra |',
+         'For row 2, found 0 columns when expecting 2: Alice'],
+        errors3)
+
+      table4, errors4 = self.newTable(
+        ['|  .  |',
+         '| :-: |',
+         '| ![](http://www.google.com) |',
+         '| ![](http://www.cnn.com) |'])
+      /#print errors4
+      /#print table4
+
+    field title : str = null #:
+      The title associated with the table
+
+    field csscls : str = null #:
+      The CSS class(es) to associate with the table.
+
+    field columns : @vec<map> #:
+      The column information. Each element contains:
+        align: str
+          One of '', 'left', 'right' or 'center'
+        minwidth: int
+          Minimum width (in chars) of the column
+        header: str (optional)
+          The column header (need not be specified).
+
+    field indices : map #:
+      Maps column header values to integers (first column is 0, second is 1, etc).
+
+    field rows : @vec<vec<str>> #:
+      The data rows of the table. Each element is a list of strings
+      (size equal to the size of 'columns') representing the values
+      of each column within the row.
+
+    lifecycle params:
+      var parent : *Section #:
+        The section this text object belongs to.
+      var columns -> columns;
+      var rawrows : vec<vec<str>> #:
+        See the 'rows' field.
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.        
+      var title -> title = null;
+      var csscls -> csscls = null;
+      var uid : str = null #:
+        A unique identifier for this table.
+    super (parent, prelines=prelines, uid=uid)
+    scope:
+      indices = {}
+      for i, cdata in enumerate(columns):
+        header = cdata.get('header', None)
+        if header:
+          indices[header] = i
+
+      rows = [metax.lib.markdown.Row(self, rowdata) for rowdata in rawrows]
+      
+      self.rowsIs(rows)
+      self.indicesIs(indices)
+    end lifecycle;
+
+    method keys : map #:
+      The mapping from row title to Row instances.
+    scope:
+      return {row.title(): row for row in self.rows()}
+    test:
+      table, errors = self.newTable()
+      test.iseq(['Alice', 'Bob'], sorted(table.keys()))
+    end method keys;
+
+    method show #:
+      Write this table.
+    params:
+      var fp : ostream = out;
+      var indent : str = '';
+      var aspect : str = 'ascii' #:
+        What to show. Valid values are:
+          titles: show only titles (indented by level)
+          markdown: recreate the markdown text
+    scope:
+      title = self.title()
+      parent = self.parent()
+      parser = parent.parser() if parent else None
+      prelines = self.prelines()
+
+      def FormatRow(row, aligns, widths):
+        return ' | '.join(
+          [aligns[i](row[i], widths[i]) for i in range(0, len(row))])
+
+      if aspect == 'ascii':
+        if prelines:
+          fp.write('\n' * prelines)
+        if title:
+          fp.write('%sTable: %s\n\n' % (indent, title))
+
+        /# Accumulate all the entries in each column (including header)
+        columns = self.columns()
+        header = [cd['header'] for cd in columns]
+        rows = self.rows()
+        column_lists = []
+        widths = []
+        aligns = []
+        for i in range(0, len(columns)):
+          clist = [header[i]]
+          for row in rows:
+            clist.append(row.data()[i])
+          column_lists.append(clist)
+          widths.append(max([len(val) for val in clist]))
+          align = columns[i]['align'] or 'left'
+          aligns.append(
+            string.ljust if align == 'left' else
+            (string.rjust if align == 'right' else string.center))
+
+        /# Print the header.
+        fp.write(
+          '%s| %s |\n' % 
+          (indent, 
+           FormatRow(header, aligns, widths)))
+
+        /# Compute and print the separator
+        seplist = []
+        for i, cdata in enumerate(columns):
+          align = cdata['align'] or 'left'
+          left = ':' if align != 'right' else ''
+          right = ':' if align != 'left' else ''
+          width = widths[i]
+          sep = left + ('-' * (max(1, width - len(left + right)))) + right
+          seplist.append(sep)
+        fp.write('%s|%s|\n' % (indent, FormatRow(seplist, aligns, widths)))
+
+        /# Print the data rows.
+        /#   TODO(wmh): Find max width for each column.
+        for row in self.rows():
+          fp.write(
+            '%s| %s |\n' %
+            (indent, FormatRow(row.data(), aligns, widths)))
+
+        fp.write('\n')
+
+      elif aspect == 'tex':
+        columns = self.columns()
+
+        aligns = []
+        headers = []
+        totwid = 0
+        numh = 0
+        for column in columns:
+          align = column.get('align', '') or 'left'
+          alignspec = align[0]
+          h = column.get('header', '')
+          w = column.get('minwidth', None)
+          W = column.get('maxwidth', None)
+          if h:
+            numh += 1
+            if w:
+              totwid += w
+              words = h.split()
+              maxwordlen = max([len(word) for word in words])
+              if w < maxwordlen and len(words) > 1:
+                /# The desired minimum width is smaller than one of the words
+                /# in the header. We can at least reduce the column width to
+                /# the width of the largest word in the header.
+                /# TODO(wmh): How to establish the size of text in cm?
+                cm = 0.2 * maxwordlen
+                h = '\\textbf{\\begin{minipage}[t]{%1.3fcm}%s\\end{minipage}}' % (
+                  cm, h)
+              else:
+                h = '\\textbf{' + h + '}'
+            elif W:
+              alignspec = '%s{%dex}' % (alignspec.upper(), W)
+              h = '\\textbf{' + h + '}'
+            else:    
+              h = '\\textbf{' + h + '}'
+          headers.append(h)
+          aligns.append(alignspec)
+
+        colspec = '|%s|' % '|'.join(aligns)
+        /#print '%d for %s' % (totwid, self.fulltitle())
+
+        if totwid > 45:
+          table_type = 'table*'
+          table_loc  = 't'
+        else:
+          table_type = 'table'
+          table_loc  = 'h!'
+
+        /# Print the table
+        fp.write('\\begin{%s}[%s]\n' % (table_type, table_loc))
+        fp.write('  \\centering\n')
+        fp.write('  \\rowcolors{2}{gray!25}{white}\n')
+        if title:
+          fp.write('  \\caption{%s}\n' % title)
+        /# fp.write('\\label{tab:table1}\n')
+        fp.write('  \\begin{tabular}{%s}\n' % colspec)
+        
+        /# Print the header (if one exists)
+        if numh:
+          fp.write('    \\hline\n')
+          fp.write('    \\rowcolor{gray!50}\n')
+          fp.write('    %s\\\\\n' % ' & '.join(headers))
+          fp.write('    \\hline\n')
+
+        for row in self.rows():
+          line = ' & '.join([
+            metax.lib.markdown.Paragraph.TextToTex(cell, parser=parser) 
+            for cell in row.data()])
+          fp.write('    %s\\\\\n' % line)
+          /# fp.write('    \\hline\n')
+        fp.write('    \\hline\n')
+        fp.write(  '\\end{tabular}\n')
+        fp.write('\\end{%s}\n' % table_type)
+
+      elif aspect == 'html':
+        csscls = self.csscls()
+        cssclsstr = ' class="%s"' % csscls if csscls else ''
+        uid = self.uid()
+        uidstr = ' id="%s"' % uid if uid else ''
+        fp.write('<table%s%s>\n' % (cssclsstr, uidstr))
+        if title:
+          fp.write('  <caption>%s</caption>\n' % title)
+        for row in self.rows():
+          line = '<tr>%s</tr>\n' % ''.join(
+            ['<td>%s</td>' % 
+             (metax.lib.markdown.Paragraph.TextToHtml(cell, parser=parser).strip() or '&nbsp;')
+             for cell in row.data()])
+          fp.write(line)
+        fp.write('</table>\n')
+
+      else:
+        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+    test:
+      table, errors = self.newTable()
+      fp = test.newStr()
+      table.show(fp=fp, indent='...', aspect='ascii')
+      test.iseqtext(
+        >|r"""...Table: Table Title
+        >|
+        >|...| Name  | Age | Height | Fruit |
+        >|...|:---- | :-- | -----: | :---:|
+        >|...| Alice | 25  |   1.7m |  Kiwi |
+        >|...| Bob   | 23  |   1.9m | Apple |
+        >|
+        >|""",
+        fp.getvalue())
+
+      test.maxDiff = None
+      fp = test.newStr()
+      table.show(fp=fp, aspect='tex')
+      test.iseqtext(
+        >|r"""\begin{table}[h!]
+        >|  \centering
+        >|  \rowcolors{2}{gray!25}{white}
+        >|  \caption{Table Title}
+        >|  \begin{tabular}{|l|l|r|c|}
+        >|    \hline
+        >|    \rowcolor{gray!50}
+        >|    \textbf{Name} & \textbf{Age} & \textbf{Height} & \textbf{Fruit}\\
+        >|    \hline
+        >|    Alice & 25 & 1.7m & Kiwi\\
+        >|    Bob & 23 & 1.9m & Apple\\
+        >|    \hline
+        >|\end{tabular}
+        >|\end{table}
+        >|""",
+        fp.getvalue())
+
+      table, errors = self.newTable(
+        >|"""    Table: Testing images in tables.
+        >|
+        >|        |  .  |
+        >|        | :-: |
+        >|        | ![](http://tny.im/7r1 300x) |
+        >|""".rstrip().split('\n'))
+      fp = test.newStr()
+      table.show(fp=fp, aspect='html')
+    end method show;
+
+  end class Table;
+
+  class Row < Block #:
+    A row within a table.
+
+    The conceptual children of a row are the column names (and associated
+    values are entries in the row).
+  scope:
+
+    field data : @vec<str> #:
+      The values of each column within this row.
+
+    lifecycle params:
+      var table : &Table;
+      var columns : &vec<str>;
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.        
+    super (table, prelines=prelines)
+    scope:
+      self.dataIs(columns)
+    end;
+
+    method title : str #:
+      The value of the column within the table representing a unique key.
+    scope:
+      return self.data()[0]
+    test:
+      test.iseq('Alice', test.row1.title())
+      test.iseq('Bob', test.row2.title())
+    end method title;
+
+    method keys : map #:
+      Maps column header names to values for this row.
+    scope:
+      data = self.data()
+      indices = self.parent().indices()
+      result = {k: data[indices[k]] for k in indices}
+      return result
+    test:
+      test.iseq(
+        {'Age': '25', 'Fruit': 'Kiwi', 'Name': 'Alice', 'Height': '1.7m'},
+        test.row1.keys())
+    end method keys;
+
+    test
+    lifecycle setup:
+      self.table, _ = self.newTable()
+      self.row1 = self.table.rows()[0]
+      self.row2 = self.table.rows()[1]
+    end lifecycle;
+
+  end class Row;
+
+  class Panel < BlockGroup #:
+    A collection of paragraphs (et.al.) that are placed within a box to offset
+    them from the rest of the document.
+
+    See
+    http://tex.stackexchange.com/questions/36524/how-to-put-a-framed-box-around-text-math-environment
+    for how to add a box around text.
+  scope:
+
+    field title : str = null #:
+      The title associated with the table
+
+    lifecycle params:
+      var parent : Section #:
+        The section this list belongs to.
+      var prelines : int = 0 #:
+        The number of empty lines found before this block started.
+      var title -> title = null;
+    super (parent, prelines=prelines)
+    scope:
+    test:
+      panel = metax.lib.markdown.Panel(test.subsection, title='Testing')
+      test.iseq('Testing', panel.title())
+    end;
+
+  end class Panel;
+
+  class Section < BlockGroup #:
+    A consecutive collection of blocks of text. Contains:
+     - a title
+     - zero or more Block elements
+     - zero or more child sections
+     - one or zero parent section
+
+    A Section instance with empty title is treated specially (it is not
+    allowed to have any block elements, but can have child sections).
+
+  scope:
+
+    meta
+    field AbbrevRe : regexp;
+
+    meta
+    lifecycle scope:
+      cls.AbbrevReIs(re.compile(r'[^a-z]'))
+    end;
+
+    field parser : Parser #:
+      The parser responsible for parsing the section. Stores the label map used
+      in url and image reference links. If not provided, label maps cannot be
+      searched for. If not defined, we could search up the ancestor chain for
+      one that does define parser, but there is no space savings to be had here,
+      so it is best to just pass in the parser to every section.
+
+    field title : str #:
+      The title associated with this section.
+
+    field abbrev : str #:
+      A shorter version of the title. Useable for path-based querying.
+      TODO(wmh): Replace this with the newly defined 'uid' field inherited
+      from Block.
+
+    field children : @vec<*Section> #:
+      The ordered collection of child sections
+
+    field depth : int #:
+      The depth of this section.  The top-level section (the one without any
+      parents) has a depth of 0.  Immediate children of that section have
+      depth 1, etc.
+
+    field keys : @map<str,*Object> #:
+      Maps section or text titles to Section or Text instances. Used by find().
+
+    lifecycle params:
+      var parent : Section #:
+        The parent section.  Since only the top-most section has a null parent,
+        this is a required argument (but may be None).
+      var title -> title;
+      var abbrev -> abbrev = null;
+      var parser -> parser = null;
+      var prelines : int = 1 #:
+        The number of empty lines found before this block started.        
+    super (parent, prelines=prelines)
+    scope:
+      self.uidIs(abbrev)   # TODO(wmh): Replace abbrev with uid in params and use super to initialize
+      self.depthIs(0 if not parent else parent.depth() + 1)
+    test:
+      test.iseq(2, test.subsection.depth())
+    end lifecycle;
+
+    protected
+    method register #:
+      Register the given object with myself.  Registration provides means of
+      finding this child within myself by the following strings:
+       - the title, as provided by the user (all sections have titles, but
+         not all Text instances do).
+       - the abbrev, as provided by the user (many sections do not have abbrevs,
+         and as of yet, no text objects have abbrevs).
+       - a canonical representation of title, lowercase, with all non-alpha
+         characters (whitespace, punctuation, etc.) deleted (only added if
+         no abbrev was specified).                                                             
+    params:
+      var obj : Object;
+    scope:
+      keys = self.keys()
+      title = obj.title()
+      if title is not None:
+        keys[title] = obj
+      abbrev = obj.abbrev()
+
+      if abbrev:
+        keys[abbrev] = obj
+        /# print 'title=%s abbrev=%s' % (title, abbrev)
+      elif title:
+        canonical = re.sub(self.__class__.AbbrevRe(), '', title.lower())
+        /# print 'title=%s canonical=%s' % (title, canonical)
+        keys[canonical] = obj
+    test:
+      section = test.subsection
+      test.iseq(0, len(section.keys()))
+
+      /# Creating a subsection with parent does NOT implicitly register child.
+      sec = metax.lib.markdown.Section(
+        section, title='A New Beginning', abbrev='sec1', parser=self.md)
+      test.iseq(0, len(section.keys()))
+
+      /# Explicitly registering works.
+      section.register(sec)
+      test.iseqvec(['A New Beginning', 'sec1'], sorted(section.keys()))
+    end method register;
+
+    method isSection : bool scope:
+      return True
+    test:
+      test.istrue(test.section.isSection())
+    end method isSection;
+
+    method isParsingList : bool #:
+      True if the last block in this section is a list.
+    scope:
+      block = self.lastBlock()
+      return block and block.isList()
+    test:
+      test.makeLists()
+      section = test.section
+      test.iseq(0, len(section.blocks()))
+      test.isfalse(section.isParsingList())
+      section.addBlock(test.p1)
+      test.isfalse(section.isParsingList())
+      section.addBlock(test.ul)
+      test.istrue(section.isParsingList())
+    end method isParsingList;
+
+    method lastBlock : Block #:
+      The last block in this section.
+    scope:
+      blocks = self.blocks()
+      return blocks[-1] if blocks else None
+    test:
+      section = test.subsection
+      test.isnull(section.lastBlock())
+      section.addBlock(test.p1)
+      test.issame(test.p1, section.lastBlock())
+    end method lastBlock;
+   
+    method addBlock : Block #:
+      Add a text object to myself.
+    params:
+      var block : Block;
+    scope:
+      if self.title():
+        self.blocks().append(block)
+        self.register(block)
+      else:
+        print '**** PROBLEM: %s' % self.fulltitle()
+        /# raise Error('A section with empty title cannot have any blocks.')
+      return block
+    test:
+      section = test.subsection
+      test.iseq(0, len(section.blocks()))
+
+      /# Creating a block does NOT implicitly add the block to its parent
+      para = metax.lib.markdown.Paragraph(
+        section, 'This is a simple paragraph\non two lines.')
+      test.iseq(0, len(section.blocks()))
+
+      /# Explicitly adding the block properly updates the blocks() field.
+      section.addBlock(para)
+      test.iseq(1, len(section.blocks()))
+    end method addBlock;
+
+    method addChild #:
+      Add a child section to myself.
+    params:
+      var section : Section;
+    scope:
+      self.children().append(section)
+      self.register(section)
+    test:
+      section = test.subsection
+      test.iseq(0, len(section.children()))
+
+      /# Creating a Section (and specifying a parent) does NOT implicitly
+      /# register the child with the parent.
+      sssec = metax.lib.markdown.Section(
+        section, title='A New Beginning', parser=self.md)
+      test.iseq(0, len(section.children()))
+
+      /# Explicitly adding the child works.
+      section.addChild(sssec)
+      test.iseq(1, len(section.children()))
+    end method addChild;
+
+    method newChild : Section #:
+      Create a new section within myself.
+    params:
+      var title : str;
+      var abbrev : str = null;
+      var prelines : int = 1 #:
+        The number of prelines before the to-be-created section.
+    scope:
+      child = metax.lib.markdown.Section(
+        self, title=title, abbrev=abbrev, parser=self.parser(),
+        prelines=prelines)
+      self.addChild(child)
+      return child
+    test:
+      section = test.subsection
+      test.iseq(0, len(section.children()))
+      child = section.newChild('A New Beginning', abbrev='new')
+      test.iseq(1, len(section.children()))
+    end method newChild;
+
+    method newNextSection : Section #:
+      Create a Section to represent text after this section.  The result
+      may or may not be a child of self, depending on 'depth'.
+    params:
+      var depth : int #:
+        What section level (between 1 and 6 inclusive).
+      var title : str #:
+        The title (including abbrev if present).
+      var debug : bool = false #:
+        Enable debugging if true.
+        TODO(wmh): Delete this param.
+      var prelines : int = 0 #:
+        The number of prelines before the to-be-created section.
+    scope:
+      current_depth = self.depth()
+      current_section = self
+      /# are: title/abbrev portion of a section header
+      are = re.compile(r'(?P<title>.*\S)\s*\[=(?P<abbrev>.*)\]\s*$')
+
+      abbrev = None
+      am = are.match(title)
+      if am:
+        title = am.group('title')
+        abbrev = am.group('abbrev')
+
+      /# We need to establish the parent section of the new section, which
+      /# we'll call the target.
+      if depth <= current_depth:
+        /# The target is an ancestor of current_section
+        target = current_section.parent()
+        dd = depth
+        while dd < current_depth:
+          target = target.parent()
+          dd += 1
+      elif depth == current_depth + 1:
+        /# We have an immediate child of the current section.
+        target = current_section
+      else:
+        /# depth > current_depth + 1.
+        /# We have a section that is a non-immediate child of the current
+        /# section, which suggests a formatting issue (but sometimes it
+        /# is useful to allow such situations, and we can insert dummy
+        /# sections in between).
+        assert depth > current_depth + 1
+        cb = current_section
+        dd = depth
+        while dd != current_depth + 1:
+          cb = cb.newChild('')
+          dd -= 1
+        target = cb
+
+      if debug:
+        print 'Line %4d: section start (target=%s abbrev=%s title=%s)' % (
+          lnum, target, abbrev, title)
+
+      current_section = target.newChild(title, abbrev=abbrev, prelines=prelines)
+      assert current_section.depth() == depth
+      return current_section
+
+    test:
+      section = test.subsection
+      test.iseq(2, section.depth())
+
+      section2 = section.newNextSection(2, 'Testing')
+      test.issame(section.parent(), section2.parent())
+
+      section3 = section.newNextSection(3, 'SubBegin')
+      test.issame(section, section3.parent())
+    end method newNextSection;
+
+    method show #:
+      Print out this section.
+    params:
+      var fp : ostream = out #:
+        Where to write the output.
+      var indent : str = '' #:
+        What to insert before each line.
+      var aspect : str = 'ascii' #:
+        What to show. Valid values are:
+          title: show only section titles (indented by level)
+          title*: show section and text titles (indented by level)
+          ascii: recreate the markdown text
+          tex: convert to latex
+          html: convert to html
+      var depth : int = -1 #:
+        Only recurse to children at most 'depth' levels below this one.
+        A value of 0 means do not show children. A negative value means
+        show unlimited depth.
+      var nohead : bool = false #:
+        If true, do not insert special header/footer for top-level.
+      var style : str = null #:
+        The CSS to use for html renderings.  If given, it should be an
+        HTML <style> tag.
+      var preamble : str = null #:
+        What to insert before the generated text.
+        When aspect is HTML, this is inserted after <body> before rest of
+        text.
+      var postamble : str = null #:
+        What to insert after the generated text.
+        When aspect is HTML, this is inserted just before </body>.
+    scope:
+      d = self.depth()
+      prelines = self.prelines()
+      if aspect.startswith('title'):
+        abbrev = self.abbrev()
+        abbrevstr = ' [=%s]' % abbrev if abbrev else ''
+        fp.write(
+          '%s%s%s%s\n' %
+          (indent, '  ' * d, self.title() or '(sham)', abbrevstr))
+        if aspect == 'title*':
+          for block in self.blocks():
+            title = block.title()
+            if title:
+              /# Add some text to distinguish these text-based titles from
+              /# section titles.
+              title = '*' + title
+              /# Write the augmented text title.
+              fp.write('%s%s%s\n' % (indent, '  ' * (d+1), title))
+          /# Now handle children
+          if depth != 0:
+            for child in self.children():
+              child.show(fp=fp, indent=indent, aspect=aspect, depth=depth-1)
+
+      elif aspect == 'ascii':
+        if d:
+          if prelines:
+            fp.write('\n' * prelines)
+          fp.write('%s%s %s\n' % (indent, '#' * d, self.title()))
+        for block in self.blocks():
+          block.show(fp=fp, indent=indent, aspect=aspect)
+        /# Now handle children
+        if depth != 0:
+          for child in self.children():
+            child.show(fp=fp, indent=indent, aspect=aspect, depth=depth-1)
+
+      elif aspect == 'html':
+        d = self.depth()
+        title = self.title() or ''
+
+        /# Create the initial html for this section.
+        if d == 0:
+          if nohead:
+            pass
+          else:
+            /# Root level.
+            fp.write(
+              >|"""<html>
+              >|  <head>
+              >|%(csslib)s
+              >|  </head>
+              >|  <body>
+              >|""" % {'csslib': style or ''})
+            if preamble:
+              fp.write(preamble)
+        else:
+          kdata = {
+            1: {'tag': 'h1'},
+            2: {'tag': 'h2'},
+            3: {'tag': 'h3'},
+            4: {'tag': 'h4'},
+            5: {'tag': 'h5'},
+          }[d]
+          tag = kdata['tag']
+          abbrev = self.abbrev()
+          idstr = ' id="%s" title="%s"' % (abbrev, abbrev) if abbrev else ''
+          fp.write('\n')
+          fp.write(
+            '\n<%s%s>%s</%s>\n' % (
+              tag, idstr,
+              metax.lib.markdown.Paragraph.TextToHtml(
+                title, parser=self.parser(), indent=indent),
+              tag))
+
+        /# Print out any block objects.
+        for block in self.blocks():
+          block.show(fp=fp, aspect=aspect)
+
+        /# Now handle children
+        if depth != 0:
+          for child in self.children():
+            child.show(fp=fp, indent=indent, aspect=aspect, depth=depth-1)
+
+        /# Perform any wrap-up needed.
+        if d == 0 and not nohead:
+          if postamble:
+            fp.write(postamble)
+          fp.write('  </body>\n</html>\n')
+
+      elif aspect == 'tex':
+        d = self.depth()
+        title = self.title() or ''
+
+        /# Create the initial latex for this section.
+        if d == 0:
+          /# root level.
+          /# Section relabling performed by titlesec
+          /#   http://tex.stackexchange.com/questions/59726/change-size-of-section-subsection-subsubsection-paragraph-and-subparagraph-ti
+          /#   http://www.ctex.org/documents/packages/layout/titlesec.pdf
+          /# Table alternating colors performed by xcolor
+          /#   http://tex.stackexchange.com/questions/5363/\
+          /#     how-to-create-alternating-rows-in-a-table
+          /# Fixed width aligned table columns
+          /#   http://tex.stackexchange.com/questions/12703/\
+          /#      how-to-create-fixed-width-table-columns-with-text-raggedright-centered-raggedlef
+          fp.write(
+           >|"""\documentclass[twocolumn]{report}
+           >|\\usepackage[margin=1cm,footskip=0.5cm]{geometry}
+           >|\\setlength{\\columnsep}{0.75cm}
+           >|\\usepackage[table]{xcolor}
+           >|\\usepackage{titlesec}
+           >|\\usepackage{color}
+           >|\\usepackage{comment}
+           >|\usepackage{array}
+           >|\\newcolumntype{L}[1]{>{\\raggedright\\let\\newline\\\\\\arraybackslash\\hspace{0pt}}m{#1}}
+           >|\\newcolumntype{C}[1]{>{\\centering\\let\\newline\\\\\\arraybackslash\\hspace{0pt}}m{#1}}
+           >|\\newcolumntype{R}[1]{>{\\raggedleft\\let\\newline\\\\\\arraybackslash\\hspace{0pt}}m{#1}}
+           >|
+           >|%%\\titleformat{\\chapter}[display]{\\normalfont\\huge\\bfseries}{\\chaptertitlename\\ \\thechapter}{20pt}{\\Huge}
+           >|\\titleformat{\\chapter}[hang]{\\color{red}\\normalfont\\Huge\\bfseries}{}{0em}{\\Huge}
+           >|
+           >|%% \\titleformat{\\section}{\\normalfont\\Large\\bfseries}{\\thesection}{1em}{}
+           >|\\titleformat{\\section}{\\color{green}\\normalfont\\Large\\bfseries}{}{0em}{}
+           >|
+           >|%% \\titleformat{\\subsection}{\\normalfont\\large\\bfseries}{\\thesubsection}{1em}{}
+           >|\\titleformat{\\subsection}{\\color{blue}\\normalfont\\large\\bfseries}{}{0em}{}
+           >|
+           >|%% \\titleformat{\\subsubsection}{\\normalfont\\normalsize\\bfseries}{\\thesubsubsection}{1em}{}
+           >|\\titleformat{\\subsubsection}{\\color{cyan}\\normalfont\\normalsize\\bfseries}{}{0em}{}
+           >|\\titlespacing*{\\section}{0pt}{1ex}{1ex}
+           >|
+           >|%% \\titleformat{\\paragraph}[runin]{\\normalfont\\normalsize\\bfseries}{\\theparagraph}{1em}{}
+           >|\\titleformat{\\paragraph}[runin]{\\color{orange}\\normalfont\\normalsize\\bfseries}{\\theparagraph}{0em}{}
+           >|
+           >|%% \\titleformat{\\subparagraph}[runin]{\\normalfont\\normalsize\\bfseries}{\\thesubparagraph}{1em}{}
+           >|\\titleformat{\\subparagraph}[runin]{\\normalfont\\normalsize\\bfseries}{\\thesubparagraph}{0em}{}
+           >|
+           >|\\title{%s}
+           >|
+           >|\\begin{document}
+           >|
+           >|""" % (title))
+        else:
+          kdata = {
+            1: {'tag': 'chapter'},
+            2: {'tag': 'section'},
+            3: {'tag': 'subsection'},
+            4: {'tag': 'subsubsection'},
+            5: {
+              /# https://www.sharelatex.com/learn/Line_breaks_and_blank_spaces
+              'tag': 'paragraph', 
+              'suffix': '\\hfill \\break'
+           },
+          }[d]
+          tag = kdata['tag']
+          suffix = kdata.get('suffix', '')
+          fp.write('\\%s{%s}%s\n' % (
+            tag, metax.lib.markdown.Paragraph.TextToTex(title), suffix))
+          fp.write('\n')
+
+        /# Print out any block objects.
+        for block in self.blocks():
+          block.show(fp=fp, aspect=aspect)
+
+        /# Now handle children
+        if depth != 0:
+          for child in self.children():
+            child.show(fp=fp, indent=indent, aspect=aspect, depth=depth-1)
+
+        /# Perform any wrap-up needed.
+        if d == 0:
+          fp.write('\\end{document}\n')
+
+      else:
+        raise Error('Unknown aspect "%s" for Section.show' % aspect)
+    test:
+      section = test.subsection
+      block1 = section.addBlock(metax.lib.markdown.Paragraph(
+        section, 'A first paragraph\nwith two lines', prelines=1))
+      block2 = section.addBlock(metax.lib.markdown.Paragraph(
+        section, 'A second paragraph\nwith three\nlines', prelines=2))
+      test.iseq(1, section.prelines())
+      test.iseq(1, block1.prelines())
+      test.iseq(2, block2.prelines())
+
+      fp = test.newStr()
+      section.show(fp=fp)
+      test.iseqtext("""
+        >|## SubSection A
+        >|
+        >|A first paragraph
+        >|with two lines
+        >|
+        >|
+        >|A second paragraph
+        >|with three
+        >|lines
+        >|""",
+        fp.getvalue())
+    end method show;
+
+    method fulltitle : str #:
+      The fully qualified title of this section.
+    scope:
+      parts = []
+      obj = self
+      while obj is not None:
+        parts.append(obj.title() or '')
+        obj = obj.parent()
+      return '/'.join(reversed(parts))
+    test:
+      test.iseq('/Section 1/SubSection A', test.subsection.fulltitle())
+    end method fulltitle;
+
+  end class Section;
+
+  test
+  class TestCase < metax.test.TestCase
+  assocs:
+    std assoc os #:
+    resource simple.md path "testdata/markdown/simple.md";
+    resource markdown.md path "testdata/markdown/markdown.md";
+    resource simple_golden path "testdata/markdown/simple.md.golden";
+    resource raw_txt_golden path "testdata/markdown/raw.txt.golden";
+    resource raw_html_golden path "testdata/markdown/raw.html.golden";
+  scope:
+  
+    lifecycle setup:
+      self.md = metax.lib.markdown.Parser()
+      self.root = metax.lib.markdown.Section(
+        None, title='', prelines=1, parser=self.md)
+      self.section = self.root.newChild(title='Section 1')
+      self.subsection = self.section.newChild(
+        abbrev='suba', title='SubSection A')
+      self.p1 = metax.lib.markdown.Paragraph(
+        self.subsection,
+        'This is an example paragraph containing a few lines\n'
+        'of text including a **bold** word and _italize phrase_.')
+      self.p2 = metax.lib.markdown.Paragraph(
+        self.subsection,
+        '**Some Title**. This is an example paragraph with a\n'
+        'title (the first one is not titled)')
+      /# NOTE: Intentionally have NOT added p1 and p2 to subsection yet,
+      /# although they know they are children of subsection.
+    end lifecycle;
+
+    method parseMarkdown params:
+      var resource : str #:
+        The resource (defined here in this class) containing a markdown file.
+    scope:
+      respath = metax.root.Object.Resource(
+        resource, fqn='metax.lib.markdown_test.TestCase')
+      result = self.md.parseFile(respath)
+      return result
+    end;
+
+    method parseBook params:
+      var resources : &vec<str> #:
+        The names of the resources to parse as part of the book.
+      var bookname : str = 'TheBook' #:
+        The title of the book.
+    scope:
+      paths = []
+      for resid in resources:
+        res = metax.root.Object.Resource(
+          resid, fqn='metax.lib.markdown_test.TestCase')
+        paths.append(res)
+      book = self.md.loadBook(paths, bookname=bookname)
+      return book
+    end method parseBook;
+
+    method newTable : Table params:
+      var lines : vec = null;
+    scope:
+      if lines is None:
+        lines = [
+          'Table: Table Title',
+          '',
+          '| Name | Age | Height | Fruit |',
+          '| --- | :--- | ---: | :---: |',
+          '| Alice | 25 | 1.7m | Kiwi |',
+          '| Bob | 23 | 1.9m | Apple |',
+        ]
+      errors = []
+      table = metax.lib.markdown.Table.New(lines, errors=errors)
+      return table, errors
+    end method newTable;
+
+    method makeLists : List #:
+      Generate a list useful for testing.
+    scope:
+      self.ul = metax.lib.markdown.List(self.subsection)
+      self.item1 = self.ul.newItem(paras=['Apple'])
+      self.item2 = self.ul.newItem(paras=['Banana'])
+      self.item3 = self.ul.newItem(paras=['Cantelope'])
+
+      self.ol = metax.lib.markdown.List(self.subsection, ordered=True)
+      self.ol.newItem(paras=['Apple'])
+      self.ol.newItem(paras=['Banana'])
+      self.ol.newItem(paras=['Cantelope'])
+    test:
+    end method makeLists;
+
+  end class TestCase;
+
+end namespace metax.lib.markdown;

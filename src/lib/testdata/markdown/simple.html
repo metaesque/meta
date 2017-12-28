@@ -1,0 +1,121 @@
+<html>
+  <head>
+
+  </head>
+  <body>
+
+
+<h1>A Simple Document</h1>
+<p>This document highlights some markdown features.</p>
+
+
+<h2>Blocks</h2>
+
+
+<h3>Paragraphs</h3>
+<p>Paragraphs are contiguous collections of lines, and newlines are
+ignored for the purposes of formatting unless the newline is preceeded
+by two or more spaces (e.g. the line ends in two or more spaces),
+which s an explicit request  
+for a line break.</p>
+<p>There is special syntax to create markup within a paragraph, discussed
+below in the 'Inline' section.</p>
+
+
+<h3>HTML</h3>
+<p>An HTML block starts with an html tag in the first column, and ends with
+the next HTML endtag in the first column. For example:</p>
+<table border="1">
+  <tr><td>Apple</td><td>1</td></tr>
+</table>
+
+
+<h3>Blockquote</h3>
+<p>You can create a blockquote by starting a line with '> '</p>
+<blockquote>
+This text will be wrapped in a blockquote.
+When converted to HTML. When rendered in ascii it
+will keep the same structure.
+</blockquote>
+
+
+<h3>Code</h3>
+<p>You can insert code from an artibrary programming language
+using two different syntaxes:</p>
+
+<pre><code class="python">class Person(Object):
+  def __init__(self, name):
+    self._name = name
+</code></pre>
+<p>or:</p>
+
+<pre><code>class Person(Object):
+  def __init__(self, name):
+    self._name = name
+</code></pre>
+<p>with the former being more useful because it allows one to specify which
+language the code is implemented in.  In HTML, the code is syntax
+highlighted using 
+    <a href="https://highlightjs.org/">highlight.js</a>.</p>
+
+
+<h3>Tables</h3>
+<p>One can specify a table with an optional preceeding title with:</p>
+<table>
+  <caption>Fruit</caption>
+<tr><td>Apple</td><td>3</td></tr>
+<tr><td>Banana</td><td>1</td></tr>
+<tr><td>Cantelope</td><td>2</td></tr>
+</table>
+
+
+<h3>Lists</h3>
+<p>One can specify unordered lists with hyphens:</p>
+<ul>
+  <li>
+  <p>this is a first point</p>
+  </li>
+  <li>
+  <p>here is a second point across multiple lines
+  to show how it is handled</p>
+  </li>
+  <li>
+  <p>a third line in which the continuation lines are not
+  indented, but is still handled properly. This only
+  works until the first empty line, which signals the
+  end of the list (like what happens with
+  the paragraph below this). If you want multiple
+  blocks in a list, indent them.</p>
+  </li>
+</ul>
+<p>One can specify ordered lists with numbers:</p>
+<ol>
+  <li>
+  <p>apple</p>
+  <ul>
+    <li>
+    <p>Nested lists are easy to write</p>
+    </li>
+  </ul>
+  </li>
+  <li>
+  <p>banana</p>
+  <ul>
+    <li>
+    <p>Nested lists can have nested paragraphs</p>
+    <blockquote>
+and blockquotes
+    </blockquote>
+
+    <pre><code class="bash">and code blocks
+</code></pre>
+    <p>and any other kind of block (table, etc.)</p>
+    </li>
+  </ul>
+  </li>
+  <li>
+  <p>cantelope</p>
+  </li>
+</ol>
+  </body>
+</html>

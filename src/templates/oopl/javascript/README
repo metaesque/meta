@@ -1,0 +1,13 @@
+
+----------------------------------------------------------------------
+FILE LISTING:
+
+BUILD:
+  The top-level BUILD file for Meta<Javascript>. As of 2017-12-22, it is empty.
+
+WORKSPACE:
+  Specifies all external dependencies needed for Meta<Javascript> to work.
+  Of particular importance is io_bazel_rules_closure, from
+  https://github.com/bazelbuild/rules_closure, which defines the bazel rules
+  for compiling javascript using the Google Closure Compiler.
+  

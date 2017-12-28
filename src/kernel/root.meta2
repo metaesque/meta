@@ -77,6 +77,10 @@ scope:
 
   end class ObjectMetaRoot;
 
+  native scope:
+    NEWSUFFIX = '2'
+  end;
+
   class Object #:
     Except in special circumstances, every class defined within Meta inherits
     from this class. Every base language provides a specialized implementation
@@ -104,11 +108,100 @@ scope:
     cls assoc metax.root.ObjectMetaRoot;
   scope:
 
+    meta
+    field CLI : any #:
+      Stores an instance of metax.root.flags.Command, providing access to
+      parsed command line information.
+       - The goal is to define a 'Meta' variable in every namespace, of 
+         type '*ObjectMeta' that provides access to MetaObject ... the
+         metaclass instance reprsenting Object.  This object will be the
+         repository of system-wide information the command line interface, etc.
+       - This is currently typed as 'any' because there will be a circularity
+         induced if we type it as metax.root.flags.Command. Need to establish
+         whether this will be implementable in C++.
+
     user
     lifecycle #:
       Do NOT introduce any instance-level state here.
     scope:
-    end lifecycle;            
+    end lifecycle;
+
+    meta
+    method Resource : str #:
+      This method provides an interface by which a user an obtain a
+      resource that was defined via the 'resource' construct within
+      the 'assocs' attribute of a class.  Having this be a meta method allows
+      us to:
+       - store the links in class-specific directories without worrying that
+         invocation from a subclass will break the naming.
+       - allows resources from one class to be accessed from another class
+       - will work with non-meta classes (assuming the non-meta BUILD
+         files are properly defined).                                          
+    params:
+      var resource_id : str #:
+        The id of the resource (that is, the value of the primary attribute
+        of the 'resource' construct that defines the resource.
+      var fqn : str = null #:
+        The fully qualified name of the class for which resources are
+        desired.  If null, uses the receiver cls to determine fqn.
+      var test : bool = false #:
+        If true, the resource is for a test class.
+    scope<py>:
+      /# TODO(wmh): Each metaclass should maintain the list of legal
+      /# resources associated with class instances, so that this method
+      /# is just a lookup in a map.  There are, however, some complexities
+      /# involved in auto-generating this map that need to be worked out
+      /# (code for auto-generation of field constructs needs to be written,
+      /# similar to the code for auto-generating methods).  We also need
+      /# to decide whether resources get inherited from parent classes, etc.
+
+      /# One problem with this method is that it should really be defined
+      /# in metax.c.Compiler, which has all the data and methods to make
+      /# a simple determination of the namespace directory. But we do not
+      /# want metax.root.Object depending on metax.c.Compiler.
+      /#
+      /# TODO(wmh): Do we want to provide access to ~/.config/metameta
+      /# via a meta or static var on Object? That would give us access to
+      /# repository_path without having to rely on METAREP
+
+      /# TODO(wmh): In metax.c.*, there is a moratorium on the use of
+      /# baselang I/O methods (everything must go thru Compiler.fs()). But
+      /# if we don't apply the same rules here, we will fail to be able to
+      /# provide a memory-only filesystem. Figure out how to handle this.
+      import os
+      if fqn is None:
+        fqn = cls.__module__ + '.' + cls.__name
+      namespace_fqn, clsname = fqn.rsplit('.', 1)
+      subparts = namespace_fqn.split('.')
+
+      /# Convert the fqn to a relative path.
+      metarep = os.getenv('METAREP')
+      if metarep is None:
+        /# TODO(wmh): Handle non-test bazel invocation (e.g. bazel run vs bazel test)
+        if os.getenv('TEST_SRCDIR', None) or os.getenv('IN_UNITTEST'):
+          /# We are in bazel running a test.  All such tests are invoked from
+          /# the directory containing WORKSPACE.
+          parts = [os.getcwd()] + subparts
+        else:
+          raise meta.errors.Error('Missing environment variable METAREP')
+      else:
+        metarep += NEWSUFFIX
+        parts = [metarep, 'oopl', 'python']
+        parts.extend(subparts)
+      /# CODETANGLE(resource_dir): In metax.c (parser.meta).
+      parts.append('resources')
+      /# CODETANGLE(resource_name): In metax.c (parser.meta).
+      parts.append('%s_%s' % (clsname, resource_id))
+      path = '/'.join(parts)
+      /# We avoid accessing the filesystem (to verify it exists) and instead
+      /# allow the caller to deal with issues. On the other hand, it would
+      /# be useful to return the realpath instead of the symlinked path.
+      /# TODO(wmh): How to avoid using baselang I/O commands here??
+      return path
+    scope<cc>:
+    scope<js>:
+      return null;
+    end method Resource;
 
     remark hidden #:
       We are currently disabling the test class for Object because it adds to
@@ -151,3 +244,1286 @@ scope:
 
 end namespace metax.root;
 
+namespace metax.root.flags #:
+  Classes related to flags and other command-line artifacts.
+
+  Motiviation:
+   - A program often has need for user-provided customizations, often
+     in the form of command-line flags
+   - A program often has multiple behaviors it can exhibit, which can be thought
+     of as a collection of 'commands'. For example, think of how 'git or 'svn'
+     works ... an executable with flags and a variety of subcommands like
+     'git init', 'git push', 'git add', etc., each exibiting differing behavior.
+   - Parsing and accessing the underlying data represented by command line
+     arguments should be automated by the language.
+
+  Notes:
+   - A given program has a top-level Command instance that contains
+      - all of the Flag instances that can appear
+      - all of the Command instances that are legal at this level
+      - any positional args that are legal (if any subcommands exist,
+        positional args are not legal).
+   - Each Command has a recusively defined collection of Flag, Command and arg
+     instances.
+
+  Command: A command, associated flags, and optional args.
+  Flag: A single customizable (usually optional) typed name/value pair.
+  Arg: A single customizable (usually required) typed positional argument.
+
+  Examples:
+
+  - The command line
+      % meta2 -L oopl -b py canonical --expand flags.meta2 metax.root.flags
+    is represented by:
+     - A Command instance whose name is 'meta2', with flags -L and -b.
+     - A Command instance whose name is 'canonical', with flag --expand
+       and positional args 'flags.meta2' and 'metax.root.flags'
+        - this command is a 'child' of the 'meta2' command.
+     - The 'canonical' Command instance is available within the program as
+       the variable 'MetaCLI', and provides access to all legal flags and
+       args.  Values can be changed dynamically at runtime as desired.
+
+scope:
+
+  class Error < metax.root.Error;
+
+  nometanotest
+  class NameConflict < Error #:
+    An attempt to define a command/flag/arg whose name or aliases conflict with
+    pre-existing symbol.
+
+  abstract
+  class Part #:
+    Abstract superclass of Command, Flag and Arg.
+  assocs:
+    std assoc logging;
+    std assoc re;
+  scope:
+
+    field parent : Command #:
+      The parent Command instance to which this part belongs.
+
+    field name : @str #:
+      The name of the part.  For Command instances, the name of the
+      top-level instance is the executable used to invoke the program.
+
+    field aliases : @vec<@str> #:
+      The aliases by which the flag or arg can be identified.
+
+    field summary : str #:
+      A one line summary of the flag or arg.
+
+    field desc : str #:
+      A multi-line description of the flag or arg.
+        
+    lifecycle params:
+      var name -> name;
+      var parent -> parent = null;
+      var aliases : str = null #:
+        A comma-separated list of aliases.
+      var summary -> summary = null;
+      var desc -> desc = null;
+    scope:
+      if aliases:
+        assert isinstance(aliases, str)
+        alist = re.split(r'\s*,\s*', aliases);
+        self.aliasesIs(alist)
+    end lifecycle;
+
+    method typecheck : any #:
+      Convert a string value into some python object as dictated by mytype.
+
+      Returns:
+        A python object dictated by vtype. If the typecheck fails, returns null.
+    params:
+      var value : str #:
+        The type to convert.
+      var mytype : str = null #:
+        The type to use to typecheck. Normally null, in which case self.mytype()
+        is used.
+    scope:
+      result = None
+      if mytype is None:
+        mytype = self.mytype()
+
+      if mytype == 'str':
+        /# Any value is legal.
+        if isinstance(value, str):
+          result = value
+        else:
+          /# Instead of converting to string, we could report an error for
+          /# this situation.
+          result = str(value)
+
+      elif mytype == 'bool':
+        if isinstance(value, bool):
+          result = value
+        elif value == 'true':
+          result = True
+        elif value == 'false':
+          result = False
+        
+      elif mytype == 'int':
+        if isinstance(value, int):
+          result = value
+        elif re.match(r'^\d+$', value):
+          result = int(value)
+
+      elif mytype in ('real', 'float', 'double'):
+        if isinstance(value, float):
+          result = value
+        elif re.match(r'^\d*\.\d+$', value):
+          result = float(value)
+      
+      elif mytype.startswith('enum'):
+        enumtype = self.enumtype()
+        if enumtype:
+          /# We support two different value modes for enums.
+          /#  - if the enum specifies an integer for the enum value specified,
+          /#    we return the integer.
+          /#  - if the enum does NOT specify an integer, we return the value
+          /#    string.
+          /# Examples:
+          /#  - mytype 'enum<red,green,blue>' will return
+          /#    'red' for 'red', 'green' for 'green' and 'blue' for 'blue'.
+          /#  - mytype 'enum<red=1,green=2,blue=3>' will return
+          /#    1 for 'red', 2 for 'green' and 3 for 'blue'.
+          if value in enumtype:
+            result = enumtype[value]
+            if result == -1:
+              result = value
+
+      elif mytype.startswith('list<'):
+        m = re.match('^list<(.*)>', mytype)
+        if m:
+          subtype = m.group(1)
+          if not isinstance(value, list):
+            /# TODO(wmh): Do we want to support splitting on chars other than
+            /# comma?
+            value = re.split('\s*,\s*', value)
+          /# Now typecheck each element.
+          result = []
+          error = False
+          for subval in value:
+            realval = self.typecheck(subval, mytype=subtype)
+            if realval is None:
+              /# How to report this?
+              error = True
+            result.append(realval)
+          if error:
+            result = None
+        else:
+          raise Error('Unknown type "%s"' % mytype)
+      else:
+        raise Error('Unknown type "%s"' % mytype)
+
+      return result
+    test:
+      invalid = None
+      test.iseq(87, test.arg1.typecheck('87'))
+      test.iseq(invalid, test.arg1.typecheck('a'))
+      test.iseq('oopl', test.metalang.typecheck('oopl'))
+      test.iseq(True, test.expand.typecheck('true'))
+      test.iseq(False, test.expand.typecheck('false'))
+      test.iseq(invalid, test.expand.typecheck('blah'))
+      test.iseq('red', test.arg3.typecheck('red'))
+      test.iseq(invalid, test.arg3.typecheck('purple'))
+      test.iseq('female', test.enumflag.typecheck('female'))
+
+    end method typecheck;
+
+    method names : vec<str> #:
+      Obtain the names of my ancestors (and myself).
+    scope:
+      names = []
+      obj = self
+      while obj is not None:
+        names.append(obj.name())
+        obj = obj.parent()
+      return list(reversed(names))
+    test:
+      test.iseqvec(['faux', 'image'], test.fauximg.names())
+    end method names;
+
+    method isFlag : bool scope:
+      return False
+    test:
+      test.isfalse(test.arg4.isFlag())
+      test.istrue(test.strflag.isFlag())
+    end method isFlag;
+
+    method isArg : bool scope:
+      return False
+    test:
+      test.istrue(test.arg4.isArg())
+      test.isfalse(test.strflag.isArg())
+    end method isArg;
+
+  end class Part;
+
+  class Command < Part #:
+    Represents a command, associated flags, and optional args.
+  scope:
+
+    field commands : @map<str,Command> #:
+      Maps command names anad aliases to Command instances.
+
+    field flags : @map<str,Flag> #:
+      Maps flag names and aliases to Flag instances. Also stores
+      the names of Arg instances, which cannot confict with flag names/aliases.
+
+    field args : @vec<Arg> #:
+      A list of non-flag positional arguments.
+
+    lifecycle params:
+      var name : str #:
+        The name of the command.
+      var parent : Command = null #:
+        The parent of this command.
+      var aliases : str = null #:
+        Aliases by which this command is recognized.
+      var flags : vec<Flag> = null #:
+        If present, flags to be registered.
+      var args : vec<Arg> = null #:
+        If present, args to be registered.
+      var summary : str = null #:
+        A one-line summary of the flag.
+      var desc : str = null #:
+        A multi-line description of the flag.
+    super (name, parent=parent, aliases=aliases, summary=summary, desc=desc)
+    scope:
+      if flags:
+        for flag in flags:
+          self.registerFlag(flag)
+      if args:
+        for arg in args:
+          self.registerArg(arg)
+    end;
+
+    method findFlag : Flag #:
+      Obtain a flag by name or alias.
+
+      Returns:
+        null if no such flag is found.
+    params:
+      var nora : str #:
+        Name or alias of flag desired.
+    scope:
+      result = self.flags().get(nora, None)
+      if result is None:
+        parent = self.parent()
+        if parent:
+          result = parent.findFlag(nora)
+      return result
+    test:
+      command = test.subcommand
+      test.iseq('metalang', command.findFlag('metalang').name())
+      test.iseq('metalang', command.findFlag('L').name())
+      test.isnull(command.findFlag('not-a-flag'))
+    end method findFlag;
+
+    method newFlag : Flag #:
+      Create a Flag instance and register it with myself.
+    params:
+      var name : str #:
+        The name of the flag.
+      var mytype : str = 'str' #:
+        The type of the flag.
+      var default : str = null #:
+        The string representation of the default value of the flag.
+      var aliases : str = null #:
+        Aliases for the flag.
+      var summary : str = null #:
+        A one-line summary of the flag.
+      var desc : str = null #:
+        A multi-line description of the flag.
+    scope:
+      if default is None:
+        raise Error('Flag %s : %s needs a default value' % (name, mytype))
+      result = Flag(
+        name, mytype=mytype, default=default, aliases=aliases,
+        summary=summary, desc=desc)
+      self.registerFlag(result)
+      return result
+    test:
+      command = self.subcommand
+      test.iseq(['e', 'expand'], sorted(command.flags()))
+      
+      flag = command.newFlag(
+        'test', 'bool', False, aliases='T,tst', summary='testing',
+        desc='more testing')
+      test.iseq(['T', 'e', 'expand', 'test', 'tst'], sorted(command.flags()))
+      test.issame(flag, command.findFlag('test'))
+      test.issame(flag, command.findFlag('T'))
+      test.issame(flag, command.findFlag('tst'))
+    end method newFlag;
+
+    method registerFlag : Flag #:
+      Register a Flag (or Arg) with this Command.
+
+      Flag and Arg instances share the same name space.
+    params:
+      var part : Part #:
+        The flag or arg to register.
+    scope:
+      partkind = self.__class__.__name__
+      flags = self.flags()
+      noras = [part.name()] + (part.aliases() or [])
+      for nora in noras:
+        existing = self.findFlag(nora)
+        if existing:
+          kind = 'name' if nora == part.name() else 'alias'
+          raise NameConflict(
+            '%s "%s" of %s %s conflicts with pre-existing %s "%s"' %
+            (kind, nora, partkind, part.name(),
+             existing.__class__.__name__, existing.name()))
+        flags[nora] = part
+    test:
+      /# Noop. Tested in newFlag, etc.
+      pass
+    end method registerFlag;
+
+    method allFlags : map<str,Flag> #:
+      Compute the set of all flags that are available in this command.
+    params:
+      var aliases : bool = false #:
+        If true, include aliases (which means there will be multiple keys with
+        the same Flag instance). By default, returns name to flag, wherein
+        there is one key per Flag.
+    scope:
+      result = {}
+      command = self
+      while command is not None:
+        for nora, flag in command.flags().iteritems():
+          if not aliases and nora != flag.name(): continue
+          if nora not in result:
+            result[nora] = flag
+        command = command.parent()
+      return result
+    test:
+      test.iseqvec(
+        ['baselang', 'metadir', 'metalang'],
+        sorted(test.command.allFlags()))
+      test.iseqvec(
+        ['L', 'b', 'baselang', 'metadir', 'metalang'],
+        sorted(test.command.allFlags(aliases=True)))
+
+      test.iseqvec(
+        ['baselang', 'expand', 'metadir', 'metalang'],
+        sorted(test.subcommand.allFlags()))
+      test.iseqvec(
+        ['L', 'b', 'baselang', 'e', 'expand', 'metadir', 'metalang'],
+        sorted(test.subcommand.allFlags(aliases=True)))
+    end method allFlags;
+
+    method findCommand : Command #:
+      Find a command by name or alias within myself.
+    params:
+      var nora : str #:
+        The name or alias of the command desired.
+    scope:
+      return self.commands().get(nora, None)
+    test:
+      test.issame(test.subcommand, test.command.findCommand('canonical'))
+      test.issame(test.subcommand, test.command.findCommand('can'))
+      test.isnull(test.command.findCommand('not-a-command'))
+    end method findCommand;
+
+    method newCommand : Command #:
+      Create a new subcommand.
+    params:
+      var name : str #:
+        The name of the command.
+      var aliases : str = null #:
+        Aliases by which this command is recognized.
+      var flags : vec<Flag> = null #:
+        If present, flags to be registered.
+      var args : vec<Arg> = null #:
+        If present, args to be registered.
+      var summary : str = null #:
+        A one-line summary of the flag.
+      var desc : str = null #:
+        A multi-line description of the flag.
+    scope:
+      if self.args():
+        /# Cannot add a subcommand to a command that has args.
+        raise Error(
+          "Command '%s' has args (%s) and thus cannot accept subcommand '%s'" %
+          (self.name(), ','.join([arg.name() for arg in self.args()]), name))
+      command = Command(
+        name, parent=self, aliases=aliases, flags=flags, args=args,
+        summary=summary, desc=desc)
+      self.registerCommand(command)
+      return command
+    test:
+      test.iseq([], sorted(test.subcommand.commands()))
+      command = test.subcommand.newCommand('subcan')
+      test.iseq(['subcan'], sorted(test.subcommand.commands()))
+    end method newCommand;
+
+    method registerCommand #:
+      Register this command.
+    params:
+      var command : Command #:
+        docstr
+    scope:
+      commands = self.commands()
+      noras = [command.name()] + (command.aliases() or [])
+      for nora in noras:
+        existing = self.findCommand(nora)
+        if existing:
+          kind = 'name' if nora == command.name() else 'alias'
+          raise NameConflict(
+            '%s "%s" of command %s conflicts with pre-existing command "%s"' %
+            (kind, nora, command.name(), existing.name()))
+        commands[nora] = command
+    test:
+      command = test.command
+      newcom = metax.root.flags.Command('subcom', aliases='can')
+      test.raises(
+        metax.root.flags.NameConflict, command.registerCommand, newcom)
+    end method registerCommand;
+
+    method newArg : Arg #:
+      Create and register an Arg instance with this Command.
+    params:
+      var name : str #:
+        The name of the arg.  Since args are positional, this does not have
+        the same importance for Arg instances as for Flag instances, but is
+        useful for reference purposes.
+      var mytype : str = 'str' #:
+        The type of the arg. Critically important when validating a value.
+      var default : str = null #:
+        The string representation of the default value of the flag. If null,
+        the arg is required.
+      var aliases : str = null #:
+        Aliases for the arg. Rarely used for Arg instances, since even the
+        name itself is only useful for reference purposes.
+      var summary : str = null #:
+        A one-line summary of the arg.
+      var desc : str = null #:
+        A multi-line description of the arg.
+      var multi : bool = false #:
+        If true, this Arg bundles all remaining command line args into a single
+        list of strings.
+    scope:
+      if multi:
+        if not mytype.startswith('list<'):
+          mytype = 'list<' + mytype + '>'
+        default = []
+      result = Arg(
+        name, mytype=mytype, default=default, aliases=aliases,
+        summary=summary, desc=desc)
+      self.registerArg(result)
+      return result
+    test:
+      /# TestCase setup invoked newArg on test.faux
+      command = self.fauximg
+      test.iseq(3, len(command.args()))
+    end method newArg;
+   
+    method registerArg #:
+      Register an Arg with this Command.
+    params:
+      var arg : Arg #:
+        The arg to register.
+    scope:
+      args = self.args()
+      lastarg = args[-1] if args else None
+      if lastarg:
+        if lastarg.default() is not None:
+          /# A previous arg has a default value, which means it is not legal
+          /# for the new arg to NOT have a default value.
+          if arg.default() is None:
+            raise Error(
+              'Cannot have required Arg %s after optional Arg %s' %
+              (arg.name(), lastarg.name()))
+          /# A previous arg has a default value, which means it is not legal
+          /# to specify a multi-valued arg.
+          if arg.ismulti():
+            raise Error(
+              'Cannot have multi-valued Arg %s after optional Arg %s' %
+              (arg.name(), lastarg.name()))
+      args.append(arg)
+
+      /# We register the names/aliases of this Arg in the flag map, ensuring
+      /# that there are no name conflicts.
+      self.registerFlag(arg)
+    test:
+      /# Noop. Tested in newArg, etc.
+      pass
+    end method registerArg;
+
+    method findArg : Arg #:
+      Obtain the arg at a given index.
+    params:
+      var index : any #:
+        Either the integer index of the arg (starting from 0), or
+        the name of the arg.
+    scope:
+      args = self.args()
+      n = len(args)
+      if index < n:
+        result = args[index]
+      else:
+        result = None
+      return result
+    test:
+      command = test.fauximg
+      test.issame(test.arg1, command.findArg(0))
+      test.issame(test.arg2, command.findArg(1))
+      test.issame(test.arg3, command.findArg(2))
+      test.isnull(command.findArg(3))
+    end method findArg;
+
+    method instantiate : Command #:
+      Parse a list of strings and identify a specific Command instance,
+      with values assigned to each relevant Flag and Arg instance.
+
+      Returns:
+        The Command instance identified by argv, or null if invalid args
+        were found in argv (errors will be written to stderr if found).
+    params:
+      var argv : vec<str> #:
+        The list of command line arguments to parse.  The first element
+        in the list is a command, followed by flags, followed by either
+        args or a subcommand. If a subcommand is found, this method is
+        recursively invoked to identify the subcommand.
+      var parent : Command = null #:
+        The parent command, relevant when parsing a subcommand.  When
+        passing command line arguments to this method, this is null.
+      var start : bool = false #:
+        True if argv represents command line arguments.  If true, the
+        'start' field of Flag and Arg instances are initialized during
+        instantiation. If false, they are not initialized.
+      var efp : ostream = err #:
+        Where to write error output.
+      var debug : bool = false #:
+        If true, turn on debugging output.
+    scope:
+      result = self
+      errors = []
+
+      if parent is None:
+        /# For the top-level Command instance, we set the name to the
+        /# executable.
+        self.nameIs(argv[0])
+        if debug:
+          print 'Set name to %s' % self.name()
+      else:
+        /# For subcommands, the name of the command is fixed, and must match
+        /# argv[0].
+        if argv[0] != self.name():
+          raise Error(
+            "Invocation of command '%s' when seeing command '%s'" %
+            (self.name(), argv[0]))
+
+      fre = re.compile(r'^(-{1,2})([^= ]+)(?:=(.*))?')
+
+      /# Now parse flags/args/subcommands.
+      index = 1
+      argc = len(argv)
+      nm1 = argc - 1
+      current_arg_index = 0
+      while index < argc:
+        item = argv[index]
+        nextitem = argv[index+1] if index < nm1 else None
+        if item[0] == '-':
+          /# We are parsing a flag.
+          m = fre.match(item)
+          flagmark = m.group(1)
+          flagname = m.group(2)
+          flagval = m.group(3)
+          if flagmark == '-':
+            /# Only single-letter flags can be specified with '-', and
+            /# multiple can be merged together. Only the last one can have
+            /# a value (all others must be of type bool
+            if flagval is not None:
+              errors.append('Cannot inline assign to short flags (%s)' % item)
+              break
+            shorts = list(flagname)
+            sn = len(shorts)
+            for si, short in enumerate(shorts):
+              flag = self.findFlag(short)
+              if flag:
+                flagtype = flag.mytype()
+                if si < sn - 1:
+                  /# There are other short flags after this one, so this flag
+                  /# must be boolean.
+                  if flagtype != 'bool':
+                    errors.append(
+                      'Using -%s in %s which must be boolean but --%s is %s' %
+                      (short, item, flag.name(), flagtype))
+                    break
+                /# Set the value.
+                res = flag.instantiate(short, None, nextitem)
+                if res is None:
+                  /# We failed to set the flag.
+                  errors.append(
+                    'Flag --%s : %s cannot have value "%s"' %
+                    (flag.name(), flagtype, flagval or nextitem))
+                else:
+                  /# We successfully set the flag
+                  if res is True:
+                    /# We consumed nextitem
+                    index += 1
+                  if start:
+                    flag.startIs(flag.value())
+                  if debug:
+                    print 'item "%s" sets flag "-%s" to "%s"' % (
+                      item, short, flag.value())
+              else:
+                errors.append(
+                  'Command %s does not recognize flag -%s' %
+                  (self.name(), short))
+            if errors:
+              break
+          else:
+            /# We have a longform flag.
+            flag = self.findFlag(flagname)
+            if not flag and flagname.startswith('no'):
+              flag = self.findFlag(flagname[2:])
+            if flag:
+              /# The flag is legal. Obtain the value and typecheck.
+              flagtype = flag.mytype()
+              res = flag.instantiate(
+                flagname, flagval, nextitem)
+              if res is None:
+                /# We failed to set the flag.
+                errors.append(
+                  'Flag --%s : %s cannot have value "%s"' %
+                  (flag.name(), flagtype, flagval))
+                break
+              else:
+                /# We succeeded in setting the flag.
+                if res:
+                  /# The next arg was consumed.
+                  index += 1
+                if start:
+                  flag.startIs(flag.value())
+                if debug:
+                  print 'item "%s" sets flag "--%s" to "%s"' % (
+                    item, flagname, flag.value())
+            else:
+              errors.append(
+                'Command %s does not recognize flag --%s' % 
+                (self.name(), flagname))
+              break
+        else:
+          command = self.findCommand(item)
+          if command:
+            /# We are parsing a subcommand.
+            if debug:
+              print 'item "%s" is a subcommand' % item
+            result = command.instantiate(
+              argv[index:], parent=self, start=start, efp=efp, debug=debug)
+            /# The recursive call consumes all args, so we are done.
+            index = argc
+            break
+          else:
+            arg = self.findArg(current_arg_index)
+            if arg:
+              if debug:
+                print 'Identified arg %s at position %d' % (arg.name(), current_arg_index)
+
+              next_index = arg.instantiate(argv, index)
+              if next_index > -1:
+                /# We have a valid arg.
+                if debug:
+                  if next_index > index + 1:
+                    print 'arg "%s" consumes items %s' % (
+                      arg.name(), argv[current_arg_index:next_index])
+                  else:
+                    print 'item "%s" is arg "%s"' % (item, arg.name())
+                if start:
+                  arg.startIs(arg.value())
+
+                /# How many values were consumed.
+                diff = next_index - index
+                assert diff > 0
+                /# We increment index by 1 at the end of the loop, so we
+                /# need to increment by diff-1 here.  Note that diff will
+                /# normally be 1, in which case we don't adjust index at all.
+                /# It will be >1 if arg is multi. Currently, it will consume
+                /# all elements, but we may add support for some subset in
+                /# the future, hence this somewhat hacky general solution.
+                index += (diff - 1)
+              else:
+                /# We have an invalid arg.
+                /#  - Arg.instantiate() will already have printed out an error.
+                errors.append(
+                  'Arg %s : %s cannot have value "%s"' % (
+                    arg.name(), arg.mytype(), item))
+                break
+            else:
+              /# This item is not a subcommand or flag or arg ... unrecognized.
+              errors.append(
+                'Command %s has no args to represent "%s"' %
+                (self.name(), item))
+              break
+        index += 1
+
+      /# After consume all args in argv, we now verify that all required
+      /# args and flags have values.
+      if result and not errors:
+        for arg in result.args():
+          if arg.value() is None:
+            /# A required arg without a value.
+            errors.append(
+              'Command %s has required arg %s : %s that is missing a value' %
+              (result.name(), arg.name(), arg.mytype()))
+        allflags = result.allFlags()
+        for flagname in sorted(allflags):
+          flag = allflags[flagname]
+          if flag.value() is None:
+            /# A required flag without a value
+            errors.append(
+              'Command %s has required flag %s : %s that is missing a value' %
+              (result.name(), flag.name(), flag.mytype()))
+
+      if errors:
+        efp.write(
+          "Found errors while instantiating command '%s' with\n  %s\n" % (
+            self.name(), ' '.join(
+              ['"%s"' % arg if ' ' in arg else arg for arg in argv])))
+        efp.write('Errors:\n')
+        for error in errors:
+          efp.write('  ' + error + '\n')
+        result = None
+
+      return result              
+    test:
+      command = test.faux
+
+      command.show(fp=test.fp())
+      before = test.out()
+
+      res = command.instantiate(
+        ['./person', '--name', 'Alice', '--gender=female', '--deps', '1',
+         '-h', '1.63', 'image', '300'],
+        start=True)
+      res.show(fp=test.fp())
+      after = test.out()
+      test.iseqvec(['./person', 'image'], res.names())
+
+      test.iseqtext(
+        >|"""faux: A command with a flag and arg of each type.
+        >|  --deps                 0                              None       =         
+        >|  --gender               undef                          None       =         
+        >|  --height               1.87                           None       =         
+        >|  --name                 Bob                            None       =         
+        >|""",
+        before)
+
+      test.iseqtext(
+        >|"""image: Image processing.
+        >|  --deps                 1                              =          0         
+        >|  --gender               female                         =          undef     
+        >|  --height               1.63                           =          1.87      
+        >|  --name                 Alice                          =          Bob       
+        >|  width                  300                            =          None      
+        >|  length                 600                            None       =         
+        >|  color                  red                            None       =         
+        >|""",
+        after)
+
+      res = command.instantiate(['./person', 'list', 'a', 'b', 'c'], debug=False)
+      res.show(fp=test.fp())
+
+      test.iseqtext(
+        >|"""list: Image listing
+        >|  --deps                 1                              =          0         
+        >|  --gender               female                         =          undef     
+        >|  --height               1.63                           =          1.87      
+        >|  --name                 Alice                          =          Bob       
+        >|  files                  ['a', 'b', 'c']                None       []        
+        >|""",
+        test.out())
+
+    end method instantiate;
+
+    method findValue : any #:
+      Obtain the value of a flag or arg defined within this command.
+
+      Returns:
+        The value if present, or null.
+    params:
+      var nora : str #:
+        The name or alias desired.
+    scope:
+      flags = self.allFlags()
+      part = flags.get(nora, None)
+      if part:
+        result = part.value()
+      else:
+        result = None
+      return result
+    test:
+      res = test.faux.instantiate(
+        ['./person', '--name', 'Charles', 'list', 'a', 'b', 'c'])
+      test.iseq('Charles', res.findValue('name'))
+      test.iseq(0, res.findValue('deps'))
+      test.iseq(['a', 'b', 'c'], res.findValue('files'))
+    end method findValue;
+
+    method show #:
+      Print out information about this Command.
+    params:
+      var fp : ostream = out #:
+        Where to write output.
+      var indent : str = "" #:
+        The indentation to insert before each line of output.
+      var mode : str = 'summary' #:
+        How much details to show.  Possible values are:
+          summary: ...
+    scope:
+      fp.write('%s%s: %s\n' % (indent, self.name(), self.summary()))
+      subindent = indent + '  '
+      flags = self.allFlags()
+      for flagname in sorted(flags):
+        flag = flags[flagname]
+        /# flags and args are both recorded in flags, but we only want to
+        /# show flags here.
+        if flag.isFlag():
+          flag.show(fp=fp, indent=subindent, mode=mode)
+      for arg in self.args():
+        arg.show(fp=fp, indent=subindent, mode=mode)
+    end method show;
+
+    method asValues : Values #:
+      Wrap myself in a Values instance
+    scope:
+      return Values(self)
+    test:
+      res = test.faux.instantiate(
+        ['./person', '--name', 'Charles', 'list', 'a', 'b', 'c'])
+      values = res.asValues()
+      test.isinst(values, metax.root.flags.Values)
+    end method asValues;
+
+  end class Command;
+
+  abstract
+  class SubPart < Part #:
+    Abstract superclass of Flag and Arg.
+  scope:
+
+    field mytype : @str #:
+      The type of the part. Legal values are:
+        str
+        bool
+        int
+        real or float or double
+        enum<val1,val2,...>
+        list<T> for T above.
+
+    field enumtype : map #:
+      If 'type' is 'enum<...>', this field contains a mapping from values
+      to ordinals.  It is null if type isn't 'enum<...>'
+    scope:
+      accessor get lazy:
+        ere = re.compile(r'^enum<(.*)>$')
+        m = ere.match(self.mytype())
+        if m:
+          result = {}
+          parts = re.split(r'\s*[,\|]\s*', m.group(1))
+          vre = re.compile(r'^([^= ]+)(?:\s*=\s*(\d+))?$')
+          for part in parts:
+            vm = vre.match(part)
+            if vm:
+              result[vm.group(1)] = int(vm.group(2) or -1)
+            else:
+              print 'ERROR: Invalid enum spec "%s" (ignored)' % part
+        else:
+          result = None
+        -> result
+      test:
+        print '**** FIX ME ... not being generated in meta2!'
+      end accessor get;
+    end field;
+
+    field default : str #:
+      The string representation of the default value of the part. 
+
+    field start : any #:
+      The value of the flag/arg as specified by the command line.  This will
+      be null if it was not explicitly specified on the command line.
+
+    field value : any #:
+      The current value of the flag/arg. This can be from the default, or from
+      a value specified on the command line, or from a runtime modification.
+
+    lifecycle params:
+      var name : str;
+      var mytype -> mytype = 'str';
+      var default -> default = null;
+      var aliases : str = null;
+      var summary : str = null;
+      var desc : str = null;
+    super (name, aliases=aliases, summary=summary, desc=desc)
+    scope:
+      default = self.default()
+      if default is None:
+        self.valueIs(None)
+      else:
+        value = self.typecheck(default)
+        if value is None:
+          raise Error(
+            '%s %s : %s cannot have default value "%s"' %
+            (self.__class__.__name__, self.name(), self.mytype(), default))
+        self.valueIs(value)
+    end;
+
+  end class SubPart;
+
+  class Flag < SubPart #:
+    A single customizable (usually optional) name/value pair accessible
+    within a program by name or alias.
+  scope:
+      
+    protected
+    method instantiate : trilean #:
+      Typecheck and conditionally assign a value to this flag.
+
+      Returns:
+        null if the value is invalid.
+        true if the next arg was needed.
+        false if the next arg was not needed.
+    params:
+      var nora : str #:
+        The name or alias by which the flag was specified. For bool flags,
+        this may include a 'no' prefix.
+      var inval : str #:
+        The value specified inline with the flag reference via '='. If null,
+        it means there was no inline value given.
+      var nextval : str #:
+        The value of the arg after the flag. This may or may not be used,
+        depending on nora and inline. A value of null means no value available.
+    scope:
+      /# None means the value is invalid
+      /# True means the value is valid and nextval was consumed
+      /# False means the value is valid and nextval was not consumed
+      result = None
+
+      flagtype = self.mytype()
+      if flagtype == 'bool':
+        /# We do NOT currently support assigning a value to booleans from
+        /# nextval ... only by using nora and inval.
+        if inval:
+          /# The only legal inval values are 'true' and 'false'
+          realval = self.typecheck(inval)
+        elif nora.startswith('no'):
+          realval = False
+        else:
+          realval = True
+
+        /# false means we did NOT use nextval.
+        result = False
+
+      else:
+        /# Non-boolean flags can get their value from inval or nextval.
+        if inval is None:
+          result = True
+          flagval = nextval
+        else:
+          result = False
+          flagval = inval
+        realval = self.typecheck(flagval)
+
+      if realval is None:
+        /# realval None means the specified value is not legal for the flag,
+        /# and returning None from this method indicates that.
+        result = None
+        /# We mark the value of the flag is undefined (aka None).
+        self.valueIs(None)
+      else:
+        self.valueIs(realval)
+
+      return result
+    test:
+      def Chk(flag, flagname, inval, nextval, eres, evalue):
+        res = flag.instantiate(flagname, inval, nextval)
+        test.iseq(eres, res)
+        test.iseq(evalue, flag.value())
+
+      /# str flags.
+      Chk(test.metalang, 'metalang', 'oopl', 'blah', False, 'oopl')
+      Chk(test.metalang, 'metalang', None, 'oopl', True, 'oopl')
+      Chk(test.metalang, 'L', 'oopl', 'blah', False, 'oopl')
+      Chk(test.metalang, 'L', None, 'oopl', True, 'oopl')
+      Chk(test.metalang, 'metalang', 20, 'oopl', False, '20')
+
+      /# bool flags.
+      /#  - the nextval is currently never used, so res is always False or None,
+      /#    never True.
+      Chk(test.expand, 'expand', 'true', 'false', False, True)
+      Chk(test.expand, 'expand', 'false', 'true', False, False)
+      Chk(test.expand, 'e', 'true', 'false', False, True)
+      Chk(test.expand, 'e', 'false', 'true', False, False)
+      Chk(test.expand, 'expand', None, 'true', False, True)
+      Chk(test.expand, 'noexpand', None, 'true', False, False)
+      Chk(test.expand, 'expand', 'blah', 'true', None, None)
+    end method instantiate;
+
+    method show #:
+      Print out information about this Flag.
+    params:
+      var fp : ostream = out #:
+        Where to write output.
+      var indent : str = "" #:
+        The indentation to insert before each line of output.
+      var mode : str = 'summary' #:
+        How much details to show.  Possible values are:
+          summary: ...
+    scope:
+      value = self.value()
+      start = self.start()
+      default = self.default()
+
+      def Trunc(val, width):
+        w = len(val)
+        return val if w < width else val[:width-1] + '$'
+
+      if mode == 'summary':
+        sval = '=' if str(start) == str(value) else Trunc(str(start), 10)
+        dval = '=' if str(default) == str(value) else Trunc(str(default), 10)
+
+        fp.write(
+          '%s--%-20s %-30s %-10s %-10s\n' %
+          (indent, self.name(), value, sval, dval))
+      else:
+        fp.write('%sERROR: Unknown mode %s\n' % (indent, summary))
+    test:
+      fp = test.newStr()
+      test.baselang.show(fp=fp)
+      test.iseq(
+        '--baselang             <special>                      None       '
+        '=         \n',
+        fp.getvalue())
+    end method show;
+
+    method isFlag : bool scope:
+      return True
+    test:
+      test.isfalse(test.arg4.isFlag())
+      test.istrue(test.strflag.isFlag())
+    end method isFlag;
+
+  end class Flag;
+
+  class Arg < SubPart #:
+    A positional argument.
+  scope:
+
+    method instantiate : int #:
+      Instantiate this instance (set its value) if the given value matches
+      the type of this arg.
+
+      Returns:
+        -1 if the arg failed to instantiate
+        Otherwise returns the index within values one past those consumed
+        by this arg.
+    params:
+      var values : vec<str> #:
+        The values being processed.
+      var index : int #:
+        The index within values corresponding to this arg.
+    scope:
+
+      if self.ismulti():
+        value_list = values[index:]
+        realval = self.typecheck(value_list)
+        if realval is None:
+          logging.error(
+            "Arg %s : %s cannot have value '%s'",
+              self.name(), self.mytype(), str(value_list))
+          result = -1
+          self.valueIs(None)
+        else:
+          /# We've consumed all the values.
+          result = len(values)
+          self.valueIs(realval)
+      else:
+        value = values[index]
+        realval = self.typecheck(value)
+        if realval is None:
+          logging.error(
+            "Arg %s : %s cannot have value '%s'",
+            self.name(), self.mytype(), value)
+          result = -1
+          self.valueIs(None)
+        else:
+          self.valueIs(realval)
+          result = index + 1
+      return result
+    test:
+      arg1 = test.arg1
+      arg4 = test.arg4
+      values = ['abc', '500', '200', '300']
+      test.isnull(arg1.value())
+
+      def Chk(arg, values, index, expected_index, expected_value):
+        test.iseq(expected_index, arg.instantiate(values, index))
+        test.iseq(expected_value, arg.value())
+
+      Chk(arg1, values, 1, 2, 500)
+      Chk(arg1, values, 2, 3, 200)
+      Chk(arg1, values, 0, -1, None)
+
+      Chk(arg4, values, 1, 4, ['500', '200', '300'])
+      arg4.mytypeIs('list<int>')
+      Chk(arg4, values, 1, 4, [500, 200, 300])
+      Chk(arg4, values, 0, -1, None)
+    end method instantiate;
+
+    method show #:
+      Print out information about this Flag.
+    params:
+      var fp : ostream = out #:
+        Where to write output.
+      var indent : str = "" #:
+        The indentation to insert before each line of output.
+      var mode : str = 'summary' #:
+        How much details to show.  Possible values are:
+          summary: ...
+    scope:
+      value = self.value()
+      start = self.start()
+      default = self.default()
+
+      def Trunc(val, width):
+        w = len(val)
+        return val if w < width else val[:width-1] + '$'
+
+      if mode == 'summary':
+        sval = '=' if str(start) == str(value) else Trunc(str(start), 10)
+        dval = '=' if str(default) == str(value) else Trunc(str(default), 10)
+
+        fp.write(
+          '%s%-22s %-30s %-10s %-10s\n' %
+          (indent, self.name(), value, sval, dval))
+      else:
+        fp.write('%sERROR: Unknown mode %s\n' % (indent, summary))
+    test:
+      fp = test.newStr()
+      test.baselang.show(fp=fp)
+      test.iseq(
+        '--baselang             <special>                      None       '
+        '=         \n',
+        fp.getvalue())
+    end method show;
+
+    method ismulti : bool #:
+      True if this is a multi-value arg.
+    scope:
+      return self.mytype().startswith('list<')
+    test:
+      test.isfalse(test.arg1.ismulti())
+      test.istrue(test.arg4.ismulti())
+    end method ismulti;
+
+    method isArg : bool scope:
+      return True
+    test:
+      test.istrue(test.arg4.isArg())
+      test.isfalse(test.strflag.isArg())
+    end method isArg;
+
+  end class Arg;
+
+  class Values #:
+    A wrapper around a Command instance providing accessing to flags and args.
+  scope:
+    field _command_ : Command;
+
+    lifecycle params:
+      var command -> _command_;
+    scope:
+    end;
+
+    method __getattr__ : any #:
+      Allow one to obtain the values of flags/args as properties on self.
+    params:
+      var nora : str #:
+        The name or alias of the flag or arg deisred.
+    scope:
+      command = self._command_()
+      result = command.findValue(nora)
+      if result is None:
+        raise AttributeError(
+          "Failed to find flag/arg with name/alias '%s'" % nora)
+      return result
+    test:
+      command = test.faux.instantiate(
+        ['./person', '--name', 'Charles', 'list', 'a', 'b', 'c'])
+      values = metax.root.flags.Values(command)
+      test.iseq('Charles', values.name)
+      test.iseq(0, values.deps)
+      test.iseq(['a', 'b', 'c'], values.files)
+
+      try:
+        value = values.blah
+      except AttributeError:
+        pass
+      else:
+        test.fail('Failed to raise AttributeError')
+    end method __getattr__;
+
+  end class Values;
+
+  test
+  class TestCase < metax.test.TestCase scope:
+    lifecycle setup:
+      command = metax.root.flags.Command('meta2')
+      test.command = command
+      test.baselang = command.newFlag(
+        'baselang', 'str', '<special>', aliases='b',
+        summary='The baselang to compile into.',
+        desc='If this is <special>, a metalang-specific default is used')
+      test.metalang = command.newFlag(
+        'metalang', 'str', 'oopl', aliases='L',
+        summary='The metalang the code is defined in.')
+      test.metadir = command.newFlag(
+        'metadir', 'str', '.meta2',
+        summary='The subdir to write code to.',
+        desc="A value of .meta2 is treaed specially, being symlinked to repo")
+
+      test.subcommand = command.newCommand(
+        'canonical', aliases='can',
+        summary='Canonicalize the specified meta files and report diffs.')
+      test.expand = test.subcommand.newFlag(
+        'expand', 'bool', False, aliases='e',
+        summary='If true, invoke expandMeta() before canonicalizing',
+        desc='By default, expandMeta() invokes parseMeta() but not expandMeta().')
+
+      test.faux = metax.root.flags.Command(
+        'faux', summary='A command with a flag and arg of each type.')
+      test.strflag = test.faux.newFlag(
+        'name', default='Bob', summary='The name of the person')
+      test.intflag = test.faux.newFlag(
+        'deps', mytype='int', default='0', summary='Number of dependents.')
+      test.realflag = test.faux.newFlag(
+        'height', mytype='real', aliases='h', default='1.87',
+        summary='Height in meters.')
+      test.enumflag = test.faux.newFlag(
+        'gender', mytype='enum<undef|female|male|trans>', default='undef',
+        summary='Gender of person')
+
+      test.fauximg = test.faux.newCommand(
+        'image', summary='Image processing.')
+      test.arg1 = test.fauximg.newArg(
+        'width', mytype='int', summary='Image width')
+      test.arg2 = test.fauximg.newArg(
+        'length', mytype='int', default=600, summary='Image length')
+      test.arg3 = test.fauximg.newArg(
+        'color', mytype='enum<red,green,blue>', aliases='c', default='red',
+        summary='Preferred primary color')
+
+      test.fauximg2 = test.faux.newCommand(
+        'list', summary='Image listing')
+      test.arg4 = test.fauximg2.newArg(
+        'files', multi=True, summary='The image files.')
+    end;
+  end class TestCase;
+
+end namespace metax.root.flags;

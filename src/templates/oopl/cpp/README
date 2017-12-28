@@ -1,0 +1,40 @@
+
+----------------------------------------------------------------------
+FILE LISTING:
+
+BUILD:
+  The top-level BUILD file for Meta<C++>. As of 2017-12-22, it is empty.
+
+BUILD.gtest:
+  The BUILD file used to compile the gtest suite. Its structure is dictated by
+  https://docs.bazel.build/versions/master/cpp-use-cases.html#including-external-libraries
+
+CROSSTOOL.Darwin.g++:
+  A custom CROSSTOOL file for use on MacOS when one wants to use g++ instead
+  of clang (for example because g++ has better C++17 support). The command:
+     meta2 -b <baselang> setup
+  uses this file to populate the CROSSTOOL file within a bazel repository.
+  Note that this file itself does not affect bazel in any way ... one must
+  copy the file to
+    $(bazel info output_base)/external/local_config_cc/CROSSTOOL
+  for it to take effect (or use something like
+    https://github.com/bazelbuild/bazel/wiki/Building-with-a-custom-toolchain
+  or
+    https://github.com/bazelbuild/bazel/wiki/Yet-Another-CROSSTOOL-Writing-Tutorial
+  to define a new toolchain entirely).
+
+WORKSPACE:
+  Specifes all external resources that Meta<C++> needs in order to work.
+  One critical dependency is gtest, which can be specified as a dependency of
+  a target by adding "@gtest//:main" to "deps" in cc_library.
+
+metastrap/
+  Defines the //metastrap:__Meta__ target which is to be included into
+  every C++ header file. Ensures that a certain minimum set of commonly
+  used symbols are always available.  The intention is to keep this list
+  as small as possible ... and maybe to remove it entirely.
+  Note that as of 2017-12-22, this isn't even added to C++ targets (but
+  probably will be).
+
+
+

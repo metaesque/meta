@@ -11,6 +11,35 @@ config:
     must specify the primary attribute (and any customization of other
     values).
   config:
+
+    feature
+    Attribute location : <user|test|meta|usertest> = user #:
+      Many constructs have an associated class, and each user-defined
+      class has an associated test-class and meta-class. This feature
+      attribute allows one to indicate which class (user, test or meta)
+      the construct in question is associated with.  The default is
+      the user class.
+
+      Note that the 'usertest' value is not applicable to all sub-constructs. A
+      different mechanism for specifying multiple classes is being implemented.
+
+      TODO(wmh): Make this a multi-value attribute and remove 'usertest'.
+    config:
+      FeatureValue user #:
+        Applies to user-provided class (the most common situation).
+      FeatureValue test #:
+        Applies to the testclass of the class this construct belongs to. If that
+        class has location 'test' it is an error to specify location value
+        'test' (test classs do not have test classes).
+      FeatureValue meta #:
+        Applies to the metaclass of the class this construct belongs to. If that
+        class has location 'meta' it is an error to specify location value
+        'meta' (meta classs do not have meta classes).
+      FeatureValue usertest #:
+        This is only legal in a small number of subconstructs. For example,
+        an 'assoc' may be needed in both user and test class.
+        TODO(wmh): Remove this option from here and add it in 'assoc'.
+    end Attribute location;
     
     secondary
     Attribute comment: : simple = <empty> aliases <#:> #:
@@ -43,7 +72,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <class|native>;
+    Attribute scope: children <class|behavior|native>;
 
     Template python scope:
       >|${comment}
@@ -71,17 +100,7 @@ config:
     The class construct.
   config:
 
-    feature
-    Attribute location : <user|test|meta> = user #:
-      Whether this is a user class, test class or meta class.
-    config:
-      FeatureValue user #:
-        A user-level class.
-      FeatureValue test #:
-        A test class (one not auto-generated from a user class).
-      FeatureValue meta #:
-        A meta class (one not auto-generated from a user class).
-    end Attribute location;
+    Attribute location;
 
     feature
     Attribute visibility : <public|private> = public #:
@@ -179,7 +198,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <lifecycle|method|field|native|category|remark>;
+    Attribute scope: children <lifecycle|method|field|native|category|remark|command>;
 
     secondary
     Attribute flags: : complex = <empty> children <flag> #:
@@ -188,27 +207,29 @@ config:
     Template python scope:
       >|${imports}
       >|##########  End Imports  ##########
-      >|${preamble}
+      >|${preclass}
       >|
       >|
       >|class ${class}(${parentspec}):
       >|  ${comment}
-      >|  ${header}
+      >|  ${preamble}
       >|  ${scope}
-      >|${postamble}
+      >|  ${postamble}
+      >|${postclass}
     end Template python;
 
     Template python_test scope:
       >|${imports}
       >|##########  End Imports  ##########
-      >|${preamble}
+      >|${preclass}
       >|
       >|
       >|class ${class}(${parentspec}):
       >|  ${comment}
-      >|  ${header}
+      >|  ${preamble}
       >|  ${scope}
-      >|${postamble}
+      >|  ${postamble}
+      >|${postclass}
       >|########## Start Harness ##########
       >|
       >|
@@ -225,14 +246,15 @@ config:
       >|goog.module('${fqcn}');
       >|goog.module.declareLegacyNamespace();
       >|${imports}
-      >|${preamble}
+      >|${preclass}
       >|
       >|${comment}
       >|class ${class}${parentspec} {
-      >|  ${header}
+      >|  ${preamble}
       >|  ${scope}
+      >|  ${postamble}
       >|}
-      >|${postamble}
+      >|${postclass}
     end Template javascript;
 
     Template javascript_test #:
@@ -243,96 +265,98 @@ config:
       >|goog.setTestOnly('${fqcn}');
       >|goog.module.declareLegacyNamespace();
       >|${imports}
-      >|${preamble}
+      >|${preclass}
       >|
       >|${comment}
       >|class ${class}${parentspec} {
-      >|  ${header}
+      >|  ${preamble}
       >|  ${scope}
+      >|  ${postamble}
       >|}
-      >|${postamble}
+      >|${postclass}
     end Template javascript_test;
 
-    Template javascript_oldstyle #:
-      How to define javascript classes without using ES2015 classes.
-    scope:
-      >|${comment}
-      >|goog.provide('${fqcn}');
-      >|${imports}
-      >|${preamble}
-      >|${scope}
-      >|${postamble}
-    end Template javascript_oldstyle;
-
-    Template javascript_test_oldstyle #:
-      How to define javascript test classes without using ES2015 classes.
-    scope:
-      >|${comment}
-      >|goog.setTestOnly('${namespace}.${class}');
-      >|${imports}
-      >|${preamble}
-      >|${scope}
-      >|${postamble}
-      >|
-      >|var testCase = new ${namespace}.${class}('${namespace}.${class}');
-      >|// TODO(wmh): Look into
-      >|//    $CLOSURE_ROOT/library/closure/goog-orig/testing/jsunit.js.
-      >|// We may be able to create a goog.testing.TestRunner and execute it
-      >|// without needing to include goog.testing.jsunit.  Would give us more
-      >|// control over whether tests are invoked per file or across multiple files.
-      >|//
-      >|// TODO(wmh): Determine how to access the arguments specified to
-      >|// bazel test via --test_arg within the javascript test code. The first
-      >|// arg, if provided, should be a regexp limiting which test methods get
-      >|// invoked. It should be passed as the arg to run(). For now, we provide
-      >|// a hacked solution by passing in a value to metac (which is totally
-      >|// the wrong place to be doing this!)
-      >|testCase.run(${test_method_restr});
-    end Template javascript_test_oldstyle;
-
-    Template cpp scope:
+    Template cpp_decl scope:
       >|#ifndef ${namespace_under}_${class}_h
       >|#define ${namespace_under}_${class}_h 1
       >|
       >|${imports}
       >|
       >|${namespace_spec}
-      >|${preamble}
-      >|
-      >|class Meta${class}; // So classes can find their metaclass
+      >|${preclass}
       >|
       >|${comment}
       >|class ${class}${parentspec} {
+      >|  ${preamble}
       >|  ${scope}
+      >|  ${postamble}
       >|};
-      >|${postamble}
+      >|${postclass}
       >|
       >|${end_namespace}
       >|
       >|${imposts}
       >|
       >|#endif // ${namespace_under}_${class}_h
-    end Template cpp;
+    end Template cpp_decl;
 
-    Template cpp_test scope:
+    Template cpp_defn scope:
+      >|#include "${header}"
+      >|${imports_local}
+      >|
+      >|${namespace_spec}
+      >|${preclass_local}
+      >|
+      >|${scope}
+      >|
+      >|${postclass_local}
+      >|
+      >|${end_namespace}
+      >|${imposts_local}
+    end Template cpp_defn;
+
+    Template cpp_test_decl scope:
       >|#ifndef ${namespace_under}_${class}_h
       >|#define ${namespace_under}_${class}_h 1
       >|
       >|${imports}
       >|
       >|${namespace_spec}
-      >|${preamble}
+      >|${preclass}
       >|
       >|${comment}
       >|class ${class}${parentspec} {
+      >|  ${preamble}
       >|  ${scope}
+      >|  ${postamble}
       >|};
-      >|${postamble}
+      >|${postclass}
       >|
       >|${end_namespace}
       >|
       >|#endif // ${namespace_under}_${class}_h
-    end Template cpp_test;
+    end Template cpp_test_decl;
+
+    Template cpp_test_defn scope:
+      >|#include "${header}"
+      >|${imports_local}
+      >|
+      >|${namespace_spec}
+      >|${preclass_local}
+      >|
+      >|${scope}
+      >|
+      >|${postclass_local}
+      >|
+      >|${end_namespace}
+      >|${imposts_local}
+      >|
+      >|
+      >|int main(int argc, char* argv[]) {
+      >|  ::testing::InitGoogleTest(&argc, argv);
+      >|  return RUN_ALL_TESTS();
+      >|}
+    end Template cpp_test_defn;
 
   end Construct class;
 
@@ -342,21 +366,7 @@ config:
     attributes. Not all constructs within class scope inherit from this.
   config:
 
-    feature
-    Attribute location : <user|test|meta> = user #:
-      This feature attribute identifies whether the ${kind} is defined
-      on the user class, the implicit test class associated with the user
-      class, or the implicit meta class associated with the user class.
-    config:
-      FeatureValue user #:
-        Indicates that the ${kind} is defined on the user class.
-      FeatureValue test #:
-        Indicates that the ${kind} is defined on the auto-generated test class
-        associated with the class this construct resides within.
-      FeatureValue meta #:
-        Indicates that the ${kind} is defined on the auto-generated meta class
-        associated with the class this construct resides within.
-    end Attribute location;
+    Attribute location;
 
     feature
     Attribute kind : <instance|static> = instance #:
@@ -496,6 +506,8 @@ config:
         *<any>  null 
         @vec    []
         @map    {}
+
+      TODO(wmh): This should have type 'expr', not 'word'.
     end Attribute default;
 
     Attribute comment:;
@@ -541,7 +553,12 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <_statement_>;
+    Attribute scope: : simple children <_statement_>;
+
+    secondary
+    Attribute test: : simple = <empty> children <_statement_> #:
+      A single test block associated with this field. For the field
+      nm.sp.Foo.name, the test method is nm.sp.FooTest.test_name.
 
   end Construct accessor;
 
@@ -601,6 +618,17 @@ config:
     end Attribute mutability;
 
     feature
+    Attribute autogen : <std|notest> = std #:
+      Controls which a test method is auto-generated even when no
+      test block exists.
+    config:
+      FeatureValue std #:
+        Auto-generate a test method for the executable.
+      FeatureValue notest #:
+        No test method is generated
+    end Attribute autogen;
+
+    feature
     Attribute extensibility : <extendable|final> = extendable #:
       Whether subclasses can override the method.
     config:
@@ -612,7 +640,7 @@ config:
     end Attribute extensibility;
 
     feature
-    Attribute dispatch : <autodispatch|nonvirtual|virtual> = autodispatch #:
+    Attribute dispatch : <autodispatch|nonvirtual|virtual> = virtual #:
       How dispatch occurs on this method.
     config:
       FeatureValue autodispatch #:
@@ -628,6 +656,17 @@ config:
         callsite is determined based on the dynamic type of the receiver as
         opposed to the static type.
     end Attribute dispatch;
+
+    feature
+    Attribute optimization : <outline|inline> = outline #:
+      Whether the executable should be considered for optimization
+      via inlining. Accessors are always marked as inlined.
+    config:
+      FeatureValue outline #:
+        The executable is not marked as inlineable.
+      FeatureValue inline #:
+        The executable is marked as inlineable.
+    end Attribute optimization;
 
     feature
     Attribute inheritance : <new|override|prex|postx|superx> = new #:
@@ -721,16 +760,16 @@ config:
     secondary
     Attribute test: : simple = <empty> children <_statement_> #:
       A single test block associated with this method. For the method
-      nm.sp.Class.name, the test method is nm.sp.ClassTest.test_name.
+      nm.sp.Foo.name, the test method is nm.sp.FooTest.test_name.
 
     secondary
     Attribute tests: : complex = <empty> children <testx> #:
       Allows multiple tests to be defined. The ids of each testx are used as
       suffixes to the test method name formed by the user-provided method. For
-      the method nm.sp.Class.name, if there are three testx constructs in the
+      the method nm.sp.Foo.name, if there are three testx constructs in the
       'tests' block with ids 'a', 'b', and 'c', the test methods will be
-      nm.sp.ClassTest.test_name_a, nm.sp.ClassTest.test_name_b, and
-      nm.sp.ClassTest.test_name_c
+      nm.sp.FooTest.test_name_a, nm.sp.FooTest.test_name_b, and
+      nm.sp.FooTest.test_name_c
 
     Attribute comment:;
     Attribute config:;
@@ -746,7 +785,9 @@ config:
     Attribute visibility;
     Attribute span;
     Attribute mutability;
+    Attribute autogen;
     Attribute extensibility;
+    Attribute optimization;
     Attribute dispatch;
     Attribute inheritance;
     Attribute location;
@@ -772,7 +813,7 @@ config:
     Template python scope:
       >|
       >|${modifiers}
-      >|def ${method}(${params?, }):
+      >|def ${method}${params}:
       >|  ${comment}
       >|  ${preamble}
       >|  ${scope}
@@ -782,7 +823,7 @@ config:
     Template javascript scope:
       >|
       >|${comment}
-      >|${method}(${params?, }) {
+      >|${method}${params} {
       >|  ${preamble}
       >|  ${scope}
       >|  ${postamble}
@@ -790,18 +831,10 @@ config:
       >|${postmethod}
     end Template;
 
-    Template javascript_test scope:
-      >|
-      >|${comment}
-      >|function ${method}() {
-      >|  ${scope}
-      >|}
-    end Template;
-
     Template javascript_oldstyle scope:
       >|
       >|${comment}
-      >|${method_prefix}${method} = function(${params?, }) {
+      >|${method_prefix}${method} = function${params} {
       >|  ${preamble}
       >|  ${scope}
       >|  ${postamble}
@@ -817,16 +850,30 @@ config:
       >|}
     end Template;
 
-    Template cpp scope:
+    Template cpp_decl scope:
+      >|${comment}
+      >|${modifiers? }${returns? }${method}${params}${inline}
+    end Template cpp_decl;
+
+    Template cpp_defn scope:
       >|
-      >|
-      >|${modifiers}${fqn}::${method}(${params?, }) {
-      >|  ${comment}
+      >|${returns? }${class_base}::${method}${params}${initlist} {
       >|  ${preamble}
       >|  ${scope}
       >|  ${postamble}
       >|}
-    end Template;
+    end Template cpp_defn;
+
+    Template cpp_decl_test scope:
+      >|// No decl code needed for ${method}
+    end Template cpp_decl_test;
+
+    Template cpp_defn_test scope:
+      >|
+      >|TEST_F(${class_base}, ${method}) {
+      >|  ${scope}
+      >|}
+    end Template cpp_defn_test;
 
   end Construct method;
 
@@ -847,6 +894,7 @@ config:
     Attribute visibility;
     Attribute span;
     Attribute mutability;
+    Attribute autogen;
     Attribute extensibility;
     Attribute dispatch;
     Attribute inheritance = postx;
@@ -902,7 +950,9 @@ config:
     Attribute visibility;
     Attribute span;
     Attribute mutability;
+    Attribute autogen;
     Attribute extensibility;
+    Attribute optimization;
     Attribute dispatch;
     Attribute inheritance;
     Attribute location;
@@ -923,7 +973,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <_statement_>;
+    Attribute scope: : complex children <receiver>;
 
   end Construct behavior;
 
@@ -946,20 +996,20 @@ config:
     secondary
     Attribute test: : simple = <empty> children <_statement_> #:
       A single test block associated with this method. For the method
-      nm.sp.Class.name, the test method is nm.sp.ClassTest.test_name.
+      nm.sp.Foo.name, the test method is nm.sp.FooTest.test_name.
 
     secondary
     Attribute tests: : complex = <empty> children <testx> #:
       Allows multiple tests to be defined. The ids of each testx are used as
       suffixes to the test method name formed by the user-provided method. For
-      the method nm.sp.Class.name, if there are three testx constructs in the
+      the method nm.sp.Foo.name, if there are three testx constructs in the
       'tests' block with ids 'a', 'b', and 'c', the test methods will be
-      nm.sp.ClassTest.test_name_a, nm.sp.ClassTest.test_name_b, and
-      nm.sp.ClassTest.test_name_c
+      nm.sp.FooTest.test_name_a, nm.sp.FooTest.test_name_b, and
+      nm.sp.FooTest.test_name_c
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <_statement_>;
+    Attribute scope: : simple children <_statement_>;
 
   end Construct receiver;
 
@@ -993,17 +1043,7 @@ config:
     The native construct.
   config:
 
-    feature
-    Attribute location : <user|test|meta> = user #:
-      Which class this native block applies to.
-    config:
-      FeatureValue user #:
-        Applies to the user-defined class.
-      FeatureValue test #:
-        Applies ot the auto-generated test class.
-      FeatureValue meta #:
-        Applies ot the auto-generated meta class.
-    end Attribute location;
+    Attribute location;
 
     feature
     Attribute position : <pre|post> = post #:
@@ -1042,24 +1082,7 @@ config:
     The assoc construct.
   config:
 
-    feature
-    Attribute location : <user|test|meta> = user #:
-      Which class(es) the assoc is needed for.
-    config:
-      FeatureValue user #:
-        The assoc is needed for the user-provided class (the most common
-        situation).
-      FeatureValue test #:
-        The assoc is needed in the auto-generated test class associated with the
-        class within which the assoc is found. If that class has location test
-        it is an error for any assoc to have location value 'test' (test classs
-        do not have test classes).
-      FeatureValue meta #:
-        The assoc is needed in the auto-generated meta class associated with the
-        class within which the assoc is found. If that class has location meta
-        it is an error for any assoc to have location value 'meta' (meta classs
-        do not have meta classes).
-    end Attribute location;
+    Attribute location;
 
     feature
     Attribute kind : <cls|lib|std> = cls #:
@@ -1076,7 +1099,8 @@ config:
 
     primary
     Attribute assoc : word = <required> #:
-      The name of the assoc.
+      The name of the assoc.  For c-style includes in C++, one can use a
+      value of 'stdlib.h'.
       TODO(wmh): We should introduce a 'name' secondary attribute with
       replacer semantics, instead of having the assoc primary value identify
       the assoc. By having 'name', individual baselangs can vary the value
@@ -1107,11 +1131,13 @@ config:
 
     primary
     Attribute testx : id = <required> #:
-      The name of the testx.
+      The name of the testx. Note that one cannot use values like
+      '1' or '2' here because they aren't valid ids. Better to use
+      a word/phrase more descriptive of what is being tested.
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <_statement_>;
+    Attribute scope: : simple children <_statement_>;
 
   end Construct testx;
 
@@ -1119,8 +1145,10 @@ config:
     The resource construct.
   config:
 
+    Attribute location;
+
     primary
-    Attribute resource : id = <required> #:
+    Attribute resource : word = <required> #:
       The name of the resource.
 
     secondary
@@ -1134,44 +1162,51 @@ config:
 
   end Construct resource;
 
-  Construct entry < _oopl_ #:
-    The entry construct.
-  config:
-
-    primary
-    Attribute entry : id = <required> #:
-      The name of the entry.
-
-    Attribute comment:;
-    Attribute scope: children <flag|action|block>;
-
-  end Construct entry;
-
   Construct flag < _oopl_ #:
     The flag construct.
   config:
 
+    feature
+    Attribute status : <required|optional> = optional #:
+      Whether the flag is required or not (most flags are optional).
+
     primary
-    Attribute flag : id = <required> #:
+    Attribute flag : id = <required> aliases <arg> #:
       The name of the flag.
+
+    secondary
+    Attribute aliases : word = empty aliases <@> #:
+      A comma-separated list of aliases for the flag. If any alias is one char
+      long, it can be accessed with '-' or '--', and can be merged togetehr with
+      other single-letter flag names (-abc = -a -b -c).
+
+    secondary
+    Attribute type : type = any aliases <:> #:
+      The metatype of the flag.
+
+    secondary
+    Attribute default : word = <special> aliases <=> #:
+      The default value of the flag.
+      TODO(wmh): This should have type 'expr', not 'word'.
+    end Attribute default;
 
     Attribute comment:;
     Attribute scope: : simple;
 
   end Construct flag;
 
-  Construct action < _oopl_ #:
-    The action construct.
+  Construct command < _oopl_ #:
+    The command construct.
   config:
 
     primary
-    Attribute action : id = <required> #:
-      The name of the action.
+    Attribute command : id = <required> #:
+      The name of the command.
 
     Attribute comment:;
-    Attribute scope: : simple;
+    Attribute scope: children <flag|command|block>;
 
-  end Construct action;
+  end Construct command;
 
   abstract
   Construct _statement_ < _oopl_ #:
@@ -1195,7 +1230,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <_statement_> ;
+    Attribute scope: : simple children <_statement_> ;
 
   end Construct block;
 
@@ -1228,6 +1263,9 @@ config:
       a default value means the param is optional.  When defined in an
       executable block, it provides an explicit value to initialize the
       variable to instead of using a type-specific default.
+
+      TODO(wmh): This should have type 'expr', not 'word'. Work needs to
+      be done to properly update the code with this new type in mind.
     end Attribute default;
 
     Attribute comment:;

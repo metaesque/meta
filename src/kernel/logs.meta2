@@ -1,0 +1,174 @@
+namespace metax.logs #:
+  Logging in Meta
+scope:
+
+  class SimpleLog #:
+    A simple log interface.
+  assocs:
+    std assoc inspect;
+  scope:
+
+    field dent : int #:
+      How much indentation is currently in place.
+    field level : int #:
+      The current level. Only print out messages whose level is >= this value.
+    field fp : ostream #:
+      Where info gets written.
+    
+    lifecycle params:
+      var level -> level = 0;
+      var fp -> fp = out;
+    scope:
+    end;
+
+    method sinfo #:
+      Unconditionally increment indentation after printing message conditionally
+    params:
+      var msg : str = null;
+      var level : int = 1;
+      var prefix : str = null;
+    scope:
+      if self._level >= level:
+        if msg:
+          self._info(msg, prefix)
+      self._dent += 1
+    test:
+      log = test.log(level=0, dent=0)
+      log.sinfo(msg='testing sinfo')
+      test.iseq(1, log.dent())
+      test.iseq('', log.fp().getvalue())
+
+      log = test.log(level=1, dent=0)
+      log.sinfo(msg='testing sinfo', prefix='some prefix')
+      test.iseq(1, log.dent())
+      test.iseq('some prefix: testing sinfo\n', log.fp().getvalue())
+    end method sinfo;
+
+    method einfo #:
+      Unconditionally decrement indentation before printing message conditionally.
+
+      Args:
+        msg: str or None
+    params:
+      var msg : str = null #:
+        The message to print. If None, no message is printed.
+      var level : int = 1 #:
+        Only print out the message if current level is >= this value
+      var prefix : str = null #:
+        If null, print out the name of the method as a prefix.
+        If evaluates to False, no prefix.
+        Else, prefix msg with whatever is specified.
+      var quiet : bool = false #:
+        If true, this method becomes like end().
+    scope:
+      self._dent -= 1
+      if not quiet and self._level >= level:
+        if msg:
+          self._info(msg, prefix)
+    end method einfo;
+
+    method end #:
+      Decrement indent by one.  Like einfo but without a logged message.
+    scope:
+      self._dent -= 1
+    end method end;
+
+    method info #:
+      Print a message conditionally.
+    params:
+      var msg : str;
+      var level : int = 1;
+      var prefix : bool = false;
+    scope:
+      if self._level >= level:
+        self._info(msg, prefix)
+    end method info;
+
+    method _info #:
+      Write a message unconditionally.
+    params:
+      var msg : str #:
+        What to write
+      var prefix : str = null #:
+        If null, it does not mean 'no prefix', it means 'use the function name
+        as a prefix'. To get no prefix, use the empty string.
+    scope:
+      /# This method should always be invoked by a method within SimpleLog,
+      /# which should have been invoked by some other method M. We want to find
+      /# the name of M, which is two frames above us.
+      if prefix is None:
+        frame = inspect.stack()[2]
+        prefix = frame[3] + ': '
+      elif not prefix:
+        prefix = ''
+      else:
+        if not isinstance(prefix, basestring):
+          print 'ERROR: prefix is %s DEFAULT is %s' % (prefix, DEFAULT)
+        prefix += ': '
+      self.fp().write(('  ' * self._dent) + prefix + str(msg) + '\n')
+    end method _info;
+
+    test
+    method log : metax.logs.SimpleLog params:
+      var dent : int = 0;
+      var level : int = 0;
+    scope:
+      fp = self.newStr()
+      result = metax.logs.SimpleLog(fp=fp, level=level)
+      result.dentIs(dent)
+      return result
+    end;
+  end class SimpleLog;
+
+  class SimpleLogs #:
+    Maintain a named collection of SimpleLog instances.
+  scope:
+    field logs : @map #:
+      Maps conceptual log names to SimpleLog instances.
+
+    field fp : ostream #:
+      Default location to write logs to.
+
+    lifecycle params:
+      var logs : map = null;
+      var fp : ostream = out;
+    scope:
+      if logs:
+        for name, level in logs.iteritems():
+          self.newLog(name, level=level, fp=fp)
+    end lifecycle;
+
+    method reset #:
+      Set all logs to level 0.
+    scope:
+      for log in self._logs.values():
+        log.levelIs(0)
+    end method reset;
+
+    method newLog params:
+      var name : str #:
+        The conceptual name of the log
+      var level : int = 1 #:
+        The start level of the log instance.
+      var fp : ostream = null #:
+        If null, uses self.fp()
+    scope:
+      if fp is None:
+        fp = self.fp()
+      self._logs[name] = SimpleLog(level=level, fp=fp)
+    end method newLog;
+
+    method __getattr__ #:
+      Given an instance D of SimpleLog, allow D.name to refer to D.logs()[name]
+    params:
+      var name : str #:
+        The name of the pre-registered log.
+    scope:
+      result = self._logs.get(name, None)
+      if result is None:
+        raise AttributeError('Failed to find a log named "%s"' % name)
+      return result
+    end method;
+  end class SimpleLogs;
+
+end namespace metax.logs;

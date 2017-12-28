@@ -1,0 +1,43 @@
+
+# Header 1
+
+This is a __first__ paragraph
+short and sweet.
+
+Another **paragraph** but with explict  
+line break here.
+
+----------------------------------------------------------------------
+
+<table>
+  <tr><td>An HTML block</td></tr>
+</table>
+
+<div>
+  <h1>Another HTML block</h1>
+  <h2>And a third HTML block</h2>
+</div>
+
+Here's a pretty picture of red trees.
+![red-leaved trees in a row](https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg)
+[which can be found here](https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg) and
+![this][sunlit-trees] is a beautiful sunlit tree ([it can be found here][sunlit-trees])
+
+- Apple
+  1. way out
+  2. last thing
+- Banana
+  1. not fair
+  2. having a life
+- Cantelope
+  * nested bullet with multiple lines
+    to see how it works
+  * another nested bullet with indented
+    second line.
+
+How do we determine when a list ends?  When we encounter text at
+left margin? (or, in the case of code blocks, at code level?)
+
+    class Person(object):
+      def __init__(self, name):
+        self._name = name

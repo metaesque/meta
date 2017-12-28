@@ -1,7 +1,7 @@
 # ifndef __META___HH
 # define __META___HH __META___HH
 
-# include <iostream>
-# include "Any.h"
+// Included into every meta-generated .h file.  Be careful about what is
+// added here.
 
 # endif  // __META___HH

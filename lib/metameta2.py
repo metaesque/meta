@@ -43,9 +43,12 @@ def CheckEnv():
       index = i
       break
   if index is not None:
-    sys.stderr.write(
-      'WARNING: Replaced %s with %s in sys.path\n' %
-      (metarep_path, newrep_path))
+    if False:
+      # TODO(wmh): How to remind user of this replacement without it spamming
+      # output everytime 'meta2' is invoked?
+      sys.stderr.write(
+        'WARNING: Replaced %s with %s in sys.path\n' %
+        (metarep_path, newrep_path))
     sys.path[index] = newrep_path
 
 # TODO(wmh): Determine if we ALWAYS want to invoke CheckEnv() whenever
@@ -121,7 +124,7 @@ def FlagParser():
     # augments certain commands rather than being its own command. In
     # particular, if the command is 'canonical', --expand means show the
     # canonical version AFTER expandMeta() has been invoked (by default,
-    # canonical shows the version with expanding).
+    # canonical shows the version BEFORE expanding).
     options.add_option(
       '-E', '--expand', action='store_true', dest='expand', default=False,
       help='Show expanded meta file.')
@@ -157,7 +160,14 @@ def FlagParser():
     #   help=(
     #     'A comma-or-space-separated list of attribute keys to search '
     #     '(or, if preceeded by a hyphen (-), to exclude.'))
-    #
+
+    options.add_option(
+      '--implicit_scopes', action='store_true', dest='implicit_scopes',
+      default=False,
+      help=(
+        'If true, methods without scopes are given a default body instead of '
+        'production an error.'))
+
     options.add_option(
       '--lintfull', action='store_true', dest='lintfull', default=False,
       help='If true, turn on various reminder warnings that should be rare.')
@@ -244,6 +254,7 @@ def FlagParser():
     #   '--umlvars', dest='umlvars', default='',
     #   help='Comma-separated list of key=value pairs defining a uml config dict.')
 
+    # TODO(wmh): Is --unfilt the same as --raw??
     options.add_option(
       '--unfilt', action='store_true', dest='unfilt', default=False,
       help='If True, do not filter test output via Compiler.parseBazelOutput')
@@ -255,6 +266,11 @@ def FlagParser():
     options.add_option(
       '-V', '--version', action='store', dest='version', default='',
       help='Which version of the meta library to use (beta, current, previous).')
+
+    options.add_option(
+      '-W', '--write_goldens', action='store_true', dest='write_goldens',
+      default=False,
+      help='If True, tests involving goldens write instead of compare.')
 
     # options.add_option(
     #   '--warn_level', dest='warn_level', default='max', type='choice',

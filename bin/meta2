@@ -39,10 +39,13 @@ def Main():
   if args and args[0] == 'config':
     # User wants to know a config variable, so we do not need a
     # Compiler instance.
-    configpath = os.path.join(os.getenv('HOME'), '.config', 'meta')
     config = metax.c.Compiler.CONFIG
-    for var in args[1:]:
-      print '%s = %s' % (var, config.get(var, '<INVALID>'))
+    vars = args[1:] or sorted(config)
+    if len(vars) == 1:
+      print config.get(vars[0], '<INVALID>')
+    else:
+      for var in vars:
+        print '%s = %s' % (var, config.get(var, '<INVALID>'))
       
   else:
     # Create a Compiler instance.

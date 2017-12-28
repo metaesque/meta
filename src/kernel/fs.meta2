@@ -3,10 +3,11 @@ namespace metax.fs #:
   through this namespace, and in particular metax.fs.Filesystem.
 scope:
 
+  class Error < metax.root.Error;
+
   native scope:
     REQUIRED = object()
-
-  class Error : ^Exception;
+  end;
 
   class GenericFile #:
     Abstract superclass of all kinds of files.
@@ -84,7 +85,7 @@ scope:
       problems in baselangs that cannot handle varargs well. Do we want a safer
       interface?
     params:
-      vararg var subnames : vec<str> #:
+      multi var subnames : vec<str> #:
         The subnames to obtain.
     scope:
       result = self
@@ -122,7 +123,7 @@ scope:
     method show #:
       Print out the hierarchy below this directory.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write the output.
       var indent : str = '' #:
         How much to indent each line of output.
@@ -132,7 +133,7 @@ scope:
 
   end;
 
-  class Directory : GenericFile #:
+  class Directory < GenericFile #:
     A file that can contain other files.
   assocs:
     std assoc collections;
@@ -170,7 +171,7 @@ scope:
     method show #:
       Print out the hierarchy below this directory.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write the output.
       var indent : str = '' #:
         How much to indent each line of output.
@@ -211,14 +212,14 @@ scope:
 
   end class Directory;
 
-  class File : GenericFile #:
+  class File < GenericFile #:
     A normal file (not symlink, not block, etc.)
   scope:
 
     method show #:
       Print out this file
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write the output.
       var indent : str = '' #:
         How much to indent each line of output.
@@ -237,7 +238,7 @@ scope:
 
   end class File;
 
-  class Symlink : GenericFile #:
+  class Symlink < GenericFile #:
     A link to another file.
   scope:
 
@@ -256,7 +257,7 @@ scope:
     method show #:
       Print out the hierarchy below this directory.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write the output.
       var indent : str = '' #:
         How much to indent each line of output.
@@ -419,7 +420,7 @@ scope:
     method join : str #:
       Join a collection of path parts.
     params:
-      vararg var parts : vec;
+      multi var parts : vec;
     scope:
       return os.path.join(*parts)
     test:
@@ -856,7 +857,7 @@ scope:
     method summarize #:
       Print information about the filesystem
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write output.
       var verbose : bool = false #:
         If true, show contents of files.
@@ -954,9 +955,8 @@ scope:
 
   end class Filesystem;
 
-tests:
-
-  class TestCase : meta.testing.TestCase scope:
+  test
+  class TestCase < metax.test.TestCase scope:
     lifecycle setup:
     end lifecycle;
 

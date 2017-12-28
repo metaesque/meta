@@ -84,24 +84,211 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
 
 ## Adding support for a new baselang
 
- - Update src/kernel/{root,test}.meta2 by adding baselang specific code
-    - search for <py> and do the same thing in the new baselang as was done
-      in python.
-
  - Update src/kernel/parser.meta with baselang-specific code:
-    - Use the 'cards1-*' target in src/kernel/Makefile as a starting point:
-       % make cards1-cc
-    - Deal with whatever error arises next, until no errors arise.
-       - define OoplFoo.metaMethodBody()
-       - define OoplFoo.formatParams()
-       - define OoplFoo.formatParentSpec()
-       
-    - Use the 'cards2-*' target in src/kernel/Makefile to continue the
-      support for the new baselang, this time around providing an xUnit
-      testing environment.
-    - Deal with whatever error arises next, until the unittests all pass.
+ 
+    - Define OoplFoo by copying a pre-existing Oopl* class like OoplPython.
+      - The class itself contains only an initializer and a test lifecycle, all
+        other functionality is defined via behaviors.
+      - For each behavior defined below the Oopl* classes, add a 'receiver' for 
+        OoplFoo with appropriate code and unittests.
+      - Use 
+          % metac -r parser.meta metax.c.OoplFoo
+        to iteratively add new code and test it.
+ 
+ - Update src/kernel/{root,test}.meta2 by adding baselang specific code
+    - search for <py> and do the same thing in <foo> as was done in python.
+    - use 
+        % meta2 -b foo root.meta2
+        % meta2 -b foo --implicit_scopes test.meta2
+      The --implicit_scopes flag is to stop the compiler from producing
+      warnings like
+        metax.test.TestCase.iseq is general but missing scope<foo>
+      
+ - Look at the generated baselang files to see if they look syntactically correct:
+    - The repository directory can be found with:
+        % repopath=$(meta2 config repository_path)
+    - The directory containing code for baselang Foo class metax.root.Object is
+      (usually)
+        $repopath/oopl/foo/metax/root/Object.*
+
+ - Within parser.meta, modify the test scope of BaseLanguageOopl.typeToBase(),
+   extending the test method to support baselang foo.
+    - it is critically import that meta-level types be properly converted
+      to baselang variants.
+      
+ - Use the 'cards1-*' target in src/kernel/Makefile as a starting point:
+    % make cards1-cc
+ - Deal with whatever error arises next, until no errors arise.
+    - define OoplFoo.metaMethodBody()
+    - define OoplFoo.formatParams()
+    - define OoplFoo.formatParentSpec()
+    
+ - Use the 'cards2-*' target in src/kernel/Makefile to continue the
+   support for the new baselang
+   - this target generates unit testing code, which will require additional
+     code to be added to OoplFoo ... for example, OoplFoo.__init__ needs
+     to specify values for setup[case] and teardown[case] in updateConfigs().
+   - this target allows you to actually invoke the unit tests once OoplFoo
+     is generating proper test code, which will allow you to formally test
+     the cards2.meta source code in Foo.
+
+ - Add support for parsing the bazel log files for Foo:
+   - Test up some new data (only after unittests for cards2.meta2 are all
+     passing!):
+      % cd ./testdata
+      ! Edit Makefile and add foo to BASELANGS
+      % make refresh_repo
+      # The above will tromp on testdata/repo, recreating subdirs for all
+      # baselangs supported so far. This may (or may not) break unit tests.
+
+## Implementing semantics of types without a prefix
+
+- For primitive types, it makes sense that the implicit prefix should be '@'
+  - Need to establish what '@' means in Meta:
+     - could mean "pass-by-value", but then clones would need to be taken
+       in baselangs other than C++ in situations they aren't necessary
+       (pass-by-value in C++ is often a means of ensuring the object is
+       cleaned up).
+     - could mean "guaranteed not to be null and will be automatically gced".
+     - consider how move semantics in C++ changes things
+     - ... more contemplated needed...
+- For class types:
+   - We define "pass-by-reference" to mean "pass-by-pointer and guaranteed
+     to not be null".
+   - Most languages other than C++ do not have a distinction between
+     pass-by-value, pass-by-reference and pass-by-pointer.
+     - they mostly pass-by-pointer but use '.' to access
+   - We can have the default by '*' or '&' or '&#'
+      - pros of '*'
+        - matches intuitions of most people
+      - cons of '*'
+        - In C++, we have to use '->'. Especially problematic if 'str' means
+          '*str'.
+      - pros of '&'
+        - In C++, we can use '.'.  This is especially useful if 'str' means
+          '&str', as string manipulation is very common and it would be nice
+          to be able to use '.' instead of '->' in the default situation.
+        - It is arguably more common for class types to be non-null pointers
+          that it is for them to be nullable pointers
+        - Distinguishes Meta<C++> more clearly from C++ ... "improvement"?
+      - cons of '&'
+        - Some baselangs do not have a static typechecking mechanism for
+          enforcing non-null pointers (so this check would either need to
+          happen at runtime or not happen).
+        - Without making it const, we would be allowing modification of
+          the calling scope variable in some languages.
+           - in many languages, pass-by-pointer has the same issues
+             (in Java, one passes by pointer and cannot make the object const).
+      - pros of '&#'
+        - same as for '&'
+        - increased type safety
+      - cons of '&#'
+        - constness not statically enforceable in many baselangs
+        - non-nullness not statically enforceable in many baselangs
         
-## Implementing interned string support
+- For native types:
+  - if all native types are class types in baselangs, it makes sense that 
+    native types would use the same default as for class types, but I'm not
+    sure all native types will be baselang class types.
+     - more contemplated needed.
+
+## Implementing the 'str' type
+
+- Features of the 'str' type:
+  - values are immutable
+  - efficient comparison for at least literal strings
+  - space efficiency
+  - ability to store null
+  - ability to indicate at the type level whether the 'str' can be null or not
+  - ability to efficiently concatenate values of type 'str' with other strings
+    (of type 'str' or other variants)
+    
+  - using the Meta type system, we have the following variants:
+    - *str : can be null
+    - &str : cannot be null
+    - @str : storage space
+    - str: same as *str
+
+- In languages like Perl and Python, which have good support for text
+  manipulation, strings are immutable and conditionally interned.
+  
+   - in python (http://guilload.com/python-string-interning)
+      - '' and all length 1 strings are interned
+      - from the above url, all literal strings matching regexp 
+          ^[a-zA-Z0-9_]{1,20}$
+        are interned, but my experiments show that
+          'foo!' is 'foo!'
+        returns True, and it appears that ALL literal strings
+        are returned (even a string of 1025 'o's is interned)
+        
+   - the conditional internment allows for O(1) equality testing between strings
+     if both are interned (falling back to the O(N) algorithm if either isn't
+     interned). Because strings are often keys within dicts, efficient equality
+     testing is beneficial.
+     
+   - a variable of type 'str' (Python), 'String' (Javascript), or scalar (Perl)
+     can be null, and in some languages (Javascript) one can indicate a distinction
+     between "string that can be null" and "string that cannot be null"
+     
+
+- In C++
+   - there are a variety of types that can be used to represent a string:
+     - char*
+     - std::string
+     - std::string_view  (points to pre-existing char* or string)
+   - when needed to convert between types:
+      - char* to string requires a copy: O(N)
+      - char* to string_view does not require a copy: O(1)
+      - string to char* uses s.c_str(): O(1)
+      - string to string_view does not copy: O(1)
+      - string_view to char* uses sv.data() but is NOT guaranteed to be NUL-terminated: (O(1))
+      - string_view to NUL-terminated char*: O(N)
+      - string_view to string: O(N)
+      - creating string_view from char* needs strlen(): O(N) unless explicit length passed
+      - creating string_vew from string shares state: O(1)
+      
+   - implementing 'str' using 'const char*'
+      - no length, not convenient methods for various things.
+      - not viable
+      
+   - implementing 'str' using 'const std::string'
+      - variants:
+        - *str --> const std::string* 
+        - &str --> const std::string&
+        - @str --> std::string
+      - notes:
+        - the most common type is '*str' ('str' means '*str'), which means one
+          needs to use s->meth() instead of s.meth().  Having to remember whether
+          to use -> or . depending on whether the type is '*str' or '&str' is
+          cumbersome
+        - no internment, so using 'str' as the key in a map incurs relatively
+          expensive string comparisons.
+       
+   - implementing 'str' using a special IStr class
+     - variants:
+       - *str --> IStr*
+       - &str --> IStr
+       - @str --> std::string
+     - notes:
+       - The most common type is '*str' which means one uses s->meth() instead
+         of s.meth(), and *s instead of s when wanting a 'const std::string&'.
+          - Can we support the syntax 's.meth()'?  C++ does not allow '.' to
+            be overridden (https://stackoverflow.com/questions/8777845/overloading-member-access-operators-c)
+            but does allow dereference ('*') to be overridden ... will that help
+            us?  I don't think so.
+          - see proposal http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2014/n4173.pdf
+            is this in c++17?
+       
+   - implementing 'str' using a special IStr class that stores nullable as state
+     - variants:
+       - *str --> IStr (with state indicating null allowed)
+       - &str --> IStr (with state indicating null not allowed)
+       - @str --> std::string
+     - notes:
+       - by having state in IStr store whether nullable, we lose static
+         type-checking on that aspect!
+         
+    - implement 'str' using two classes, 'IStrPtr' (nullable) and 'IStrRef' (non-nullable)
 
 - The 'str' type is immutable and (partially?) interned
    - equality testing is faster (for those instances that are interned) than
@@ -181,6 +368,17 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
       - cons
          - violates the fundamental meaning of what '&' means in Meta.
            DEAL BREAKER.
+
+   - Variant 3: &str is not legal
+     - pros
+       - implementation-wise, vec<&str> is not possible because a growable
+         array must allocate more space than elements, with those elements
+         somehow marked as "null", which isn't allowed for an actual reference
+         (although &str does not necessarily need to be implemented by a
+         reference).
+     - cons
+       - people are very use to 'const std::string&' (aka &#str = &str since str
+         is implicitly const)
            
    - Notes:
       - it is absolutely crucial to provide some mechanism for distinguishing
@@ -205,6 +403,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
    - Variant #2: value cannot be null
       - pros
          - synonym for &str?
+         - alternative for &str if &str is made illegal.     
       - cons
          - special-case semantics (does NOT mean copy-by-value, although
            @ does mean copy-by-value everywhere else).
@@ -368,6 +567,106 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
       away this rare but important special-casing, it is best if user-level
       class modules return the class and only the class.
 
+## Accessors
+
+Meta defines the 'field' construct, which serves many purposes:
+ - defines state
+ - defines various accessors on the state
+ - defines dump, read, write
+ - supports packing
+ - supports UML generation
+
+The standard accessors for a field:
+  field foo : int;
+are
+   foo() : int
+   fooIs(value:int)
+   fooRef() : &int
+
+The reasoning behind using 'Is' and 'Ref' suffixes for setter and mutable
+setter
+ - it is useful to be able to search for '.foo' and find all accesses
+   to the field, which is not as easily accomplished if the accessors are
+   named 'setFoo' and 'mutableFoo'.
+ - case-consistency ... foo() and setFoo() are asymettric, foo() and fooIs()
+   are symmetric
+    - yes, using getFoo() and setFoo() would be symettric too, but getFoo()
+      is too cumbersome.
+
+Questions:
+ - Should the setter return &Class instead of void?
+    - pros:
+      - Returning &Class allows one to cascade messages:
+          obj.ageIs(32).weightIs(85).heightIs(187)
+    - cons:
+      - more code clutter
+      - more inefficient ... the return value will often be unused, wasting
+        an assignment
+      - we can support message cascades using '..', which is a more
+        general solution anyways:
+          obj.ageIs(32)..weightIs(85)..heightIs(187)
+    - conclusion:
+       - Setters return 'void'
+
+Notes:
+ - getters are const and return consts
+ - setters are not const and return nothing
+ - reffers are not const and return non-const
+    - in languages without the ability to return lvalues
+      from methods, a different means of providing reffer
+      semantics is needed
+       - for languages with properties, the reffer is
+         a property instead of a method (not optimal,
+         but better than nothing).
+ 
+ - the type of a field determines the type of args/return of
+   accessors:
+    - if field F has type @T
+      - getter()
+        - returns @T if T is primitive
+        - returns &#T if T is class
+      - setter(value)
+        - value has type &#T and a copy is assigned to @T
+      - reffer()
+        - returns &T (so that T can be modified)
+
+    - if field F has type @#T
+      - getter()
+        - returns @T if T is primitive
+        - returns &#T if T is class
+      - setter() not generated
+      - reffer() not generated
+
+    - if field F has type &T (non-null ptr)
+       - getter() returns &#T
+       - setter(value) has value of type &#T
+
+       - notes
+         - in C++, vec<&T> is not possible if it is implemented
+           literally as a vec of references. We could still
+           support this conceptually, with vec<*T> and implicit
+           dereferencing.
+
+ - the base type associated with a metatype varies depending on the
+   context it is used in:
+    - as a field
+       - @T     T
+       - @#T    const T
+       - &T     T&           <-- requires initialization via init list of constructor (cannot reside in contanier)
+       - &#T    const T&     <-- requires initialization via init list of constructor (cannot reside in contanier)
+       - *T     T*
+       - *#T    const T*
+       - **T    T**
+       - #*#T   const T*const         <-- cannot reside in contanier
+       - *#*#T  const T*const*
+       - #*#*#T const T*const*const   <-- cannot reside in contanier
+    - as a positial parameter
+
+    - as a keyword parameter
+    - as a local variable without default
+    - as a local variable with default
+
+
 ## Class Hierarchy
 
 Every user-defined user-level class in Meta has two auto-generated classes
@@ -420,18 +719,59 @@ IMPORTANT QUESTIONS RELATED TO CLASS HIERARCHY:
    metaclasses where present, or should the meta-defined metaclass
    hierarchy instead inherit from metax.root.Object and contain the
    baselang-specific metaclass when it is present?
-    - inheriting from baselang metaclasses
-    - not inheriting from baselang metaclasses
-       - means that meta-defined metaclasses can inherit from metax.root.Object
-         and thus benefit from a consistent interface
-       - implies delegation of most functionality in situations where the
-         baselang has an underlying metaclass
-       - incurs additional (nominal) memory, since there will be a
-         (presumably very small) metaclass instance associated with each
-         user-defined class. Even if it isn't small, there are a small
-         number of classes defined.
-       - simplifies the code base, since we do not need to insert implicit
-         parameters.
+   
+    - The metaclass hierarchy defined by Meta inherits from the metaclass(es)
+      defined by baselangs.
+       - pros:
+          - we aren't maintaining two separate hierarchies in languages
+            that provide 
+          - the features added by Meta integrate seamlessly into the
+            features provided by the baselang, instead of the two sets
+            of features being forced to be independent
+       - cons:
+          - Metaclasses are a required feature, introducing additional
+            classes and complexity without any ability to remove them if
+            they are unused.
+       - notes about ObjectMetaRoot:
+          - This class is for the metaclass hierarchy what Object is for the
+            class hierarchy. All metaclasses in Meta inherit (directly or indirectly)
+            from this class unless the user specifies a metaparent outside the
+            meta metaclass inheritance hierarchy (which limits what Meta can do).
+          - This class acts as a bridge between the Meta world and the non-Meta
+            world, inheriting from whatever baselang-specific class is used
+            for metaclasses. If such a class does not exist, this class
+            inherits from the root class in the baselang. If such a class
+            does not exist, this class inherits from nothing. We 
+            intentionally do NOT have this class inherit from
+            metax.root.Object in such cases because that would mean that
+            metax.root.Object functionality would be available in some
+            baselang metaclasses but not in others.
+
+    - Meta introduces a metaclass hierarchy that is independent of the
+      metaclass hierarchy of the baselang, and instances of the Meta-defined
+      metaclass hierarchy contain instances of the baselang metaclass
+      instances (for baselangs that have a metaclass concept).
+       - pros:
+          - all metaclasses across all baselangs can inherit from
+            metax.root.Object and benefit from a consistent interface,
+            instead of different functionality existing in different
+            baselangs.
+          - the metaclasses introduced by Meta can be completely decoupled
+            from the user-classes ... they can be used if needed, but
+            do not have any impact on the code if not used. Note however
+            that they are implicitly being used (and thus required) if
+            the user defines any 'meta'-level classic constructs.
+       - cons:
+          - results in an extra hierarchy
+          - implies delegation of most functionality in situations where the
+            baselang has an underlying metaclass
+          - *** In Python, we would not be able to set __metaclass__ to
+            the Meta-defined metaclass, and would have to implement all
+            meta-level functionality using @classmethod, etc.
+             - this would be definining an 'Initialize' method and ensuring
+               it always gets invoked when classes are loaded, etc. ...
+               not nearly as clean a solution as having the metaclass
+               initializer perform such initialization.
 
  - should test classes have meta classes?
     - pros
@@ -509,3 +849,395 @@ IMPORTANT QUESTIONS RELATED TO CLASS HIERARCHY:
              - display all classes, lifecycles, methods, fields, behaviors
                (and allow narrowing based on typed id) and allow jump-to
                capabilities.
+
+## The Importance Of Antlr
+
+Although Meta can do a great deal without having baselang parsers,
+being able to produce an AST of a baselang program (across all
+baselangs) would provide the following benefits:
+ - can introduce { ... } block syntax in addition to indent-based blocks
+ - can automate baselang-to-meta conversations
+ - can properly identify whether fields are initialized in initializers
+ - can establish whether a method returns before end
+
+## C++ and Bazel
+
+C++17 offers many features that will be very useful in Meta<C++>, so we need
+Meta to be C++17-enabled from the get-go. However:
+ - on macos as of 2017/12/16, the default c++ compile is clang
+      % c++ --version
+      |c++ --version
+      |Apple LLVM version 9.0.0 (clang-900.0.38)
+      |Target: x86_64-apple-darwin16.7.0
+      |Thread model: posix
+      |InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+      
+ - apple clang 9.0.0 is mapped to LLVM 4.? 
+     - LLVM releases at http://releases.llvm.org/ 
+     - C++ status for LLVM at https://clang.llvm.org/cxx_status.html
+     - apple version numbers to LLVM version numbers: https://en.wikipedia.org/wiki/Xcode#cite_note-LLVM_versions-80
+        - nothing specified for most recent apple clang, but presumably LLVM 4*
+     - one can supposedly use -std=c++1z (according to https://clang.llvm.org/cxx_status.html
+       in the 'C++17 implementation status' section), but that doesn't work:
+         % cd meta2/src/kernel/tests/cc/c++17
+         % make 
+         % /usr/bin/clang++ -std=c++1z main.cc
+         |main.cc:2:10: fatal error: 'any' file not found
+         |#include <any>
+         |         ^~~~~
+         |1 error generated.
+         % which clang++
+         |clang++ is /usr/bin/clang++
+         % cd /usr/include
+         % find . -name '*any*'
+         |./apr-1/apr_anylock.h
+         
+ - g++ does handle C++17 properly:
+     % cd meta2/src/kernel/tests/cc/c++17
+     % /usr/local/wmh/gcc-7.2/bin/g++ -std=c++17 main.cc
+     % ./main
+     |Hello World
+     |val1 = 1
+     
+ - bazel's default CROSSTOOL uses clang:
+     % cd meta2/src/kernel/tests/cc/c++17
+     % make bazel-clobber
+     % blaze build --cxxopt=-std=c++1z --verbose_failures :main
+     |...
+     |main.cc:2:10: fatal error: 'any' file not found
+     |#include <any>
+     |         ^~~~~
+     
+     % grep cxx $(find $(bazel info execution_root) -name CROSSTOOL)
+     |...
+     |cxx_builtin_include_directory: "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include"
+     |...
+
+ - it is possible to have bazel use a different compiler
+   - a discussion of cc_configure
+      - https://blog.bazel.build/2016/03/31/autoconfiguration.html
+   - indicates that one can set envvar CC and rerun:
+       % cd meta2/src/kernel/tests/cc/c++17
+       % bazel clean --expunge
+       % make bazel-clobber
+       % export CC=/usr/local/wmh/gcc-7.2/bin/g++
+       % blaze build --cxxopt=-std=c++17 --verbose_failures :main
+       |...
+       |g++: error: unrecognized command line option '-Wthread-safety'; did you mean '-fthread-jumps'?
+       |g++: error: unrecognized command line option '-Wself-assign'; did you mean '-Wcast-align'?
+       |...
+
+    - Looks like the crosstool generation code defined in cc_configure is accidentally
+      inserting some compiler_flag options that aren't legal for gcc.
+        - comment out 
+             compiler_flag: "-Wthread-safety"
+             compiler_flag: "-Wself-assign"
+          in
+            % emacsclient $(find $(bazel info execution_root) -name CROSSTOOL)
+ 
+    - Retrying the build:
+        % blaze build --cxxopt=-std=c++17 --verbose_failures :main
+        |...
+        |collect2: fatal error: cannot find 'ld'
+        |...
+ 
+  https://stackoverflow.com/questions/41356173/how-to-use-clang-instead-g-in-bazel
+
+
+## Supporting native methods
+
+Many languages provide a mechanism for interacting with code written in other
+languages
+ - perlxs (https://perldoc.perl.org/perlxs.html) links to C code
+ - python (https://docs.python.org/2.0/ext/intro.html) links to C code
+ - java JNI (https://en.wikipedia.org/wiki/Java_Native_Interface) links to C, C++, assembler
+
+As well, there are means of perform whole-program conversion to other languages:
+ - emscripten (https://en.wikipedia.org/wiki/Emscripten) compiles C++ and
+   outputs asm.js, a subset of Javascript !!!
+ - mono/.NET
+ 
+Meta can make these cross-language capabilities much easier:
+
+  Suppose we have a program written in python. A specific method could instead
+  be written in C++ (with Meta automatically providing all of the glue needed
+  to interface between the languages).
+
+    class Matrix scope:
+    
+      method times : Matrix #:
+        Implemented in C++ for efficiency.
+      params:
+        var matrix : Matrix;
+      scope<py>:
+        native lang c++ scope:
+          ... add C++ code here ...
+        end;
+      end method times;
+        
+  Note that my original idea that an entire method could be marked
+  'native' does not work because we need to specify both the target baselang
+  and the native baselang, which would only be possible if we put the 
+  target baselang on the 'scope:' of 'class' (that is too limiting).
+   - Will need to expand this idea further.
+
+## Supporting I/O (etc.) in Javascript
+
+We need to provide I/O capabilities in Javascript.  Since phantomjs already
+has such support (and would also be the sensible choice to provide the
+javascript version of 'meta2 repl') we can use phantomjs.
+
+TODO(wmh): Establish how to properly specify the needed dependencies if a
+certain javascript class uses phantomjs libraries like 'require(webpage)', etc.
+
+Note that 
+  https://github.com/bazelbuild/rules_closure/blob/master/closure/testing/phantomjs_harness.js
+(and the other files in its directory) may be helpful here.  For example,
+note how one types phantomjs objects:
+  var webpage = /** @type {!phantomjs.WebPage} */ (require('webpage'));
+  var fs = /** @type {!phantomjs.FileSystem} */ (require('fs'));
+  var webserver = /** @type {!phantomjs.WebServer} */ (require('webserver'));
+  var system = /** @type {!phantomjs.System} */ (require('system'));
+
+And from
+  https://github.com/bazelbuild/rules_closure/blob/master/closure/testing/BUILD
+the BUILD target:
+  closure_js_library(
+      name = "phantomjs_harness",
+      srcs = ["phantomjs_harness.js"],
+      no_closure_library = True,
+      deps = ["//closure/testing/externs:phantomjs"],
+  )
+I suspect the dep will need to be modified to use @ syntax, but it should be
+a helpful starting point ... we may be able to use
+
+
+## Languages to Support
+
+Java
+Perl
+Go
+Eiffel
+Ada
+C#
+ObjC
+Ruby
+Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
+
+
+## Bugs
+
+- Cannot define a 'native' construct before the first 'class' in a namespace
+  scope: because the code is looking for a class to attach the native code
+  to.  Need to support this usecase ... it will be common to add a native
+  block before any classes.
+  
+- NamespaceConstruct._mergeClassesPython() has to deal with the fact that
+  we sometimes want to refer to class nm.sp.Class2 from within nm.sp.Class1
+  as nm.sp.Class2, when python prefers we use Class2 when they share a
+  namespace (because python does not add 'sp' to 'nm' until 'nm.sp' is fully
+  parsed).  The code currently inserts some magic at the top of each
+  module to define nm.sp within nm.sp, but it is entirely possible that this
+  code will break something in python's control flow.
+  
+- The Emacs major-mode has various weaknesses:
+  - Within Meta comment blocks, inserting the character " immediately kills
+    all syntax highligting
+    
+  - When in a comment block, if the current line has a '(' without matching
+    ')' and newline-tab is entered, the cursor is moved below the unmatch
+    ')' rather than being moved to the start of block position.
+
+  - When searching up for start of construct, it can be mislead by matching
+    regexps in comments.
+    - could be improved by having Meta know how many spaces appear before
+      each construct (usually 0 for namespace, 2 for class, 4 for method),
+      but this will obviously break for nested classes, etc.
+
+- The fundamentally important Construct.attrpair() method has a problem:
+     locattr, location = self.attrpair('location', default=LOOKUP)
+  Suppose that the construct in question does not explicitly specify a
+  'location'. That means it does not have a location in the metafile, which
+  means locattr.line() will not be meaningful ... but often the whole point
+  of keeping locattr around is to get the meta linenum!
+  
+   - In such situations, attrpair() should return (None, <value>) instead of
+     returning the misleading special Attribute instance.
+  
+   - To identify places where this is causing problems, we could initialize
+     the 'line' field of the special Attribute instances cached in attrinfo
+     to some sentinal like -123, and whenever Attribute.line() is invoked, if
+     the value is -123, we raise an error.
+
+- Suppose we have a class with user and meta methods and a user-defined
+  TestCase class in 'test' location.  The meta method test blocks cannot
+  benefit from the initialization done in the TestCase, because they
+  are defined separately.
+   - consider merging tests into a single class, or otherwise fixing this
+     (copying TestCase code to TestCaseMeta?)
+
+## Critical Missing Features
+
+- Meta needs someone to write code for vim that does syntax highlighting, etc.
+
+## TODO
+
+- The 'default' attribute of 'var', 'field' and 'flag' should have type 'expr'
+  not 'word'
+   - will allow us to support
+        var item : nm.sp.Class = @nm.sp.Class2.Func;
+     or
+        var item : map = {'a': 1, 'b': 2};
+        
+- Implement the 'simplex' attribute type
+   - used for block-valued attributes that are of type 'simple'
+     when the selector is a baselang, and are of type 'complex'
+     when the selector is '*'.
+
+- Support aliases on primary attributes (e.g. 'arg' for 'flag')
+
+- In addition to the >| syntax, which does:
+     namespace nm.sp scope:
+       class A scope:
+          method f scope:
+            text = """
+             >|some text
+             >|more text"""
+  we should also support
+     namespace nm.sp scope:
+       class A scope:
+          method f scope:
+            text = """
+     !meta_inline:
+     some text
+     more text"""
+     !end meta_inline:
+  which inserts the text to the same level as the line before !meta_inline:
+  This is not optimal, and will require special support from the simple-block
+  parsing code, but having to indent text via >| is sometimes cumbersome.
+  Is there a better solution?  emacs and vim support for >|?
+
+- Implement C++ to the point where 'make cards2-cc' works.
+  - need to get C++ unit testing working
+  - may need to improve the type system.
+
+- Get implicit meta-level receiver vars working
+  - each baselang has a hard or soft receiver variable name
+  - meta introduces its own naming convention
+     - self for instance methods in user classes
+     - test for instance methods in test classes
+     - meta for class methods (in either user or test classes)
+  - any reference to the meta names ('self', 'test', 'meta') within
+    baselang-level scopes should be replaced by the appropriate
+    baselang names/syntax.
+     - for example, in C++, if baselang scope code contains 'self.'
+       it should be replaced with '(*this).'
+
+- 'entry' and 'action' constructs
+
+- nested flag/arg parsing
+  - introduce metax.lib.Command class with 'flags', 'args' and 'actions'
+  - A command line is represented by a Command instance
+     - if the application uses actions, the first non-flag identifies the
+       action, for which a new Command instance is created and added to
+       the actions() field of the parent Command.
+     - if the application does not use actions, all non-flag args on the
+       command-line are grouped together into the args() field (and
+       can be interspersed with the flags ... not possible if actions exist).
+
+- html generation
+  - when file.meta is compiled via meta2, create .file.html, which renders
+    the code with syntax highlighting and hyperlinking:
+     - every meta construct is highlighted and linked to its documentation
+     - every meta construct is linked to its associated baselang code
+
+- uml generation
+   - this should use the HTML syntax so that we can draw association lines
+     from field to field rather than just class to class.
+
+- get baseline-to-metaline mapping working
+   - should NOT need to invoke metafilt externally (wherever possible)
+
+- implement 'meta2 shell', which starts an interactive shell within which
+  one can explore meta-level code interactive.
+   - parse/expand/translate/compile metafiles
+   - print out arbitrary constructs
+   - run code in arbitrary baselang
+   - validate repository
+   - peruse repository (all known classes)
+     - support 'cd' in the shell  
+     - have /nmsp contain namespaces
+     - have /meta contain .meta source code
+
+- implement behaviors in meta2
+  - Should introduce a special syntax in classes:
+      class Foo scope:
+        stub method methname;
+      end class;
+    which acts as an (optional) placeholder within classes,
+    promising replacement from a behavior (or some other yet to
+    be created construct). .e.g
+      behavior methname scope:
+        receiver Foo scope:
+          ...
+        end;
+      end behavior;
+
+    This 'stub method' would be most useful in the root classes for
+    abstract methods ... useful to have a place where one can see all
+    of the to-be-implemented-in-subclasses methods, without having
+    to repeat docstrs, params, etc.
+
+## Ideas
+
+- Add a 'preamble:' block to 'behavior' constructs that is inserted at the
+  start of each receiver scope block before user code after auto-gened
+  preamble code.  Useful for initializing params with same logic.
+
+- The 'lazy' block on accessors in fields should be moved up to being
+  a block on 'field' itself, not on accessors
+   - it doesn't make sense for 'set'
+   - the same code applies to both 'get' and 'ref' (confirm this before moving)
+
+- Add a 'super' feature attribute to the 'var' construct for use in params:
+  blocks ... implicitly added to the super() attribute:
+    method f params:
+      super var a : int;
+    scope:
+    end;
+  is equivalent to
+    method f params:
+      var a : int;
+    super (a)
+    scope:
+    end;
+    
+  For bonus points, can skip type and comment because meta can look it up
+  from the parent method:
+    method f params:
+      super var a;
+    scope:
+    end;
+  is equivalent to
+    method f params:
+      var a : int;
+    super (a)
+    scope:
+    end;
+  because Meta can find the parent definition to determine that param
+  'a' has type int (and can insert parent comment block, etc.) 
+
+- Provide a syntax on 'var' within 'params:' to indicate that the
+  default value should be "whatever the default of the parent invocation is"
+  for use in super calls.
+   - in python, this can be implemented by not passing the keyword parameter
+     at all in the super call.
+   - example:
+        method f params:
+          super var a : int;
+          super var b : int = 3;
+          super var c : int = super;
+     this would be equivalent to
+        super (a, b=b)
+     (the c arg is marked as 'use default from super' so we don't
+      pass it to the super call).

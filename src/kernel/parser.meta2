@@ -153,75 +153,85 @@ namespace metax.c #:
   /#          - Part2 is NOT added inside Part1, but rather the parent File.
 scope:
 
-  class Error : meta.errors.Error;
-  class InternalError : Error;
-  class InvalidType : Error;
-  class MissingConstruct : Error;
-  class MissingAttribute : Error;
-  class UnusedException : Error;
-  class InvariantViolated : Error;
-  class InvalidAttributeType : Error;
-  class ConflictingFeatureValues : Error;
+  class Error < metax.root.Error;
 
-  class Meta #:
-    Abstract superclass of all Meta compiler classes.
+  nometanotest
+  class InternalError < Error;
 
-    TODO(wmh): Do we still want/need this?  In old code, defined
-      rootDir()
-      metaPath(*subpaths)
-      metaRepository()
-      mapPath(path)
-    Most subclasses have no need for these methods, and everything has access
-    to a MetaFile, so that may be a better place for those methods.  For now,
-    we maintain an empty abstract parent.
-  assocs:
-    std assoc re;
+  nometanotest
+  class InvalidType < Error;
 
-    cls assoc metax.logs.SimpleLogs;
+  nometanotest
+  class MissingConstruct < Error;
 
-    resource testdata path "./testdata" #:
-      /# TODO(wmh): StrLitVarInterpolation: Support variable interpolation in
-      /# meta-level string literals.
+  nometanotest
+  class MissingAttribute < Error;
+
+  nometanotest
+  class UnusedException < Error;
+
+  nometanotest
+  class InvariantViolated < Error;
+
+  nometanotest
+  class InvalidAttributeType < Error;
+
+  nometanotest
+  class ConflictingFeatureValues < Error;
+
+  native #:
+    These are currently required because Meta is not properly parsing
+      params:
+        var default : any = metax.c.REQUIRED;
+    Only the 'Meta' is being parsed, and the '.REQUIRED' is being silently
+    ignored.
   scope:
+    ERROR = 1
+    REQUIRED = 2
+    LOOKUP = 3
+    SPECIAL = 4
+    EMPTY = 5
+    SELF = 6
 
-    meta
-    lifecycle scope:
-      /# Useful for debugging purposes ... set to true in a test block to
-      /# enable diagnostics at a specific point onward.
-      cls.Debug = False
+    NEWSUFFIX = '2'
+    SUFFIX = '.meta' + NEWSUFFIX
 
-      cls.ERROR = object()
-      cls.REQUIRED = object()
-      cls.LOOKUP = object()
-      cls.SPECIAL = object()
-      cls.EMPTY = object()
-      cls.SELF = object()
+    SPECIAL_PREFIX_RE = re.compile(r'^\s*>\|')
 
-      cls.NEWSUFFIX = '2'
-      cls.SUFFIX = '.meta' + cls.NEWSUFFIX
+    /# Provide a means of debugging control flow.
+    D = metax.logs.SimpleLogs({
+      'parse': 0,
+      /# expand tracks expandMeta:
+      /#  - set to 1 to see the overall flow of expandMeta() calls.
+      /#  - set to 2 to see more details
+      'expand': 0,
+      'translate': 0,
+      'compile': 0,
+    })
 
-      cls.SPECIAL_PREFIX_RE = re.compile(r'^\s*>\|')
-    end;
+    /# TODO(wmh): Move this someplace cleaner.
+    def dsep(title='', end=False, prefix=False, width=80, delim='#',
+             subtitle=None, fp=sys.stdout):
+      """Print a named start/end separator
 
-    meta
-    method dsep : str #:
-      Print a named start/end separator
-    params:
-      var title : str = '' #:
-        The title/name of the separator
-      var end : bool = false #:
-        If true, this is the end separator (else start).
-      var prefix : bool = false #:
-        If true, add a 'Start' or 'End' prefix to title based on 'end'
-      var width : int = 80 #:
-        How many chars total in the separator
-      var delim : str = '#' #:
-        The char to use in the separator.
-      var subtitle : str = null #:
-        What to print on a separate line below the separator.
-      var fp : meta!ostream = meta!out #:
-        Where to write the separator.
-    scope:
+      Args:
+        title: str
+          The title/name of the separator
+        end: bool
+          If true, this is the end separator (else start).
+        prefix: bool
+          If true, add a 'Start' or 'End' prefix to title based on 'end'
+        width: int
+          How many chars total in the separator
+        delim: str
+          The char to use in the separator.
+        subtitle: str
+          What to print on a separate line below the separator.
+        fp: file
+          Where to write the separator.
+
+      Returns: str
+      """
       if title:
         if prefix:
           p = 'End  ' if end else 'Start'
@@ -238,41 +248,15 @@ scope:
         fp.write('%s%s%s\n' % (delim * left, inside, delim * (dsize - left)))
       if subtitle:
         fp.write(subtitle + '\n')
-    end method dsep;
-
-  end class Meta;
-
-  native #:
-    These are currently required because Meta is not properly parsing
-      params:
-        var default : any = Meta.REQUIRED;
-    Only the 'Meta' is being parsed, and the '.REQUIRED' is being silently
-    ignored.
-  scope:
-    ERROR = Meta.ERROR
-    REQUIRED = Meta.REQUIRED
-    LOOKUP = Meta.LOOKUP
-    SPECIAL = Meta.SPECIAL
-    EMPTY = Meta.EMPTY
-    SELF = Meta.SELF
-
-    /# Provide a means of debugging control flow.
-    D = metax.logs.SimpleLogs({
-      'parse': 0,
-      /# expand tracks expandMeta:
-      /#  - set to 1 to see the overall flow of expandMeta() calls.
-      /#  - set to 2 to see more details
-      'expand': 0,
-      'translate': 0,
-      'compile': 0,
-    })
 
   end;
 
-  class Line : Meta #:
+  class Line #:
     A single line of a Meta file.
 
     This is a (start,end) pair within the entire file contents.
+  assocs:
+    cls assoc metax.logs.SimpleLogs;
   scope:
 
     field text : str #:
@@ -359,7 +343,8 @@ scope:
       test.iseq('   3: 0:', test.line3.asStr())
     end method asStr;
 
-    meta method FromText : vec<Line> #:
+    meta
+    method FromText : vec<Line> #:
       Obtain a list of Line instances given text of a metafile.
     params:
       var text : str;
@@ -393,12 +378,17 @@ scope:
 
       return result
     test:
-      lines = metax.c.Line.FromText(test.text)
-      test.iseq(4, len(lines))
+      /# TODO(wmh): This is an example of where having tests for meta methods
+      /# be defined in a separate (meta) class is problematic ... the TestCase
+      /# class and all of its initialized state is not available to this
+      /# method.
+      text = 'class Person scope:\n  field name : str;\n'
+      lines = metax.c.Line.FromText(text)
+      test.iseq(2, len(lines))
       test.iseq('   2: 2:  field name : str;', lines[1].asStr())
     end method FromText;
 
-  tests:
+    test
     lifecycle setup:
       text = (
         'class Person scope:\n'
@@ -413,9 +403,10 @@ scope:
       self.line3 = lines[2]
       self.line4 = lines[3]
     end;
+
   end class Line;
 
-  class Type : Meta #:
+  class Type #:
     An abstraction of a Meta type.
 
     Primitive Types
@@ -547,37 +538,34 @@ scope:
 
   scope:
 
-    meta public raw field PRIMITIVE : map<str,map> #:
-      A mapping from Meta primitive type name to map containing:
-        args: tuple
-      Note that aliases for Meta primitive types must also be specified
-      explicitly (e.g. 'float' and 'double', etc.
-
-    meta public raw field NATIVE : map<str,map> #:
-      Keys are Meta native types, values are maps containing:
-        defparam: str
-        args: tuple
-
-    meta public raw field EXTERNAL_CLASS_INDICATOR : str = '^' #:
-      Any type that starts with this value indicates that the core type
-      is one defined outside of Meta. For example, the 'object' class from
-      python is denoted '^object', and the 'Object' class from javascript
-      is denoted '^Object'. Without such a prefix, 'object' would be
-      interpreted as a relative type name, and the namespace would be
-      appended to it to obtain the actual type.
-
-    meta public raw field RE : meta!regexp #:
-      The regexp identifying a legal Meta type and all of its constituent parts.
-
-    meta public raw field Repository : map #:
-      The repository of interned Type instances.  Keys are 'raw' representations,
-      and values are Type instances.  A first invocation of Type.Instance()
-      with a particular raw type string will create a new Type instance, cache
-      it, and return it.  Subsequent invocations of Type.Instance() for the
-      same raw type string will return the previously created instance.
-
     meta
-    lifecycle MetaType scope:
+    lifecycle MetaType #:
+      meta public raw field PRIMITIVE : map<str,map> #:
+        A mapping from Meta primitive type name to map containing:
+          args: tuple
+        Note that aliases for Meta primitive types must also be specified
+        explicitly (e.g. 'float' and 'double', etc.
+      meta public raw field NATIVE : map<str,map> #:
+        Keys are Meta native types, values are maps containing:
+          defparam: str
+          args: tuple
+      meta public raw field EXTERNAL_CLASS_INDICATOR : str = '^' #:
+        Any type that starts with this value indicates that the core type
+        is one defined outside of Meta. For example, the 'object' class from
+        python is denoted '^object', and the 'Object' class from javascript
+        is denoted '^Object'. Without such a prefix, 'object' would be
+        interpreted as a relative type name, and the namespace would be
+        appended to it to obtain the actual type.
+      meta public raw field RE : regexp #:
+        The regexp identifying a legal Meta type and all of its constituent parts.
+      meta public raw field Repository : map #:
+        The repository of interned Type instances.  Keys are 'raw' representations,
+        and values are Type instances.  A first invocation of Type.Instance()
+        with a particular raw type string will create a new Type instance, cache
+        it, and return it.  Subsequent invocations of Type.Instance() for the
+        same raw type string will return the previously created instance.
+    scope:
+      cls.EXTERNAL_CLASS_INDICATOR = '^';
       cls.PRIMITIVE = {
         /# bool, boolean
         'bool': {},
@@ -626,6 +614,9 @@ scope:
 
         'void': {},
       }
+
+      cls.RE = None
+      cls.Repository = None
 
       /# TODO(wmh): Added the $? on 2016-06-30 to support "generic types" ala
       /# templates and generics (hash<$K,$V>, etc.).  Need to add support for
@@ -761,7 +752,7 @@ scope:
           cls.Repository[result.raw()] = result
       if not allow_invalid:
         if not result or not result.isValid():
-          raise meta.errors.InvalidType('Invalid type %s (%s)' % (raw, result))
+          raise metax.root.Error('Invalid type %s (%s)' % (raw, result))
       return wrapper or result
     test:
       /# Create a namespace for use when a type needs to resolve a relative
@@ -873,11 +864,13 @@ scope:
             angles -= 1
             if angles < 0:
               /# TODO(wmh): What to do when allow_invalid is true?
-              raise meta.errors.Error(
+              raise metax.root.Error(
                 'Invalid params (too many <): %s' % params_str)
           i += 1
       return result
     test:
+      metax.c.Type.Repository = None
+      metax.c.Type.Initialize()
       res = metax.c.Type.ParseTypes('*str,@int')
       test.iseq(['*str', '@int'], [t.raw() for t in res])
       test.iseq(
@@ -896,13 +889,15 @@ scope:
     method ShowRepository #:
       Print out the repository (useful during debugging).
     params:
-      var fp : meta!ostream = meta!out;
+      var fp : ostream = out;
     scope:
       rep = cls.Repository
       for tstr in sorted(rep):
         metatype = rep[tstr]
         fp.write('%-30s : %s\n' % (tstr, metatype))
     test:
+      metax.c.Type.Repository = None
+      metax.c.Type.Initialize()
       fp = test.newStr()
       metax.c.Type.ShowRepository(fp=fp)
       test.iseqtext(
@@ -931,6 +926,7 @@ scope:
       var base -> base;
       var params -> params = null;
       var native -> native = false;
+    scope:
     test:
       test.iseq('@int<32>', test.type.raw())
     end lifecycle;
@@ -963,7 +959,7 @@ scope:
 
       TODO(wmh): This should be an automatically generated method.
     params:
-      var fp : meta!ostream = meta!out;
+      var fp : ostream = out;
     scope:
       fp.write('Type: %s\n' % self._raw)
       fp.write('  prefix = %s\n' % self._prefix)
@@ -1105,7 +1101,7 @@ scope:
     scope:
       prefix = self.prefix()
       if not prefix:
-        raise meta.errors.Error('All types should have a prefix: %s' % self.raw())
+        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
       /# If there is a '*' anywhere in prefix, this is a pointer type.
       return '*' in prefix
     test:
@@ -1121,7 +1117,7 @@ scope:
     scope:
       prefix = self.prefix()
       if not prefix:
-        raise meta.errors.Error('All types should have a prefix: %s' % self.raw())
+        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
       return prefix[0] == '&' and '*' not in prefix
     test:
       test.iseq(
@@ -1136,7 +1132,7 @@ scope:
     scope:
       prefix = self.prefix()
       if not prefix:
-        raise meta.errors.Error('All types should have a prefix: %s' % self.raw())
+        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
       return prefix[0] == '&' and '*' in prefix
     test:
       test.iseq(
@@ -1151,7 +1147,7 @@ scope:
     scope:
       prefix = self.prefix()
       if not prefix:
-        raise meta.errors.Error('All types should have a prefix: %s' % self.raw())
+        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
       return prefix[0] == '@'
     test:
       test.istrue(test.type.isValue())
@@ -1226,7 +1222,7 @@ scope:
       test.iseq('*str', str(t1))
     end method __str__;
 
-  tests:
+    test
     lifecycle setup:
       metax.c.Type.Repository = None
       metax.c.Type.Initialize()
@@ -1243,7 +1239,7 @@ scope:
     Type.Initialize()
   end;
 
-  class TypeWrapper : Meta comment:
+  class TypeWrapper #:
     A wrapper for the Type class.
 
     The Type class has interned instances for each type in the system.
@@ -1286,6 +1282,8 @@ scope:
     lifecycle params:
       var type -> type;
       var display -> display;
+    scope:
+    end;
 
     method wrappedRaw : str #:
       The local type name found in the source code.
@@ -1318,11 +1316,7 @@ scope:
       pass
     end method __getattr__;
 
-  tests:
-
-    public raw field type : metax.c.Type;
-    public raw field wrap : metax.c.TypeWrapper;
-
+    test
     lifecycle #:
       TODO(wmh): Remember that in Meta2, we won't have a tests: block
       in classes, and instead will define methods as test methods like we
@@ -1334,16 +1328,19 @@ scope:
       self.wrap = metax.c.TypeWrapper(self.type, 'Person')
     end lifecycle;
 
+    test
     method test_isPtr scope:
       test.iseq(True, test.type.isPtr())
       test.iseq(True, test.wrap.isPtr())
     end method test_isPtr;
 
+    test
     method test_isRef scope:
       test.iseq(False, test.type.isRef())
       test.iseq(False, test.wrap.isRef())
     end method test_isRef;
 
+    test
     method test_fqcn scope:
       test.iseq('a.b.Person', test.type.fqcn())
       test.iseq('a.b.Person', test.wrap.fqcn())
@@ -1351,7 +1348,7 @@ scope:
 
   end class TypeWrapper;
 
-  class ExprParser : Meta #:
+  class ExprParser #:
     Parses expressions of the following forms:
      - num        : [-+0-9]
      - id         : [a-zA-Z_]
@@ -1362,7 +1359,7 @@ scope:
      - call       : '@'
   assocs:
     std assoc re;
-    std unittest assoc pprint;
+    std test assoc pprint;
   scope:
 
     meta
@@ -1415,8 +1412,8 @@ scope:
       /# This will be used in StrExpr()
       cls.DummyMetaFile = None
     test:
-      print '***** NOT BEING TESTED!'
-      pprint.pprint(metax.c.ExprParser.CharMap)
+      /# pprint.pprint(metax.c.ExprParser.CharMap)
+      print '**** HERE with CHARPMAP %d' % len(metax.c.ExprParser.CharMap)
     end lifecycle;
 
     meta
@@ -1593,7 +1590,7 @@ scope:
     method summary #:
       Print out a summary of current state of expr.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write summary.
       var verbose : bool = false #:
         If true, print out all source lines, otherwise print out the 5 lines
@@ -1884,7 +1881,7 @@ scope:
       /# way to start the query at index i that doesn't use text[i:] and
       /# doesn't require us to compile a regexp each time thru this func?
       numstr = line[i:]
-      m = ExprParserClass.NUM_RE.match(numstr)
+      m = MetaExprParser.NUM_RE.match(numstr)
       if m:
         ival, fraction, exponent = m.groups()
         if fraction or exponent:
@@ -1959,7 +1956,7 @@ scope:
       line, i = self.current()
       /# Assumes line[i] is underscore or alpha without verifying
       /# No array bounds checking needed because all lines end in '\n'
-      m = ExprParserClass.ID_PREFIX_RE.match(line[i:])
+      m = MetaExprParser.ID_PREFIX_RE.match(line[i:])
       if m:
         expr = m.group()
         self.colIs(i + m.end())
@@ -2396,7 +2393,7 @@ scope:
       Note that the ',' ends '@a.b' and the ')' ends '@c!f'. Similarly for
         var a : map = { 'a': @a.b, 'b': @c!f }
       in which the comma ends '@a.b' and the '}' ends @c!f. In general,
-      the chars in ExprParserClass.TERMCHARS represent when to end a call construct.
+      the chars in MetaExprParser.TERMCHARS represent when to end a call construct.
 
     params:
       var receiver : str = null #:
@@ -2475,7 +2472,7 @@ scope:
           /#  - we are seeing a ')', which means we are at end of an arglist
           /#  - we are seeing a ',', which means we are at end of an arg inside an arglist
           /#  - we are seeing a ';', which means we are at end of expr construct.
-          if line is None or line[i] in ExprParserClass.TERMCHARS:
+          if line is None or line[i] in MetaExprParser.TERMCHARS:
             break
 
       return expr
@@ -2518,7 +2515,7 @@ scope:
       eprs = metax.c.ExprParser(
         test.metafileFor('@test.iseq(@test!hex.q, 1);\n'))
       test.iseq(
-        "{'rec': 'test', 'subcalls': [{'args': [<kind=call str=@test!hex.q expr={'rec': 'test', 'subcalls': [{'field': True, 'name': 'hex'}, {'name': 'q'}]}>, <kind=num str=1 expr=1>], 'name': 'iseq'}]}",
+        "{'rec': 'self', 'subcalls': [{'args': [<kind=call str=@test!hex.q expr={'rec': 'test', 'subcalls': [{'field': True, 'name': 'hex'}, {'name': 'q'}]}>, <kind=num str=1 expr=1>], 'name': 'iseq'}]}",
         str(eprs._parseCall()))
 
       /# Nested method invocation with nested calls spanning multiple lines.
@@ -2529,7 +2526,7 @@ scope:
           "          @edge.summary);\n"),
           col=8)
       test.iseqtext(
-        "{'rec': 'test', 'subcalls': [{'args': [<kind=str str='Edge between <1,0,-1> (n) and <1,-1,0> (s) with center <0,-52>' expr='Edge between <1,0,-1> (n) and <1,-1,0> (s) with center <0,-52>'>, <kind=call str=@edge.summary expr={'rec': 'edge', 'subcalls': [{'name': 'summary'}]}>], 'name': 'iseq'}]}",
+        "{'rec': 'self', 'subcalls': [{'args': [<kind=str str='Edge between <1,0,-1> (n) and <1,-1,0> (s) with center <0,-52>' expr='Edge between <1,0,-1> (n) and <1,-1,0> (s) with center <0,-52>'>, <kind=call str=@edge.summary expr={'rec': 'edge', 'subcalls': [{'name': 'summary'}]}>], 'name': 'iseq'}]}",
         str(eprs._parseCall()))
 
     end method _parseCall;
@@ -2537,7 +2534,7 @@ scope:
     method consumeOperator : map #:
       Consume an operator.
     scope:
-      legal = ExprParserClass.LEGAL_OP_CHARS
+      legal = MetaExprParser.LEGAL_OP_CHARS
       line, i = self.current()
 
       /# Obtain the operator
@@ -2602,7 +2599,7 @@ scope:
 
   end class ExprParser;
 
-  class Expr : Meta #:
+  class Expr #:
     A parsed expression as returned by ExprParser.parse().
   scope:
     field kind : str #:
@@ -2635,6 +2632,7 @@ scope:
       var kind -> kind;
       var text -> text;
       var value -> value;
+    scope:
     end;
 
     method __repr__ : str #:
@@ -2670,7 +2668,7 @@ scope:
 
   end class Expr;
 
-  class VarSet : Meta comment:
+  class VarSet comment:
     Maintain a collection of var/value/Attribute tuples.
 
     A VarSet is used to instantiate a baselang-specific template associated
@@ -2683,7 +2681,7 @@ scope:
     std assoc re;
   scope:
 
-    protected field map : @map #:
+    field map : @map #:
       Maps variable names to lists containing [value, attribute, delim, width]
     end field map;
 
@@ -2914,7 +2912,7 @@ scope:
     end method asStr;
 
     method show params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write this varset.
     scope:
       fp.write(self.asStr() + '\n')
@@ -2927,7 +2925,7 @@ scope:
         fp.getvalue())
     end method show;
 
-  tests:
+    test
     lifecycle setup:
       self.varset = metax.c.VarSet()
       self.varset.addVar('age', 25)
@@ -2936,7 +2934,7 @@ scope:
     end lifecycle;
   end class VarSet;
 
-  class BaseStreams : Meta #:
+  class BaseStreams #:
     Provides support for writing output to multiple streams with aggregation.
 
     When compiling a Meta construct into base language constructs, the following
@@ -3024,7 +3022,7 @@ scope:
     method initStreams #:
       Create streams for each name specified.
     params:
-      vararg var names : vec;
+      multi var names : vec;
     scope:
       for name in names:
         self.stream(name, clear=True, create=True)
@@ -3172,7 +3170,7 @@ scope:
     params:
       var title : str = null #:
         A title to show.
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write output.
     scope:
       indent = ''
@@ -3182,7 +3180,7 @@ scope:
       fp.write('\n')
     end method dump;
 
-  tests:
+    test
     lifecycle setup:
       self.bs = metax.c.BaseStreams()
       self.bs2 = metax.c.BaseStreams()
@@ -3190,7 +3188,7 @@ scope:
     end lifecycle;
   end class BaseStreams;
 
-  class Stream : Meta #:
+  class Stream #:
     Wrapper around a list of lines/segments.
 
     Used to give insight into usage.
@@ -3203,6 +3201,7 @@ scope:
     lifecycle params:
       var name -> name;
       var data -> data;
+    scope:
     end;
 
     method append params:
@@ -3248,7 +3247,7 @@ scope:
 
   end class Stream;
 
-  class BaseSegment : Meta #:
+  class BaseSegment #:
     A collection of contiguous lines of baselang text originating at a specific
     line in a .meta file.
   scope:
@@ -3300,7 +3299,7 @@ scope:
     method show #:
       Print out details.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write output.
       var indent : str = '' #:
         What to insert before each line.
@@ -3424,7 +3423,7 @@ scope:
           lines.append(indent + chunk if chunk else '')
 
       if strip_special:
-        dentre = Meta.SPECIAL_PREFIX_RE
+        dentre = metax.c.SPECIAL_PREFIX_RE
         for i in range(start_index, len(lines)):
           m = dentre.match(lines[i])
           if m:
@@ -3926,13 +3925,13 @@ scope:
       test.iseqvec(['hello', ''], metax.c.BaseSegment.StrChunkToList('hello\n\n'))
     end method StrChunkToList;
 
-  tests:
+    test
     lifecycle setup:
     end;
 
   end class BaseSegment;
 
-  class BaseFile : Meta #:
+  class BaseFile #:
     An output file generated when compiling Meta source into a base language.
 
     Provides an abstraction layer between on-disk vs in-memory files. Also
@@ -3979,7 +3978,7 @@ scope:
         print contents
     end lifecycle;
 
-  tests:
+    test
     lifecycle setup:
       contents = 'MetaLanguage Test config:\nend;\n'
       self.base = metax.c.BaseFile('faux/path', contents)
@@ -3987,7 +3986,7 @@ scope:
 
   end class BaseFile;
 
-  class MapFile : Meta #:
+  class MapFile #:
     Associated with a BaseFile. Contains file lines number mappings from base to
     MetaFile.
   scope:
@@ -4038,7 +4037,7 @@ scope:
       Returns:
         The path written to.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write the map.
       var indent : str = '' #:
         What to insert before each line.
@@ -4103,7 +4102,7 @@ scope:
 
   end class MapFile;
 
-  class ConsInfo : Meta #:
+  class ConsInfo #:
     An optimized representation of a construct. Maintains:
      - for every feature attribute
        - feature key
@@ -4122,7 +4121,7 @@ scope:
      - for each template
        - mapping from template name to template body.
   assocs:
-    codetest std assoc copy;
+    usertest std assoc copy;
   scope:
     field name : str #:
       Name of the construct.
@@ -4228,7 +4227,7 @@ scope:
     method show #:
       Print out this class.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write output.
       var indent : str = '' #:
         What to insert before each line of output.
@@ -4646,7 +4645,7 @@ scope:
     test:
     end method findTemplate;
 
-  tests:
+    test
     lifecycle setup:
       self.cons = metax.c.ConsInfo('person', 'id', None)
     end;
@@ -4681,12 +4680,13 @@ scope:
       var kinds -> kinds;
       var primaries -> primaries;
       var features -> features;
+    scope:
     end;
 
     method show #:
       Print out this instance in humand-readable format.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write to.
     scope:
       fp.write('ConsGroup: %s\n' % ','.join(self.kinds()))
@@ -4718,7 +4718,7 @@ scope:
 
   end class ConsGroup;
 
-  class Context : Meta #:
+  class Context #:
     A Context maintains the set of (modified) ConsInfo instances that apply when
     parsing a Construct (based on the set of constructs legal in the Meta
     language and any 'config' blocks in the lexical chain above the current
@@ -4829,6 +4829,7 @@ scope:
       var consmap -> consmap;
       var compiler -> compiler;
       var metafile -> metafile;
+    scope:
     end lifecycle;
 
     method subclone : Context #:
@@ -4979,7 +4980,7 @@ scope:
     method show #:
       Print out this class.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write output.
       var indent : str = '' #:
         What to insert before each line of output.
@@ -5085,7 +5086,7 @@ scope:
       test.iseqvec(['Attribute', 'Construct'], sorted(res3.primaries()))
     end method legalInfo;
 
-  tests:
+    test
     lifecycle setup:
       _, _, _, compiler = test.cachedInfo(metal='Meta')
       self.compiler = compiler
@@ -5094,7 +5095,7 @@ scope:
   end class Context;
 
   abstract
-  class Attribute : Meta #:
+  class Attribute #:
     Abstract superclass of all Attribute classes.
 
     A parsed MetaFile contains Construct instances, which map attribute
@@ -5153,6 +5154,7 @@ scope:
       var litkey -> litkey = null;
       var line -> line = -1;
       var col -> col = -1;
+    scope:
     end lifecycle;
 
     abstract
@@ -5199,7 +5201,7 @@ scope:
         The number of characters written. If the output contains multiple
         lines, the return value is -1.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write output.
       var indent : str = '' #:
         What to write before each non-first line.  The first line
@@ -5352,7 +5354,7 @@ scope:
   end class Attribute;
 
   abstract
-  class SimpleAttribute : Attribute #:
+  class SimpleAttribute < Attribute #:
     An attribute that has a string value.
   scope:
     field value : str #:
@@ -5393,31 +5395,31 @@ scope:
 
   end class SimpleAttribute;
 
-  class FeatureAttribute : SimpleAttribute #:
+  class FeatureAttribute < SimpleAttribute #:
     An attribute that appears before the primary attribute.
     The feature value comes from a pre-defined set of feature-key-specific
     legal values.
   scope:
   end class FeatureAttribute;
 
-  class IdAttribute : SimpleAttribute #:
+  class IdAttribute < SimpleAttribute #:
     An attribute whose value is an identifier.
   scope:
   end class IdAttribute;
 
-  class WordAttribute : SimpleAttribute #:
+  class WordAttribute < SimpleAttribute #:
     An attribute whose value is a single word.
   scope:
   end class WordAttribute;
 
-  class NumAttribute : SimpleAttribute #:
+  class NumAttribute < SimpleAttribute #:
     An attribute whose value is an integer. Note that this is a subclass
     of SimpleAttribute so its value is a string (but required to only contain
     digits optionally preceeded by a sign)
   scope:
   end class NumAttribute;
 
-  class ExprAttribute : Attribute #:
+  class ExprAttribute < Attribute #:
     An attribute whose value is an Expr.
   scope:
 
@@ -5495,7 +5497,7 @@ scope:
 
   end class ExprAttribute;
 
-  class TypeAttribute : Attribute #:
+  class TypeAttribute < Attribute #:
     An attribute whose value is a Type.
   scope:
 
@@ -5543,7 +5545,7 @@ scope:
   end class TypeAttribute;
 
   abstract
-  class ListAttribute : Attribute #:
+  class ListAttribute < Attribute #:
     An attribute whose value is a list of strings.
   scope:
 
@@ -5575,7 +5577,7 @@ scope:
 
   end class ListAttribute;
 
-  class EnumAttribute : ListAttribute #:
+  class EnumAttribute < ListAttribute #:
     An attribute containing a list of words separated by '|' (by default) or
     some other delimiter.  The normal format is <val1|val2|val3>, with
     variants like ,<val1,val2,val3> or #<val1#val2#val3> or ... allowed.
@@ -5659,7 +5661,7 @@ scope:
 
   end class EnumAttribute;
 
-  class MultiFeatureAttribute : ListAttribute #:
+  class MultiFeatureAttribute < ListAttribute #:
     An attribute that appears before the primary attribute. The feature value is
     a list of strings, each of which comes from a pre-defined set of
     feature-key-specific legal values
@@ -5667,7 +5669,7 @@ scope:
   end class MultiFeatureAttribute;
 
   abstract
-  class BlockAttribute : Attribute #:
+  class BlockAttribute < Attribute #:
     An attribute whose value is a list.
   scope:
 
@@ -5694,7 +5696,7 @@ scope:
 
   end class BlockAttribute;
 
-  class SimpleBlock : BlockAttribute #:
+  class SimpleBlock < BlockAttribute #:
     An attribute whose value is a list of str.
   scope:
 
@@ -5741,7 +5743,7 @@ scope:
       /# Template bodies, which use the |> syntax for readability. For the
       /# baselang code stripping, see BaseSegment.flattenLines() and the
       /# strip_special param.
-      r = Meta.SPECIAL_PREFIX_RE
+      r = metax.c.SPECIAL_PREFIX_RE
       result = '\n'.join([r.sub('', line) for line in self.value()]) + '\n'
       return result
     test:
@@ -5764,7 +5766,7 @@ scope:
 
   end class SimpleBlock;
 
-  class ComplexBlock : BlockAttribute #:
+  class ComplexBlock < BlockAttribute #:
     An attribute whose value is a list of Contruct.
   scope:
 
@@ -5828,12 +5830,12 @@ scope:
       var id : str #:
         The id of the desired construct.
       var default : any = REQUIRED #:
-        What to return if the id does not exist. If Meta.REQUIRED, raises
+        What to return if the id does not exist. If metax.c.REQUIRED, raises
         MissingConstruct
-        TODO(wmh): Fix the REQUIRED vs Meta.REQUIRED issued.
+        TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issued.
     scope:
       result = self._map.get(id, default)
-      if result is Meta.REQUIRED:
+      if result is metax.c.REQUIRED:
         raise MissingConstruct('Failed to find %s within complex block' % id)
       return result
     test:
@@ -5931,7 +5933,6 @@ scope:
             (construct.kindid(), ppath, current_construct.kindid(),
              id(construct), id(current_construct)),
             line=primary.line() if primary else -1)
-          raise Error('here')
       else:
         construct.linkParent(self)
 
@@ -6003,7 +6004,7 @@ scope:
         Format is:
           <term> ::- <id> ['@' <attr> ]
           <spec> ::- <term> | <spec> '/' <term>
-      var fp : meta!ostream = null #:
+      var fp : ostream = null #:
         If non-null, where to write failure information.
     scope:
       parts = spec.split('/')
@@ -6158,7 +6159,7 @@ scope:
       The number of characters written. If the output contains multiple
       lines, the return value is -1.
   params:
-    var fp : meta!ostream = meta!out #:
+    var fp : ostream = out #:
       Where to write the lines.
     var indent : str = '' #:
       How much to indent each line.
@@ -6293,7 +6294,7 @@ scope:
 
   end behavior writeValueLines;
 
-  class Construct : Meta #:
+  class Construct #:
     Abstract root class of the Construct hierarchy.  Each instance represents
     the parsed representation of a syntactic construct obtained from a
     user-provided meta file (or auto-generated internally).
@@ -6560,7 +6561,7 @@ scope:
         Type, not a str), or can also be Attribute subclass instances
         wrapping the proper value type (thus, 'scope:' can either be a
         list of strings or a SimpleBlock, 'params:' can be a ComplexBlock, etc.
-      var precount : int = 0;
+      var precount : precount = 0;
       var termcode : int = 15;
       var position : str = null #:
         The name of some construct in the new parent preceeded by '+'
@@ -6698,12 +6699,12 @@ scope:
       var key : str #:
         The attribute key.
       var default : any = REQUIRED #:
-        The value to return if the key isn't present. If Meta.REQUIRED, raises
+        The value to return if the key isn't present. If metax.c.REQUIRED, raises
         MissingAttribute error.
-        TODO(wmh): Fix the REQUIRED vs Meta.REQUIRED issue.
+        TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issue.
     scope:
       result = self._attributes.get(key, default)
-      if result is Meta.REQUIRED:
+      if result is metax.c.REQUIRED:
         raise MissingAttribute(
           'rawattr: On %s failed to find required rawattr("%s")' % (self.kindid(), key))
       return result
@@ -6724,12 +6725,12 @@ scope:
         The attribute key.
       var default : any = REQUIRED #:
         The value to return if the attribute isn't present.
-        If Meta.REQUIRED, raises MissingAttribute error.
-        TODO(wmh): Fix the REQUIRED vs Meta.REQUIRED issue.
+        If metax.c.REQUIRED, raises MissingAttribute error.
+        TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issue.
     scope:
       attribute = self._attributes.get(key, None)
       if attribute is None:
-        if default is Meta.REQUIRED:
+        if default is metax.c.REQUIRED:
           raise MissingAttribute(
             'rawval: On %s failed to find required rawattr("%s")' %
             (self.kindid(), key))
@@ -6774,20 +6775,20 @@ scope:
       var default : any = REQUIRED #:
         The value to return for the attribute if the key isn't present.
         - if None, returns None for attr and value.
-        - if Meta.REQUIRED, raises MissingAttribute error.
-        - if Meta.LOOKUP, we perform lookup in the lexical context chain.
+        - if metax.c.REQUIRED, raises MissingAttribute error.
+        - if metax.c.LOOKUP, we perform lookup in the lexical context chain.
            - it is inefficient to make this the default (more efficient to
              use EMPTY or REQUIRED where they are valid).
-        - if Meta.EMPTY, create a new Attribute with empty value.
+        - if metax.c.EMPTY, create a new Attribute with empty value.
            - when an actual attribute is not needed if not present, it is best
              to pass in None instead of EMPTY.
         - else, it must be an Attribute instance (rarely the case)
     scope:
-      /# TODO(wmh): Fix the REQUIRED vs Meta.REQUIRED issue.
+      /# TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issue.
       attr = self.rawattr(key, default=None)
       if attr is None:
         /# No explicit value ... 'default' tells us what to do in this case.
-        if default is Meta.LOOKUP:
+        if default is metax.c.LOOKUP:
           info, _ = self.attrinfo(key)
           attr = info['attribute']
           /# TODO(wmh): Should 'attr' be cloned!!!??
@@ -6801,7 +6802,7 @@ scope:
             /#raise Error(
             /#  'Here with attr %s : %s in %s' %
             /#  (key, info['type'], self.kindid()))
-        elif default is Meta.EMPTY:
+        elif default is metax.c.EMPTY:
           /# NOTE(wmh): This is a variant of code in ConsInfo.registerSecondary()
           attrinfo, consinfo = self.attrinfo(key)
           func = MetaFile.AttrValueEmpty[attrinfo['type']]
@@ -6812,7 +6813,7 @@ scope:
             /# 'attribute' key in ConsInfo dicts could then use this 'empty'
             /# instance as well, which would remove the code redundancy between
             /# here and ConsInfo.registerSecondary. Alternative, we can just be
-            /# careful about using Meta.EMPTY ... only when truly needed.
+            /# careful about using metax.c.EMPTY ... only when truly needed.
 
             /# print '****** HERE with key %s type %s value %s'  % (key, attrinfo['type'], str(value))
             attr = MetaFile.CreateNewAttribute(
@@ -6824,7 +6825,7 @@ scope:
             raise MissingAttribute(
               '*** Failed to find empty value for %s in %s (%s)' % (
                 key, self.kindid(), str(e)))
-        elif default is Meta.REQUIRED:
+        elif default is metax.c.REQUIRED:
           raise MissingAttribute(
             'Failed to find %s in %s' % (key, self.kindid()))
         else:
@@ -6867,16 +6868,16 @@ scope:
         attr=None, value=None)
       /# A feature attribute that does not exist in source: LOOKUP.
       Chk(
-        card.attrpair('presence', default=metax.c.Meta.LOOKUP),
+        card.attrpair('presence', default=metax.c.LOOKUP),
         cls=metax.c.FeatureAttribute, key='presence', value='concrete')
       /# A feature attribute that does not exist in source: EMPTY
       test.raises(
         metax.c.MissingAttribute,
-        card.attrpair, 'presence', default=metax.c.Meta.EMPTY)
+        card.attrpair, 'presence', default=metax.c.EMPTY)
       /# A feature attribute that does not exist in source: REQUIRED
       test.raises(
         metax.c.MissingAttribute,
-        card.attrpair, 'presence', default=metax.c.Meta.REQUIRED)
+        card.attrpair, 'presence', default=metax.c.REQUIRED)
 
 
       /# A non-block attribute that exists in the source.
@@ -6889,16 +6890,16 @@ scope:
         attr=None, value=None)
       /# A non-block attribute that does not exist in the source: LOOKUP
       Chk(
-        card.attrpair('testparent', default=metax.c.Meta.LOOKUP),
+        card.attrpair('testparent', default=metax.c.LOOKUP),
         cls=metax.c.WordAttribute, key='testparent', value='<special>')
       /# A non-block attribute that does not exist in the source: EMPTY
       Chk(
-        card.attrpair('testparent', default=metax.c.Meta.EMPTY),
+        card.attrpair('testparent', default=metax.c.EMPTY),
         cls=metax.c.WordAttribute, key='testparent', value='')
       /# A non-block attribute that does not exist in the source: REQUIRED
       test.raises(
         metax.c.MissingAttribute,
-        card.attrpair, 'testparent', default=metax.c.Meta.REQUIRED)
+        card.attrpair, 'testparent', default=metax.c.REQUIRED)
 
 
       /# An block-valued attribute that exists in the source.
@@ -6912,16 +6913,16 @@ scope:
         attr=None, value=None)
       /# A block-valued attribute that does not exist in source: EMPTY
       Chk(
-        namespace.attrpair('preports:', default=metax.c.Meta.EMPTY),
+        namespace.attrpair('preports:', default=metax.c.EMPTY),
         cls=metax.c.SimpleBlock, value=tuple())
       /# A block-valued attribute that does not exist in source: LOOKUP
       Chk(
-        namespace.attrpair('preports:', default=metax.c.Meta.LOOKUP),
+        namespace.attrpair('preports:', default=metax.c.LOOKUP),
         cls=metax.c.SimpleBlock, value=tuple())
       /# A block-valued attribute that does not exist in source: REQUIRED
       test.raises(
         metax.c.MissingAttribute,
-        namespace.attrpair, 'preports:', default=metax.c.Meta.REQUIRED)
+        namespace.attrpair, 'preports:', default=metax.c.REQUIRED)
 
     end method attrpair;
 
@@ -6932,8 +6933,8 @@ scope:
         The attribute key.
       var default : any = LOOKUP #:
         The value to return if the attribute isn't present.
-        If Meta.REQUIRED, raises MissingAttribute error.
-        TODO(wmh): Fix the REQUIRED vs Meta.REQUIRED issue.
+        If metax.c.REQUIRED, raises MissingAttribute error.
+        TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issue.
     scope:
       attr, value = self.attrpair(key, default=default)
       return value
@@ -6950,8 +6951,8 @@ scope:
       var default : any = LOOKUP #:
         TODO(wmh): Change from LOOKUP to REQUIRED?
         The value to return if the attribute isn't present.
-        If Meta.REQUIRED, raises MissingAttribute error.
-        TODO(wmh): Fix the REQUIRED vs Meta.REQUIRED issue.
+        If metax.c.REQUIRED, raises MissingAttribute error.
+        TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issue.
     scope:
       attr, value = self.attrpair(key, default=default)
       return attr
@@ -7025,7 +7026,7 @@ scope:
         Format is:
           <term> ::- <id> ['@' <attr> ]
           <spec> ::- <term> | <spec> '/' <term>
-      var fp : meta!ostream = null #:
+      var fp : ostream = null #:
         If non-null, where to write failure information.
       var attr : str = 'scope:' #:
         Which complex-block attribute of self to start in.
@@ -7278,7 +7279,7 @@ scope:
       Returns:
         For now, always -1, but this may change in the future.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write output.
       var indent : str = '' #:
         How much indentation before each line.
@@ -7516,7 +7517,7 @@ scope:
 
   end class Construct;
 
-  class GenericConstruct : Construct #:
+  class GenericConstruct < Construct #:
     A construct that can be used to represent any construct kind, but which
     does not have any kind-specific fields.
   scope:
@@ -7538,7 +7539,7 @@ scope:
   end class GenericConstruct;
 
   abstract
-  class MetaConstruct : Construct #:
+  class MetaConstruct < Construct #:
     Abstract superclass of all construct classes in Meta(Meta).
   scope:
 
@@ -7564,7 +7565,7 @@ scope:
 
   end class MetaConstruct;
 
-  class MetaLanguageConstruct : MetaConstruct #:
+  class MetaLanguageConstruct < MetaConstruct #:
     Used to represent MetaLanguage constructs, which define Meta languages.
   assocs:
     resource metameta path "../schema/meta/schema.meta";
@@ -7744,7 +7745,7 @@ scope:
   end class MetaLanguageConstruct;
 
   abstract
-  class BaseLanguageConstruct : MetaConstruct #:
+  class BaseLanguageConstruct < MetaConstruct #:
     The abstract superclass of all baselanguage instances.  There will
     an abstract subclass for each MetaLanguage, and concrete subclasses of
     that class for each base language within the Meta Language.
@@ -7851,7 +7852,7 @@ scope:
       var default : any = REQUIRED;
     scope:
       result = self._configs.get(name, default)
-      if result is Meta.REQUIRED:
+      if result is metax.c.REQUIRED:
         raise Error(
           'Failed to find config var "%s" in baselang %s' %
           (name, self.name()))
@@ -7870,7 +7871,7 @@ scope:
   end class BaseLanguageConstruct;
 
   abstract
-  class BaseLanguageOopl : BaseLanguageConstruct #:
+  class BaseLanguageOopl < BaseLanguageConstruct #:
     The abstract superclass of all base languages in Meta(Oopl).
 
     The following config variables should be given values in subclasses via
@@ -8365,7 +8366,7 @@ scope:
       Chk('True', 'bool', ooplpy.compileExpr(expr_true, metafile))
 
       expr_null = metax.c.ExprParser(test.metafileFor('null\n')).parse()
-      Chk('None', 'meta.Null', ooplpy.compileExpr(expr_null, metafile))
+      Chk('None', 'cls.Null', ooplpy.compileExpr(expr_null, metafile))
 
       expr_one = metax.c.ExprParser(test.metafileFor('1\n')).parse()
       Chk('1', 'uint', ooplpy.compileExpr(expr_one, metafile))
@@ -8897,7 +8898,7 @@ scope:
 
       Chk('True', 'bool', ooplpy.analyzeVariable('true', executable=method))
       Chk('False', 'bool', ooplpy.analyzeVariable('false', executable=method))
-      Chk('None', 'meta.Null', ooplpy.analyzeVariable('null', executable=method))
+      Chk('None', 'cls.Null', ooplpy.analyzeVariable('null', executable=method))
       Chk(metax.c.SELF, '&nm.sp.Card', ooplpy.analyzeVariable('self', executable=method))
     end method analyzeVariable;
 
@@ -8921,7 +8922,7 @@ scope:
       fieldmap = params.get('fields', {})
 
       for field in myclass.fields():
-        metatype = field.attrval('type', default=Meta.LOOKUP)
+        metatype = field.attrval('type', default=metax.c.LOOKUP)
         fid = field.id()
         default = fieldmap.get(fid, self.defaultValue(metatype))
         if fid in initmap:
@@ -9370,7 +9371,7 @@ scope:
 
   end class BaseLanguageOopl;
 
-  class OoplPython : BaseLanguageOopl #:
+  class OoplPython < BaseLanguageOopl #:
     Functionality for compiling Meta(Oopl) code into Python.
   assocs:
     std assoc code;
@@ -9464,7 +9465,7 @@ scope:
       })
     end;
 
-  tests:
+    test
     lifecycle setup:
       baselang, _, context, _ = self.cachedInfo(basel='python')
       self.baselang = baselang
@@ -9472,7 +9473,7 @@ scope:
     end lifecycle;
   end class OoplPython;
 
-  class OoplJavascript : BaseLanguageOopl #:
+  class OoplJavascript < BaseLanguageOopl #:
     Functionality for compiling Meta(Oopl) code into Javascript
 
     References:
@@ -9604,14 +9605,14 @@ scope:
       })
     end;
 
-  tests:
-
+    test
     lifecycle setup:
       baselang, _, context, _ = self.cachedInfo(basel='javascript')
       self.baselang = baselang
       self.context = context
     end lifecycle;
 
+    test
     method test_typeToBase scope:
       oopljs, _, context, _ = test.cachedInfo(basel='javascript')
       MetaType = metax.c.Type.Instance
@@ -9625,7 +9626,7 @@ scope:
 
   end class OoplJavascript;
 
-  class OoplCpp : BaseLanguageOopl #:
+  class OoplCpp < BaseLanguageOopl #:
     Functionality for compiling Meta(Oopl) code into C++
 
     Notes on Bazel:
@@ -9782,14 +9783,14 @@ scope:
 
     end lifecycle;
 
-  tests:
-
+    test
     lifecycle setup:
       baselang, _, context, _ = self.cachedInfo(basel='cpp')
       self.baselang = baselang
       self.context = context
     end lifecycle;
 
+    test
     method test_typeToBase #:
       BaseLanguageOopl.typeToBase usually does not need overriding, but
       it is still useful to have some C++-specific tests for it.
@@ -10423,7 +10424,7 @@ scope:
           preamble = varset.getValue('preamble')
           baselang = construct.baselang()
           for field in myclass.fields():
-            ftype = field.attrval('type', default=Meta.LOOKUP)
+            ftype = field.attrval('type', default=metax.c.LOOKUP)
             /# print 'HERE with %s = %s' % (str(ftype), baselang.typeToBase(ftype))
 
             /# TODO(wmh): See the comment within the scope of
@@ -11531,7 +11532,7 @@ scope:
 
   end behavior formatDependencies;
 
-  behavior formatDependency: tuple<str,str> #:
+  behavior formatDependency : tuple<str,str> #:
     Obtain baselang import text and bazel target for a given dependency.
 
     Returns:
@@ -11714,7 +11715,7 @@ scope:
       result = []
       rawfield = field.rawfield()
       myclass = field.myclass()
-      type_attr, metatype = field.attrpair('type', default=Meta.LOOKUP)
+      type_attr, metatype = field.attrpair('type', default=metax.c.LOOKUP)
       if metatype.isStr():
         /# The 'str' type should be implementable using:
         /#   const std::string
@@ -11765,10 +11766,10 @@ scope:
     abstract receiver BaseLanguageOopl;
 
     receiver OoplPython scope:
-      kind = construct.attrval('kind', default=Meta.LOOKUP)
+      kind = construct.attrval('kind', default=metax.c.LOOKUP)
       params = construct.parsedParams()
-      visibility = construct.attrval('visibility', default=Meta.LOOKUP)
-      returns = construct.attrval('returns', default=Meta.LOOKUP)
+      visibility = construct.attrval('visibility', default=metax.c.LOOKUP)
+      returns = construct.attrval('returns', default=metax.c.LOOKUP)
 
       comment_attr, comdata = self.parseComment(
         construct=construct, parse_return=True)
@@ -11863,7 +11864,7 @@ scope:
         lines.append(' * @param {*} varargs')
 
       /# Annotate the return type
-      returns = construct.attrval('returns', default=Meta.LOOKUP)
+      returns = construct.attrval('returns', default=metax.c.LOOKUP)
       if not returns.isVoid():
         /# See comment above about defqn - we need to do the same thing here.
         baseret = self.typeToBase(returns, class_construct=myclass, defqn=True)
@@ -11879,11 +11880,11 @@ scope:
         /# in OoplJavascript.formatClassConstruct()).
         pass
       else:
-        visibility = construct.attrval('visibility', default=Meta.LOOKUP)
+        visibility = construct.attrval('visibility', default=metax.c.LOOKUP)
         lines.append(' * @%s' % visibility)
 
       /# Handle initializer-specific annotations.
-      kind = construct.attrval('kind', default=Meta.LOOKUP)
+      kind = construct.attrval('kind', default=metax.c.LOOKUP)
       if kind == 'initializer':
         myclass = construct.myclass()
         pspec = myclass.parentclasses()[0]
@@ -11911,7 +11912,7 @@ scope:
           pass
 
       /# Handle 'new' vs 'override' semantics.
-      inheritance = construct.attrval('inheritance', default=Meta.LOOKUP)
+      inheritance = construct.attrval('inheritance', default=metax.c.LOOKUP)
       if inheritance != 'new':
         lines.append(' * @override ')
 
@@ -11926,10 +11927,10 @@ scope:
 
     receiver OoplCpp scope:
       comment_attr, clines = construct.attrpair('comment:', default=None)
-      kind = construct.attrval('kind', default=Meta.LOOKUP)
+      kind = construct.attrval('kind', default=metax.c.LOOKUP)
       params = construct.parsedParams()
-      visibility = construct.attrval('visibility', default=Meta.LOOKUP)
-      returns = construct.attrval('returns', default=Meta.LOOKUP)
+      visibility = construct.attrval('visibility', default=metax.c.LOOKUP)
+      returns = construct.attrval('returns', default=metax.c.LOOKUP)
 
       /# TODO(wmh): Fix this ... using formatComment() temporarily.
       if clines is None:
@@ -11946,17 +11947,17 @@ scope:
   end behavior formatMethodComment;
 
   behavior formatParams : vec<str> #:
-      Format the params into baselang code.
+    Format the params into baselang code.
 
-      Returns:
-        A list of baselang syntax, one element per parameter.
-    params:
-      var executable : ExecutableConstruct #:
-        The executable containing the params.
-      var preamble : vec<str> #:
-        Where to write any parameter-related preamble code.
-      var decl : bool = false #:
-        If true, format for declaration not definition.
+    Returns:
+      A list of baselang syntax, one element per parameter.
+  params:
+    var executable : ExecutableConstruct #:
+      The executable containing the params.
+    var preamble : vec<str> #:
+      Where to write any parameter-related preamble code.
+    var decl : bool = false #:
+      If true, format for declaration not definition.
   scope:
     abstract receiver BaseLanguageOopl;
 
@@ -12874,7 +12875,6 @@ scope:
       if location is None:
         location = method.attrval('location')
       if style == 'base':
-        /# TODO(wmh): Move these into baselang-specific receivers.
         if self.id() in ('python', 'perl'):
           if myclass.isMeta():
             result = 'cls'
@@ -13168,7 +13168,7 @@ scope:
     end receiver OoplPython;
 
     receiver OoplJavascript scope:
-      kind = method.attrval('kind', default=Meta.LOOKUP)
+      kind = method.attrval('kind', default=metax.c.LOOKUP)
       recstr = self.receiverStr(method)
       myclass = method.myclass()
       class_name = myclass.id()
@@ -13296,7 +13296,7 @@ scope:
 
   end behavior superCode;
 
-  class ConstructConstruct : MetaConstruct #:
+  class ConstructConstruct < MetaConstruct #:
     Used to represent Construct constructs.
   scope:
 
@@ -13305,7 +13305,7 @@ scope:
 
   end class ConstructConstruct;
 
-  class AttributeConstruct : MetaConstruct #:
+  class AttributeConstruct < MetaConstruct #:
     Used to represent Attribute constructs.
   scope:
 
@@ -13314,7 +13314,7 @@ scope:
 
   end class AttributeConstruct;
 
-  class FeatureValueConstruct : MetaConstruct #:
+  class FeatureValueConstruct < MetaConstruct #:
     Used to represent FeatureValue constructs.
   scope:
 
@@ -13323,7 +13323,7 @@ scope:
 
   end class FeatureValueConstruct;
 
-  class FileConstruct : MetaConstruct #:
+  class FileConstruct < MetaConstruct #:
     Used to represent File constructs.
   scope:
 
@@ -13351,7 +13351,7 @@ scope:
 
   end class FileConstruct;
 
-  class TemplateConstruct : MetaConstruct #:
+  class TemplateConstruct < MetaConstruct #:
     Used to represent Template constructs.
   scope:
 
@@ -13361,7 +13361,7 @@ scope:
   end class TemplateConstruct;
 
   abstract
-  class OoplConstruct : Construct #:
+  class OoplConstruct < Construct #:
     Abstract superclass of all constructs within Meta(Oopl)
   scope:
 
@@ -13461,7 +13461,7 @@ scope:
   end class OoplConstruct;
 
   abstract
-  class SymbolConstruct : OoplConstruct #:
+  class SymbolConstruct < OoplConstruct #:
     Abstract superclass of constructs that maintain a symbol table mapping
     identifiers to sub-constructs accessible at runtime.
   scope:
@@ -13487,8 +13487,7 @@ scope:
     scope:
       symbols = self.symbols()
       if name in symbols:
-        current = symbols[name]
-        if current is not construct:
+        if symbols[name] is not construct:
           raise Error(
             'Attempt to re-register symbol "%s" in %s' %
             (name, self.kindfqn()))
@@ -13555,7 +13554,7 @@ scope:
 
   end class SymbolConstruct;
 
-  class NamespaceConstruct : SymbolConstruct #:
+  class NamespaceConstruct < SymbolConstruct #:
     Represents a 'namespace' construct.
 
     Implementation issues:
@@ -13754,7 +13753,7 @@ scope:
             /#     a user-provided class to put in the autogened test namespace
             /#   metauser:
             /#     a user-provided metaclass
-            location = child.attrval('location', default=Meta.LOOKUP)
+            location = child.attrval('location', default=metax.c.LOOKUP)
             variant = 'user'
             if location != 'user':
               variant = location + variant
@@ -14217,7 +14216,7 @@ scope:
   end class NamespaceConstruct;
 
   abstract
-  class ClassicConstruct : SymbolConstruct #:
+  class ClassicConstruct < SymbolConstruct #:
     Abstract parent of all constructs that appear within a class.
 
     Includes field, method, lifecycle, behavior, entry and class.
@@ -14333,7 +14332,7 @@ scope:
 
   end class ClassicConstruct;
 
-  class ClassConstruct : ClassicConstruct #:
+  class ClassConstruct < ClassicConstruct #:
     Represents a 'class' construct.
 
     The userclass, testclass and metaclass fields are set in expandMeta:
@@ -14682,7 +14681,7 @@ scope:
     method showDependencies #:
       Print out the dependencies of this class.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write output.
     scope:
       deps = self.deps()
@@ -14793,7 +14792,7 @@ scope:
       userblock = namespace.attr('scope:')
       testspace = namespace.testspace()
       testblock = testspace.attr('scope:') if testspace else None
-      testparent = self.attrval('testparent', default=Meta.LOOKUP)
+      testparent = self.attrval('testparent', default=metax.c.LOOKUP)
       if testparent == '<special>':
         /# If there is a TestCase class defined within testblock, we use
         /# that as the parent, else we use metax.test.TestCase
@@ -14827,7 +14826,7 @@ scope:
     scope:
       metaspace = self.namespace()
       metablock = metaspace.rawattr('scope:') if metaspace else None
-      metaparent = self.attrval('metaparent', default=Meta.LOOKUP)
+      metaparent = self.attrval('metaparent', default=metax.c.LOOKUP)
 
       if metaparent == '<special>':
         /# We did not find an explicit metaparent, so we compute it dynamically:
@@ -14857,8 +14856,8 @@ scope:
         pass
 
       /# TODO(wmh): Delete following when we are using root.meta2
-      /# if metaparent == 'meta.root.Object__Meta':
-      /#   metaparent = 'meta.root.ObjectMetaClass'
+      /# if metaparent == 'metax.root.Object__Meta':
+      /#   metaparent = 'metax.root.ObjectMetaClass'
 
       metaname = ClassConstruct.MetaifyName(self.id())
       assert metaspace is not None
@@ -14958,7 +14957,7 @@ scope:
       if parents_attr is None:
         namespace = self.namespace()
         metafile = self.metafile()
-        parent_attr, parent = self.attrpair('parent', default=Meta.LOOKUP)
+        parent_attr, parent = self.attrpair('parent', default=metax.c.LOOKUP)
         fqn, metafqn = self.baselang().formatClassType(
           metafile, parent, namespace)
 
@@ -15854,7 +15853,7 @@ scope:
       basel = baselang.id()
       metaclass = self.metaclass()
       namespace = self.namespace()
-      assocs = self.attrval('associations:', default=Meta.EMPTY)
+      assocs = self.attrval('associations:', default=metax.c.EMPTY)
 
       /# Explicit imports
       for dep in assocs:
@@ -15864,8 +15863,8 @@ scope:
         else:
           /# assoc
           aid = dep.id()
-          aloc = dep.attrval('location', default=Meta.LOOKUP)
-          akind = dep.attrval('kind', default=Meta.LOOKUP)
+          aloc = dep.attrval('location', default=metax.c.LOOKUP)
+          akind = dep.attrval('kind', default=metax.c.LOOKUP)
           if akind == 'std':
             fqn = aid
           else:
@@ -16047,7 +16046,7 @@ scope:
       baselang = metac.baselang()
 
       /# Establish the path storing the resource.
-      path_attr, subpath_expr = resource.attrpair('path', default=Meta.LOOKUP)
+      path_attr, subpath_expr = resource.attrpair('path', default=metax.c.LOOKUP)
       subpath = subpath_expr.asStr(unquote=True)
 
       src_path = fs.join(fs.dirname(metafile.path()), subpath)
@@ -16196,7 +16195,7 @@ scope:
 
   end class ClassConstruct;
 
-  class CategoryConstruct : OoplConstruct #:
+  class CategoryConstruct < OoplConstruct #:
     Represents a 'category' construct.
 
     TODO(wmh): Decide whether this class should inherit from ClassicConstruct
@@ -16274,7 +16273,7 @@ scope:
 
   end class CategoryConstruct;
 
-  class RemarkConstruct : OoplConstruct #:
+  class RemarkConstruct < OoplConstruct #:
     Represents a 'remark' construct.
 
     TODO(wmh): Decide whether this class should inherit from ClassicConstruct
@@ -16312,7 +16311,7 @@ scope:
 
   end class RemarkConstruct;
 
-  class FlagConstruct : OoplConstruct #:
+  class FlagConstruct < OoplConstruct #:
     Represents a 'flag' construct.
 
     TODO(wmh): Decide whether this class should inherit from ClassicConstruct
@@ -16403,7 +16402,7 @@ scope:
 
   end class FlagConstruct;
 
-  class CommandConstruct : ClassicConstruct #:
+  class CommandConstruct < ClassicConstruct #:
     Represents a 'command' construct.
 
     TODO(wmh): Decide whether this class should inherit from ClassicConstruct
@@ -16435,7 +16434,7 @@ scope:
       streams = metafile.streams()
       klass = self.ancestor('class')
       metaclass = klass.metaclass()
-      metaclass_scope = metaclass.attr('scope:', default=Meta.REQUIRED)
+      metaclass_scope = metaclass.attr('scope:', default=metax.c.REQUIRED)
       context = metaclass.context()
       metafile = self.metafile()
       baselang = self.baselang()
@@ -16446,7 +16445,7 @@ scope:
       if comment_lines is None:
         comment_lines = [
           'Auto-generated entry point for %s' % klass.fqn()]
-      command_scope = self.attrval('scope:', default=Meta.REQUIRED)
+      command_scope = self.attrval('scope:', default=metax.c.REQUIRED)
 
       /# Establish the level of command construct.
       clist = []
@@ -16499,7 +16498,7 @@ scope:
           /# We write the contents of the block into command_body.
           /# TODO(wmh): Should use BlockConstruct.translateMeta() if possible!
           clines = child.attrval('comment:', default=None) or []
-          blines = child.attrval('scope:', default=Meta.REQUIRED)
+          blines = child.attrval('scope:', default=metax.c.REQUIRED)
           command_body.append('')
           for line in clines:
             /# TODO(wmh): Generalize to all baselangs.
@@ -16605,7 +16604,7 @@ scope:
 
   end class CommandConstruct;
 
-  class BlockConstruct : OoplConstruct #:
+  class BlockConstruct < OoplConstruct #:
     Represents a 'block' construct.
 
     TODO(wmh): Decide whether this class should inherit from ClassicConstruct
@@ -16642,7 +16641,7 @@ scope:
 
   end class BlockConstruct;
 
-  class FieldConstruct : ClassicConstruct #:
+  class FieldConstruct < ClassicConstruct #:
     Represents a 'field' construct.
   scope:
 
@@ -16708,10 +16707,10 @@ scope:
 
         /# print 'FieldConstruct.expandMeta: %s' % fqn
 
-        kind = self.attrval('kind', default=Meta.LOOKUP)
+        kind = self.attrval('kind', default=metax.c.LOOKUP)
         scope, accessors = self.attrpair('scope:', default=None)
-        pack = self.attrval('pack', default=Meta.LOOKUP)
-        typeattr, type = self.attrpair('type', default=Meta.LOOKUP)
+        pack = self.attrval('pack', default=metax.c.LOOKUP)
+        typeattr, type = self.attrpair('type', default=metax.c.LOOKUP)
         isconst = type.isBaseConst()
 
         /# Register this field with the class.
@@ -16904,14 +16903,14 @@ scope:
       /# TODO(wmh): Perform as much work here as possible before calling
       /# baselang.formatBaseField().  In particular, check if the field is
       /# optional, packed, etc.
-      select_attr, select = self.attrpair('select', default=Meta.LOOKUP)
-      status_attr, status = self.attrpair('status', default=Meta.LOOKUP)
-      location_attr, location = self.attrpair('location', default=Meta.LOOKUP)
-      kind_attr, kind = self.attrpair('kind', default=Meta.LOOKUP)
-      pack_attr, pack = self.attrpair('pack', default=Meta.LOOKUP)
+      select_attr, select = self.attrpair('select', default=metax.c.LOOKUP)
+      status_attr, status = self.attrpair('status', default=metax.c.LOOKUP)
+      location_attr, location = self.attrpair('location', default=metax.c.LOOKUP)
+      kind_attr, kind = self.attrpair('kind', default=metax.c.LOOKUP)
+      pack_attr, pack = self.attrpair('pack', default=metax.c.LOOKUP)
       inheritance_attr, inheritance = self.attrpair(
-        'inheritance', default=Meta.LOOKUP)
-      type_attr, type = self.attrpair('type', default=Meta.LOOKUP)
+        'inheritance', default=metax.c.LOOKUP)
+      type_attr, type = self.attrpair('type', default=metax.c.LOOKUP)
       /# TODO(wmh): Should we LOOKUP default?
       default_attr, default = self.attrpair('default', default=None)
       comment_attr, comlines = self.attrpair('comment:', default=None)
@@ -16949,7 +16948,7 @@ scope:
 
   end class FieldConstruct;
 
-  class AccessorConstruct : OoplConstruct #:
+  class AccessorConstruct < OoplConstruct #:
     Used to represent Accessor constructs.
   scope:
 
@@ -16959,7 +16958,7 @@ scope:
   end class AccessorConstruct;
 
   abstract
-  class ExecutableConstruct : ClassicConstruct #:
+  class ExecutableConstruct < ClassicConstruct #:
     Abstract construct above constructs that have
     executable code.
   scope:
@@ -17201,7 +17200,7 @@ scope:
             else:
               /# Neither 'test:' nor 'tests:' was defined.
               /#  - we add an empty test block for non-abstract methods.
-              presence = self.attrval('presence', default=Meta.LOOKUP)
+              presence = self.attrval('presence', default=metax.c.LOOKUP)
               if presence == 'concrete':
                 testdata.append({
                   'name': testbase,
@@ -17622,15 +17621,15 @@ scope:
           for var in params.value():
             name = var.id()
             provides_attr, provides = var.attrpair(
-              'provides', default=Meta.LOOKUP)
+              'provides', default=metax.c.LOOKUP)
             /# If 'provides' is given, should not specify 'type', 'multiplicity'
             /# or 'comment:' (but can specify 'default')
-            missing = None if provides else Meta.LOOKUP
+            missing = None if provides else metax.c.LOOKUP
             typeattr, type = var.attrpair('type', default=missing)
             multattr, multiplicity = var.attrpair(
               'multiplicity', default=missing)
             comattr, comlines = var.attrpair('comment:', default=None)
-            default = var.attrval('default', default=Meta.LOOKUP)
+            default = var.attrval('default', default=metax.c.LOOKUP)
 
             if provides:
               myclass = self.myclass()
@@ -17705,7 +17704,7 @@ scope:
 
   end class ExecutableConstruct;
 
-  class MethodConstruct : ExecutableConstruct #:
+  class MethodConstruct < ExecutableConstruct #:
     Represents a 'method' construct.
   scope:
 
@@ -17714,7 +17713,7 @@ scope:
 
   end class MethodConstruct;
 
-  class LifecycleConstruct : ExecutableConstruct #:
+  class LifecycleConstruct < ExecutableConstruct #:
     Represents a 'lifecycle' construct.
   scope:
 
@@ -17898,7 +17897,7 @@ scope:
 
   end class LifecycleConstruct;
 
-  class BehaviorConstruct : ExecutableConstruct #:
+  class BehaviorConstruct < ExecutableConstruct #:
     Represents a 'behavior' construct.
   assocs:
     std assoc collections;
@@ -17925,7 +17924,6 @@ scope:
       /# scope.
       name = self.id()
       context = self.context()
-      baselang = self.baselang()
       comment_lines = self.attrval('comment:', default=None)
       params_attr, params = self.attrpair('params:', default=None)
       parent_block = self.parent()
@@ -17946,6 +17944,7 @@ scope:
         
       scope, receivers = self.attrpair('scope:', default=None)
       for receiver in receivers:
+
         clsname = receiver.id()
 
         feature_map = copy.copy(default_feature_map)
@@ -18034,7 +18033,7 @@ scope:
 
   end class BehaviorConstruct;
 
-  class ReceiverConstruct : OoplConstruct #:
+  class ReceiverConstruct < OoplConstruct #:
     Represents a 'receiver' construct.
   scope:
 
@@ -18043,7 +18042,7 @@ scope:
 
   end class ReceiverConstruct;
 
-  class NativeConstruct : OoplConstruct #:
+  class NativeConstruct < OoplConstruct #:
     Represents a 'native' construct.
   scope:
 
@@ -18172,7 +18171,7 @@ scope:
 
   end class NativeConstruct;
 
-  class AssocConstruct : OoplConstruct #:
+  class AssocConstruct < OoplConstruct #:
     Represents a 'assoc' construct.
   scope:
 
@@ -18181,7 +18180,7 @@ scope:
 
   end class AssocConstruct;
 
-  class TestxConstruct : OoplConstruct #:
+  class TestxConstruct < OoplConstruct #:
     Represents a 'testx' construct.
   scope:
 
@@ -18190,7 +18189,7 @@ scope:
 
   end class TestxConstruct;
 
-  class ResourceConstruct : OoplConstruct #:
+  class ResourceConstruct < OoplConstruct #:
     Represents a 'resource' construct.
   scope:
 
@@ -18200,7 +18199,7 @@ scope:
   end class ResourceConstruct;
 
   abstract
-  class StatementConstruct : OoplConstruct #:
+  class StatementConstruct < OoplConstruct #:
     Abstract construct above constructs that can
     appear within executable code.
   scope:
@@ -18210,7 +18209,7 @@ scope:
 
   end class StatementConstruct;
 
-  class VarConstruct : StatementConstruct #:
+  class VarConstruct < StatementConstruct #:
     Represents a 'var' construct.
   scope:
 
@@ -18219,7 +18218,7 @@ scope:
 
   end class VarConstruct;
 
-  class LoopConstruct : StatementConstruct #:
+  class LoopConstruct < StatementConstruct #:
     Represents a 'loop' construct.
   scope:
 
@@ -18228,11 +18227,11 @@ scope:
 
   end class LoopConstruct;
 
-  class MetaFile : Meta #:
+  class MetaFile #:
     A metafile (with functionality for parsing, as well as final state).
   assocs:
     std assoc math;
-    codetest std assoc pprint;
+    usertest std assoc pprint;
   scope:
 
     meta lifecycle scope:
@@ -18694,17 +18693,17 @@ scope:
 
       test.captureStdout()
 
-      test.raises(meta.errors.Exiting, mf.fatal, 'hello')
+      test.raises(metax.root.Error, mf.fatal, 'hello')
       test.iseq(
         {'order': [{'message': 'hello', 'line': 0, 'kind': 'F', 'col': 0}], 'F': [{'message': 'hello', 'line': 0, 'kind': 'F', 'col': 0}]},
         mf._logmap)
 
-      test.raises(meta.errors.Exiting, mf.fatal, 'goodbye', line=15, col=30)
+      test.raises(metax.root.Error, mf.fatal, 'goodbye', line=15, col=30)
       test.iseq(
         {'order': [{'message': 'hello', 'line': 0, 'kind': 'F', 'col': 0}, {'message': 'goodbye', 'line': 15, 'kind': 'F', 'col': 30}], 'F': [{'message': 'hello', 'line': 0, 'kind': 'F', 'col': 0}, {'message': 'goodbye', 'line': 15, 'kind': 'F', 'col': 30}]},
         mf._logmap)
 
-      test.raises(meta.errors.Exiting, mf.fatal, 'done', attr=attr)
+      test.raises(metax.root.Error, mf.fatal, 'done', attr=attr)
       test.iseq(
         {'order': [{'message': 'hello', 'line': 0, 'kind': 'F', 'col': 0}, {'message': 'goodbye', 'line': 15, 'kind': 'F', 'col': 30}, {'message': 'done', 'line': 0, 'kind': 'F', 'col': 0}], 'F': [{'message': 'hello', 'line': 0, 'kind': 'F', 'col': 0}, {'message': 'goodbye', 'line': 15, 'kind': 'F', 'col': 30}, {'message': 'done', 'line': 0, 'kind': 'F', 'col': 0}]},
         mf._logmap)
@@ -18731,10 +18730,10 @@ scope:
     scope:
       if log:
         self.printLog()
-      raise meta.errors.Exiting('Dying')
+      raise metax.root.Error('Dying')
     test:
       mf = test.metafile
-      test.raises(meta.errors.Exiting, mf.die, log=False)
+      test.raises(metax.root.Error, mf.die, log=False)
     end method die;
 
     method warnings : vec<str> scope:
@@ -18844,7 +18843,7 @@ scope:
         Format is:
           <term> ::- <id> ['@' <attr> ]
           <spec> ::- <term> | <spec> '/' <term>
-      var fp : meta!ostream = null #:
+      var fp : ostream = null #:
         If non-null, where to write failure information.
     scope:
       if spec[0] == '/':
@@ -19040,7 +19039,7 @@ scope:
     method show #:
       Print out the content of this metafile.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write to.
     scope:
       sep = '#' * 80 + '\n'
@@ -21027,7 +21026,7 @@ scope:
       metac = self.compiler()
       flags = metac.flags()
       metadir = flags.metadir
-      if metadir != Meta.SUFFIX:
+      if metadir != metax.c.SUFFIX:
         self.warning(
           'Not performing file caching/cleanup for metadir %s' % metadir)
         return
@@ -21064,16 +21063,16 @@ scope:
           fs.unlink(path)
     end method cleanupFiles;
 
-  tests:
+    test
     lifecycle setup:
-      /# testdata = meta.root.Object.Resource('testdata', fqn='metax.c.Meta')
+      /# testdata = metax.root.Object.Resource('testdata', fqn='metax.c.Meta')
       _, _, _, compiler = test.cachedInfo(metal='Meta')
       text = 'MetaLanguage Test config:\nend MetaLanguage Test;\n'
       self.metafile = metax.c.MetaFile('fauxpath', compiler, text=text)
     end lifecycle;
   end class MetaFile;
 
-  class Compiler : Meta #:
+  class Compiler #:
     Maintains information about a collection of metafiles and provides
     functionality for parsing, expanding, compiling, analyzing, canonicalizing,
     (etc) those meta files.
@@ -21344,7 +21343,7 @@ scope:
         for example, unit tests.
       var metadir : str = null #:
         The path, relative to rootdir, within which the meta repository resides.
-        If this matches Meta.SUFFIX, it is treated specially in various places
+        If this matches metax.c.SUFFIX, it is treated specially in various places
         in the codebase.
       var kind : str = null #:
         The kind of filesystem to use. One of the legal values of the
@@ -21381,7 +21380,7 @@ scope:
       if metadir is None:
         metadir = flags.metadir
         if metadir == '.meta':
-          metadir = '.meta' + Meta.NEWSUFFIX
+          metadir = '.meta' + metax.c.NEWSUFFIX
       if kind is None:
         kind = 'memory' if flags.inmemory else 'disk'
       fs = metax.fs.Filesystem(kind=kind, metadir=metadir, rootdir=rootdir)
@@ -21395,7 +21394,7 @@ scope:
       /# files for (inherits, directly or indirectly, from metameta).
       metalang = self.metalangNamed(metal)
       if not metalang:
-        raise meta.errors.Error('Unknown MetaLanguage %s' % metal)
+        raise metax.root.Error('Unknown MetaLanguage %s' % metal)
 
       self.metalangIs(metalang)
       self.levelsIs(levels)
@@ -21407,7 +21406,7 @@ scope:
       if basel and metalang.baselangs():
         baselang = metalang.baselangNamed(basel)
         if not baselang:
-          raise meta.errors.Error(
+          raise metax.root.Error(
             'Unknown BaseLanguage %s for %s' % (basel, metal))
         self.baselangIs(baselang)
       else:
@@ -21470,7 +21469,7 @@ scope:
     method metaPath : str #:
       Obtain a path relative to the meta root.
     params:
-      vararg var subpaths : vec;
+      multi var subpaths : vec;
     scope:
       fs = self.fs()
       return fs.join(self.metaRoot(), *subpaths)
@@ -21537,7 +21536,7 @@ scope:
     method verifyDirectory : bool #:
       Ensure the initial directory is set up.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write diagnostic information.
     scope:
       result = True
@@ -21545,7 +21544,7 @@ scope:
       metadir = flags.metadir
       assert '/' not in metadir
       repository_path = self.repositoryPath()
-      special_metadir = Meta.SUFFIX
+      special_metadir = metax.c.SUFFIX
       fs = self.fs()
 
       def Print(msg):
@@ -21750,7 +21749,7 @@ scope:
     scope:
       /# Now parse $METAROOT/src/schema/meta/schema.meta
       context = self.bootstrapContext()
-      metapath = meta.root.Object.Resource(
+      metapath = metax.root.Object.Resource(
         'metameta', fqn='metax.c.MetaLanguageConstruct')
       metafile = MetaFile(metapath, self)
       /#metafile.debuglevelIs(4)
@@ -21797,7 +21796,7 @@ scope:
           fs = self.fs()
           metapath = metadata.get('schema', None)
           if not metapath:
-            metapath = meta.root.Object.Resource(
+            metapath = metax.root.Object.Resource(
               'meta' + id, fqn='metax.c.MetaLanguageConstruct')
           /# print 'LOADING %s' % fs.realpath(metapath)
           with fs.open(metapath, 'r') as fp:
@@ -22310,7 +22309,7 @@ scope:
         The .meta files to process.
       var debug : bool = false #:
         If true, print out progress.
-      var fp : meta!ostream = null #:
+      var fp : ostream = null #:
         If non-null, write out progress to given stream.
     scope:
       errors = 0
@@ -22336,7 +22335,7 @@ scope:
         The .meta file to process.
       var debug : bool = false #:
         If true, print out progress.
-      var fp : meta!ostream = null #:
+      var fp : ostream = null #:
         If non-null, write out progress to given stream.
     scope:
       flags = self.flags()
@@ -22434,7 +22433,7 @@ scope:
     params:
       var metafiles : vec<MetaFile> #:
         The metafiles to summarize.
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write output
       var indent : str = '' #:
         What each line starts with.
@@ -22464,7 +22463,7 @@ scope:
       cset = set()
       data = {}
       for metafile in metafiles:
-        name = fs.basename(metafile.path()).replace(Meta.SUFFIX, '')
+        name = fs.basename(metafile.path()).replace(metax.c.SUFFIX, '')
         output = metafile.constructs()
         data[name] = {kind: len(output[kind]) for kind in output}
         cset.update(output.keys())
@@ -22881,9 +22880,9 @@ scope:
         metafile_paths = [
           fs.abspath(f)
           for f in fs.listdir(fs.cwd())
-          if f.endswith(Meta.SUFFIX) and not f.startswith('.')]
+          if f.endswith(metax.c.SUFFIX) and not f.startswith('.')]
       else:
-        meta_suffix = Meta.SUFFIX
+        meta_suffix = metax.c.SUFFIX
         for arg in args:
           if arg.endswith(meta_suffix):
             if fs.exists(arg):
@@ -22949,7 +22948,7 @@ scope:
         else:
           /# Canonicalize the constructs in the MetaFile instance.
           file_cons = metafile.construct()
-          new_path = metafile_path.replace(Meta.SUFFIX, '-new' + Meta.SUFFIX)
+          new_path = metafile_path.replace(metax.c.SUFFIX, '-new' + metax.c.SUFFIX)
           if fs.exists(new_path):
             print 'ERROR: %s already exists - not replacing' % new_path
             continue
@@ -22968,10 +22967,10 @@ scope:
           /# to replace old with new or not.
           if Compiler.PromptDiff(metafile_path, new_path, kind='delta'):
             backup_path = metafile_path.replace(
-              Meta.SUFFIX,
-              '-' + datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + Meta.SUFFIX)
+              metax.c.SUFFIX,
+              '-' + datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + metax.c.SUFFIX)
             if backup_path == metafile_path:
-              print 'ERROR: not supporting files with %s suffix' % Meta.SUFFIX
+              print 'ERROR: not supporting files with %s suffix' % metax.c.SUFFIX
               sys.exit(1)
             print 'Moved %s to %s' % (
               fs.relpath(metafile_path), fs.relpath(backup_path))
@@ -23049,7 +23048,7 @@ scope:
     method generateMajorMode : map #:
       Instantiate a major mode by parsing its schema and writing a .el file.
     params:
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write diagnostic information (NOT where the .el file is
         written).
       var dryrun : bool = false #:
@@ -23065,9 +23064,9 @@ scope:
       /# or to abide by literal case-sensitivity.
       metaid = metalang.id().lower()
       MetaLang = metalang.name()
-      metaprefix = 'meta%s%s' % (metaid, Meta.NEWSUFFIX)
+      metaprefix = 'meta%s%s' % (metaid, metax.c.NEWSUFFIX)
 
-      in_file = meta.root.Object.Resource(
+      in_file = metax.root.Object.Resource(
         'emacs_template', fqn='metax.c.Compiler')
       out_file = self.metaPath(
         'src', 'schema', metaid, 'meta%s-mode.el' % metaid)
@@ -23647,6 +23646,7 @@ scope:
         if failm:
           d = failm.groupdict()
           fqn = '%s.%s' % (d['class'], d['method'])
+          print '**** HERE with fqn %s' % fqn
           if not sepre.match(errlines[i]):
             raise Error('Should have found separator line after "%s"' % line)
           if fqn not in datamap:
@@ -24091,9 +24091,9 @@ scope:
           time2: str
             The time of the test(s) as reported in the log file
     params:
-      var stdout : meta!istream = meta!in #:
+      var stdout : istream = in #:
         A file handle opened for reading on the stdout of the bazel command.
-      var stderr : meta!istream = meta!in #:
+      var stderr : istream = in #:
         A file handle opened for reading on the stderr of the bazel command.
       var logdir : str = null #:
         Where to find the logs produced by bazel. Normally null, in which
@@ -24266,7 +24266,7 @@ scope:
     params:
       var tests : map #:
         A map as returned from parseBazelOutput.
-      var fp : meta!ostream = meta!out #:
+      var fp : ostream = out #:
         Where to write output.
       var indent : str = '' #:
         What to add before each line.
@@ -24379,9 +24379,9 @@ scope:
       var cwd : str = null #:
         The directory to use when making relative paths absolute. If None,
         the current working directory is used.
-      var ifp : meta!istream = meta!in #:
+      var ifp : istream = in #:
         The input to be processed.
-      var ofp : meta!ostream = meta!out #:
+      var ofp : ostream = out #:
         Where output should be written.
       var debug : bool = false #:
         If True, print out information useful in debugging this method.
@@ -24762,11 +24762,9 @@ scope:
       return rc, stdout, stderr
     test:
     end method executeCommand;
-
   end class Compiler;
 
-tests:
-
+  test
   native scope:
     /# IMPORTANT: TestCase.cachedInfo() returns a cached
     /# baselang/metalang/context/compiler. Assuming none of the test code
@@ -24777,7 +24775,8 @@ tests:
     COMPILERS = {}
   end;
 
-  class TestCase : meta.testing.TestCase assocs:
+  test
+  class TestCase < metax.test.TestCase assocs:
     std assoc optparse;
 
     resource ex1 path "./testdata/ex1.meta2";
@@ -24916,7 +24915,7 @@ tests:
           '-L', '--metalang', dest='metalang', default='oopl',
           help='The meta language we are compiling')
         options.add_option(
-          '--metadir', dest='metadir', default=metax.c.Meta.SUFFIX,
+          '--metadir', dest='metadir', default=metax.c.SUFFIX,
           help='The subdir to write code to')
         options.add_option(
           '-M', '--inmemory', action='store_true', dest='inmemory', default=False,
@@ -25000,13 +24999,13 @@ tests:
     method resourcePath : str #:
       Obtain the path to a resource given the resource name (only for
       resources defined on this class).
-      TODO(wmh): Improve meta.root.Object.Resource() to accept an xid
+      TODO(wmh): Improve metax.root.Object.Resource() to accept an xid
       resname instead of having to pass fqn as a second param).
     params:
       var name : str #:
         The name of a resource defined on TestCase.
     scope:
-      result = meta.root.Object.Resource(name, fqn='metax.c_test.TestCase')
+      result = metax.root.Object.Resource(name, fqn='metax.c_test.TestCase')
       _, _, _, metameta = test.cachedInfo(metal='Meta')
       fs = metameta.fs()
       if not fs.exists(result):
@@ -25025,7 +25024,7 @@ tests:
         If null, uses compiler.metalang().context().
       var debuglevel : int = 0;
     scope:
-      path = meta.root.Object.Resource(resname, fqn='metax.c_test.TestCase')
+      path = metax.root.Object.Resource(resname, fqn='metax.c_test.TestCase')
       _, metalang, _, compiler = self.cachedInfo(metal=metal)
       self.compiler = compiler
       if context is None:
@@ -25094,7 +25093,7 @@ tests:
       /#  - Compiler and Filesystem construction is not that expensive
       /#  - this method won't be used all the time and it is best for us to
       /#    be in a clean slate for those test methods that really need it.
-      repo_path = meta.root.Object.Resource('test_repo', fqn='metax.c.Compiler')
+      repo_path = metax.root.Object.Resource('test_repo', fqn='metax.c.Compiler')
       compiler = metax.c.Compiler(
         metal=metal, basel=basel, kind='disk',
         rootdir=repo_path, metadir='.', repodir=repo_path)

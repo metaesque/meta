@@ -1,0 +1,89 @@
+<html>
+  <head>
+
+  </head>
+  <body>
+
+
+<h1>Header 1</h1>
+
+<p>This is a <b>first</b> paragraph
+short and sweet.</p>
+
+<p>Another <b>paragraph</b> but with explict  
+line break here.</p>
+
+<hr/>
+
+<table>
+  <tr><td>An HTML block</td></tr>
+</table>
+
+<div>
+  <h1>Another HTML block</h1>
+  <h2>And a third HTML block</h2>
+</div>
+
+<p>Here's a pretty picture of red trees.
+<div class="image bgblack right">
+  <div class="fixedwidth">red-leaved trees in a row</div>
+  <a href="https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg">
+    <img alt=red-leaved trees in a row src=https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg>
+  </a>
+</div>
+<a href="https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg">which can be found here</a> and
+<div class="image bgblack right">
+  <div class="fixedwidth">this</div>
+  <a href="http://www.designzzz.com/wp-content/uploads/2016/02/oaks-are-beautiful-trees.jpg">
+    <img alt=this src=http://www.designzzz.com/wp-content/uploads/2016/02/oaks-are-beautiful-trees.jpg title=Beautiful sunlit tree>
+  </a>
+</div>
+ is a beautiful sunlit tree (<a href="http://www.designzzz.com/wp-content/uploads/2016/02/oaks-are-beautiful-trees.jpg">it can be found here</a>)</p>
+
+<ul>
+  <li>
+  <p>Apple</p>
+  <ol>
+    <li>
+    <p>way out</p>
+    </li>
+    <li>
+    <p>last thing</p>
+    </li>
+  </ol>
+  </li>
+  <li>
+  <p>Banana</p>
+  <ol>
+    <li>
+    <p>not fair</p>
+    </li>
+    <li>
+    <p>having a life</p>
+    </li>
+  </ol>
+  </li>
+  <li>
+  <p>Cantelope</p>
+  <ul>
+    <li>
+    <p>nested bullet with multiple lines
+    to see how it works</p>
+    </li>
+    <li>
+    <p>another nested bullet with indented
+    second line.</p>
+    </li>
+  </ul>
+  </li>
+</ul>
+
+<p>How do we determine when a list ends?  When we encounter text at
+left margin? (or, in the case of code blocks, at code level?)</p>
+
+<pre><code>class Person(object):
+  def __init__(self, name):
+    self._name = name
+</code></pre>
+  </body>
+</html>

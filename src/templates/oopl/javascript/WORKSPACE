@@ -19,7 +19,8 @@ git_repository(
   name = "io_bazel_rules_closure",
   remote = "https://github.com/bazelbuild/rules_closure.git",
   # commit = "64f93d91a11db829d8468e6a476ff047131fb927",
-  commit = "7e0c1ff0da3dc5739f1409faf870986fecf76693",
+  # commit = "7e0c1ff0da3dc5739f1409faf870986fecf76693",
+  commit = "172f84fe96e07214fa7337b081648d4a61b45b93",
   # IMPORTANT: You can find the latest commit by:
   #  - visiting https://github.com/bazelbuild/rules_closure
   #  - click the link to the right of 'Latest commit'
