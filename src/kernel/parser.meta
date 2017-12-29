@@ -8932,7 +8932,7 @@ scope:
           if fval == default:
             method.metafile().warning(
               'Explicit iniitalization of %s to %s not necessary (is default)' %
-              (fid, default), attr=scope)
+              (fid, default), attr=scope_attr)
         elif basel == 'cpp' and metatype.isValue() and not metatype.isPrimitive():
           /# There is no need to initialize the field, because C++ has already
           /# invoked a constructor on the field class to initialize the field

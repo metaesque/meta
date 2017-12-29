@@ -305,6 +305,8 @@ scope:
     std assoc glob;
     std assoc shutil;
     std assoc tempfile;
+
+    test resource testdata path "./testdata/fs";
   scope:
 
     meta
@@ -369,7 +371,6 @@ scope:
 
       if kind == 'emulate':
         self.emulateIO()
-
     end lifecycle;
 
     method environ : map #:
@@ -695,6 +696,7 @@ scope:
       var path : str;
     scope:
       return os.path.abspath(path)
+    test:
     end method abspath;
 
     method normpath : str #:
@@ -952,6 +954,12 @@ scope:
         raise meta.errors.Error('getFakeFile() only valid when kind=emulate')
       return self._fake_filesystem.GetObject(path)
     end method getFakeFile;
+
+    test
+    lifecycle setup:
+      rootdir = metax.root.Object.Resource('testdata')
+      /#test.fs = metax.fs.Filesystem(rootdir=rootdir)
+    end;
 
   end class Filesystem;
 

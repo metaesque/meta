@@ -119,6 +119,27 @@ scope:
        - This is currently typed as 'any' because there will be a circularity
          induced if we type it as metax.root.flags.Command. Need to establish
          whether this will be implementable in C++.
+       - Currently initialized in metax.c.Compiler.Initialize(), but that
+         doesn't account for situations where this field is desired 
+         'in the wild' without the compiler as intermediary.
+       - TODO(wmh): Find a way to initialize this properly.
+
+    meta
+    field Config : @map #:
+      Provides access to the key/value pairs of ~/.config/metameta, which acts
+      as the means of avoiding meta-specific environment variables scattered
+      throughout the codebase. Initialized in metax.c.Compiler.Initialize(),
+      but a more general mechanism is also needed to support access to this
+      data without the compiler as intermediary.
+      TODO(wmh): Can repeate the Config() method from the 'meta2' script here,
+      but we cannot remove meta2://Config() as we need to be able to parse
+      the config BEFORE any meta code (including this file) is loaded.
+
+    meta
+    lifecycle #:
+      This may go away.
+    scope:
+    end lifecycle;
 
     user
     lifecycle #:
@@ -170,22 +191,26 @@ scope:
       /# provide a memory-only filesystem. Figure out how to handle this.
       import os
       if fqn is None:
-        fqn = cls.__module__ + '.' + cls.__name
+        fqn = cls.__module__ + '.' + cls.__name__
       namespace_fqn, clsname = fqn.rsplit('.', 1)
       subparts = namespace_fqn.split('.')
 
       /# Convert the fqn to a relative path.
-      metarep = os.getenv('METAREP')
-      if metarep is None:
-        /# TODO(wmh): Handle non-test bazel invocation (e.g. bazel run vs bazel test)
-        if os.getenv('TEST_SRCDIR', None) or os.getenv('IN_UNITTEST'):
-          /# We are in bazel running a test.  All such tests are invoked from
-          /# the directory containing WORKSPACE.
-          parts = [os.getcwd()] + subparts
-        else:
-          raise meta.errors.Error('Missing environment variable METAREP')
+      if os.getenv('TEST_SRCDIR', None) or os.getenv('IN_UNITTEST'):
+        /# We are in bazel running a test.  All such tests are invoked from
+        /# the directory containing WORKSPACE.
+        parts = [os.getcwd()] + subparts
       else:
-        metarep += NEWSUFFIX
+        config = cls.Config()
+        if config:
+          metarep = config['repository_path']
+        else:
+          metarep = os.getenv('METAREP')
+          if metarep is None:
+            metarep = '/Users/wmh/src/wmh/lib/meta2'
+            print 'WARNING: Temporarily using hardcoded repopath %s' % metarep
+          else:
+            metarep += NEWSUFFIX
         parts = [metarep, 'oopl', 'python']
         parts.extend(subparts)
       /# CODETANGLE(resource_dir): In metax.c (parser.meta).
@@ -445,6 +470,28 @@ scope:
       test.iseqvec(['faux', 'image'], test.fauximg.names())
     end method names;
 
+    method fqn : str #:
+      The fully qualified name of this command.
+    params:
+      var delim : str = '_' #:
+        What to separate command names with.
+    scope:
+      return delim.join(self.names())
+    test:
+      test.iseq('meta2', test.command.fqn())
+      test.iseq('meta2_canonical', test.subcommand.fqn())
+      test.iseq('deps', test.intflag.fqn())
+      test.iseq('length', test.arg2.fqn())
+    end method fqn;
+
+    method isCommand : bool scope:
+      return False
+    test:
+      test.isfalse(test.arg4.isCommand())
+      test.isfalse(test.strflag.isCommand())
+      test.istrue(test.subcommand.isCommand())
+    end method isCommand;
+
     method isFlag : bool scope:
       return False
     test:
@@ -464,6 +511,11 @@ scope:
   class Command < Part #:
     Represents a command, associated flags, and optional args.
   scope:
+
+    field order : @vec<Command> #:
+      The sub-commands of this command in the order they were registered.
+      In addition to ordering, this provides a unique set of subcommands,
+      unlike 'commands', which has entries for every alias as well.
 
     field commands : @map<str,Command> #:
       Maps command names anad aliases to Command instances.
@@ -499,6 +551,64 @@ scope:
         for arg in args:
           self.registerArg(arg)
     end;
+
+    method isCommand : bool scope:
+      return True
+    test:
+      test.isfalse(test.arg4.isCommand())
+      test.isfalse(test.strflag.isCommand())
+      test.istrue(test.subcommand.isCommand())
+    end method isCommand;
+
+    method root : Command #:
+      The top-level command above this one.
+    scope:
+      result = self
+      cmd = self.parent()
+      while cmd is not None:
+        result = cmd
+        cmd = cmd.parent()
+      return result
+    test:
+      test.issame(test.command, test.subcommand.root())
+    end method root;
+
+    method help #:
+      Print out help for this command.
+    params:
+      var fp : ostream = out #:
+        Where to write output.
+      var indent : str = '' #:
+        Indentation before each line.
+      var full : bool = false #:
+        If true, print out full help.
+    scope:
+      mode = 'helpfull' if full else 'help'
+      self.show(fp=fp, indent=indent, mode=mode)
+    test:
+      fp = test.fp()
+      test.command.help(fp=fp)
+      test.command.help(fp=fp, full=True)
+      test.iseqtext(
+        >|"""meta2: 
+        >|  --baselang|b: The baselang to compile into.
+        >|  --metadir: The subdir to write code to.
+        >|  --metalang|L: The metalang the code is defined in.
+        >|  canonical: Canonicalize the specified meta files and report diffs.
+        >|    --expand|e: If true, invoke expandMeta() before canonicalizing
+        >|meta2: 
+        >|  --baselang|b: The baselang to compile into.
+        >|    If this is <special>, a metalang-specific default is used
+        >|  --metadir: The subdir to write code to.
+        >|    A value of .meta2 is treated specially, being symlinked to repo
+        >|  --metalang|L: The metalang the code is defined in.
+        >|
+        >|  canonical: Canonicalize the specified meta files and report diffs.
+        >|    --expand|e: If true, invoke expandMeta() before canonicalizing
+        >|      By default, expandMeta() invokes parseMeta() but not expandMeta().
+        >|""",
+        test.out())
+    end method help;
 
     method findFlag : Flag #:
       Obtain a flag by name or alias.
@@ -539,7 +649,7 @@ scope:
         A multi-line description of the flag.
     scope:
       if default is None:
-        raise Error('Flag %s : %s needs a default value' % (name, mytype))
+        raise Error('Flag --%s : %s needs a default value' % (name, mytype))
       result = Flag(
         name, mytype=mytype, default=default, aliases=aliases,
         summary=summary, desc=desc)
@@ -668,6 +778,12 @@ scope:
         docstr
     scope:
       commands = self.commands()
+      order = self.order()
+
+      if command in order:
+        raise Error('Attempt to re-register command %s' % command.fqn())
+      order.append(command)
+
       noras = [command.name()] + (command.aliases() or [])
       for nora in noras:
         existing = self.findCommand(nora)
@@ -860,8 +976,8 @@ scope:
                 if res is None:
                   /# We failed to set the flag.
                   errors.append(
-                    'Flag --%s : %s cannot have value "%s"' %
-                    (flag.name(), flagtype, flagval or nextitem))
+                    '%s cannot have value "%s"' %
+                    (flag.title(), flagval or nextitem))
                 else:
                   /# We successfully set the flag
                   if res is True:
@@ -891,8 +1007,7 @@ scope:
               if res is None:
                 /# We failed to set the flag.
                 errors.append(
-                  'Flag --%s : %s cannot have value "%s"' %
-                  (flag.name(), flagtype, flagval))
+                  '%s cannot have value "%s"' % (flag.title(), flagval))
                 break
               else:
                 /# We succeeded in setting the flag.
@@ -952,11 +1067,11 @@ scope:
                 /# We have an invalid arg.
                 /#  - Arg.instantiate() will already have printed out an error.
                 errors.append(
-                  'Arg %s : %s cannot have value "%s"' % (
-                    arg.name(), arg.mytype(), item))
+                  '%s cannot have value "%s"' % (arg.title(), item))
                 break
             else:
               /# This item is not a subcommand or flag or arg ... unrecognized.
+              self.show(mode='helpfull')
               errors.append(
                 'Command %s has no args to represent "%s"' %
                 (self.name(), item))
@@ -970,20 +1085,20 @@ scope:
           if arg.value() is None:
             /# A required arg without a value.
             errors.append(
-              'Command %s has required arg %s : %s that is missing a value' %
-              (result.name(), arg.name(), arg.mytype()))
+              'Command %s has required %s that is missing a value' %
+              (result.name(), arg.title()))
         allflags = result.allFlags()
         for flagname in sorted(allflags):
           flag = allflags[flagname]
           if flag.value() is None:
             /# A required flag without a value
             errors.append(
-              'Command %s has required flag %s : %s that is missing a value' %
-              (result.name(), flag.name(), flag.mytype()))
+              'Command %s has required %s that is missing a value' %
+              (result.name(), flag.title()))
 
       if errors:
         efp.write(
-          "Found errors while instantiating command '%s' with\n  %s\n" % (
+          "Found errors while instantiating command '%s' with args\n  %s\n" % (
             self.name(), ' '.join(
               ['"%s"' % arg if ' ' in arg else arg for arg in argv])))
         efp.write('Errors:\n')
@@ -994,7 +1109,7 @@ scope:
       return result              
     test:
       command = test.faux
-
+      test.iseq('faux', command.fqn())
       command.show(fp=test.fp())
       before = test.out()
 
@@ -1066,30 +1181,6 @@ scope:
       test.iseq(['a', 'b', 'c'], res.findValue('files'))
     end method findValue;
 
-    method show #:
-      Print out information about this Command.
-    params:
-      var fp : ostream = out #:
-        Where to write output.
-      var indent : str = "" #:
-        The indentation to insert before each line of output.
-      var mode : str = 'summary' #:
-        How much details to show.  Possible values are:
-          summary: ...
-    scope:
-      fp.write('%s%s: %s\n' % (indent, self.name(), self.summary()))
-      subindent = indent + '  '
-      flags = self.allFlags()
-      for flagname in sorted(flags):
-        flag = flags[flagname]
-        /# flags and args are both recorded in flags, but we only want to
-        /# show flags here.
-        if flag.isFlag():
-          flag.show(fp=fp, indent=subindent, mode=mode)
-      for arg in self.args():
-        arg.show(fp=fp, indent=subindent, mode=mode)
-    end method show;
-
     method asValues : Values #:
       Wrap myself in a Values instance
     scope:
@@ -1100,6 +1191,13 @@ scope:
       values = res.asValues()
       test.isinst(values, metax.root.flags.Values)
     end method asValues;
+
+    method title : str #:
+      A small snippet summarizing this flag.
+    scope:
+      return 'Command %s' % self.name()
+    test:
+    end method title;
 
   end class Command;
 
@@ -1169,8 +1267,7 @@ scope:
         value = self.typecheck(default)
         if value is None:
           raise Error(
-            '%s %s : %s cannot have default value "%s"' %
-            (self.__class__.__name__, self.name(), self.mytype(), default))
+            '%s cannot have default value "%s"' % (self.title(), default))
         self.valueIs(value)
     end;
 
@@ -1265,49 +1362,19 @@ scope:
       Chk(test.expand, 'expand', 'blah', 'true', None, None)
     end method instantiate;
 
-    method show #:
-      Print out information about this Flag.
-    params:
-      var fp : ostream = out #:
-        Where to write output.
-      var indent : str = "" #:
-        The indentation to insert before each line of output.
-      var mode : str = 'summary' #:
-        How much details to show.  Possible values are:
-          summary: ...
-    scope:
-      value = self.value()
-      start = self.start()
-      default = self.default()
-
-      def Trunc(val, width):
-        w = len(val)
-        return val if w < width else val[:width-1] + '$'
-
-      if mode == 'summary':
-        sval = '=' if str(start) == str(value) else Trunc(str(start), 10)
-        dval = '=' if str(default) == str(value) else Trunc(str(default), 10)
-
-        fp.write(
-          '%s--%-20s %-30s %-10s %-10s\n' %
-          (indent, self.name(), value, sval, dval))
-      else:
-        fp.write('%sERROR: Unknown mode %s\n' % (indent, summary))
-    test:
-      fp = test.newStr()
-      test.baselang.show(fp=fp)
-      test.iseq(
-        '--baselang             <special>                      None       '
-        '=         \n',
-        fp.getvalue())
-    end method show;
-
     method isFlag : bool scope:
       return True
     test:
       test.isfalse(test.arg4.isFlag())
       test.istrue(test.strflag.isFlag())
     end method isFlag;
+
+    method title : str #:
+      A small snippet summarizing this flag.
+    scope:
+      return 'Flag --%s : %s' % (self.name(), self.mytype())
+    test:
+    end method title;
 
   end class Flag;
 
@@ -1335,8 +1402,7 @@ scope:
         realval = self.typecheck(value_list)
         if realval is None:
           logging.error(
-            "Arg %s : %s cannot have value '%s'",
-              self.name(), self.mytype(), str(value_list))
+            "%s cannot have value '%s'", self.title(), str(value_list))
           result = -1
           self.valueIs(None)
         else:
@@ -1348,8 +1414,7 @@ scope:
         realval = self.typecheck(value)
         if realval is None:
           logging.error(
-            "Arg %s : %s cannot have value '%s'",
-            self.name(), self.mytype(), value)
+            "%s cannot have value '%s'", self.title(), value)
           result = -1
           self.valueIs(None)
         else:
@@ -1376,43 +1441,6 @@ scope:
       Chk(arg4, values, 0, -1, None)
     end method instantiate;
 
-    method show #:
-      Print out information about this Flag.
-    params:
-      var fp : ostream = out #:
-        Where to write output.
-      var indent : str = "" #:
-        The indentation to insert before each line of output.
-      var mode : str = 'summary' #:
-        How much details to show.  Possible values are:
-          summary: ...
-    scope:
-      value = self.value()
-      start = self.start()
-      default = self.default()
-
-      def Trunc(val, width):
-        w = len(val)
-        return val if w < width else val[:width-1] + '$'
-
-      if mode == 'summary':
-        sval = '=' if str(start) == str(value) else Trunc(str(start), 10)
-        dval = '=' if str(default) == str(value) else Trunc(str(default), 10)
-
-        fp.write(
-          '%s%-22s %-30s %-10s %-10s\n' %
-          (indent, self.name(), value, sval, dval))
-      else:
-        fp.write('%sERROR: Unknown mode %s\n' % (indent, summary))
-    test:
-      fp = test.newStr()
-      test.baselang.show(fp=fp)
-      test.iseq(
-        '--baselang             <special>                      None       '
-        '=         \n',
-        fp.getvalue())
-    end method show;
-
     method ismulti : bool #:
       True if this is a multi-value arg.
     scope:
@@ -1429,7 +1457,142 @@ scope:
       test.isfalse(test.strflag.isArg())
     end method isArg;
 
+    method title : str #:
+      A small snippet summarizing this flag.
+    scope:
+      return 'Arg %s : %s' % (self.name(), self.mytype())
+    test:
+    end method title;
+
   end class Arg;
+
+  behavior show  #:
+    Print out information about this part.
+  params:
+    var fp : ostream = out #:
+      Where to write output.
+    var indent : str = "" #:
+      The indentation to insert before each line of output.
+    var mode : str = 'summary' #:
+      How much details to show.  Possible values are:
+        summary: provide a one-line summary
+        help: provide help for the part
+        helpfull: provide detailed help for the part.
+  scope:
+    receiver Command scope:
+      fp.write('%s%s: %s\n' % (indent, self.name(), self.summary() or ''))
+      subindent = indent + '  '
+
+      if mode == 'summary':
+        flags = self.allFlags()
+      else:
+        flags = self.flags()
+
+      for flagname in sorted(flags):
+        flag = flags[flagname]
+        if flag.name() != flagname: continue   # skip aliases
+        /# flags and args are both recorded in flags, but we only want to
+        /# show flags here.
+        if flag.isFlag():
+          flag.show(fp=fp, indent=subindent, mode=mode)
+
+      if 'help' in mode:
+        /# Intentionally listing in order instead of alphabetically, in case
+        /# the order is important (user can order them alphabetically if
+        /# order isn't important).
+        for command in self.order():
+          if 'full' in mode:
+            fp.write('\n')
+          command.show(fp=fp, indent=subindent, mode=mode)
+
+      for arg in self.args():
+        if 'help' not in mode or not arg.ismulti or 'full' in mode:
+          arg.show(fp=fp, indent=subindent, mode=mode)
+    test:
+      fp = test.fp()
+      test.command.show(fp=fp)
+      test.iseqtext(
+        >|"""meta2: 
+        >|  --baselang             <special>                      None       =         
+        >|  --metadir              .meta2                         None       =         
+        >|  --metalang             oopl                           None       =         
+        >|""",
+        test.out())
+    end receiver Command;
+
+    receiver Flag scope:
+      value = self.value()
+      start = self.start()
+      default = self.default()
+
+      def Trunc(val, width):
+        w = len(val)
+        return val if w < width else val[:width-1] + '$'
+
+      if mode == 'summary':
+        sval = '=' if str(start) == str(value) else Trunc(str(start), 10)
+        dval = '=' if str(default) == str(value) else Trunc(str(default), 10)
+
+        fp.write(
+          '%s--%-20s %-30s %-10s %-10s\n' %
+          (indent, self.name(), value, sval, dval))
+
+      elif 'help' in mode:
+        symbols = '|'.join([self.name()] + self.aliases())
+        fp.write('%s--%s: %s\n' % (indent, symbols, self.summary() or ''))
+        desc = self.desc()
+        if desc and 'full' in mode:
+          for line in desc.split('\n'):
+            fp.write('%s  %s\n' % (indent, line))
+
+      else:
+        fp.write('%sERROR: Unknown mode %s\n' % (indent, summary))
+    test:
+      fp = test.newStr()
+      test.baselang.show(fp=fp)
+      test.iseq(
+        '--baselang             <special>                      None       '
+        '=         \n',
+        fp.getvalue())
+    end receiver Flag;
+
+    receiver Arg scope:
+      value = self.value()
+      start = self.start()
+      default = self.default()
+
+      def Trunc(val, width):
+        w = len(val)
+        return val if w < width else val[:width-1] + '$'
+
+      if mode == 'summary':
+        sval = '=' if str(start) == str(value) else Trunc(str(start), 10)
+        dval = '=' if str(default) == str(value) else Trunc(str(default), 10)
+
+        fp.write(
+          '%s%-22s %-30s %-10s %-10s\n' %
+          (indent, self.name(), value, sval, dval))
+
+      elif 'help' in mode:
+        symbols = '|'.join([self.name()] + self.aliases())
+        fp.write('%s%s: %s\n' % (indent, symbols, self.summary() or ''))
+        desc = self.desc()
+        if desc and 'full' in mode:
+          for line in desc.split('\n'):
+            fp.write('%s  %s\n' % (indent, line))
+
+      else:
+        fp.write('%sERROR: Unknown mode %s\n' % (indent, summary))
+    test:
+      fp = test.newStr()
+      test.baselang.show(fp=fp)
+      test.iseq(
+        '--baselang             <special>                      None       '
+        '=         \n',
+        fp.getvalue())
+    end receiver Arg;
+
+  end behavior show;
 
   class Values #:
     A wrapper around a Command instance providing accessing to flags and args.
@@ -1445,13 +1608,12 @@ scope:
       Allow one to obtain the values of flags/args as properties on self.
     params:
       var nora : str #:
-        The name or alias of the flag or arg deisred.
+        The name or alias of the flag or arg desired.
     scope:
       command = self._command_()
       result = command.findValue(nora)
       if result is None:
-        raise AttributeError(
-          "Failed to find flag/arg with name/alias '%s'" % nora)
+        raise AttributeError('Undefined flag --%s (or arg %s)' % (nora, nora))
       return result
     test:
       command = test.faux.instantiate(
@@ -1468,6 +1630,31 @@ scope:
       else:
         test.fail('Failed to raise AttributeError')
     end method __getattr__;
+
+    method __setattr__ #:
+      Assign a value to a flag.
+    params:
+      var nora : str #:
+        The name or alias of the flag or arg to set.
+      var value : any #:
+        The value to assign.
+    scope:
+      if nora == '_Values__command_':
+        self.__dict__[nora] = value
+      else:
+        command = self._command_()
+        flags = command.allFlags()
+        part = flags.get(nora, None)
+        if part is None:
+          raise AttributeError('Undefined flag --%s (or arg %s)' % (nora, nora))
+        else:
+          realval = part.typecheck(value)
+          if realval is None:
+            logging.error("%s cannot have value '%s'", self.title(), value)
+          else:
+            part.valueIs(value)
+    test:
+    end method __setattr__;
 
   end class Values;
 
@@ -1486,7 +1673,7 @@ scope:
       test.metadir = command.newFlag(
         'metadir', 'str', '.meta2',
         summary='The subdir to write code to.',
-        desc="A value of .meta2 is treaed specially, being symlinked to repo")
+        desc="A value of .meta2 is treated specially, being symlinked to repo")
 
       test.subcommand = command.newCommand(
         'canonical', aliases='can',

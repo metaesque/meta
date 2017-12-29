@@ -1162,6 +1162,19 @@ config:
 
   end Construct resource;
 
+  Construct command < _oopl_ #:
+    The command construct.
+  config:
+
+    primary
+    Attribute command : id = <required> #:
+      The name of the command.
+
+    Attribute comment:;
+    Attribute scope: children <command|flag|arg|block>;
+
+  end Construct command;
+
   Construct flag < _oopl_ #:
     The flag construct.
   config:
@@ -1195,19 +1208,6 @@ config:
 
   end Construct flag;
 
-  Construct command < _oopl_ #:
-    The command construct.
-  config:
-
-    primary
-    Attribute command : id = <required> #:
-      The name of the command.
-
-    Attribute comment:;
-    Attribute scope: children <flag|command|block>;
-
-  end Construct command;
-
   abstract
   Construct _statement_ < _oopl_ #:
     The abstract superconstruct for all constructs that can appear within
@@ -1223,6 +1223,41 @@ config:
   Construct block < _statement_ #:
     The block construct.
   config:
+
+    feature
+    Attribute kind : <virtual|scoped|named> = inline #:
+      Identifies one of a variety of mutually exclusive kinds of methods.
+
+      TODO(wmh): The fact that executables have a feature attribute named kind',
+      combined with us using 'kind to refer to the primary key, is destined to
+      pose confusion. Consider renaming one or the other use.
+    config:
+      FeatureValue virtual #:
+        The compiled code does not introduce a lexical scope, so the lines
+        in the block flow from previous lines without change.
+      FeatureValue scoped #:
+        The compiled code introduces a new lexical scope for the block.
+        IMPORTANT: Certain baselangs (e.g. python) do not have support for
+        lexical blocks, and although lexical scoping can be emulated in
+        Meta*, code written in Meta<Python> using scoped blocks may have
+        different semantics from what occurs in Meta<C++>, etc.
+        TODO(wmh): Does python 3 provide support for this?
+      FeatureValue named #:
+        An instance-level method is defined to implement the block. The method
+        is defined on the class within which the 'command' construct was found,
+        and accepts one argument of type metax.root.flags.Values representing
+        the instantiated flags (and associated Command). Note that only commands
+        of kind 'instance' can be invoked outside of the method implementing the
+        command construct (blocks of kind 'virtual' or 'scoped' are local to the
+        top-level command).
+
+        TODO(wmh): Provide support for returning values.  Although one
+        can use 'return' in such blocks, if the block is changed to
+        virtual, it will return from the entire surrounding function,
+        which isn't usually what is desired. A safer mechanism that works
+        for both instance and virtual blocks is preferred.
+    end Attribute kind;
+
 
     primary
     Attribute block : id = <auto> #:

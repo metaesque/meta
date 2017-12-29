@@ -1,0 +1,15 @@
+Versions of the Meta<Python> implementation of Meta.
+
+Each subdirectory has the following form:
+  v0.7.<num>/
+    lib/
+      metax/
+        {c,fs,logs,root,test}[_test]/
+    src/
+      {parser,fs,logs,root,test}.meta2
+
+A new version is formed via:
+ % meta2 release
+
+----------------------------------------------------------------------
+FILE LISTING:

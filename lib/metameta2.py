@@ -1,6 +1,5 @@
 # This file must be placed somewhere in one's PYTHONPATH. It is used to set
-# up python paths to find meta source code. It relies on METAROOT being
-# properly set.
+# up python paths to find meta source code.
 import os
 import re
 import sys
@@ -14,14 +13,44 @@ NewPythonPaths = []
 NEWSUFFIX = '2'
 
 _MetaFlagParser = None
+_Config = None
 
-def CheckEnv():
+def Config():
+  """Parse the meta config file.
+
+  Returns: dict
+  """
+  global _Config
+  result = _Config
+
+  if result is None:
+    # TODO(wmh): The return value should be available everywhere from within
+    # all baselangs. There is a plan afoot to introduce the symbol Meta into
+    # every namespace (it may be metax.root.MetaObject aka the singleton
+    # instance of metax.root.ObjectMeta, or some other entity), but that would
+    # be the right place to store this information.  In which case we would
+    # NOT provide metameta2.Config() ... or would otherwise ensure that
+    # Meta.Config() returns the same thing as metameta2.Config().
+  
+    # CODETANGLE(parse_config): Similar code exists in
+    # <<src_root/src/kernel/parser.meta2.
+    vre = re.compile(r'var\s+(?P<var>\S+)\s+=\s+(?P<val>\S+)')
+    # TODO(wmh): Add a --config flag to metameta2.py!
+    configpath = os.path.join(os.getenv('HOME'), '.config', 'metameta')
+    result = {}
+    _Config = result
+    if os.path.exists(configpath):
+      with open(configpath, 'r') as fp:
+        for line in fp:
+          m = vre.match(line)
+          if m:
+            result[m.group('var')] = os.path.expandvars(m.group('val'))
+       
+  return result
+
+def VerifyState():
   """Ensure that various META-specific environment variables are defined."""
   # print 'Checking Meta environment...'
-
-  # IMPORTANT: Code in various places assumes these checks have been made.
-  # If you remove a variable from this list, audit the code to see if
-  # a check needs to be added elsewhere.
   for envvar in (
     'METAREP',        # where baselang source code is written
     'META_VERSION',   # which version of the meta compiler to use
@@ -43,7 +72,7 @@ def CheckEnv():
       index = i
       break
   if index is not None:
-    if False:
+    if True:
       # TODO(wmh): How to remind user of this replacement without it spamming
       # output everytime 'meta2' is invoked?
       sys.stderr.write(
@@ -51,15 +80,33 @@ def CheckEnv():
         (metarep_path, newrep_path))
     sys.path[index] = newrep_path
 
-# TODO(wmh): Determine if we ALWAYS want to invoke CheckEnv() whenever
+# TODO(wmh): Determine if we ALWAYS want to invoke VerifyState() whenever
 # metameta is imported, or only selectively. If it is not always invoked,
 # the code for modify sys.path needs to be pulled out and put someplace that
 # *is* always executed.
-# TODO(wmh): Remove the reliance on envars in favor of a single config file.
-CheckEnv()
+VerifyState()
 
 
 def ParseFlags(args=None):
+  # TODO(wh): Rather than defining a flagparser that consumes all of sys.argv
+  # (which interacts poorly with an individual binary wanting to import
+  # metameta2 but still do its own thing with sys.argv), consider having
+  # metameta2 do a lightweight modification of sys.argv, stripping out
+  # a very small set of flags and update _Config with the data:
+  #   --metalang and -L
+  #   --baselang and -b
+  #   --metaversion and -V?
+  # or maybe all flags starting with --meta (rename --baselang to --metabase)?
+  #
+  # The crucial point here is that we sometimes need to know which version of
+  # the Meta codebase is desired BEFORE we import modules (and thus before we
+  # invoke any binary-specific flag parsing) so that sys.path can be adjusted to
+  # ensure that the proper code is obtained. Not even the metalang and baselang
+  # are needed to select the proper version of meta code, but metalang and
+  # baselang are ubqituously needed for various other purposes so it makes sense
+  # to provide 'metalang' and 'baselang' values in Config(), in addition to the
+  # existing 'default_metalang' and 'default_baselang' ... 'metalang' and
+  # 'baselang' would be dynamically updated by this code.
   if args is None:
     args = sys.argv[1:]
   flags, args = FlagParser().parse_args(args)
@@ -346,6 +393,8 @@ def SwapStreams():
   errors are usually written to stderr, and unix pipes only operate on
   stdout, not stderr.
   """
+  raise Exception('Is this used in meta2 or meta2old?')
+  
   tmp = sys.stdout
   sys.stdout = sys.stderr
   sys.stderr = tmp
@@ -367,13 +416,7 @@ class MetaImporter(object):
 
   @classmethod
   def Initialize(cls):
-    path = os.getenv('METAREP', None)
-    if not path:
-      raise Error('Failed to find METAREP')
-    path += NEWSUFFIX  # TODO(wmh): Remove the suffix when we are fully migrated.
-    # TODO(wmh): What was the purpose of METAREPATH and is it used anymore?
-    # Should it be a colon-separated list of directories containing
-    # meta-generated code?
+    path = Config()['repository_path']
     cls.METAREP = path
     cls.PATH_RE = re.compile('^%s/' % re.escape(path))
 
@@ -458,11 +501,9 @@ class MetaImporter(object):
     # path at all.
 
     # We determine if this is a meta file. For now, we assume that all
-    # meta-generated files reside in ${METAREP}2.  If we end up supporting
-    # multiple such dirs (is that what METAREPATH was for?), we'll need to
-    # generalize this code.
+    # meta-generated files reside in cls.METAREP/oopl/python. If we end up
+    # supporting multiple such dirs we'll need to generalize this code.
     if fullname in cache:
-      #print 'REPEAT: ' + fullname
       pass
     else:
       subpath = fullname.replace('.', '/')
@@ -522,6 +563,8 @@ def AutoCompile():
   This should be invoked before main(), or at least before any 'import'
   statements are found that could refer to meta-generated code.
   """
+  # Note that sys.meta_path has nothing to do with Meta ... it is a generic
+  # python concept: https://docs.python.org/2/library/sys.html#sys.meta_path
   sys.meta_path.append(MetaImporter.Instance())
 
 

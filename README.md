@@ -1024,6 +1024,14 @@ ObjC
 Ruby
 Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
 
+## History
+ - Pxx and Cxx
+ - X3
+ - Meta (uwo, in perl)
+ - Meta (uwo, in Meta<perl>)
+ - Meta (sf, in python)
+ - Meta2 (in Meta<python>)
+
 
 ## Bugs
 
@@ -1187,6 +1195,11 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
     abstract methods ... useful to have a place where one can see all
     of the to-be-implemented-in-subclasses methods, without having
     to repeat docstrs, params, etc.
+
+- Provide a 'Meta' symbol in every namespace, to give access to:
+  - all reflection capabilities
+  - a parsed dict of the ~/.config/metameta file
+  - ... there are more benefits here ... list them...
 
 ## Ideas
 
