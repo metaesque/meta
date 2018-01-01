@@ -78,10 +78,31 @@ scope:
   end class ObjectMetaRoot;
 
   native scope:
+    /# TODO(wmh): Remove this.
     NEWSUFFIX = '2'
-    /# Initialized in ObjectMeta initializer. Intentionally NOT a meta field
-    /# of Object because that would produce one instance per subclass, when
-    /# the object should be shared amongst all classes and objects.
+
+    /# _CLI: metax.cli.Values
+    /#   - Stores an instance of metax.cli.Values, providing access to the set of
+    /#     flags and args dictated by the command line. Also provides access to
+    /#     the instantiated Command (via CLI()._command_()).
+    /#     - This is currently typed as 'any' because there will be a circularity
+    /#       induced if we type it as metax.cli.Values. Need to establish
+    /#       whether this will be implementable in C++.
+    /#     - Initialized via metax.root.MetaObject.Initialize(), which is
+    /#       invoked by 'meta2'. However, we need a mechanism for initializing
+    /#       it in situations where this object is desired 'in the wild'
+    /#       without the compiler as intermediary.
+    /#     - TODO(wmh): Find a way to initialize this properly.
+    /#   - Intionally NOT a meta field of Object because that would produce
+    /#     one instance per subclass, when the object should be shared amongst
+    /#     all classes and objects.
+    _CLI = None
+
+    /# _Config: map
+    /#   Initialized when ObjectMeta.Config() is first invoked. Intentionally
+    /#   NOT a meta field of Object because that would produce one instance
+    /#   per subclass, when the object should be shared amongst all classes 
+    /#   and objects.
     _Config = None
   end;
 
@@ -93,9 +114,9 @@ scope:
     all languages, some are only present in a subset of languages or in just one
     language.
 
-    This class does NOT introduce any instance-level state, but does define
-    a significant amount of instance-level and meta-level functionality
-    available to every subclass intance and subclass respectively.
+    This class does NOT introduce any instance-level state (or meta-level state
+    either), but does define a significant amount of instance-level and
+    meta-level functionality available to every instance and subclass.
 
     Note that the metaparent of this class is always ObjectMetaRoot. Any
     class that inherits from Object will have a metaclass that inherits
@@ -113,32 +134,32 @@ scope:
   scope:
 
     meta
-    field CLI : any #:
-      Stores an instance of metax.root.flags.Command, providing access to
-      parsed command line information.
-       - The goal is to define a 'Meta' variable in every namespace, of 
-         type '*ObjectMeta' that provides access to MetaObject ... the
-         metaclass instance reprsenting Object.  This object will be the
-         repository of system-wide information the command line interface, etc.
-       - This is currently typed as 'any' because there will be a circularity
-         induced if we type it as metax.root.flags.Command. Need to establish
-         whether this will be implementable in C++.
-       - Currently initialized in metax.c.Compiler.Initialize(), but that
-         doesn't account for situations where this field is desired 
-         'in the wild' without the compiler as intermediary.
-       - TODO(wmh): Find a way to initialize this properly.
+    lifecycle #:
+      Do NOT add anything here ... it is executed for every subclass.
+      Do NOT add any meta-level fields either, as they implicitly get added
+      here.
+    scope:
+    end lifecycle;
 
     meta
-    lifecycle #:
-      This may go away.
+    method Initialize #:
+      A means of initializing information that should be accessible from
+      every meta-generated class.
+    params:
+      var cli : any #:
+        A metax.cli.Values instance obtained from instantiating a command
+        line.
     scope:
-    end lifecycle;
+      global _CLI
+      _CLI = cli
+    end method Initialize;
 
-    user
-    lifecycle #:
-      Do NOT introduce any instance-level state here.
+    meta
+    method CLI : any #:
+      An instance of metax.cli.Values.
     scope:
-    end lifecycle;
+      return _CLI
+    end method CLI;
 
     meta
     method Config : map #:
@@ -236,6 +257,12 @@ scope:
     scope<js>:
       return null;
     end method Resource;
+
+    user
+    lifecycle #:
+      Do NOT introduce any instance-level state here.
+    scope:
+    end lifecycle;
 
     remark hidden #:
       We are currently disabling the test class for Object because it adds to

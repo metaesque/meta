@@ -2,35 +2,237 @@ namespace metax.c.shell #:
   An interactive shell for exploring Meta.
 scope:
 
-  class Shell < metax.lib.shell.Shell scope:
+  class Shell < metax.lib.shell.Shell assocs:
+    std assoc cStringIO;
+  scope:
+
+    field compiler : metax.c.Compiler #:
+      The compiler instance invoking this shell.
 
     lifecycle params:
-      var compiler : metax.c.Compiler = null #:
-        The compiler instance this shell is associated with.
+      var compiler -> compiler;
     scope:
-      self.defineCommand('consinfo', self.consInfo)
       self.setvarCommand('prompt', 'meta> ')
 
-      root = self.filesystem()
-      meta = shell
+      /# Register commands
+      /#  - If the method associated with a command accepts arbitrary args,
+      /#    a dispatcher keyword param is not needed. However, if the method
+      /#    does not accept arbitrary args, one should provide dispatcher
+      /#    keyword.
+      self.defineCommand('context', self.showMetaContext)
 
       /# Directory hierarchy:
-      /#   /meta/<nmsp1>/<nmsp2>/.../<class>/<method>
-      /#     provides access to namespaces, classes and methods, aggregating
-      /#     information across all base langs, providing access to internal
-      /#     parsing info (consinfo, etc.)
-      /#  /??
-      /#     additional top-level targets may be added.
+      /#  /disk/<nmsp1>/<nmsp2>/.../<class>
+      /#    provides access to information about already-compiled namespaces
+      /#    and classes, aggregating information across all base langs.
+      /#  /mem/<metafile>/<nmsp>/.../<class>/<method>
+      /#    provides access to information about in-memory parsed .meta files
+      /#    and the entire construct hierarchy within each metafile
+      /#     - ability to print out the Context associated with arbitrary block
+      root = self.filesystem()
+      mem = root.newChild(
+        'dir', 'mem', context='metabbrev', generator=self.generateMetafiles,
+        /# It is fast to regenerate, and we want to ensure up-to-date info.
+        freshold=1)
+      disk = root.newChild('dir', 'disk')
     end lifecycle;
 
-    method consInfo : any #:
-      docstr
+    method dispatch : bool #:
+      Find and execute a command based on a command and args provided by user.
+
+      Returns:
+        true if command was found and invoked (regardless of success of
+        command), false if command not legal.
+    params:
+      var command : str #:
+        A word provided by the user representing a registered command to invoke.
+      var args : vec<str> #:
+        The args provided by the user after the command.
+    scope:
+      info = self._commands.get(command, None)
+      if info:
+        /# A recognized command ... let the parent implementation handle it.
+        result = super(Shell, self).dispatch(command, args)
+      else:
+        /# We see if the command is one defined by the collection of 
+        /# 'command' constructs in the Compiler class. If so, command <foo>
+        /# is implemented by method Compiler.<foo>_command(), accepting zero
+        /# args but expecting self.flags().rest to contain the args.
+        result = None
+        compiler = self.compiler()
+        cli = compiler.cli()
+        cmd = cli._command_()
+        while cmd.id() != 'main':
+          cmd = cmd.parent()
+        root = cmd
+        parent = root.parent()
+
+        cmd = root.instantiate([root.id(), command] + args, parent=parent)
+        if cmd.id() == 'main':
+          /# Failed to find a valid command.
+          print 'Unknown command "%s"' % command
+        elif cmd.name() != command:
+          print 'Matched %s not %s' % (cmd.name(), command)
+        else:
+          /# Command instantiation identified a command.
+
+          /# We update the global metax.cli.Values() instance with a
+          /# new Command. 
+          compiler.updateCLI(cmd)
+
+          /# Individual commands should set this. In fact, consider
+          /# deleting this field.
+          compiler.argmapIs(None)
+          
+          func_name = command + '_command'
+          method = getattr(compiler, func_name, None)
+          if method:
+            method()
+          else:
+            print 'Unknown command "%s" (ignored)' % command
+      return result
+    end method dispatch;
+
+    method invokeMethod : any #:
+      Invoke a method with args.
+
+      The metax.lib.shell.Shell class assumes by default that all methods
+      registered via defineCommand() accept an arbitrary number of args.
+      However, in metax.c.shell.Shell we want to interact with methods that
+      were auto-generated via Meta's 'command' construct, and those methods
+      accept zero args, instead obtaining args from self.flags().rest. This
+      method provides a dispatcher mechanism to allow us to use a non-standard
+      method invocation policy in this module.
+    params:
+      var name : str #:
+        The method name being invoked.  The 'name' param of a previous call
+        to defineCommand().
+      var method : method #:
+        The method to execute. The 'method' param of a previous invocation of
+        defineCommand()
+      var args : vec<str> #:
+        The args obtained from the prompt.
+    scope:
+      flags = self.flags()
+      cmd = flags._command_()
+      while cmd.id() != 'main':
+        cmd = cmd.parent()
+      root = cmd
+      root.show()
+      root.show(mode='help')
+    test:
+    end method invokeMethod;
+
+    override
+    method helpCommand #:
+      Provide summary of commands.
+
+      This augments the parent implementation with the commands available
+      via command 'main' in metax.c.Compiler.
     params:
       multi var args : vec;
     scope:
-      print 'here!'
+      super(Shell, self).helpCommand(*args)
+      command = self.compiler().cli()._command_()
+      while command.id() != 'main':
+        command = command.parent()
+      command.help()
     test:
-    end method consInfo;
+    end method helpCommand;
+
+    method showMetaContext : any #:
+      Print out the Context instance identified by directory or args.
+    params:
+      multi var args : vec;
+    scope:
+      dir = self.cwd()
+      nmsp = self.getctx('namespace', default=None)
+      if nmsp:
+        /# If namespace is set, we know that cwd contains the construct,
+        /# and we can obtain its context and print it.
+        construct = dir.opaque()['construct']
+        context = construct.context()
+        context.show()
+    test:
+    end method showMetaContext;
+
+    method generateMetafiles  #:
+      Create directories representing the currently parsed metafiles.
+    params:
+      var parent : Directory;
+    scope:
+      result = []
+      metac = self.compiler()
+      order = metac.metaorder()
+      for metafile in order:
+        dir = parent.newChild(
+          'dir', metafile.abbrev(), context='namespace',
+          generator=self.generateConstructs, freshold=1)
+        dir.opaqueIs({'construct': metafile.construct()})
+        result.append(dir)
+      return result
+    test:
+    end method generateMetafiles;
+
+    method generateConstructs #:
+      Given a directory with opaque['construct'] storing a Construct,
+      generate a set of directories representing the children of that
+      construct.
+    params:
+      var parent : Directory;
+    scope:
+      result = []
+      construct = parent.opaque()['construct']
+      kind = construct.kind()
+      scope = construct.attrval('scope:', default=None) or []
+
+      def Create(scope, kind, subkind, output, generator=None):
+        if generator is None:
+          generator = self.generateConstructs
+        for child in scope:
+          if child.kind() != kind: continue
+          dir = parent.newChild(
+            'dir', child.id(), context=subkind,
+            generator=generator, freshold=1)
+          dir.opaqueIs({'construct': child})
+          output.append(dir)
+
+      if kind == 'File':
+        /# Create namespaces that generate classes.
+        Create(scope, 'namespace', 'class', result)
+
+      elif kind == 'namespace':
+        /# Create classes that generate methods and fields
+        Create(scope, 'class', 'method', result)
+
+      elif kind == 'class':
+        /# Create methods that has special generator.
+        Create(
+          scope, 'method', 'fixme', result, generator=self.generateMethodDir)
+
+      return result
+    test:
+    end method generateConstructs;
+
+    method generateMethodDir #:
+      Generate the content of a directory representing a method.
+    params:
+      var parent : Directory #:
+        The method directory.
+    scope:
+      result = []
+      method = parent.opaque()['construct']
+      assert method.kind() == 'method', 'expecting method not %s' % method.kind()
+
+      fp = cStringIO.StringIO()
+      method.write(fp=fp)
+      meta = parent.newChild('file', 'meta')
+      meta.contentIs(fp.getvalue())
+      result.append(meta)
+
+      return result
+    test:
+    end method generateMethodDir;
 
   end class Shell;
 

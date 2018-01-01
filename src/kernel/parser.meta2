@@ -7629,6 +7629,9 @@ scope:
       var suffix : str = null #:
         If present, another format string to print, after primary text
         is aligned to width chars. Same escapes available as in 'form'.
+      var filter : regexp = null #:
+        If present, only display a summary line if level is less than 3
+        or if the summary line contains the specified regexp.
     scope:
       if form is None:
         form = '%(line)4d  %(indent)s%(kind)s %(id)s'
@@ -7640,6 +7643,8 @@ scope:
           raise Error('Error: output null and level %d' % level)
         output = []
 
+      scope = self.attrval('scope:', default=None)
+
       if level >= minlevel and level <= maxlevel:
         data = {
           'line': self.primary().line() + 1,
@@ -7650,17 +7655,34 @@ scope:
           'sep': sep,
         }
         summary = form % data
-        output.append(summary)
+        matches = filter and re.search(filter, summary)
 
-      scope = self.attrval('scope:', default=None)
+        if filter and (level > 2 or not scope or self.kind() == 'native') and not matches:
+          /# We are filtering, and the current line doesn't match the filter,
+          /# so we don't show it.
+          pass
+        else:
+          output.append(summary)
+
       if scope:
         if self.kind() in ('File', 'namespace', 'class', 'behavior'):
           sublevel = level + 1
+
+          currdex = len(output)
           for child in scope:
             child.writeIndex(
               level=sublevel, adj=adj, output=output, form=form, delim=delim,
               sep=sep, minlevel=minlevel, maxlevel=maxlevel,
-              width=width, suffix=suffix)
+              width=width, suffix=suffix, filter=filter)
+
+          /# print 'For "%s" there were %d children and %s' % (output[-1], len(output) - currdex, matches)
+          if len(output) <= currdex and filter:
+            /# We are filtering, and there was no match amongst any children,
+            /# so we remove this entry too.
+            if not matches and output:
+              output.pop()
+              pass
+
       return output
     test:
     end method writeIndex;
@@ -14300,6 +14322,8 @@ scope:
 
       D.translate.end()
     test:
+      print 'FIX NamespaceConstruct.translatemeta'
+      return
       cards1, scope, namespace, path = test.getMetaFile(
         'oopl', 'cards1', debuglevel=0)
       namespace.expandMeta()
@@ -18953,6 +18977,10 @@ scope:
     field path : str #:
       The path to the .meta file being parsed.
 
+    field abbrev : str #:
+      A temporary abbrev set by the Compiler to concisely but uniquely
+      identify the metafile amongst all metafiles currently parsed in memory.
+
     field construct : FileConstruct #:
       The FileConstruct instance storing the parsed representation of the
       MetaFile.  Initialized by parseMeta()
@@ -21866,6 +21894,8 @@ scope:
     std assoc importlib;
     std assoc platform;
     std assoc pprint;
+    std assoc re;
+    std assoc sre_constants;
     std assoc subprocess;
     std assoc time;
     std assoc traceback;
@@ -21880,8 +21910,8 @@ scope:
   scope:
 
     meta
-    field Flags : metax.cli.Values #:
-      The command-line flags.
+    field CLI : metax.cli.Values #:
+      The command-line flags and args (and command)
 
     meta
     field Current : Compiler #:
@@ -22298,19 +22328,15 @@ scope:
       This method must be invoked before anything else in order to initialize
       class-level state based on command-line flags.
     params:
-      var flags : metax.cli.Values #:
-        The parsed command line flags.
-        NOTE(wmh): meta2old is using argparser not metax.cli.Values.
+      var flags : any #:
+        TODO(wmh): Remove this param!
       var metadata : map = null #:
         Maps metalang id to metalang info.
         TODO(wmh): This arg will be changed/removed when we more fully move
         to defining all metalang info in the associated schema.
     scope:
-      cls.FlagsIs(flags)
       if metadata:
         cls.METADATA.update(metadata)
-      if isinstance(flags, metax.cli.Values):
-        metax.root.MetaObject.CLIIs(flags._command_())
 
       config = metax.root.MetaObject.Config()
       cls.CONFIG = config
@@ -22349,6 +22375,9 @@ scope:
 
     field metafiles : @map<str,MetaFile> #:
       Maps both relative and absolute paths to MetaFile instances.
+
+    field metaorder : @vec<MetaFile> #:
+      The MetaFile instances in the order they were parsed.
 
     field argmap : map #:
       A grouping of args into categories.
@@ -22406,7 +22435,7 @@ scope:
         global config.
     scope:
       cls = self.__class__
-      flags = cls.Flags()
+      flags = metax.root.MetaObject.CLI()
       if flags:
         optimize_level = flags.optimize_level
         metadir = flags.metadir
@@ -22478,11 +22507,30 @@ scope:
 
     end lifecycle;
 
-    method flags : any #:
-      The command-line flags.
+    method cli : metax.cli.Values #:
+      The command-line flags and args.
     scope:
-      return self.__class__.Flags()
-    end method flags;
+      return metax.root.MetaObject.CLI()
+    end method cli;
+
+    method updateCLI #:
+      Updates the CLI with a new Command instance.
+
+      This should rarely be needed, as the global CLI instance is meant
+      to represent the command-line.  However, for interactive shells, the
+      Command is updated each time a new command is entered at the shell
+      prompt.
+
+      TODO(wmh): Decide whether the interactive shell should maintain its
+      own metax.cli.Values() instance so that the global instance remains
+      pinned to the command line values.
+    params:
+      var command : metax.cli.Command #:
+        The newly instantiated Command instance.  This should rarely
+    scope:
+      self.cli()._command_Is(command)
+    test:
+    end method updateCLI;
 
     method fs : metax.c.Filesystem #:
       The filesystem wrapper.
@@ -22583,7 +22631,7 @@ scope:
     scope:
       result = True
       if metadir is None:
-        flags = self.Flags()
+        flags = self.cli()
         metadir = flags.metadir
       assert '/' not in metadir
       repository_path = self.repositoryPath()
@@ -23209,7 +23257,7 @@ scope:
         What to insert after last component of fqn
     scope:
       fs = self.fs()
-      /#flags = self.flags()
+      /#flags = self.cli()
       /#root = fs.join(flags.metadir)
       if fqn:
         parts = fqn.split('.')
@@ -23219,9 +23267,6 @@ scope:
       return fs.join(
         self.metalang().id().lower(), self.baselang().id(), *parts)
     test:
-      /# test.basics()
-      /# test.flags()
-      /# test.fixenv()
       _, _, _, metac = test.cachedInfo(basel='python')
       test.iseq(
         'oopl/python/nm/sp/Class.py',
@@ -23349,9 +23394,30 @@ scope:
         metafile = MetaFile(path, self, debuglevel=debuglevel, text=text)
         metafile.parseMeta(context, is_schema=is_schema)
 
-        abspath = self.fs().abspath(path)
+        abspath = fs.abspath(path)
         metafiles[path] = metafile
         metafiles[abspath] = metafile
+
+        def AbbrevExists(abr):
+          return abr in metafiles and metafiles[abr] is not metafile
+
+        abbrev = fs.basename(abspath).replace('.meta2', '').replace('.meta', '')
+        abbrev2 = fs.basename(fs.dirname(abspath)) + '_' + abbrev
+        if not AbbrevExists(abbrev):
+          pass
+        elif False and not AbbrevExists(abbrev2):
+          abbrev = abbrev2
+        else:
+          orig = abbrev
+          num = 1
+          while AbbrevExists(abbrev):
+            num += 1
+            abbrev = orig + '_' + str(num)
+        metafile.abbrevIs(abbrev)
+        metafiles[abbrev] = abbrev
+        /# print 'Assigning %s = %s' % (abbrev, abspath)
+
+        self.metaorder().append(metafile)
 
       return metafile
     test:
@@ -23420,7 +23486,7 @@ scope:
       var compile : bool = true #:
         If false, do not compile.
     scope:
-      flags = self.flags()
+      flags = self.cli()
       context = self.metalang().context()
       errors, warnings = (0, 0)
 
@@ -23527,6 +23593,7 @@ scope:
       file_titles = [
         ('Lines', '#Lines'),
         ('Bytes', '#Bytes'),
+        ('files', '#files'),
         ('lines', '#lines'),
         ('reallines', '#real'),
         ('bytes', '#bytes'),
@@ -23600,7 +23667,7 @@ scope:
           if show_times:
             timestats = metafile.stats()
             for kind, abbrev in time_titles:
-              cnt = timestats[kind]
+              cnt = timestats.get(kind, 0)
               totals[kind] += cnt
               fp.write(' %4.1f' % cnt)
           if show_files:
@@ -23775,7 +23842,7 @@ scope:
         See Construct.write() for details on mode semantics.
     scope:
       fs = self.fs()
-      flags = self.flags()
+      flags = self.cli()
       debuglevel = flags.debug
 
       for metafile_path in metafile_paths:
@@ -24054,7 +24121,10 @@ scope:
       /# Set this to true to debug baselang parsing of bazel output.
       debug = False
 
-      flags = self.flags()
+      if not fqns:
+        raise Error('here')
+
+      flags = self.cli()
       baselang = self.baselang()
       fs = self.fs()
       showout = verbose
@@ -25742,9 +25812,9 @@ scope:
           meta__names.pop(0)
           meta__names.append(False)
 
-        /# We record the flags someplace they will be accessible from
-        /# everywhere.
-        metax.c.Compiler.FlagsIs(flags)
+        /# We update MetaObject's idea of instantiated command.
+        assert metax.root.MetaObject.CLI() is not None
+        metax.root.MetaObject.CLI()._command_Is(selected_command)
 
         /# Create the Compiler instance.
         metac = metax.c.Compiler(metal=flags.metalang, basel=flags.baselang)
@@ -25776,7 +25846,7 @@ scope:
         Canonicalize the specified meta files and report diffs.
       scope:
         named block ::
-          flags = self.flags()
+          flags = self.cli()
           argmap = self._parseArgs(flags.rest)
           metafile_paths = argmap['metafiles']
           context = self.metalang().context()
@@ -25803,7 +25873,7 @@ scope:
         Change (conceptual) directory.
       scope:
         named block ::
-          flags = self.flags()
+          flags = self.cli()
           command = flags._command_()
           command.show()
           print 'hello!'
@@ -25844,7 +25914,7 @@ scope:
           /# TODO(wmh): Get aliases working on primary keys so we can
           /# implement 'arg'!
           /# arg args : list<str>;
-          flags = self.flags()
+          flags = self.cli()
           argmap = self._parseArgs(flags.rest, implicit=True)
           metafile_paths = argmap['metafiles']
           fp = sys.stdout
@@ -25868,6 +25938,16 @@ scope:
             sys.exit(1)
           else:
             self.writeSummary(metafiles)
+
+          if flags.test:
+            targets = []
+            for metafile in metafiles:
+              for namespace in metafile.construct().attrval('scope:', default=EMPTY):
+                if namespace.variant() == 'user':
+                  targets.append(namespace.fqn())
+            flags.rawtests = True
+            if targets:
+              self.runUnitTests(targets, verbose=flags.verbose)
           return errors == 0
       end command compile;
 
@@ -25893,7 +25973,7 @@ scope:
         Print out a summary of available commands
       scope:
         named block ::
-          command = self.flags()._command_()
+          command = self.cli()._command_()
           command.help()
       end command help;
 
@@ -25904,11 +25984,11 @@ scope:
           Do not print out constructs with level less than this.
         flag max @ M : int = 100000 #:
           Do not print out constructs with level greater than this.
-        flag kind : str = 'default' #:
+        flag kind : str = 'org1' #:
           Selects amongst a variety of named formats and delimiters. If
           form is provided explicitly, the form value specified by kind
           is overridden, but the delim of kind is maintained.
-          TODO(wmh): Should be of type enum<default|org1|org2>, but
+          TODO(wmh): Should be of type enum<num|org1|org2>, but
           need to provide user-level access to Meta enum types to support this.
         flag form : str = '' #:
           The 'form' value to pass to Construct.writeIndex. Usually easier
@@ -25917,20 +25997,25 @@ scope:
           The 'suffix' value to pass to Construct.writeIndex
         flag adj : int = 0 #:
           How much to adjust level by when computing indent value.
+        flag filter : str = '' #:
+          If present, only summary lines matching this regexp are shown.
 
         named block ::
           baselang = self.baselang()
           fs = self.fs()
-          flags = self.flags()
+          flags = self.cli()
 
           kinds = {
-            'default': {},
+            /# Line number at left margin, then indented kind and id
+            'num': {},
+            /# Indentation, then '- ', then kind, id and [line]
             'org1': {
               'form': '%(indent)s%(sep)s %(kind)s %(id)s [%(line)d]',
               'delim': ' ',
               'sep': '-',
               'adj': -1,
             },
+            /# Indentation using '*', then kind, id and [line]
             'org2': {
               'form': '%(indent)s %(kind)s %(id)s [%(line)d]',
               'delim': '*',
@@ -25954,6 +26039,11 @@ scope:
             kwds['form'] = flags.form
           if flags.suffix:
             kwds['suffix'] = flags.suffix
+          if flags.filter:
+            try:
+              kwds['filter'] = re.compile(flags.filter)
+            except sre_constants.error as e:
+              print 'ERROR: regexp "%s" is invalid (ignored)' % flags.filter
 
           argmap = self._parseArgs(flags.rest, resolve=True)
 
@@ -25985,7 +26075,7 @@ scope:
             repodir=self.repodir())
 
           /# Some useful vars
-          flags = metac.flags()
+          flags = metac.cli()
           argmap = metac._parseArgs(flags.rest)
           metafile_paths = argmap['metafiles']
           metalang = metac.metalang()
@@ -26169,7 +26259,8 @@ scope:
         Parse a specified .meta file.
       scope:
         named block ::
-          argmap = self.argmap()
+          cli = self.cli()
+          argmap = self._parseArgs(cli.rest)
           errors = False
           metafiles = []
           for path in argmap['metafiles']:
@@ -26204,7 +26295,7 @@ scope:
         named block ::
           baselang = self.baselang()
           fs = self.fs()
-          flags = self.flags()
+          flags = self.cli()
           allargs = flags.rest
           if allargs:
             fqcn = allargs[0]
@@ -26317,7 +26408,7 @@ scope:
       scope:
         named block scope:
 
-          if False:
+          if True:
             /# New implementation based on metax.c.shell.Shell
             shell = metax.c.shell.Shell(self)
             shell.run()
@@ -26326,40 +26417,43 @@ scope:
             /# Old implementation ... no access to special logic
             prompt = 'meta> '
 
-            flags = self.flags()
+            flags = self.cli()
             cmd = flags._command_()
             while cmd.id() != 'main':
               cmd = cmd.parent()
             root = cmd
-            root.show()
-            root.show(mode='help')
+            /#root.show()
+            /#root.show(mode='help')
             parent = root.parent()
 
             while True:
-              line = raw_input(prompt)
-              args = [root.id()] + line.strip().split()  # TODO(wmh): shlex
-              print 'HERE with %s' % str(args)
-
-              cmd = root.instantiate(args, parent=parent)
-              cmd.show()
-              print cmd.id()
-              print cmd.findArg('rest')
-              print cmd.args()
-
-              return
-
-              argmap = self._parseArgs(args[1:], errors=True)
-              self.argmapIs(argmap)
-
-              func_name = command + '_command'
-
-              command = getattr(self, func_name, None)
-              if command:
-                command()
-              elif command in ('quit', 'exit'):
-                break
+              line = raw_input(prompt).strip()
+              if not line: continue
+              args = line.split()  # TODO(wmh): shlex
+              command = args[0]
+              cmd = root.instantiate([root.id()] + args, parent=parent)
+              if cmd.id() == 'main':
+                /# Failed to find a valid command.
+                print 'Unknown command "%s"' % command
               else:
-                print 'Unknown command "%s" (ignored)' % command
+                /# Command instantiation identified a command.
+
+                /# We update the global metax.cli.Values() instance with a
+                /# new Command. 
+                self.updateCLI(cmd)
+
+                /# Individual commands should set this. In fact, consider
+                /# deleting this field.
+                self.argmapIs(None)
+                
+                func_name = command + '_command'
+                method = getattr(self, func_name, None)
+                if method:
+                  method()
+                elif command in ('quit', 'exit'):
+                  break
+                else:
+                  print 'Unknown command "%s" (ignored)' % command
       end command shell;
 
       command summarize #:
@@ -26396,7 +26490,7 @@ scope:
         named block scope:
           argmap = self.argmap()
           targets = argmap['fqns']
-          flags = self.flags()
+          flags = self.cli()
           self.runUnitTests(targets, verbose=flags.verbose)
       end command test;
 
@@ -26416,17 +26510,13 @@ scope:
           allargs = flags.rest
           argmap = self._parseArgs(allargs, implicit=True)
           if not argmap['args'] and not argmap['badfiles']:
-            /# Yes, all args are .meta2. or fqns. We parse/expand/compile the
+            /# All args are .meta2. or fqns. We parse/expand/compile the
             /# .meta2 files then invoke the blaze test targets associated with
             /# each fqn.
             self.argmapIs(argmap)
-
-            /# IMPORTANT: compile_command is auto-generated (see 'compile'
-            /# command above).
             if self.compile_command():
-              /# IMPORTANT: test_command is auto-generated (see 'test'
-              /# command above).
-              self.test_command()
+              if argmap['fqns']:
+                self.test_command()
           else:
             print 'ERROR : Unknown command "%s"' % selected_command.name()
       end command __default__;
@@ -26492,9 +26582,9 @@ scope:
 
       self._invoked_fixenv = False
 
-      if metax.c.Compiler.Flags() is None:
-        flags = self.flags()
-        metax.c.Compiler.Initialize(flags)
+      if metax.c.Compiler.CONFIG is None:
+        metax.c.Compiler.CONFIG = metax.root.MetaObject.Config()
+
     teardown:
       self.unfixenv()
     end lifecycle;

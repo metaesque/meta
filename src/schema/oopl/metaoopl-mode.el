@@ -1357,13 +1357,33 @@ we need its actual indentation to be reported)."
 
 (defun metaoopl2-create-index (&optional prefix)
   (interactive "P")
+  (metaoopl2-create-index-private nil prefix)
+)
+
+(defun metaoopl2-create-filtered-index (filter prefix)
+  (interactive "sRegexp: \nP")
+  (metaoopl2-create-index-private filter prefix)
+)
+
+(defun metaoopl2-create-index-private (filter usenum)
+  "Create an index.
+   
+   Args:
+     filter: str
+       A regexp to filter summary lines by
+     usenum: bool
+       If true, use --kind=num
+  "
   (let ((command
          (concat
           metaoopl2-meta-binary 
           " index "
-          (if prefix
-              "--kind=default --min=1 --adj=-1 "
+          (if usenum
+              "--kind=num --min=1 --adj=-1 "
               "--kind=org1 --min=1 ")
+          (if filter
+            (format " --filter '%s' " filter)
+            "")
           (buffer-file-name)))
         (bufname (buffer-name (current-buffer))))
     (switch-to-buffer-other-window "*Meta Index*")

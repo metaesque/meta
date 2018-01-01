@@ -1,0 +1,42 @@
+This directory is not (as of 2017-12-31) used directly. It is in the same
+shape as ../current, ../stable, and ../versions/v* to showcase what the beta
+version uses for lib, schema and src.
+
+See the metastrap.ConfigureVersion() method for details on how the version
+is selected. Note that 'meta2' invokes metastrap.ConfigureVersion() before
+importing metax.*.
+
+IMPORTANT: As of 2017-12-31, all versions of the code are using 
+
+----------------------------------------------------------------------
+FILE LISTING:
+
+config/
+  This should contain a 'metameta' file representing the configuration file used
+  for this version. For this 'beta' directory, this is a symlink to a live
+  directory that may contain extraneous other files.
+
+lib/
+  This should have a 'metax' subdir containing the python 'metax' namespace and
+  all sub-modules needed to implement Meta. For this 'beta' directory, this is a
+  symlink to a live directory that may contain extraneous other files.
+
+schema/
+  This directory contains subdirs 'meta' and 'oopl', with 'schema.meta' files in
+  both subdirs describing the Meta(Meta) and Meta(Oopl) schemas. For this 'beta'
+  directory, this is a symlink to a live directory that may contain extraneous
+  other files.
+
+src/
+  This directory contains the Meta source code that implements Meta. For this
+  'beta' directory, this is a symlink to a live directory that may contain
+  extraneous other files. Source files are:
+   - cli.meta2: code for the command line interface
+   - fs.meta2: abstract file system
+   - logs.meta2: logging
+   - parser.meta2: the compiler itself
+   - root.meta2: the Object class and associated classes
+   - shell.meta2: interactive shell for 'meta2 shell'
+   - test.meta2: the Meta test harness
+
+

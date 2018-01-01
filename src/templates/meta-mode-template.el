@@ -1303,13 +1303,33 @@ we need its actual indentation to be reported)."
 
 (defun metalang2-create-index (&optional prefix)
   (interactive "P")
+  (metalang2-create-index-private nil prefix)
+)
+
+(defun metalang2-create-filtered-index (&optional prefix filter)
+  (interactive "PsRegexp: ")
+  (metalang2-create-index-private filter prefix)
+)
+
+(defun metalang2-create-index-private (filter usenum)
+  "Create an index.
+   
+   Args:
+     filter: str
+       A regexp to filter summary lines by
+     usenum: bool
+       If true, use --kind=num
+  "
   (let ((command
          (concat
           metalang2-meta-binary 
           " index "
-          (if prefix
-              "--kind=default --min=1 --adj=-1 "
+          (if usenum
+              "--kind=num --min=1 --adj=-1 "
               "--kind=org1 --min=1 ")
+          (if filter
+            (format " --filter '%s' " filter)
+            "")
           (buffer-file-name)))
         (bufname (buffer-name (current-buffer))))
     (switch-to-buffer-other-window "*Meta Index*")

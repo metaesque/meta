@@ -162,14 +162,47 @@ def MakeSnapshot(verbose=Verbose, make_release=False):
         
   ###
   # Copy <<repository_path>>/oopl/python/metax to <newpath>/lib
+  #  - we specifically want symlinks to be converted into real files so
+  #    that the copy is self-contained. HOWEVER, this is dangerous if
+  #    there are symlinks that are massive ... how to address this?
   repometax = os.path.join(
     config['repository_path'], 'oopl', 'python', 'metax')
   libdir = os.path.join(newpath, 'lib')
   os.mkdir(libdir, 0755)
   destmetax = os.path.join(libdir, 'metax')
-  shutil.copytree(repometax, destmetax, symlinks=True)
+  shutil.copytree(repometax, destmetax, symlinks=False)
   if verbose:
     print 'NOTE: Copied %s to %s' % (repometax, destmetax)
+
+  ###
+  # Copy <<src_root>>/src/schema/{meta,oopl}/schema.meta to <newpath>/schema
+  schemasrc = os.path.join(config['src_root'], 'src', 'schema')  
+  schemadir = os.path.join(newpath, 'schema')
+  metadir = os.path.join(schemadir, 'meta')
+  oopldir = os.path.join(schemadir, 'oopl')
+  os.mkdir(schemadir, 0755)  
+  os.mkdir(metadir, 0755)  
+  os.mkdir(oopldir, 0755)
+  meta_schema_src = os.path.join(schemasrc, 'meta', 'schema.meta')
+  oopl_schema_src = os.path.join(schemasrc, 'oopl', 'schema.meta')
+  meta_schema_dst = os.path.join(metadir, 'schema.meta')
+  oopl_schema_dst = os.path.join(oopldir, 'schema.meta')
+  shutil.copyfile(meta_schema_src, meta_schema_dst)
+  if verbose:
+    print 'NOTE: Copied %s to %s' % (meta_schema_src, meta_schema_dst)
+  shutil.copyfile(oopl_schema_src, oopl_schema_dst)
+  if verbose:
+    print 'NOTE: Copied %s to %s' % (oopl_schema_src, oopl_schema_dst)
+
+  ###
+  # Copy $HOME/.config/metameta to <newpath>/config/metameta
+  configdir = os.path.join(newpath, 'config')
+  os.mkdir(configdir, 0755)
+  config_src = os.path.join(os.getenv('HOME'), '.config', 'metameta')
+  config_dst = os.path.join(configdir, 'metameta')
+  shutil.copyfile(config_src, config_dst)
+  if verbose:
+    print 'NOTE: Copied %s to %s' % (config_src, config_dst)
 
   ###
   # Update the 'current' link
@@ -290,6 +323,9 @@ def Main():
         'baselangs this flag disables bazel. Can yield significantly faster\n'
         'test runtimes.'))
     command.newFlag(
+      'test', 'bool', default='false', aliases='t',
+      summary='If true, invoke unit tests on all namespaces in all metafiles processed.')
+    command.newFlag(
       'verbose', 'bool', default='false', aliases='v',
       summary='If true, print out additional diagnostics.')
     command.newFlag(
@@ -300,22 +336,22 @@ def Main():
       summary='If true, tests involving goldens write instead of compare.')
     command.newArg(
       'args', multi=True, summary='All other args')
-    flags = command.instantiate(sys.argv).asValues()
+    cli = command.instantiate(sys.argv).asValues()
+
+    if cli.verbose and cli.verbosity == 0:
+      cli.verbosity = 1
+    elif cli.verbosity > 0 and not cli.verbose:
+      cli.verbose = True
 
     # Initialize meta-level Compiler
-    metax.c.Compiler.CONFIG = config
-    metax.c.Compiler.Initialize(flags)
-
-    if flags.verbose and flags.verbosity == 0:
-      flags.verbosity = 1
-    elif flags.verbosity > 0 and not flags.verbose:
-      flags.verbose = True
+    metax.root.MetaObject.Initialize(cli)
+    metax.c.Compiler.Initialize(cli)
 
     # Invoke the compiler
     try:
       # CODETANGLE(meta2_entry_main): First arg must be 'main'
-      argv = ['main'] + flags.args
-      #argv = flags.args
+      argv = ['main'] + cli.args
+      #argv = cli.args
       metax.c.Compiler.Entry(argv, parent=command)
     except Exception as e:
       # Perform base-to-meta line remapping on the exception string.

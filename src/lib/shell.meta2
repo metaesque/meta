@@ -46,6 +46,10 @@ scope:
   nometanotest
   class InvalidDirectoryError < Error;
 
+  native scope:
+    REQUIRED = object()
+  end;
+
   class Shell #:
     Represents a generic command-line shell.
     
@@ -150,7 +154,7 @@ scope:
           return result
 
         d = metax.lib.shell.GeneratingDirectory(
-          root, 'dir', context='test', generator=Gen, freshness=10)
+          root, 'dir', context='test', generator=Gen, freshold=10)
         sh.changeDirCommand('dir/subdir')
         dd = sh._cwd
         sh.cwdIs(dd)
@@ -183,12 +187,15 @@ scope:
       self.defineCommand('pwd', self.pwdCommand)
       self.defineCommand('history', self.historyCommand)
       self.defineCommand('ls', self.listDirCommand)
-      self.defineCommand('printenv', self.printVarsCommand)
+      self.defineCommand('vars', self.printVarsCommand)
       self.defineCommand('quit', self.quitCommand)
       self.defineCommand('set', self.setvarCommand)
+      self.defineCommand('cat', self.catCommand)
 
       /# The 'aliases' field maps command names to aliases
       self._aliases = {}
+
+      self.aliasCommand('ls', 'ls -F')
 
       /# Directories are grouped into families, and each directory family
       /# is created from the same template.  This field is a list of
@@ -219,7 +226,7 @@ scope:
       if os.path.exists(rcfile):
         with open(rcfile) as fp:
           for line in fp:
-            self._runCommand(line)
+            self.runCommand(line)
     end lifecycle;
 
     method log params:
@@ -252,7 +259,7 @@ scope:
     params:
       var genspec : str;
     scope:
-      freshness = 10
+      freshold = 10
       spec_re = re.compile('^<(\S+?)(?::(\S+?)(?:\@(\d+))?)?>')
       parts = genspec.split('/')
       if parts[0] == '':
@@ -262,14 +269,14 @@ scope:
           spec_match = spec_re.match(part)
           if spec_match:
             /# A generator specification
-            subname, genname, freshness = spec_match.groups()
-            if not freshness:
-              freshness = 3600
+            subname, genname, freshold = spec_match.groups()
+            if not freshold:
+              freshold = 3600
             generator = getattr(self, genname)
-            child = Directory(dir, subname, freshness, generator)
+            child = Directory(dir, subname, freshold, generator)
           else:
             /# Literal directory component
-            child = Directory(dir, part, freshness, None)
+            child = Directory(dir, part, freshold, None)
           self.log('part = %s\n', part)
     end method registerDirectoryGenerator;
 
@@ -281,8 +288,17 @@ scope:
       var method : method #:
         The method implementing the command. The method should
         accept any number of args (but zero keyword args).
+      var dispatcher : method = null #:
+        If present, a method used to dispatch the 'method' method.
+        It should be a function accepting three args:
+          name: str
+            The name of the method (i.e. the value of the 'name' param above).
+          method: method
+            The method object (i.e. the value of the 'method' param above)
+          args: vec<str>
+            The args found after the prompt, to be passed to the method.
     scope:
-      self._commands[name] = method
+      self._commands[name] = {'method': method, 'dispatcher': dispatcher}
     test:
       sh = test.shell
       /# Shell.__init__ calls self.defineCommand() many times.
@@ -333,15 +349,23 @@ scope:
         if not line:
           line = 'quit'
         /# process command
-        self._runCommand(line)
+        self.runCommand(line)
     end method run;
 
-    method _runCommand #:
+    protected
+    method runCommand : any #:
       Processs a single command.
+
+      Returns:
+        The result of the method invoked or null if no command was invoked.
+        Currently no way to distinguish between a successful invocation that
+        returns null and an unsuccessful invocation.
     params:
       var line : str #:
         The command to process.
     scope:
+      result = None
+
       /# If the line is a history reference, obtain the actual history line.
       /# TODO(wmh): Should instead replace history references within the
       /# existing line, instead of replacing the entire line.
@@ -365,27 +389,54 @@ scope:
 
       /# Identify the associated method and execute it.
       if command:
-        method = self._commands.get(command, None)
-        if method:
-          try:
-            method(*args)
-          except Error, e:
-            self.log('%s: %s\n', e.__class__.__name__, str(e))
-          except IndexError, e:
-            /# This often happens if the method implementing the command is
-            /# careless about how it parses arguments (and assumes that an
-            /# argument exists that doesn't
-            /# TODO(wmh): Print the usage associated with the command.
-            self.log("Error: command '%s' expects more arguments\n", command)
-        else:
-          sys.stderr.write("Unknown command '%s' - ignored.\n" % command)
+        self.dispatch(command, args)
         self._history.append(line.rstrip())
+
+      return result
     test:
       sh = test.shell
-      sh._runCommand("alias ls 'ls -F'")
+      sh.runCommand("alias ls 'ls -F'")
       test.iseq(["alias ls 'ls -F'"], sh._history)
       test.iseq({'ls': 'ls -F'}, sh._aliases)
-    end method _runCommand;
+    end method runCommand;
+
+    protected
+    method dispatch : bool #:
+      Find and execute a command based on a command and args provided by user.
+
+      Returns:
+        true if command was found and invoked (regardless of success of
+        command), false if command not legal.
+    params:
+      var command : str #:
+        A word provided by the user representing a registered command to invoke.
+      var args : vec<str> #:
+        The args provided by the user after the command.
+    scope:
+      info = self._commands.get(command, None)
+      if info:
+        result = True
+        try:
+          method = info['method']
+          dispatcher = info['dispatcher']
+          if dispatcher:
+            result = dispatcher(command, method, args)
+          else:
+            result = method(*args)
+        except Error, e:
+          self.log('%s: %s\n', e.__class__.__name__, str(e))
+        except IndexError, e:
+          /# This often happens if the method implementing the command is
+          /# careless about how it parses arguments (and assumes that an
+          /# argument exists that doesn't
+          /# TODO(wmh): Print the usage associated with the command.
+          self.log("Error: command '%s' expects more arguments\n", command)
+      else:
+        result = False
+        sys.stderr.write("Unknown command '%s' - ignored.\n" % command)
+      return result
+    test:
+    end method dispatch;
 
     method parseArgs #:
       Parse a string into a list of args.
@@ -544,15 +595,52 @@ scope:
         self.log('%5d  %s\n', index, self._history[index])
     test:
       sh = test.shell
-      sh._runCommand("alias ls 'ls -F'")
+      sh.runCommand("alias ls 'ls -F'")
       sh.defineVariable('a', int, default=0, summary='test var')
-      sh._runCommand('set a 1')
+      sh.runCommand('set a 1')
       sh.historyCommand()
       test.iseqtext(
         "    0  alias ls 'ls -F'\n"
         '    1  set a 1\n',
         test.out.getvalue())
     end method historyCommand;
+
+    method catCommand #:
+      Show the contents of one or more files.
+    params:
+      multi var args : vec;
+    scope:
+      dir = self.cwd()
+      for path in args:
+        if '/' in path:
+          print 'WARNING: Not yet handling relpaths in cat. Ignoring ' + path
+          continue
+        node = dir.child(path)
+        if not node:
+          print 'File "%s" does not exist.' % path
+          continue
+        if node.isSymlink():
+          node = node.link()
+          if not node:
+            print 'Symlink "%s" has no link' % path
+            continue
+
+        if node.isDir():
+          print 'Cannot cat directory "%s"' % path
+          continue
+        else:
+          print node.content()
+    test:
+      sh = test.shell
+      sh.runCommand("alias ls 'ls -F'")
+      sh.defineVariable('a', int, default=0, summary='test var')
+      sh.runCommand('set a 1')
+      sh.historyCommand()
+      test.iseqtext(
+        "    0  alias ls 'ls -F'\n"
+        '    1  set a 1\n',
+        test.out.getvalue())
+    end method catCommand;
 
     method quitCommand #:
       Exit the shell.
@@ -575,15 +663,17 @@ scope:
       multi var args : vec;
     scope:
       if len(args):
-        method = self._commands.get(args[0])
-        if method:
+        info = self._commands.get(args[0])
+        if info:
+          method = info['method']
           self.log('%s\n' % method.im_func.func_doc)
         else:
           sys.stderr.write("Unknown command '%s'" % args[0])
 
       else:
         for command in sorted(self._commands.keys()):
-          method = self._commands[command]
+          info = self._commands[command]
+          method = info['method']
           /#print dir(method.im_func)
           desc = method.im_func.func_doc
           lines = re.split('\n', desc or 'Missing doc string: ' % method.__name__)
@@ -671,18 +761,22 @@ scope:
         dir = self._cwd
 
       /# We refresh dir itself to make sure we are working with up-to-date information
-      dir._refresh()
+      dir.refresh()
 
       /# Traverse directories, generating as we go
       for part in parts:
         /# Part should be a subdirectory of dir
         if dir.contains(part):
           dir = dir.child(part)
-          /# We set the directory each time thru, so that the context vars are
-          /# set each time.
-          self.cwdIs(dir)
-          /# We ensure that the subdir is still fresh.
-          dir._refresh()
+          if dir.isDir():
+            /# We set the directory each time thru, so that the context vars are
+            /# set each time.
+            self.cwdIs(dir)
+            /# We ensure that the subdir is still fresh.
+            dir.refresh()
+          else:
+            print 'ERROR: %s is not a directory' % dir.abspath()
+            break
         else:
           raise InvalidDirectoryError('Directory %s has no child %s' % (dir.abspath(), part))
     end method changeDirCommand;
@@ -763,7 +857,7 @@ scope:
         if kind_vars:
           self.log('\n%s variables:\n' , kind)
           for var in sorted(kind_vars.keys()):
-            value = kind_vars[var]['value']
+            value = kind_vars[var] if kind == 'context' else kind_vars[var]['value']
             if not num_re.match(str(value)):
               value = "'%s'" % value
             self.log('  %-15s = %s\n', var, value)
@@ -830,6 +924,8 @@ scope:
     params:
       var var : str #:
         The variable name.
+      var default : any = REQUIRED #:
+        The value to return if the var is not set. If REQUIRED, raises an error.
     scope:
       vars = self._vars['context']
       if var in vars:
@@ -1010,6 +1106,10 @@ scope:
       The collection of subfiles/directories (dictionary maps name to
       instance of Directory or File)
 
+    field opaque : map #:
+      A collection of key/value pairs that clients can read/write as they
+      choose. Useful for storing information used in generator functions.
+
     lifecycle params:
       var parent : Directory;
       var name : str #:
@@ -1018,10 +1118,11 @@ scope:
     scope:
     end lifecycle;
 
-    method _refresh #:
+    protected
+    method refresh #:
       Conditionally re-generate my list of children.
     scope:
-    end method _refresh;
+    end method refresh;
 
     method isGenerator scope:
       return False
@@ -1068,7 +1169,7 @@ scope:
         If True, suffix names with '/' if directories
     scope:
       /# Ensure that my children are up-to-date
-      self._refresh()
+      self.refresh()
 
       /# Print out my children.
       data = []
@@ -1090,8 +1191,8 @@ scope:
         fp.write('\n'.join(data) + '\n')
       else:
         /# TODO(wmh): provide multi-child-per-line support
-        output = self.__class__._FormatListing(
-          data, width=self._terminalWidth())
+        output = self.__class__.FormatListing(
+          data, width=self.terminalWidth())
         fp.write(output + '\n')
       return data
     test:
@@ -1105,16 +1206,17 @@ scope:
       test.iseqtext('dir  file\ndir/  file\n', fp.getvalue())
     end method listChildren;
 
-    method _terminalWidth : int #:
+    protected
+    method terminalWidth : int #:
       Return the width of the current terminal.
       Returns int
     scope:
       /# This is its own method so that we easily control it during unit tests.
       return int(os.getenv('COLUMNS', '70')) - 5
-    end method _terminalWidth;
+    end method terminalWidth;
 
-    meta
-    method _FormatListing : str #:
+    meta protected
+    method FormatListing : str #:
       Format a list of files similar to how 'ls' does, in multiple columns.
       Returns str.  Multi-line string representing the formatted set of rows of
       columns.
@@ -1144,7 +1246,7 @@ scope:
         while start != end:
           numrows = start + (end - start) / 2
 
-          result = cls._FormatListingUsing(
+          result = cls.FormatListingUsing(
               numrows, files, width=width, maxword=maxword)
           if result:
             /# We can fit in numrows, but maybe we can fit in even fewer.
@@ -1153,23 +1255,23 @@ scope:
             /# We cannot fit in numrows ... try more rows.
             start = numrows + 1
         if numrows != end:
-          result = cls._FormatListingUsing(
+          result = cls.FormatListingUsing(
               end, files, width=width, maxword=maxword)
 
       else:
         rows = 1
         while True:
-          result = cls._FormatListingUsing(
+          result = cls.FormatListingUsing(
               rows, files, width=width, maxword=maxword)
           if result or rows > len(files):
             break
           rows += 1
 
       return result
-    end method _FormatListing;
+    end method FormatListing;
 
-    meta
-    method _FormatListingUsing : str #:
+    meta protected
+    method FormatListingUsing : str #:
       Attempt to format a list of words into a specified number of rows.
       Returns str (if successful) or null (if not possible)
     params:
@@ -1267,7 +1369,7 @@ scope:
       else:
         result = None
       return result
-    end method _FormatListingUsing;
+    end method FormatListingUsing;
 
     method isDir scope:
       return True
@@ -1325,14 +1427,52 @@ scope:
       test.iseq(test.subdir, test.dir._children['subdir'])
     end method registerChild;
 
-    method newDir : Directory #:
-      docstr
+    method newChild : FileSystemObject #:
+      Create a new file system object and register with self.
+
+      The kind (dir, file or symlink) is determined by kind. If dir,
+      whether it Directory or GeneratingDirectory is determined by existence
+      of context/generator/freshold.
     params:
-      var a : int #:
-        docstr
+      var kind : str #:
+        One of 'dir', 'file' or 'symlink'
+      var name : str #:
+        A string representing a unique (base) name within the parent
+      var context : str = null #:
+        The name of the context variable (within the shell) to store
+        'name' into.  If specified, a GeneratingDirectory is created,
+        and generator and freshold are both required.
+      var generator : method = null #:
+        A method that accepts a single Directory as argument, and returns the
+        list of FileSystemObject instances that that Directory should have as
+        children.
+      var freshold : int = -1 #:
+        Number of seconds that the child contents of this Directory are
+        considered fresh (accesses after that duration will result in the
+        generator being invoked again).
     scope:
+      if context:
+        if not generator or freshold < 0:
+          raise Error('Must provide generator and freshold if context given.')
+        result = GeneratingDirectory(
+          self, name, context, generator, freshold)
+      elif kind == 'dir':
+        result = Directory(self, name)
+      else:
+        if context or generator or freshold > -1:
+          raise Error(
+            'Non-dir children should not specify context, generator or freshold')
+        if kind == 'file':
+          result = File(self, name)
+        elif kind == 'symlink':
+          result = Symlink(self, name)
+        else:
+          raise Error('Invalid kind "%s"' % kind)
+
+      self.registerChild(result)
+      return result
     test:
-    end method newDir;
+    end method newChild;
 
     test
     lifecycle setup:
@@ -1360,17 +1500,19 @@ scope:
     field generator : method #:
       The contents of the directory are produced by invoking this method
 
-    raw field last_update : float #:
+    raw
+    field last_update : float #:
       Each instance records the last time it was updated. We mark it non-updated
       on initialization so that the first call to '_refresh' will update
       children from self._generator.
 
-    raw field freshness_threshold : int #:
+    field freshold : int #:
       For now, each instance records its freshness threshold in seconds.
       May want to find a more efficient means of storing this though 
       (for example based on the generic path of this node).
 
-    raw field child_context : str #:
+    raw
+    field child_context : str #:
       Generated directories are context variables, and '_child_context'
       maintains the name of the context variable to store into.
 
@@ -1386,7 +1528,7 @@ scope:
         Accepts a single Directory as argument, and returns the list
         of FileSystemObject instances that that Directory should have
         as children.
-      var freshness : int #:
+      var freshold : int #:
         Number of seconds that the child contents of this Directory
         are considered fresh (accesses after that duration will result
         in the generator being invoked again).
@@ -1394,7 +1536,7 @@ scope:
     scope:
       self._generator = generator
       self._last_update = datetime.datetime.fromtimestamp(0)
-      self._freshness_threshold = freshness
+      self._freshold = freshold
       self._child_context = context
       /# IMPORTANT: We do NOT invoke _refresh() within this constructor, as this
       /# would result in an exponential initialization of all transitive children
@@ -1411,12 +1553,6 @@ scope:
       d._last_update = tm
       test.iseq(tm, d.lastUpdate())
     end method lastUpdate;
-
-    method freshnessThreshold scope:
-      return self._freshness_threshold
-    test:
-      test.iseq(10, test.dir.freshnessThreshold())
-    end method freshnessThreshold;
 
     method childContext scope:
       return self._child_context
@@ -1440,13 +1576,13 @@ scope:
       self._last_update = value
     test:
       d = test.dir.lastUpdate()
-      /# TODO(wmh): mock out time issues so we don't actually sleep for 1 second.
-      time.sleep(1)
+      time.sleep(0.001)
       test.dir.updateTime()
       test.istrue(d < test.dir.lastUpdate())
     end method updateTime;
 
-    method _refresh : bool #:
+    protected
+    method refresh : bool #:
       Conditionally re-generate my list of children.
 
       Returns:
@@ -1456,7 +1592,7 @@ scope:
       td = now - self.lastUpdate()
       total_seconds = td.seconds + td.days * 24 * 3600
 
-      if total_seconds > self.freshnessThreshold():
+      if total_seconds > self.freshold():
         /# Invoke my generator to obtain a list of FileSystemObjects
         child_list = self._generator(self)
 
@@ -1486,15 +1622,15 @@ scope:
 
       /# We've set the freshness threshold to 10 seconds, so calling _refresh
       /# now should NOT require an update.
-      test.iseq(False, test.dir._refresh())
+      test.iseq(False, test.dir.refresh())
 
       /# By setting the last_updated value back 30 seconds, we ensure that
       /# a new call to _refresh will trigger an update.
       d = datetime.datetime.now()
       test.dir.updateTime(d - datetime.timedelta(seconds=30))
-      test.iseq(True, test.dir._refresh())
+      test.iseq(True, test.dir.refresh())
       test.istrue(test.dir.lastUpdate() >= d)
-    end method _refresh;
+    end method refresh;
 
     test
     lifecycle setup:
@@ -1507,20 +1643,25 @@ scope:
 
       generator = lambda x: (test.subdir, test.subfile)
       test.dir = metax.lib.shell.GeneratingDirectory(
-        root, 'dir', context='special', generator=generator, freshness=10)
+        root, 'dir', context='special', generator=generator, freshold=10)
 
-      test.root._refresh()
-      test.dir._refresh()
-      test.subdir._refresh()
+      test.root.refresh()
+      test.dir.refresh()
+      test.subdir.refresh()
     end;
   end class GeneratingDirectory;
 
   class File < FileSystemObject #:
     Represents a terminal file, which the shell can interact with.
   scope:
+
+    field content : str #:
+      The contents of the file.
+
     lifecycle params:
       var parent : Directory;
       var name : str;
+      var content -> content = null;
     super (parent, name)
     scope:
     end lifecycle;
