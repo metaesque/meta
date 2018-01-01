@@ -1,4 +1,4 @@
-MetaLanguage Meta name Meta toplevel <MetaLanguage|File> #:
+MetaLanguage meta name Meta toplevel <MetaLanguage|File> #:
   The constructs in Meta(Meta), the root Meta language that all other Meta
   languages inherit from.
 
@@ -29,6 +29,16 @@ config:
     Attribute toplevel : enum = <empty> #:
       A list of toplevel constructs that can appear in a program written in
       this MetaLanguage.
+
+    secondary
+    Attribute color : word = <empty> #:
+      Specifies a color to use when highlighting the primary key of this
+      construct. The value is anything legal in CSS Color Module Level 3
+      (https://developer.mozilla.org/en-US/docs/Web/CSS/color_value)
+      but without any whitespace allowed. Examples:
+        purple
+        rgb(255,128,100)
+        #ab76d9
 
     secondary
     Attribute comment: : simple = <empty> aliases <#:> #:
@@ -335,4 +345,4 @@ config:
       TODO(wmh): This may not be relevant for BaseLanguage constructs.
   end Construct BaseLanguage;
 
-end MetaLanguage Meta;
+end MetaLanguage meta;

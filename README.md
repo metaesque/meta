@@ -816,6 +816,139 @@ IMPORTANT QUESTIONS RELATED TO CLASS HIERARCHY:
       - Add an 'autogen' feature attribute to the 'class' construct that
         allows one to disable test and/or meta class generation.
 
+## Exception classes.
+
+  There is an important issue that needs to be resolved related to exceptions.
+  We want to be able to offer two mutually exclusive features:
+   1. In order for baselang code to use meta-generated classes and catch
+      exceptions without using Meta exception classes, each of these classes
+      should inherit from baselang coorelates where possible.
+   2. In order to catch ranges of exceptions, it is useful to define an
+      inheritance hierarchy of exceptions (if exception classes B and C inherit
+      from A, then either exception can be caught be looking for exception A).
+
+  Python: https://airbrake.io/blog/python-exception-handling/class-hierarchy
+  - BaseException
+    - Exception
+      - ArithmeticError
+        - FloatingPointError
+      - AssertionError
+      - ImportError
+        - ModuleNotFoundError
+      - LookupError
+        - IndexError
+        - KeyError
+      ...
+
+  C++: http://stdcxx.apache.org/doc/stdlibug/18-2.html modiifed in http://en.cppreference.com/w/cpp/error/exception
+  - exception
+    - logic_error
+      - domain_error
+      - invalid_argument
+      - length_error
+      - out_of_range
+    - runtime_error
+      - range_error
+      - overflow_error 
+      - underflow_error     - 
+    ...
+
+  Suppose Meta also wants to define a hierarchy of exceptions
+  - metax.root.Error
+    - metax.error.Error
+      - metax.error.LogicError
+        ...
+      - metax.error.RuntimeError
+        ...
+
+  The classes in the Meta exception hierarchy need to inherit from other classes
+  from the Meta exception hierarchy ... but they should also inherit from
+  baselang equivalent classes.
+   a. In baselangs with support for full multiple inheritance, this is viable
+   b. In baselangs with support for single class inheritance and multiple
+     interface inheritance, this is viable as long as the Meta exception class
+     hierarchy is instead a Meta interface hierarchy.
+   c. In baselangs without support for any form of multiple inheritance, this
+     is only supportable in Meta by having all exception classes be native
+     types.
+
+  Given that Meta does not, as of 2017/12/31, have full support for multiple
+  inheritance or interfaces, the easiest (and most general) solution is (c), so
+  that is what we'll go with for now.
+   - must maintain a mapping from conceptual exception class to
+     baselang equivalent
+   - must provide some special baselang syntax to allow baselang scope: blocks
+     to refer to the conceptual meta-level exception class name and have it
+     replaced with the appropiate baselang exception class.
+      - there is a more general need for such an escape mechanism within baselang
+        scope: blocks
+      - possible syntaxes:
+         - $#{...}  --> I don't think this is legal in perl, is it?
+         - #${...}  --> this may conflict with perl syntax
+         - $!{...}
+         - !${...}  --> conflicts with Perl
+         - $!{...}  <-- this one is promising (slight problem related to ! field access, but acceptable)
+         
+         
+## Variable interpolation within literal strings
+
+Suppose we want to form a string providing a person's name, dob, height and weight.
+
+  python:
+    print 'Person %s born %s height %1.2fm weight %1.2fkg' % (
+      p.name(), p.dob(), p.height(), p.weight())
+      
+  javascript:
+    console.log(
+        'Person ' + p.name() + ' born ' + p.dob() +
+        ' height ' + p.height().toFixed(2) + 'm' +
+        ' weight ' + p.weight().toFixed(2) + 'kg');
+       
+  C++
+    cout << "Person " << p.name()
+         << " born " << p.dob()
+         << " height " << ios:setprecision(2) << p.height() << "m"
+         << " weight " << ios:setprecision(2) << p.weight() << "h"
+         << endl;
+
+
+Meta provides a mechanism for identifying literal strings in baselang source code
+that contain special variable interpolation requests, and generating the appropriate
+baselang source code.
+ - the code generated will not be valid RHS in all baselangs, so this is
+   limited to situations where an arbitrary block of code can be inserted.
+    - NOTE: not strictly true, in that Meta could define a method, but passing in all
+      necessary local vars becomes complicated ... maybe later.
+      
+ - rather than introducing escape syntax within baselang code to indicate
+   creation of a string object based on this special syntax, we can do the more
+   general thing ... use meta-level statements. Added bonus: provide a mechanism
+   to embed meta-level statements inside a baselang simple block!
+   
+    method show
+    scope<*>:
+      var msg : str = 
+        "Person ${.name} born ${.dob} "
+        "height ${.height:1.2f}m weight ${.weight:1.2f}kg\n";
+      block
+      :py:
+        print msg
+      :js:
+        console.log(msg)
+      :cc:
+        cout << msg << endl;
+    end method;
+    
+Meta can provide lots of convenience syntax within these variables:
+ - ${.name} means @self.name
+ - ${!name} means @self!name
+ - ${rec.name} means @rec.name
+ - ${rec!name} means @rec!name
+ - ${name} means local variable 'name'
+ - ${@name} means "name " + local variable 'name'
+ - ${@.name} means "name " + @self.name
+
+
 ## Finding class/method/field definitions in meta files
 
  - By providing the ability to define many namespaces/classes/methods in
@@ -1031,9 +1164,71 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
  - Meta (uwo, in Meta<perl>)
  - Meta (sf, in python)
  - Meta2 (in Meta<python>)
+ 
+## Units of Measurement
 
+ - Research
+   - https://dl.acm.org/citation.cfm?id=1035292.1029008
+
+ - For C++
+   - https://github.com/nholthaus/units (https://sourceforge.net/projects/tuoml/)
+
+ - For python
+   - https://pypi.python.org/pypi/units/
+   - https://pypi.python.org/pypi/measurement/1.8.0
+   - https://pypi.python.org/pypi/quantities/
+   - http://home.scarlet.be/be052320/Unum.html
+   - http://dirac.cnrs-orleans.fr/ScientificPython/ScientificPythonManual/Scientific.Physics.PhysicalQuantities-module.html
+   - https://pint.readthedocs.io/en/latest/
+
+ - For .NET?
+   - https://www.codeproject.com/Articles/216191/Quantities-Units-and-Values-an-Object-Oriented-Imp
+
+## Languages To Add To Meta
+
+- Python            py
+- Javascript        js
+- C++               cc
+- Java              java
+- Ruby              rb
+- C#                cs
+- Objective-C       mm
+- Delphi            pas
+- Swift             swift
+- Perl              pm
+- Go                go
+- Dart              dart
+- Ada               ada
+- R?                r
+- Eiffel
+- EIEIO
+- Smalltalk/Squeak  st
+- Tcl               tcl
+
+## Pain Points
+
+- finding specific code in a large file is problematic
+  - having code defined in various possible places makes searching for it difficult
+    - is it a field or a method?
+    - is it defined in the class or in a behavior?
+
+
+## Important To Remember
+
+- Metaclass initializers get invoked N+1 times if there are N descendent
+  classes of the underclass. In hindsight, this is obvious, but I had been
+  assuming that code written into metaclass __init__ blocks was executed
+  exactly once. Important to keep this in mind.
+   - puts more importance on providing 'static' fields separate from 'meta'
+     fields, for situations where we want to ensure code occurs exactly
+     once.
 
 ## Bugs
+
+- The 'default' attribute of 'var' is of type 'word' instead of 'expr'.
+  This means we cannot use:
+    var  delim : str = '  ';
+  and is totally limiting in many other ways. Fix!!
 
 - Cannot define a 'native' construct before the first 'class' in a namespace
   scope: because the code is looking for a class to attach the native code
@@ -1088,6 +1283,9 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
 
 - Meta needs someone to write code for vim that does syntax highlighting, etc.
 
+- Should Meta support python-like continuations in all baselangs?
+   - https://www.ps.uni-saarland.de/~duchier/python/continuations.html
+
 ## TODO
 
 - The 'default' attribute of 'var', 'field' and 'flag' should have type 'expr'
@@ -1097,10 +1295,31 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
      or
         var item : map = {'a': 1, 'b': 2};
         
+- NamespaceConstruct.expandMeta() needs updating so that each namespace has an
+  'id' with not dots in it. The code in
+     NamespaceConstruct.createImplicitParents()
+  was designed for use in the namespace initializer, but similar code can be
+  crafter for expandMeta. 
+   - start with the test namespace, which is being created within expandMeta
+     (instead of creating a namespace with multi-dots, create individual
+     namespaces). 
+   - once the test namespace is working properly, move on to updating the
+     user namespace, which is a bit more subtle because it already exists.
+        
+- Statement level support!!
+  - recursive loading of dependency classes
+  - proper initialization of symbol tables
+        
 - Implement the 'simplex' attribute type
    - used for block-valued attributes that are of type 'simple'
      when the selector is a baselang, and are of type 'complex'
      when the selector is '*'.
+     
+- Define metax.error, a namespace consisting solely of exception classes.
+   - each exception class should inherit from appropriate baselang 
+     classes where possible.
+   - each should be clearly documented with when it should be raised
+   - all code in the Meta implementation should use these classes.
 
 - Support aliases on primary attributes (e.g. 'arg' for 'flag')
 
@@ -1153,18 +1372,9 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
        command-line are grouped together into the args() field (and
        can be interspersed with the flags ... not possible if actions exist).
 
-- html generation
-  - when file.meta is compiled via meta2, create .file.html, which renders
-    the code with syntax highlighting and hyperlinking:
-     - every meta construct is highlighted and linked to its documentation
-     - every meta construct is linked to its associated baselang code
-
 - uml generation
    - this should use the HTML syntax so that we can draw association lines
      from field to field rather than just class to class.
-
-- get baseline-to-metaline mapping working
-   - should NOT need to invoke metafilt externally (wherever possible)
 
 - implement 'meta2 shell', which starts an interactive shell within which
   one can explore meta-level code interactive.
@@ -1206,6 +1416,8 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
 - Add a 'preamble:' block to 'behavior' constructs that is inserted at the
   start of each receiver scope block before user code after auto-gened
   preamble code.  Useful for initializing params with same logic.
+   - less useful if per-baselang blocks are needed .. more useful if
+     logic can be written in Meta*
 
 - The 'lazy' block on accessors in fields should be moved up to being
   a block on 'field' itself, not on accessors
@@ -1254,3 +1466,52 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
         super (a, b=b)
      (the c arg is marked as 'use default from super' so we don't
       pass it to the super call).
+
+- Support literal syntax for bases other than 10.
+     723R8
+     010001100010100R2
+     ab8373aR16
+     1234R10
+   or
+     0o723
+     0b010001100010100
+     0xab8373a
+     123
+   
+   Note: Meta does NOT support 0235 as being base 8! (too ambiguous)
+   
+   Note: How will this interact with literal units? 
+     83kg in base 8?
+     
+   Note that suffixes like Ki, Mi, Gi, Ti, and Pi implicitly
+   encode a base-2 interpretation, but somewhat special in nature.
+    - Ki = 2^10
+    - Mi = 2^20
+    - Gi = 2^30
+    - Ti = 2^40
+    - Pi = 2^50
+
+## Stack
+
+ - ability to see ConsInfo data for specific construct
+   --> meta shell
+     --> native type for 'date', 'time', etc
+       - units of measurement
+     --> getting 'run' command working
+       --> creating a 'hierarchy' summary of a meta file using org-mode
+         --> supporting 'aliases' attribute on 'command' construct
+           --> getting 'str' attribute type working
+             --> auto-filtering exceptions raised when meta2 invoked 
+               - blocked because exception was occuring during creation of Compiler
+                 and since filterMetaOutput is an instance method I have a catch-22
+             - solution to 'str' issue was 
+                 Attribute path : str = <empty> #:
+               vs
+                 Attribute path : str = empty #:
+           --> timing how long it takes to parse/expand/translate/compile each metafile
+             --> adding file/line counts to writeSummary
+           --> tracking down the bug in metax.root.flags.Command.instantiate()
+                - was a use of 'current_arg_index' instead of 'index' when forming
+                  argv to consume with multi-valued catch flags!
+           - finally got aliases working!
+         --> provide a total in writeSummary when more than two files were parsed.

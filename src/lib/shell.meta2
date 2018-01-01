@@ -1,0 +1,1571 @@
+namespace metax.lib.shell #:
+  An abstract Shell class.
+
+  This Shell class provides an interactive command-line-based environment
+  modeled on unix filesystems and unix shells, but it adds a few new features.
+
+  The filesystem shown by this Shell is virtual (it does not have to have
+  anything to do with the actual filesystem, although one can mirror real
+  file hierarches within the shell if desired).
+
+  Each Directory within the filesystem knows how to automatically generate
+  and refresh its list of child objects. A user of this class provides
+  specifications for what the directory hierarchy looks like, including how
+  to generate content within directories.
+
+  In addition to the filesystem-generating functionality, this Shell also
+  allows one to:
+    - associate commands with implementations via defineCommand()
+    - define variables of three different kinds:
+       - environment
+         - ...?
+       - shell
+         - these are set explicitly by the 'set' command.
+       - context
+         - these are dictated by the current working directory
+         - they are readonly
+    - define aliases for commands
+    - view command history
+
+  Example Usage:
+
+    class MyShell < metax.lib.Shell scope:
+      lifecycle scope:
+        self.defineComand('<newcommand>', self.methodImplementCommand)
+        ...
+        
+        root = self.filesystem()
+        subdir = 
+
+
+scope:
+
+  nometanotest
+  class Error < metax.root.Error;
+
+  nometanotest
+  class InvalidDirectoryError < Error;
+
+  class Shell #:
+    Represents a generic command-line shell.
+    
+    This provides basic shell-like functionality.  Subclasses add
+    domain-specific functionality.
+  assocs:
+    std assoc logging;
+    std assoc os;
+    std assoc re;
+    std assoc subprocess;
+  scope:
+
+    meta
+    lifecycle scope:
+      meta.HISTORY_RE = re.compile('^\s*!(-?\d+)\s*$')
+
+    field history : @vec #:
+      Maintains a history of commands executed.
+
+    field fp : ostream = out #:
+      Where to write output.
+
+    field vars : map scope:
+      accessor get test:
+        sh = test.shell
+        test.iseq({
+          'shell': {
+            'prompt': {
+              'desc': '',
+              'type': str,
+              'name': 'prompt',
+              'value': 'goosh> ',
+              'summary': 'The string to print when prompting for input'
+              }
+            },
+          'context': {},
+          'env': {}
+        }, sh.vars())
+    end field vars;
+
+    field commands : map #:
+      A mapping from command name to method implementing the command.
+    scope:
+      accessor get test:
+        sh = test.shell
+        test.iseq(
+          ['alias', 'aliases', 'cd', 'help', 'history', 'ls', 'printenv', 'pwd',
+           'quit', 'set'],
+          sorted(sh.commands().keys()))
+    end field commands;
+
+    field aliases : map #:
+      Aliases for commands ala bash alias.
+    scope:
+      accessor get test:
+        sh = test.shell
+        test.iseq({}, sh.aliases())
+        sh.aliasCommand('ls', 'ls -F')
+        sh.aliasCommand('h', 'history 10')
+        test.iseq({'h': 'history 10', 'ls': 'ls -F'}, sh.aliases())
+    end field aliases;
+
+    raw
+    field directory_families : vec;
+
+    field filesystem : Directory #:
+      The top of the directory hierarchy.
+
+    field cwd : str scope:
+      accessor set #:
+        Any time the 'cwd' field is set, we need to update the context vars
+        which are uniquely identified by the current directory.
+      scope:
+        self._cwd = value
+        if value is not None:
+          self.log('Switching to %s\n', value.abspath())
+          /# We need to reset the context vars based on the current directory.
+          path = value.abspath()
+          if not path.endswith('/'):
+            path = path + '/'
+          family = value.familyPath()
+          var_re = re.compile('<([^>\s]+)>')
+          family_str = var_re.sub('(?P<\\1>[^\/]+)', family)
+          path_re = re.compile(family_str)
+          pmatch = path_re.match(path)
+          if pmatch:
+            self._vars['context'] = pmatch.groupdict()
+          else:
+            raise Error('Failed to parse\n  %s\nwith\n  %s\n' % (path, family_str))
+      test:
+        sh = test.shell
+        root = sh.filesystem()
+        sh.cwdIs(root)
+        test.istrue(root is sh._cwd)
+
+        /# The following sets up a generating directory so that we have context
+        /# variables and can test the context-generating code of cwdIs().
+        def Gen(parent):
+          result = []
+          result.append(metax.lib.shell.Directory(parent, 'subdir'))
+          result.append(metax.lib.shell.File(parent, 'subfile'))
+          return result
+
+        d = metax.lib.shell.GeneratingDirectory(
+          root, 'dir', context='test', generator=Gen, freshness=10)
+        sh.changeDirCommand('dir/subdir')
+        dd = sh._cwd
+        sh.cwdIs(dd)
+        test.istrue(dd is sh._cwd)
+        test.iseq({'test': 'subdir'}, sh._vars['context'])
+    end field cwd;
+
+    lifecycle params:
+      var fp : ostream = out #:
+        Where to write output (useful for unittesting).
+      var rcfile : str = null #:
+        Where to obtain an initial initialization file.  If None,
+        uses $HOME/.wshrc.
+    scope:
+      self.fpIs(fp)
+
+      /# The 'vars' field maps variable names to a dict maintaining the value
+      /# and meta-information about the variable.
+      self._vars = {'env': {}, 'context': {}, 'shell': {}}
+      self.defineVariable(
+        'prompt', str, default='goosh> ',
+        summary='The string to print when prompting for input')
+
+      /# The 'commands' field maps command names to methods.
+      self._commands = {}
+      self.defineCommand('alias', self.aliasCommand)
+      self.defineCommand('aliases', self.printAliasesCommand)
+      self.defineCommand('cd', self.changeDirCommand)
+      self.defineCommand('help', self.helpCommand)
+      self.defineCommand('pwd', self.pwdCommand)
+      self.defineCommand('history', self.historyCommand)
+      self.defineCommand('ls', self.listDirCommand)
+      self.defineCommand('printenv', self.printVarsCommand)
+      self.defineCommand('quit', self.quitCommand)
+      self.defineCommand('set', self.setvarCommand)
+
+      /# The 'aliases' field maps command names to aliases
+      self._aliases = {}
+
+      /# Directories are grouped into families, and each directory family
+      /# is created from the same template.  This field is a list of
+      /# tuples containing:
+      /#   [0] regexp to apply to full path
+      /#   [1] list of strings naming the groups found in the regexp
+      /# For example, the path
+      /#    /domain/holst.ca/user/wade/groups/group1
+      /# can be described by the directory family:
+      /#    /domain/([^/]+)/user/([^/]+)/groups/([^/]+)
+      /# with groupings:
+      /#    (domain_name, user_name, group_name)
+      self._directory_families = []
+
+      /# The Filesystem is defined by the root directory.  It will get populated
+      /# as the user interacts with it via shell commands.
+      root = Directory(None, '')
+      self._filesystem = root
+
+      /# Current directory
+      self._cwd = root
+
+      /# The initial directory is '/'.
+      self.changeDirCommand('/')
+
+      if rcfile is None:
+        rcfile = os.path.join(os.getenv('HOME', '/'), '.wshrc')
+      if os.path.exists(rcfile):
+        with open(rcfile) as fp:
+          for line in fp:
+            self._runCommand(line)
+    end lifecycle;
+
+    method log params:
+      var msg : str #:
+        The message to log.
+      multi var args : vec #:
+        Used to replace printf sequences in msg.
+    scope:
+      self._fp.write(msg % args)
+    test:
+      sh = test.shell
+      out = sh._fp
+      sh.log('Test %s here %s', 'a', 'b')
+      test.iseq(
+        'Test a here b', out.getvalue())
+    end method log;
+
+    method registerDirectoryFamily params:
+      var regexp : str;
+      var groups : vec;
+    scope:
+      self._directory_families.append((regexp, groups))
+    end method registerDirectoryFamily;
+
+    method registerDirectoryGenerator #:
+      Register a set of path generators.
+      
+      Example:
+        genspec = '/domain/<domain>/'
+    params:
+      var genspec : str;
+    scope:
+      freshness = 10
+      spec_re = re.compile('^<(\S+?)(?::(\S+?)(?:\@(\d+))?)?>')
+      parts = genspec.split('/')
+      if parts[0] == '':
+        parts.pop(0)
+        dir = self._filesystem
+        for part in parts:
+          spec_match = spec_re.match(part)
+          if spec_match:
+            /# A generator specification
+            subname, genname, freshness = spec_match.groups()
+            if not freshness:
+              freshness = 3600
+            generator = getattr(self, genname)
+            child = Directory(dir, subname, freshness, generator)
+          else:
+            /# Literal directory component
+            child = Directory(dir, part, freshness, None)
+          self.log('part = %s\n', part)
+    end method registerDirectoryGenerator;
+
+    method defineCommand #:
+      Add a command to this shell, with associated implementation.
+    params:
+      var name : str #:
+        Name of command
+      var method : method #:
+        The method implementing the command. The method should
+        accept any number of args (but zero keyword args).
+    scope:
+      self._commands[name] = method
+    test:
+      sh = test.shell
+      /# Shell.__init__ calls self.defineCommand() many times.
+      test.istrue('alias' in sh._commands)
+    end method defineCommand;
+
+    method defineVariable #:
+      Define a new variable within the shell.
+    params:
+      var name : str #:
+        Name of variable
+      var type : any #:
+        A python type or a lambda that accepts a value and returns
+        True if the value is of the \"type\", False otherwise
+      var kind : str = 'shell' #:
+        One of:
+          'context' --> directory context variable
+          'shell'   --> a \"normal\" variable   
+          'env'     --> environment variable (is this needed?)
+      var default : any = null #:
+        The default value for this variable
+      var summary : str = '' #:
+        A one-line summary for the variable
+      var desc : str = '' #:
+        A multi-line description of the variable.
+    scope:
+      self._vars[kind][name] = {
+        'name': name, 'type': type, 'summary': summary, 'desc': desc }
+      if kind == 'shell':
+        self.setvarCommand(name, default)
+    test:
+      sh = test.shell
+      sh.defineVariable(
+        'home', str, kind='shell', summary='example varible',
+        default='', desc='description of example variable')
+      test.iseq(
+        {'desc': 'description of example variable', 'type': str,
+         'name': 'home', 'value': '', 'summary': 'example varible'},
+        sh._vars['shell']['home'])
+    end method defineVariable;
+
+    method run scope:
+      while True:
+        /# Obtain the command.
+        sys.stdout.write(self.getvar('prompt'))
+        /# Read a line - an empty result means EOF
+        line = sys.stdin.readline()
+        if not line:
+          line = 'quit'
+        /# process command
+        self._runCommand(line)
+    end method run;
+
+    method _runCommand #:
+      Processs a single command.
+    params:
+      var line : str #:
+        The command to process.
+    scope:
+      /# If the line is a history reference, obtain the actual history line.
+      /# TODO(wmh): Should instead replace history references within the
+      /# existing line, instead of replacing the entire line.
+      history_match = self.HISTORY_RE.match(line)
+      if history_match:
+        index = int(history_match.group(1))
+        line = self._history[index]
+        logging.info('Obtained %d from history = %s', index, line)
+
+      /# Parse the line into a command and arguments.
+      /# TODO(wmh): must improve this to support quoted arguments.
+      args = self.parseArgs(line)
+      command = args[0]
+      args.pop(0)
+
+      /# Determine if the command is an alias, and if so, expand it.
+      if command in self._aliases:
+        args = self.parseArgs(self._aliases[command])
+        command = args[0]
+        args.pop(0)
+
+      /# Identify the associated method and execute it.
+      if command:
+        method = self._commands.get(command, None)
+        if method:
+          try:
+            method(*args)
+          except Error, e:
+            self.log('%s: %s\n', e.__class__.__name__, str(e))
+          except IndexError, e:
+            /# This often happens if the method implementing the command is
+            /# careless about how it parses arguments (and assumes that an
+            /# argument exists that doesn't
+            /# TODO(wmh): Print the usage associated with the command.
+            self.log("Error: command '%s' expects more arguments\n", command)
+        else:
+          sys.stderr.write("Unknown command '%s' - ignored.\n" % command)
+        self._history.append(line.rstrip())
+    test:
+      sh = test.shell
+      sh._runCommand("alias ls 'ls -F'")
+      test.iseq(["alias ls 'ls -F'"], sh._history)
+      test.iseq({'ls': 'ls -F'}, sh._aliases)
+    end method _runCommand;
+
+    method parseArgs #:
+      Parse a string into a list of args.
+    params:
+      var command : str #:
+        The string to parse.
+    scope:
+      canonical_command = command.strip()
+      max = len(canonical_command) - 1
+      args = []
+      esc = ''
+      lastc = ''
+      arg = ''
+      i = -1
+      c = ''
+      while i < max:
+        i += 1
+        /# single quotes, double quotes and spaces.
+        lastc = c
+        c = canonical_command[i]
+        if esc:
+          /# We are currently parsing a quoted argument, terminated by
+          /# an unescaped c that matches 'esc'.
+          if c == esc and lastc != '\\':
+            /# TODO(wmh): Do we save the arg now, or wait for whitespace to
+            /# allow for "some arg"plusmore.
+            args.append(arg)
+            arg = ''
+            esc = ''
+          else:
+            arg += c
+
+        elif arg:
+          /# We are in the midst of parsing a simple arg - terminated by
+          /# whitespace, continued by anything else.
+          if c == ' ':
+            /# terminate this simple arg
+            args.append(arg)
+            arg = ''
+          else:
+            /# Part of the arg - append c to arg
+            arg += c
+
+        else:
+          /# We are between args consuming whitespace.
+          if c == '\"' or c == "'":
+            /# Indicate a quoted arg
+            esc = c
+            arg = ''
+          elif c != ' ':
+            /# A non-space - start a new arg.
+            arg = c
+          else:
+            /# whitespace - consume and continue
+            pass
+      if arg:
+        args.append(arg)
+      return args
+    test:
+      sh = test.shell
+      test.iseq(
+        ['command', 'arg1', 'arg2', 'arg3'],
+        sh.parseArgs('command arg1 arg2 arg3'))
+      test.iseq(
+        ['command', 'arg1', 'arg2', 'arg3'],
+        sh.parseArgs('command  arg1    arg2      arg3'))
+      test.iseq(
+        ['command', 'arg1 with spaces', 'arg2 with spaces'],
+        sh.parseArgs('command  "arg1 with spaces" \'arg2 with spaces\''))
+      test.iseq(
+        ['command', 'arg1 with "spaces" ', "arg2 with 'spaces' "],
+        sh.parseArgs('command  ' + " 'arg1 with \"spaces\" '" + ' "arg2 with \'spaces\' " '))
+    end method parseArgs;
+
+    remark #:
+      ----------------------------------------------------------------------
+      Methods defining interactive commands.
+
+    method aliasCommand #:
+      Create an alias for a command.
+    params:
+      multi var args : vec;
+    scope:
+      if len(args) == 2:
+        if '=' in args[0]:
+          /# We do a little hackery to support syntax of the form:
+          /#    alias ls='ls -F'
+          /# rather than
+          /#    alias ls 'ls -F'
+          /# The form results in args = ("ls='ls", "-F'")
+          /# We make it ('ls', 'ls -F')
+          self.log('Patching %s.  Do not use =.\n', str(args))
+          new_command, orig_command = args[0].split('=', 1)
+          orig_command += ' ' + args[1]
+          quote_match = re.match("(['\"])?(.*)\\1$", orig_command)
+          if quote_match:
+            orig_command = quote_match.group(2)
+        else:
+          new_command, orig_command = args
+        self._aliases[new_command] = orig_command
+      else:
+        self.log('ERROR: Currently requiring exactly two args to alias\n')
+    test:
+      sh = test.shell
+      sh.aliasCommand('ls', 'ls -F')
+      test.iseq({'ls': 'ls -F'}, sh._aliases)
+      sh.aliasCommand('this', 'is', 'test')
+      test.iseqtext(
+        'ERROR: Currently requiring exactly two args to alias\n',
+        test.out.getvalue())
+    end method aliasCommand;
+
+    method printAliasesCommand #:
+      Print all existing aliases.
+    params:
+      multi var args : vec;
+    scope:
+      for alias in sorted(self._aliases):
+        self.log('%-20s = %s\n', alias, self._aliases[alias])
+    test:
+      sh = test.shell
+      sh.aliasCommand('ls', 'ls -F')
+      sh.aliasCommand('h', 'history')
+      sh.printAliasesCommand()
+      test.iseqtext(
+        'h                    = history\n'
+        'ls                   = ls -F\n',
+        test.out.getvalue())
+    end method printAliasesCommand;
+
+    method pwdCommand #:
+      Print working directory.
+    params:
+      multi var args : vec;
+    scope:
+      self.log(self.cwd().abspath() + '\n')
+    test:
+      sh = test.shell
+      sh.pwdCommand()
+      test.iseqtext(
+        '/\n',
+        test.out.getvalue())
+    end method pwdCommand;
+
+    method historyCommand #:
+      Show the history of commands.
+    params:
+      multi var args : vec;
+    scope:
+      size = len(self._history)
+      if len(args) > 0:
+        start = size - int(args[0])
+      else:
+        start = 0
+      for index in xrange(start, size):
+        self.log('%5d  %s\n', index, self._history[index])
+    test:
+      sh = test.shell
+      sh._runCommand("alias ls 'ls -F'")
+      sh.defineVariable('a', int, default=0, summary='test var')
+      sh._runCommand('set a 1')
+      sh.historyCommand()
+      test.iseqtext(
+        "    0  alias ls 'ls -F'\n"
+        '    1  set a 1\n',
+        test.out.getvalue())
+    end method historyCommand;
+
+    method quitCommand #:
+      Exit the shell.
+    params:
+      multi var args : vec;
+    scope:
+      self.log('Goodbye\n')
+      sys.exit(1)
+    test:
+      sh = test.shell
+      test.raises(SystemExit, sh.quitCommand)
+    end method quitCommand;
+
+    method helpCommand #:
+      Provide summary of commands.
+      
+      Without arguments, provides one-line summary of all commands.
+      With an argument, provides multi-line description of a given command.
+    params:
+      multi var args : vec;
+    scope:
+      if len(args):
+        method = self._commands.get(args[0])
+        if method:
+          self.log('%s\n' % method.im_func.func_doc)
+        else:
+          sys.stderr.write("Unknown command '%s'" % args[0])
+
+      else:
+        for command in sorted(self._commands.keys()):
+          method = self._commands[command]
+          /#print dir(method.im_func)
+          desc = method.im_func.func_doc
+          lines = re.split('\n', desc or 'Missing doc string: ' % method.__name__)
+          self.log('%-15s: %s\n', command, lines[0])
+    test:
+      sh = test.shell
+      sh.helpCommand()
+      test.iseqtext(
+        'alias          : Create an alias for a command.\n'
+        'aliases        : Print all existing aliases.\n'
+        'cd             : Switch to a specified directory.\n'
+        'help           : Provide summary of commands.\n'
+        'history        : Show the history of commands.\n'
+        'ls             : List contents of directory.\n'
+        'printenv       : Print all variables.\n'
+        'pwd            : Print working directory.\n'
+        'quit           : Exit the shell.\n'
+        'set            : Set a shell variable to a given value.\n',
+        test.out.getvalue())
+    end method helpCommand;
+
+    method listDirCommand #:
+      List contents of directory.
+      
+        -F  = prefix dirs with /, etc.
+        -l  = long listing (one line per file)
+    params:
+      multi var args : vec;
+    scope:
+      /# TODO(wmh): Support listing of a specified directory (currently only lists
+      /# current directory - i.e. ignores args).
+      dir = self._cwd
+      annotate = False
+      if args and args[0] == '-F':
+        annotate = True
+      dir.listChildren(fp=self._fp, annotate=annotate)
+    test:
+      sh = test.shell
+      root = sh.filesystem()
+      metax.lib.shell.Directory(root, 'subdir')
+      metax.lib.shell.File(root, 'subfile')
+      sh.listDirCommand()
+      test.iseqtext(
+        'subdir  subfile\n',
+        test.out.getvalue())
+      out = self.newStr()
+      sh._fp = out
+      sh.listDirCommand('-F')
+      test.iseqtext(
+        'subdir/  subfile\n',
+        out.getvalue())
+    end method listDirCommand;
+
+    method changeDirCommand #:
+      Switch to a specified directory.
+    params:
+      multi var args : vec;
+    scope:
+      /# Because the directory hierarchy is dynamically created and updated,
+      /# 'cd' is a more complicated concept than one might at first think. One
+      /# must determine how and when to generate content, how generated
+      /# subdirectories will be set up so that they can generate their own
+      /# content, when and when not to generate content for all parent
+      /# directories of a path, etc.
+      if args:
+        dirname = args[0]
+      else:
+        dirname = '/'
+      if dirname != '/' and dirname.endswith('/'):
+        dirname = dirname[0:-1]
+
+      /# Obtain the directories making up the path to switch to.
+      parts = dirname.split('/')
+
+      if dirname == '/' or dirname == '':
+        dir = self._filesystem
+        parts = []
+      elif dirname.startswith('/'):
+        /# full path
+        dir = self._filesystem
+        /# skip the first part (it is an empty string)
+        parts.pop(0)
+      else:
+        /# relative path
+        dir = self._cwd
+
+      /# We refresh dir itself to make sure we are working with up-to-date information
+      dir._refresh()
+
+      /# Traverse directories, generating as we go
+      for part in parts:
+        /# Part should be a subdirectory of dir
+        if dir.contains(part):
+          dir = dir.child(part)
+          /# We set the directory each time thru, so that the context vars are
+          /# set each time.
+          self.cwdIs(dir)
+          /# We ensure that the subdir is still fresh.
+          dir._refresh()
+        else:
+          raise InvalidDirectoryError('Directory %s has no child %s' % (dir.abspath(), part))
+    end method changeDirCommand;
+
+    method setvarCommand #:
+      Set a shell variable to a given value.
+      
+      This is invoked if the command encountered at the prompt is 'set', with
+      all subsequent words being treated as args.  Two idioms are supported:
+      
+        set <var> <value>
+      and
+        set <var> '=' <value>
+    params:
+      var var : str #:
+        Name of variable being set.
+      multi var args : vec #:
+        The args after 'set'.  Can be either a list of two elements
+        representing <var> and <value>, or a list of three elements,
+        <var, '=' and <value.
+    scope:
+      /# TODO(wmh): add var validation and value typing?
+      vars = self._vars['shell']
+      if var in vars:
+        value = args[0]
+        if value == '=':
+          value = args[1]
+        var_info = vars[var]
+
+        /# Verify that the value matches the specified type.  The 'type' field in
+        /# var_info can be any of the following python types:
+        /#   function: accepts the value and returns True if it matches the type
+        /#   type: the value must be of this specified python type
+        /#   set: the value must be in the given set
+        var_type = var_info['type']
+        /# print 'var=%s var_info=%s var_type=%s' % (var, var_info, var_type)
+        if type(var_type) is type:
+          try:
+            value = var_type(value)
+            valid = True
+          except ValueError:
+            valid = False
+            type_desc = 'special'
+        elif isinstance(var_type, set):
+          valid = var in var_type
+          type_desc = repr(var_type)
+        elif isinstance(var_type, type):
+          valid = isinstance(value, var_type)
+          type_desc = var_type.__name__
+        else:
+          raise Error("Variable '%s' has unknown type specifier %s" % (var,
+                                                                       var_type))
+        if valid:
+          var_info['value'] = value
+        else:
+          raise Error("Variable '%s' of type %s cannot be assigned '%s'" %
+                      (var, var_type, value))
+      else:
+        raise Error("Attempt to set the value of undefined variable '%s'" % var)
+    test:
+      sh = test.shell
+      sh.defineVariable('a', int, default=0, summary='test var')
+      sh.setvarCommand('a', '1')
+      test.iseq(1, sh._vars['shell']['a']['value'])
+      sh.setvarCommand('a', '=', '2')
+      test.iseq(2, sh._vars['shell']['a']['value'])
+    end method setvarCommand;
+
+    method printVarsCommand #:
+      Print all variables.
+    params:
+      multi var args : vec;
+    scope:
+      num_re = re.compile('^\d+$|^\d*\.\d+$')
+      kinds = self._vars
+      for kind in sorted(kinds):
+        kind_vars = kinds[kind]
+        if kind_vars:
+          self.log('\n%s variables:\n' , kind)
+          for var in sorted(kind_vars.keys()):
+            value = kind_vars[var]['value']
+            if not num_re.match(str(value)):
+              value = "'%s'" % value
+            self.log('  %-15s = %s\n', var, value)
+    test:
+      sh = test.shell
+      sh.defineVariable('a', int, default=0, summary='test var')
+      sh.setvarCommand('a', '1')
+      sh.printVarsCommand()
+      test.iseqtext(
+        '\n'
+        'shell variables:\n'
+        '  a               = 1\n'
+        "  prompt          = 'goosh> '\n",
+        test.out.getvalue())
+    end method printVarsCommand;
+
+    remark #:
+      ----------------------------------------------------------------------
+      Service methods
+
+    method getvar : any #:
+      Obtain  the value of a shell variable.
+
+      Each variable has an associated type, and the return value is typed
+      accordingly.
+
+      This is only for shell variables ... use getctx() for context variables.
+
+      TODO(wmh): why not have this method support both shell and context vars?
+      TODO(wmh): decide what to do about env vars (keep/document or remove?)
+
+      Raises:
+        Error: If the variable does not exist.
+    params:
+      var var : str #:
+        The variable name.
+    scope:
+      vars = self._vars['shell']
+      if var in vars:
+        return vars[var]['value']
+      else:
+        raise Error("Attempt to access undefined variable '%s'" % var)
+    test:
+      sh = test.shell
+      sh.defineVariable('a', int, default=0, summary='test var')
+      sh.setvarCommand('a', '1')
+      test.iseq('goosh> ', sh.getvar('prompt'))
+      test.iseq(1, sh.getvar('a'))
+    end method getvar;
+
+    method getctx : any #:
+      Obtain the value of a context variable.
+
+      Each variable has an associated type, and the return value is typed
+      accordingly.
+
+      This is only for shell variables ... use getctx() for context variables.
+
+      TODO(wmh): why not have this method support both shell and context vars?
+      TODO(wmh): decide what to do about env vars (keep/document or remove?)
+
+      Raises:
+        Error: If the variable does not exist.
+    params:
+      var var : str #:
+        The variable name.
+    scope:
+      vars = self._vars['context']
+      if var in vars:
+        return vars[var]
+      else:
+        raise Error("Attempt to access undefined context variable '%s'" % var)
+    end method getctx;
+
+    method context : map #:
+      Obtain the current collection of context var/value pairs.
+    scope:
+      return self._vars['context']
+    end method context;
+
+    method executeShellCommand #:
+      Execute a shell command, capturing/printing output.
+    params:
+      var command : str #:
+        (bash) shell command to execute
+      var prompt : bool = true #:
+        If True, prompt user before executing command
+    scope:
+      /# Verify that the user really wants to execute this command
+      if prompt:
+        while True:
+          sys.stdout.write("Execute '%s'? " % command)
+          ans = sys.stdin.readline().strip()
+          if ans == 'y' or ans == 'yes':
+            break
+          elif ans == 'n' or ans == 'no':
+            return
+
+      /# Execute the command in the shell, capturing stdout and stderr
+      p = subprocess.Popen(command, shell=True,
+                           stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE)
+      try:
+        stdout, stderr = p.communicate()
+        retcode = p.returncode
+        if retcode < 0:
+          print >>sys.stderr, "Child was terminated by signal", -retcode
+        else:
+          print >>sys.stderr, "Child returned ", retcode
+          if stdout:
+            self.log('-' * 70 + '\n')
+            self.log('STDOUT:\n')
+            self.log(stdout + '\n')
+          if stderr:
+            self.log('-' * 70 + '\n')
+            self.log('STDERR:\n')
+            self.log(stderr + '\n')
+      except OSError, e:
+        print >>sys.stderr, "Execution failed:", e
+        retcode = subprocess.call("mycmd" + " myarg", shell=True)
+        if retcode < 0:
+          print >>sys.stderr, "Child was terminated by signal", -retcode
+        else:
+          print >>sys.stderr, "Child returned", retcode
+    test:
+      /# Need to mox out sys.stdin.readline
+      pass
+    end method executeShellCommand;
+  end class Shell;
+
+  abstract
+  class FileSystemObject #:
+    Abstract superclass of classes representing filesystem objects.
+  scope:
+
+    field name : str #:
+      The name (within parent) of this directory
+
+    field parent : FileSystemObject #:
+      The parent directory.  It may be None in two situations:
+        1) self is the root of the filesystem
+        2) self is an instance that cannot be fully initialized with
+           a parent until later.  It is for this reason that parentIs()
+           registers the child, instead of doing that registration here.
+    scope:
+      accessor set scope:
+        if value is None:
+          self._parent = value
+        else:
+          name = self.name()
+          current_parent = self.parent()
+          if current_parent:
+            /# We are already in a different parent, so we remove ourselves from it.
+            if name in current_parent.children():
+              del current_parent.children()[name]
+          self._parent = value
+          if value:
+            /# We always register ourselves with our parent.
+            /# TODO(wmh): Consider switching to a less magical implementation.
+            value.registerChild(self)
+      test:
+        /# Note that parentIs() is invoked by FileSystemObject.__init__ and
+        /# thus setUp() has invoked it a number of times.  Thus, testing
+        /# parent() is a means of testing parentIs().  We add some additional
+        /# tests here to verify that current parent deletion works.
+
+        /# Create a child of /
+        blah = metax.lib.shell.Directory(test.root, 'blah')
+
+        /# Ensure that the child knows its parent, and parent contains child
+        test.iseq(test.root, blah.parent())
+        test.iseq(True, test.root.contains('blah'))
+
+        /# Now change the parent from / to /dir
+        blah.parentIs(test.dir)
+
+        /# Verify that child knows parent and parent contains child
+        test.iseq(test.dir, blah.parent())
+        test.iseq(True, test.dir.contains('blah'))
+
+        /# Verify that the old parent (/) does NOT contain child
+        test.iseq(False, test.root.contains('blah'))
+    end field parent;
+
+    lifecycle params:
+      var parent : FileSystemObject;
+      var name : str;
+    scope:
+      self.nameIs(name)
+      self._parent = None  # needed because parentIs() expects it to be defined.
+      self.parentIs(parent)
+    end lifecycle;
+
+    method abspath : str #:
+      Full path of this file system object.
+      Returns string representing absolute path.
+    scope:
+      result = []
+      obj = self
+      while obj:
+        result.append(obj.name())
+        obj = obj.parent()
+      result = '/'.join(reversed(result))
+      if not result:
+        result = '/'
+      return result
+    test:
+      test.iseq('/', test.root.abspath())
+      test.iseq('/dir', test.dir.abspath())
+      test.iseq('/dir/subdir', test.subdir.abspath())
+      test.iseq('/file', test.file.abspath())
+      test.iseq('/dir/subfile', test.subfile.abspath())
+    end method abspath;
+
+    method isDir scope:
+      return False
+    test:
+      test.iseq(True, test.root.isDir())
+      test.iseq(True, test.dir.isDir())
+      test.iseq(True, test.subdir.isDir())
+      test.iseq(False, test.file.isDir())
+      test.iseq(False, test.subfile.isDir())
+    end method isDir;
+
+    method isSymlink scope:
+      return False
+    end method isSymlink;
+
+    test
+    lifecycle setup:
+      test.root = metax.lib.shell.Directory(None, '')
+      test.dir = metax.lib.shell.Directory(test.root, 'dir')
+      test.subdir = metax.lib.shell.Directory(test.dir, 'subdir')
+      test.subfile = metax.lib.shell.File(test.dir, 'subfile')
+      test.file = metax.lib.shell.File(test.root, 'file')
+    end lifecycle;
+  end class FileSystemObject;
+
+  class Directory < FileSystemObject #:
+    Represents a directory within which the shell can navigate.
+  scope:
+
+    field children : @map #:
+      The collection of subfiles/directories (dictionary maps name to
+      instance of Directory or File)
+
+    lifecycle params:
+      var parent : Directory;
+      var name : str #:
+        A string representing a unique (base) name within the parent
+    super (parent, name)
+    scope:
+    end lifecycle;
+
+    method _refresh #:
+      Conditionally re-generate my list of children.
+    scope:
+    end method _refresh;
+
+    method isGenerator scope:
+      return False
+    test:
+      test.iseq(False, test.root.isGenerator())
+      test.iseq(False, test.dir.isGenerator())
+      test.iseq(False, test.subdir.isGenerator())
+    end method isGenerator;
+
+    method familyPath : str #:
+      Return the family path of this directory.
+      Returns str starting and ending with '/', containing path strings
+      and/or special <context> placeholders.
+    scope:
+      parent = self.parent()
+      if parent:
+        result = parent.familyPath()
+        if parent.isGenerator():
+          result += '<%s>' % parent.childContext()
+        else:
+          result += self.name()
+      else:
+        result = self.name()
+      result += '/'
+      return result
+    test:
+      test.iseq('/', test.root.familyPath())
+      test.iseq('/dir/', test.dir.familyPath())
+      test.iseq('/dir/subdir/', test.subdir.familyPath())
+    end method familyPath;
+
+    method listChildren #:
+      List the contents of this directory.
+    params:
+      var fp : ostream = out #:
+        Where to write the output.
+      var detailed : bool = false #:
+        True means print a 'ls -l' style listing
+      var regexp : *regexp = null #:
+        If non-None, a string regexp that names must match against
+      var glob : *str = null #:
+        If non-None, a string glob that names must match against
+      var annotate : bool = false #:
+        If True, suffix names with '/' if directories
+    scope:
+      /# Ensure that my children are up-to-date
+      self._refresh()
+
+      /# Print out my children.
+      data = []
+      for child_name in sorted(self.children()):
+        if regexp and not re.match(regexp, child_name):
+          continue
+        child = self.children()[child_name]
+        if detailed:
+          /# TODO(wmh): Add in 'ls -l' style output here
+          data.append('?rwx------ ? ? %s' % child_name)
+        else:
+          if annotate:
+            if child.isDir():
+              child_name += '/'
+            elif child.isSymlink():
+              child_name += '@'
+          data.append(child_name)
+      if detailed:
+        fp.write('\n'.join(data) + '\n')
+      else:
+        /# TODO(wmh): provide multi-child-per-line support
+        output = self.__class__._FormatListing(
+          data, width=self._terminalWidth())
+        fp.write(output + '\n')
+      return data
+    test:
+      fp = test.fp()
+      test.iseq(
+        ['dir', 'file'],
+        test.root.listChildren(fp=fp, detailed=False, annotate=False))
+      test.iseq(
+        ['dir/', 'file'],
+        test.root.listChildren(fp=fp, detailed=False, annotate=True))
+      test.iseqtext('dir  file\ndir/  file\n', fp.getvalue())
+    end method listChildren;
+
+    method _terminalWidth : int #:
+      Return the width of the current terminal.
+      Returns int
+    scope:
+      /# This is its own method so that we easily control it during unit tests.
+      return int(os.getenv('COLUMNS', '70')) - 5
+    end method _terminalWidth;
+
+    meta
+    method _FormatListing : str #:
+      Format a list of files similar to how 'ls' does, in multiple columns.
+      Returns str.  Multi-line string representing the formatted set of rows of
+      columns.
+    params:
+      var files : vec<str> #:
+        The text to format into rows of columns.
+      var width : int = 80 #:
+        The maximum width of each line
+      var maxword : int = 0 #:
+        Any word whose length is larger than this is truncated to this length
+        for display purposes.
+    scope:
+      if not files:
+        return ''
+      numfiles = len(files)
+      /# We know that we can format the listing using numfiles rows (one file per
+      /# row) regardless of the width specified. We have the method
+      /# formatListingUsing(), which determines whether the files can be formatted
+      /# using a given number of rows. We could linearly try rowsize 1, rowsize 2,
+      /# all the way up to row size numfiles. But we can do better with a binary
+      /# search.
+      start = 1
+      end = numfiles
+
+      if True:
+        numrows = 0
+        while start != end:
+          numrows = start + (end - start) / 2
+
+          result = cls._FormatListingUsing(
+              numrows, files, width=width, maxword=maxword)
+          if result:
+            /# We can fit in numrows, but maybe we can fit in even fewer.
+            end = numrows
+          else:
+            /# We cannot fit in numrows ... try more rows.
+            start = numrows + 1
+        if numrows != end:
+          result = cls._FormatListingUsing(
+              end, files, width=width, maxword=maxword)
+
+      else:
+        rows = 1
+        while True:
+          result = cls._FormatListingUsing(
+              rows, files, width=width, maxword=maxword)
+          if result or rows > len(files):
+            break
+          rows += 1
+
+      return result
+    end method _FormatListing;
+
+    meta
+    method _FormatListingUsing : str #:
+      Attempt to format a list of words into a specified number of rows.
+      Returns str (if successful) or null (if not possible)
+    params:
+      var numrows : int #:
+        The number of rows to format into.
+      var files : vec<str> #:
+        The text to format into rows of columns.
+      var width : int = 0 #:
+        The maximum width of each line
+      var maxword : int = 0 #:
+        Any word whose length is larger than this is truncated to this length
+        for display purposes.
+      var colspace : int = 2 #:
+        Amount of spaces between each column
+    scope:
+      if maxword <= 0:
+        maxword = 1000000
+      files = sorted(files)
+
+      /# TODO(wmh): This needs a fix-up for situations where there are a small
+      /# number of small-length files ... in such situations the files are
+      /# spread across the entire width allowed, instead of being more
+      /# compactly listed.
+
+      ok = True
+      i = 0
+      n = len(files)
+      widths = []
+      total = 0
+      while i < n:
+        /# Amongst the words that will appear in the current column, determine the
+        /# maximum length.
+        col_width = 0
+        for j in range(0, numrows):
+          index = i + j
+          if index >= n:
+            break
+          word = files[i+j]
+          size = min(len(word), maxword)
+          if size > col_width:
+            col_width = size
+
+        widths.append(col_width)
+
+        /# Increment the total width of the line needed to display all words.
+        /# Note that if we've already processed a column, we need to add 'colspace'
+        /# between columns as well.
+        if total > 0:
+          total += colspace
+        total += col_width
+
+        /# If our total width exceeds maximum width, this formatting is not
+        /# possible.  However, if numrows is sufficient to allow a single file
+        /# per line, we allow it even if it exceeds width.
+        if numrows < n and total > width:
+          ok = False
+          break
+
+        /# Advance to the word starting the next column
+        i += numrows
+
+      if ok:
+        numcols = len(widths)
+
+        /# We've found a width distribution that allows us to fit all files
+        /# into the specified number of rows (using 'numcols' columns). We
+        /# first check whether the fit is tighter than it needs to be, and
+        /# if so, we add some additional space between each column.
+        if numcols > 1:
+          diff = width - total
+          extra_spaces = diff / (numcols-1)
+          if extra_spaces:
+            widths = [width + extra_spaces for width in widths]
+
+        /# Now we create the multi-line string of rows of columns.
+        lines = []
+        for r in range(0, numrows):
+          i = r
+          row = []
+          for width in widths:
+            if i < n:
+              word = files[i]
+              if len(word) > maxword:
+                word = word[:maxword-1] + '$'
+              row.append(word.ljust(width))
+            else:
+              break
+            i += numrows
+          spacing = ' ' * colspace
+          lines.append(spacing.join(row).rstrip())
+        if len(lines) == 1:
+          result = re.sub(r'\s+', '  ', lines[0])
+        else:
+          result = '\n'.join(lines)
+      else:
+        result = None
+      return result
+    end method _FormatListingUsing;
+
+    method isDir scope:
+      return True
+    test:
+      test.iseq(True, test.root.isDir())
+      test.iseq(True, test.dir.isDir())
+      test.iseq(False, test.file.isDir())
+    end method isDir;
+
+    method contains : bool #:
+      Determine if the given name is a subclass of myself.
+      Returns:
+        true if name is a child of self, false otherwise.
+    params:
+      var name : str;
+    scope:
+      return name in self._children
+    test:
+      test.iseq(True, test.root.contains('dir'))
+      test.iseq(True, test.root.contains('file'))
+      test.iseq(False, test.root.contains('subfile'))
+      test.iseq(True, test.dir.contains('subfile'))
+      test.iseq(True, test.dir.contains('subdir'))
+      test.iseq(False, test.dir.contains('nondir'))
+    end method contains;
+
+    method child : FileSystemObject #:
+      Obtain the child object identified by name.
+      Returns:
+        null if name isn't a child.
+    params:
+      var name : str;
+    scope:
+      return self._children.get(name, None)
+    test:
+      test.iseq(test.dir, test.root.child('dir'))
+      test.iseq(test.file, test.root.child('file'))
+      test.iseq(None, test.root.child('subfile'))
+      test.iseq(test.subfile, test.dir.child('subfile'))
+      test.iseq(test.subdir, test.dir.child('subdir'))
+      test.iseq(None, test.dir.child('nondir'))
+    end method child;
+
+    method registerChild params:
+      var child : FileSystemObject;
+    scope:
+      self._children[child.name()] = child
+    test:
+      /# Because FileSystemObject.__init__ calls registerChild to register
+      /# every object with its parent, we can test registerChild by
+      /# ensuring that dicts have their expected values.
+      test.iseq(test.file, test.root._children['file'])
+      test.iseq(test.dir, test.root._children['dir'])
+      test.iseq(test.subfile, test.dir._children['subfile'])
+      test.iseq(test.subdir, test.dir._children['subdir'])
+    end method registerChild;
+
+    method newDir : Directory #:
+      docstr
+    params:
+      var a : int #:
+        docstr
+    scope:
+    test:
+    end method newDir;
+
+    test
+    lifecycle setup:
+      /# the root directory
+      root = metax.lib.shell.Directory(None, '')
+      test.root = root
+      test.dir = metax.lib.shell.Directory(root, 'dir')
+      test.subdir = metax.lib.shell.Directory(test.dir, 'subdir')
+      test.file = metax.lib.shell.File(root, 'file')
+      test.subfile = metax.lib.shell.Directory(test.dir, 'subfile')
+    end lifecycle;
+
+  end class Directory;
+
+  class GeneratingDirectory < Directory #:
+    Represents a directory within which the shell can navigate.
+    
+    This subclass of Directory represents a directory whose children are
+    generated by invoking a 'generator' method, and whose name is 
+  assocs:
+    usertest std assoc datetime;
+    test std assoc time;
+  scope:
+
+    field generator : method #:
+      The contents of the directory are produced by invoking this method
+
+    raw field last_update : float #:
+      Each instance records the last time it was updated. We mark it non-updated
+      on initialization so that the first call to '_refresh' will update
+      children from self._generator.
+
+    raw field freshness_threshold : int #:
+      For now, each instance records its freshness threshold in seconds.
+      May want to find a more efficient means of storing this though 
+      (for example based on the generic path of this node).
+
+    raw field child_context : str #:
+      Generated directories are context variables, and '_child_context'
+      maintains the name of the context variable to store into.
+
+    lifecycle #:
+      Initialize an instance.
+    params:
+      var parent : Directory;
+      var name : str;
+      var context : str #:
+        The name of the context variable (within the shell) to store
+        'name' into.
+      var generator : method #:
+        Accepts a single Directory as argument, and returns the list
+        of FileSystemObject instances that that Directory should have
+        as children.
+      var freshness : int #:
+        Number of seconds that the child contents of this Directory
+        are considered fresh (accesses after that duration will result
+        in the generator being invoked again).
+    super (parent, name)
+    scope:
+      self._generator = generator
+      self._last_update = datetime.datetime.fromtimestamp(0)
+      self._freshness_threshold = freshness
+      self._child_context = context
+      /# IMPORTANT: We do NOT invoke _refresh() within this constructor, as this
+      /# would result in an exponential initialization of all transitive children
+      /# that have generators.  Instead, directories are made "active" ONLY be 'cd'ing
+      /# into them, and 'cd' (aka changeDirCommand) is responsible for the initial
+      /# (and all subsequent) refreshes.
+    end lifecycle;
+
+    method lastUpdate scope:
+      return self._last_update
+    test:
+      d = test.dir
+      tm = 1407887423.0
+      d._last_update = tm
+      test.iseq(tm, d.lastUpdate())
+    end method lastUpdate;
+
+    method freshnessThreshold scope:
+      return self._freshness_threshold
+    test:
+      test.iseq(10, test.dir.freshnessThreshold())
+    end method freshnessThreshold;
+
+    method childContext scope:
+      return self._child_context
+    test:
+      test.iseq('special', test.dir.childContext())
+    end method childContext;
+
+    method isGenerator scope:
+      return True
+    test:
+      test.iseq(False, test.root.isGenerator())
+      test.iseq(True, test.dir.isGenerator())
+      test.iseq(False, test.subdir.isGenerator())
+    end method isGenerator;
+
+    method updateTime params:
+      var value : time = null;
+    scope:
+      if not value:
+        value = datetime.datetime.now()
+      self._last_update = value
+    test:
+      d = test.dir.lastUpdate()
+      /# TODO(wmh): mock out time issues so we don't actually sleep for 1 second.
+      time.sleep(1)
+      test.dir.updateTime()
+      test.istrue(d < test.dir.lastUpdate())
+    end method updateTime;
+
+    method _refresh : bool #:
+      Conditionally re-generate my list of children.
+
+      Returns:
+        true if refreshing occurred, false if self still fresh.
+    scope:
+      now = datetime.datetime.now()
+      td = now - self.lastUpdate()
+      total_seconds = td.seconds + td.days * 24 * 3600
+
+      if total_seconds > self.freshnessThreshold():
+        /# Invoke my generator to obtain a list of FileSystemObjects
+        child_list = self._generator(self)
+
+        /# Initialize my _children field.
+        children = self._children
+        children.clear()
+        for child in child_list:
+          child.parentIs(self)
+
+        /# Update our lasted-updated field
+        self.updateTime(now)
+
+        /# logging.debug('Refreshed %s at %s', self.abspath(), now)
+
+        result = True
+      else:
+        result = False
+      return result
+    test:
+      /# Since GeneratingDirectory.__init__ calls _refresh, and setUp()
+      /# creates test.dir as a GeneratingDirectory, we test test.dir to
+      /# verify refresh.
+      test.iseq(test.subfile, test.dir.child('subfile'))
+      test.iseq(test.subdir, test.dir.child('subdir'))
+      test.iseq(test.dir, test.subfile.parent())
+      test.iseq(test.dir, test.subdir.parent())
+
+      /# We've set the freshness threshold to 10 seconds, so calling _refresh
+      /# now should NOT require an update.
+      test.iseq(False, test.dir._refresh())
+
+      /# By setting the last_updated value back 30 seconds, we ensure that
+      /# a new call to _refresh will trigger an update.
+      d = datetime.datetime.now()
+      test.dir.updateTime(d - datetime.timedelta(seconds=30))
+      test.iseq(True, test.dir._refresh())
+      test.istrue(test.dir.lastUpdate() >= d)
+    end method _refresh;
+
+    test
+    lifecycle setup:
+      root = metax.lib.shell.Directory(None, '')
+      test.root = root
+      test.file = metax.lib.shell.File(root, 'file')
+
+      test.subdir = metax.lib.shell.Directory(None, 'subdir')
+      test.subfile = metax.lib.shell.Directory(None, 'subfile')
+
+      generator = lambda x: (test.subdir, test.subfile)
+      test.dir = metax.lib.shell.GeneratingDirectory(
+        root, 'dir', context='special', generator=generator, freshness=10)
+
+      test.root._refresh()
+      test.dir._refresh()
+      test.subdir._refresh()
+    end;
+  end class GeneratingDirectory;
+
+  class File < FileSystemObject #:
+    Represents a terminal file, which the shell can interact with.
+  scope:
+    lifecycle params:
+      var parent : Directory;
+      var name : str;
+    super (parent, name)
+    scope:
+    end lifecycle;
+  end class File;
+
+  class Symlink < FileSystemObject #:
+    Represents a symlink to another FileSystemObject instance.
+  scope:
+
+    field link : FileSystemObject #:
+      The filesystem object linked to.
+
+    lifecycle params:
+      var parent : Directory;
+      var name : str;
+      var link : FileSystemObject;
+    super (parent, name)
+    scope:
+      self._link = link
+    end lifecycle;
+
+    method isSymlink scope:
+      return True
+    end method isSymlink;
+
+    method __getattr__ params:
+      var name : str;
+    scope:
+      /# TODO(wmh): This is rather fragile, as it delegates to self._link
+      /# for all methods not defined in FileSystemObject, but does NOT delegate
+      /# for those methods that ARE defined in FileSystemObject, which might
+      /# mean we don't invoke the desired method.  Might want to use
+      /# __getattribute__ instead!
+      return getattr(self._link, name)
+    end method __getattr__;
+  end class Symlink;
+
+  test
+  class TestCase < metax.test.TestCase scope:
+    lifecycle setup:
+      test.out = self.newStr()
+      sh = metax.lib.shell.Shell(fp=test.out)
+      test.shell = sh
+      sh.registerDirectoryFamily('/dir/([^/]+)', ('special',))
+    end lifecycle;
+  end class TestCase;
+
+end namespace metax.lib.shell;

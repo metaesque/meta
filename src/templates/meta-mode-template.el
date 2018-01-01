@@ -178,6 +178,8 @@
 
 ; Various methods set these variables
 (setq metalang2-current-construct-kind nil)
+(if (not (boundp 'metalang2-meta-binary))
+  (setq metalang2-meta-binary "meta2"))
 
 (defun metalang2-goto-construct-line (&optional target-dent)
   ;; Find the line defining the construct within which the current line
@@ -1243,3 +1245,84 @@ we need its actual indentation to be reported)."
             (setq font-lock-beg found-point))))))
 
 (provide 'metalang2-mode)
+
+;; The following is based on
+;;    https://emacs.stackexchange.com/questions/519/key-bindings-specific-to-a-buffer
+;; as a means of providing an "index" for meta files.
+
+(defvar metalang2-minor-mode-map (make-sparse-keymap)
+  "Keymap while metalang2-minor-mode is active.")
+
+(define-minor-mode metalang2-minor-mode
+  "A temporary minor mode to be activated."
+  nil
+  :lighter " MetaMinor"
+  metalang2-minor-mode-map)
+
+(defun metalang2-index-to-line ()
+  "Provides an index to file mapping features.
+
+  This is to be used in a buffer that displays a mapping from meta construct
+  to line number, as produced by 'meta2 hier' or 'meta2 hier --org'. One can
+  navigate to a desired line and press return to invoke this method, which
+  does the following:
+   - finds the line number specified on the current line
+   - obtains the buffer the current index file is associated with (top line)
+   - switches point to the window containing the named buffer and moves to
+     the desired line number.
+  "
+  (interactive)
+  (let ((p (point))
+        (line (thing-at-point 'line t))
+        lnum tmp buffer window)
+    (message line)
+    (cond
+      ((string-match "^ *\\([0-9]+\\)\\|\\[\\([0-9]+\\)\\]\n" line)
+         (setq lnum 
+          (string-to-number (or (match-string 1 line) (match-string 2 line))))
+         (message (format "found lnum %d" lnum))
+         (goto-char (point-min))
+         (setq tmp (thing-at-point 'line t))
+         (goto-char p)
+         (message (format "here with first line '%s'" tmp))
+         (cond
+            ((string-match "^buffer: \\(.*\\)" tmp)
+               (setq tmp (match-string 1 tmp))
+               (message (format "here with %s:%d" tmp lnum))
+               (setq buffer (get-buffer tmp))
+               (setq window (get-buffer-window buffer))
+               (select-window window)
+               (goto-line lnum)
+            )
+            (t (message "ERROR: Failed to find path in first line")))
+      )
+      (t (message "failed")))
+  )
+)
+(define-key metalang2-minor-mode-map (kbd "RET") 'metalang2-index-to-line)
+
+(defun metalang2-create-index (&optional prefix)
+  (interactive "P")
+  (let ((command
+         (concat
+          metalang2-meta-binary 
+          " index "
+          (if prefix
+              "--kind=default --min=1 --adj=-1 "
+              "--kind=org1 --min=1 ")
+          (buffer-file-name)))
+        (bufname (buffer-name (current-buffer))))
+    (switch-to-buffer-other-window "*Meta Index*")
+    (erase-buffer)
+    (insert (format "buffer: %s\n" bufname))
+    ; (message (format "here with '%s'" command))
+    (insert (shell-command-to-string command))
+    (metalang2-mode)
+    (orgstruct-mode)
+    (metalang2-minor-mode 1)
+    (goto-char (point-min))
+    (next-line 1)
+  )
+)
+
+(provide 'metalang2-minor-mode)

@@ -1,0 +1,37 @@
+namespace metax.c.shell #:
+  An interactive shell for exploring Meta.
+scope:
+
+  class Shell < metax.lib.shell.Shell scope:
+
+    lifecycle params:
+      var compiler : metax.c.Compiler = null #:
+        The compiler instance this shell is associated with.
+    scope:
+      self.defineCommand('consinfo', self.consInfo)
+      self.setvarCommand('prompt', 'meta> ')
+
+      root = self.filesystem()
+      meta = shell
+
+      /# Directory hierarchy:
+      /#   /meta/<nmsp1>/<nmsp2>/.../<class>/<method>
+      /#     provides access to namespaces, classes and methods, aggregating
+      /#     information across all base langs, providing access to internal
+      /#     parsing info (consinfo, etc.)
+      /#  /??
+      /#     additional top-level targets may be added.
+    end lifecycle;
+
+    method consInfo : any #:
+      docstr
+    params:
+      multi var args : vec;
+    scope:
+      print 'here!'
+    test:
+    end method consInfo;
+
+  end class Shell;
+
+end namespace metax.c.shell;

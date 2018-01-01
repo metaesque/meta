@@ -1,0 +1,13 @@
+
+- 2017-12-31
+  - cli.meta2 and metax.cli
+    - the code in root.meta2 defining metax.root.flags was pulled out
+      into cli.meta2 and renamed metax.cli.
+  - meta index:
+    - implemented command 'index' in 'meta2' interface
+    - updated Construct.writeIndex()
+    - in meta-mode-template.el, defined metaoopl2-create-index and
+      metaoopl2-minor-mode.
+    - result: C-@ m ? within a .meta2 file produces an index in a second
+      buffer that shows all high-level constructs and allows one to 
+      select a line to jump to the desired location in the original buffer.

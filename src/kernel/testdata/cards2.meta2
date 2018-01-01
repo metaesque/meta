@@ -1,11 +1,7 @@
 namespace demo.cards2 #:
   Playing cards.
-
-  Terminology: https://en.wikipedia.org/wiki/Glossary_of_card_game_terms
-
     pack:
-      A complete set of cards. A double pack may be used (i.e. 104/108 instead
-      of 52/54).
+      A complete set of cards (different games may use different packs).
     pile:
       A set of cards placed on a surface so that they partially or completely
       overlap.
@@ -25,7 +21,6 @@ namespace demo.cards2 #:
       there is already a word for stock, we choose to define deck to mean
       pack in this code, and name classes representing complete sets of cards
       using Deck rather than Pack.
-
     rank: (aka kind)
       The position of a card relative to others in the same suit. The order of
       the ranks depends on the game being played.
@@ -35,13 +30,8 @@ namespace demo.cards2 #:
       A suit symbol (e.g. spades, hearts, diamonds, clubs) on a card.
 scope:
 
-  visibility public
-  class Card < metax.root.Object #:
+  class Card #:
     A card with suit and rank.
-
-    In this implementation, Card instances do not know about the Deck they
-    belong to. See cards3.meta2 for a version in which Card maintains a Deck
-    (this introduces a circularity, as Deck needs Card and Card needs Deck).
   scope:
     field rank : int #:
       Rank as simple integer. Deck assigns display semantics to rank values.
@@ -64,7 +54,6 @@ scope:
     scope<cc>:
       this->rankIs(rank);
       this->suitIs(suit);
-    test:
     end lifecycle;
 
   end class Card;

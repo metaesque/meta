@@ -1,4 +1,4 @@
-MetaLanguage Oopl name Oopl parent Meta toplevel <namespace> #:
+MetaLanguage oopl name Oopl parent meta toplevel <namespace> #:
   The constructs in Meta(Oopl).
 config:
 
@@ -1170,6 +1170,10 @@ config:
     Attribute command : id = <required> #:
       The name of the command.
 
+    secondary
+    Attribute aliases : str = <empty> aliases <@> #:
+      A comma-separated list of aliases for the command.
+
     Attribute comment:;
     Attribute scope: children <command|flag|arg|block>;
 
@@ -1188,7 +1192,7 @@ config:
       The name of the flag.
 
     secondary
-    Attribute aliases : word = empty aliases <@> #:
+    Attribute aliases : str = <empty> aliases <@> #:
       A comma-separated list of aliases for the flag. If any alias is one char
       long, it can be accessed with '-' or '--', and can be merged togetehr with
       other single-letter flag names (-abc = -a -b -c).
@@ -1325,4 +1329,4 @@ config:
   BaseLanguage javascript name Javascript suffixes <js>;
   BaseLanguage python name Python suffixes <py>;
 
-end MetaLanguage Oopl;
+end MetaLanguage oopl;

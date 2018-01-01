@@ -9,18 +9,18 @@ default:
 # target test:
 #   Run tests on the Meta implementation of Meta.
 test: meta-py
-	meta2 -r metax.fs metax.logs metax.c metax.root metax.root.flags metax.test
+	meta2 -r metax.fs metax.logs metax.c metax.root metax.cli metax.test
 
 # target slowtest:
 #   Run tests on the Meta implementation of Meta.
 #   Why is this so slow???
 slowtest: meta-py
-	meta2 metax.fs metax.logs metax.c metax.root metax.root.flags metax.test
+	meta2 metax.fs metax.logs metax.c metax.root metax.cli metax.test
 
 # target meta-%:
 #   Compile all code needed for Meta to function.
 meta-%:
-	meta2 -b $* fs.meta2 logs.meta2 parser.meta2 root.meta2 test.meta2
+	meta2 -b $* *.meta2
 
 # target oopl:
 #   Ensure that ${METAREP}${NEWSUFFIX}/oopl is bazel-ready by overlaying

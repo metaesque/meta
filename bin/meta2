@@ -5,21 +5,11 @@ import re
 import shutil
 import subprocess
 import sys
+import traceback
 
-# NOTE: Attempting to avoid the need for metameta2.py in this code!
-#
-# metameta2.py was initially introduced because:
-#  - we want to be able to load up different versions of the
-#    meta source code depending on some user-specified version
-#  - multiple binaries needed to know this info
-#  - a convenient place to provide AutoCompile() functionality.
-#
-# We cannot modify metameta2.py itself for the time being because
-# I want meta2old to keep working, and it relies on metameta2.py
-# being as it is. Note however that there is an inherent flaw in
-# the implementation of metameta2.AutoCompile, as it relies on
-# the parser.py code from meta1 ... this code addresses that flaw.
-#
+import metastrap
+# metastrap.AutoCompile()
+
 # Issues to resolve:
 #  - in order to create a metax.c.Compiler instance, we must first
 #    establish which version of the meta2 code is desired.
@@ -45,102 +35,86 @@ import sys
 #       specific C++ binary
 #     - ... etc.
 
-Verbose = False
-_Config = None
-def Config(verbose=Verbose):
-  """Parse the meta config file.
+Verbose = metastrap.Verbose
 
-  Returns: dict
+def MakeSnapshot(verbose=Verbose, make_release=False):
+  """Create a new snapshot (and, optionally, release).
+
+  A snapshot is a private copy of the meta and baselang source code needed
+  to implement Meta.
+  - Snapshots are used to ameliorate the issues with writing self-modifying code
+    - The meta compiler uses classes in metax.*, and invoking the meta
+      compiler writes classes in metax.*, so any bugs introduced breaks
+      the compiler.
+    - By being able to use an snapshot of the metax.* code instead of the
+      'live' metax.* code, we can recover from such issues.
+    - Snapshots are a fourth layer to the traditional three-layer version:
+        <major>.<minor>.<release>.<snapshot>
+  
+  A release is a public copy of the meta and baselang source code needed to
+  implement Meta.
+  - Releases will be available on http://metaxy.org for download
+
+  TODO(wmh): Consider making this a meta method in metax.c.Compiler. But it
+  is more high-level than the compiler. Maybe define metax.c.Env?
+
+  Args:
+    verbose: bool
+      If true, print out actions performed.
+    make_release: bool
+      If true, make a public release (creates .tgz file)
   """
-  # TODO(wmh): The return value should be available everywhere from within
-  # all baselangs. There is a plan afoot to introduce the symbol Meta into
-  # every namespace (it may be metax.root.MetaObject aka the singleton
-  # instance of metax.root.ObjectMeta, or some other entity), but that would
-  # be the right place to store this information.  In which case we would
-  # NOT provide metameta2.Config() ... or would otherwise ensure that
-  # Meta.Config() returns the same thing as metameta2.Config().
+  ###  
+  # We first check if there are any .meta2 symlinks below the kernel dir.
+  #  - such symlinks usually occur because of an accidental invocation of
+  #    meta2 within a subdir.
+  #  - if there is a .meta2 symlink inside a directory that is included
+  #    as a resource, we will have a problem when we use 'tar czhf' to
+  #    tar up files ... symlinks are followed, and having spurious .meta2
+  #    links around brings in a massive amount of additional unnecessary files.
+  #  - we'll need to loosen this up a bit in the future, but better safe than
+  #    broken.
+  config = metastrap.Config()
+  kerneldir = os.path.join(config['src_root'], 'src', 'kernel')
+  for path in (
+    os.path.join(kerneldir, 'testdata', '.meta2'),
+  ):
+    if os.path.exists(path):
+      os.unlink(path)
+      if verbose:
+        print 'NOTE: Removed ' + path
+  problems = subprocess.check_output(
+    ['find', '.', '-type', 'l', '-a', '-name', '.meta2', '-a',
+     '-mindepth', '2',  '-print'],
+    cwd=kerneldir)
+  if problems:
+    print 'WARNING: Not produces snapshot because of spurious .meta2 links.'
+    print problems
+    sys.exit(1)
+  bazel_links = subprocess.check_output(
+    ['find', '.', '-type', 'l', '-a', '-name', 'bazel-*', '-print'],
+    cwd=kerneldir)
+  if bazel_links:
+    print 'WARNING: Found bazel-* links.'
+    print bazel_links
+    ans = raw_input('Remove (yes|no)? ').strip()
+    if ans.lower() == 'yes':
+      for path in bazel_links.strip().split('\n'):
+        os.unlink(path)
+        if verbose:
+          print 'Removed ' + path
+    bazel_links = subprocess.check_output(
+      ['find', '.', '-type', 'l', '-a', '-name', 'bazel-*', '-print'],
+      cwd=kerneldir)
+    if bazel_links:
+      print 'Not proceeding.'
+      sys.exit(1)
 
-  global _Config
-  result = _Config
-  if result is None:
-    # CODETANGLE(parse_config): Similar code exists in
-    # <<src_root/src/kernel/parser.meta2.
-    vre = re.compile(r'var\s+(?P<var>\S+)\s+=\s+(?P<val>\S+)')
-    # TODO(wmh): Add a --config flag to metameta2.py!
-    configpath = os.path.join(os.getenv('HOME'), '.config', 'metameta')
-    if verbose:
-      print 'NOTE: Reading %s' % configpath
-    result = {}
-    _Config = result
-    if os.path.exists(configpath):
-      with open(configpath, 'r') as fp:
-        for line in fp:
-          m = vre.match(line)
-          if m:
-            result[m.group('var')] = os.path.expandvars(m.group('val'))
-  return result
-
-
-def ConfigureVersion(verbose=Verbose):
-  """Configure sys.path to support a meta version specified in sys.argv.
-
-  Returns: tuple<str,str>
-   0. the version
-   1. the path from which the metax.c module should be obtained.
-  """
-  config = Config()
-
-  # Ensure that the Meta repository_path is the first place we look for code.
-  #  - TODO(wmh): This may be too heavy-handed ... people want to have some
-  #    control over the order in which python libraries are being found, and
-  #    by always putting this first, we are saying that any top-level
-  #    namespace defined in Meta takes absolute precedence over any other
-  #    implementation of that namespace, without any recourse.
-  #
-  # Note that we are specifying where to find the code implementing Meta, which
-  # happens in Meta(Oopl), and this 'meta2' script by definition means we want
-  # the python implementation ... hence the hard-coding of metalang and baselang.
-  repopath = os.path.join(config['repository_path'], 'oopl', 'python')
-  sys.path.insert(0, repopath)
-  metaxpath = repopath
-  if verbose:
-    print 'NOTE: Added %s to front of sys.path' % repopath
-
-  # Establish the version of Meta library code to use
-  version = 'beta'
-  argv = sys.argv
-  vflag = '--meta_version'
-  for i, arg in enumerate(argv):
-    if arg.startswith(vflag):
-      if arg.startswith(vflag + '='):
-        version = arg[len(vflag)+1:]
-        sys.argv.pop(i)
-      else:
-        version = argv[i+1]
-        sys.argv.pop(i)
-        sys.argv.pop(i)
-  if verbose:
-    print "NOTE: Using meta version '%s'" % version
-        
-  if version != 'beta':
-    # CODETANGLE(version_path)
-    path = os.path.join(config['src_root'], 'lib', 'versions', version, 'lib')
-    if not os.path.exists(path):
-      raise IOError('Failed to find a Meta version in ' + path)
-    sys.path.insert(0, path)
-    metaxpath = path
-    if verbose:
-      print 'NOTE: Added %s to front of sys.path' % path
-        
-  return version, metaxpath
-
-
-def MakeRelease(verbose=Verbose):
-  # TODO(wmh): Obtain this from Config!
-  config = Config()
-  # CODETANGLE(version_path)
+  ###
+  # Establish the new version number
+  # CODETANGLE(version_path): in metastrap.py
   release_dir = os.path.join(config['src_root'], 'lib', 'versions')
-  vre = re.compile(r'^v(\d+)\.(\d+)\.(\d+)$')
+  vre = re.compile(r'^v(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$')
   versions = []
   for base in os.listdir(release_dir):
     m = vre.match(base)
@@ -148,22 +122,34 @@ def MakeRelease(verbose=Verbose):
       major = int(m.group(1))
       minor = int(m.group(2))
       release = int(m.group(3))
+      snapshot = int(m.group(4) or 0)
       assert major == 0   # for now
       assert minor == 7   # for now
-      versions.append((base, major, minor, release))
-  versions = sorted(versions, key=lambda p: p[1])
-  previous_version, major, minor, release = versions[-1]
-  new_version = 'v%d.%d.%d' % (major, minor, release + 1)
+      versions.append((base, major, minor, release, snapshot))
+  versions = sorted(
+    versions, cmp=lambda p1, p2: (
+      cmp(p1[1], p2[1]) or cmp(p1[2], p2[2]) or cmp(p1[3], p2[3]) or
+      cmp(p1[4], p2[4])))
+  previous_version, major, minor, release, snapshot = versions[-1]
+
+  release_version = None
+  if make_release:
+    release_version = 'v%d.%d.%d' % (major, minor, release + 1)
+    new_version = release_version + '.0'
+  else:
+    new_version = 'v%d.%d.%d.%d' % (major, minor, release, snapshot + 1)
+    
   newpath = os.path.join(release_dir, new_version)
 
+  ###
   # Create the new version dir
   assert not os.path.exists(newpath)
   os.mkdir(newpath, 0755)
   if verbose:
     print 'NOTE: Created %s' % newpath
 
+  ###
   # Copy <<src_root>>/src/kernel/*.meta2 to <newpath>/src
-  kerneldir = os.path.join(config['src_root'], 'src', 'kernel')
   srcdir = os.path.join(newpath, 'src')
   os.mkdir(srcdir, 0755)  
   for base in os.listdir(kerneldir):
@@ -173,7 +159,8 @@ def MakeRelease(verbose=Verbose):
       shutil.copyfile(srcfile, destfile)
       if verbose:
         print 'NOTE: Copied %s to %s' % (srcfile, destfile)
-
+        
+  ###
   # Copy <<repository_path>>/oopl/python/metax to <newpath>/lib
   repometax = os.path.join(
     config['repository_path'], 'oopl', 'python', 'metax')
@@ -184,45 +171,55 @@ def MakeRelease(verbose=Verbose):
   if verbose:
     print 'NOTE: Copied %s to %s' % (repometax, destmetax)
 
+  ###
   # Update the 'current' link
   current_link = os.path.join(release_dir, 'current')
-  if os.path.exists(current_link):
+  if os.path.lexists(current_link):
     if not os.path.islink(current_link):
       raise IOError('Expecting %s to be a symlink' % current_link)
     os.unlink(current_link)
   os.symlink(newpath, current_link)
 
+  ###
   # Update the 'stable' link
   stable_link = os.path.join(release_dir, 'stable')
-  if os.path.exists(stable_link):
+  if os.path.lexists(stable_link):
     if not os.path.islink(stable_link):
       raise IOError('Expecting %s to be a symlink' % stable_link)
     os.unlink(stable_link)
   os.symlink(
     os.path.join(release_dir, previous_version), stable_link)
 
-  # Create a tar file.
+  ###
+  # Create a tar file (for releases)
   #  - see https://superuser.com/questions/119928/weird-bug-in-tar-not-including-files-named-init-py
   #    for details on why the env.vars. are being set.
-  tarbase = new_version + '.tgz'
-  tarpath = os.path.join(release_dir, tarbase)
-  env = copy.copy(os.environ)
-  env['COPY_EXTENDED_ATTRIBUTES_DISABLE'] = 'true'
-  env['COPYFILE_DISABLE'] = 'true'
-  tarcmd = ['tar', '-czf', tarbase, new_version]
-  subprocess.call(tarcmd, cwd=release_dir, env=env)
-  if verbose:
-    print 'NOTE: Created ' + tarpath
-  
+  if make_release:
+    release_path = os.path.join(release_dir, release_version)
+    os.symlink(newpath, release_path)
+    tarbase = release_version + '.tgz'
+    tarpath = os.path.join(release_dir, tarbase)
+    env = copy.copy(os.environ)
+    env['COPY_EXTENDED_ATTRIBUTES_DISABLE'] = 'true'
+    env['COPYFILE_DISABLE'] = 'true'
+    tarcmd = ['tar', '-czhf', tarbase, release_version]
+    subprocess.call(tarcmd, cwd=release_dir, env=env)
+    if verbose:
+      print 'NOTE: Created ' + tarpath
 
-# We want meta source code to be auto-compiled.
-# import metameta2
-# metameta2.AutoCompile(legacy=False)
 
 def Main():
-  config = Config()
-  version, expected_metax_dir = ConfigureVersion()
+  config = metastrap.Config()
+  version, expected_metax_dir = metastrap.ConfigureVersion()
   expected_metax_path = os.path.join(expected_metax_dir, 'metax', 'c')
+
+  import metax.c
+  if metax.c.__path__[0] != expected_metax_path:
+    raise IOError(
+      'Expecting metax.c to resolve to\n  %s\nnot\n  %s' %
+      (expected_metax_path, metax.c.__path__[0]))
+  import metax.root
+  import metax.cli
   
   args = sys.argv[1:]
   if not args:
@@ -235,8 +232,11 @@ def Main():
   # broken).
   action = args[0]
   
-  if action == 'release':
-    MakeRelease(verbose=True)
+  if action in ('rel', 'release'):
+    MakeSnapshot(verbose=True, make_release=True)
+  
+  elif action in ('snap', 'snapshot'):
+    MakeSnapshot(verbose=True, make_release=False)
 
   elif action == 'config':
     vars = args[1:] or sorted(config)
@@ -249,16 +249,9 @@ def Main():
   else:
     # Did not recognize action as being any of the pre-compile ones, so we
     # create the compiler and have it handle the args.
-    import metax.c
-    if metax.c.__path__[0] != expected_metax_path:
-      raise IOError(
-        'Expecting metax.c to resolve to\n  %s\nnot\n  %s' %
-        (expected_metax_path, metax.c.__path__[0]))
-    import metax.root
-    import metax.root.flags
 
     # Temporary Command instance
-    command = metax.root.flags.Command('meta2')
+    command = metax.cli.Command('meta2')
     command.newFlag(
       'baselang', 'str', default='python', aliases='b',
       summary='The baselang to compile into.',
@@ -271,7 +264,7 @@ def Main():
       summary='If true, methods without scopes are given a default body.',
       desc='By default, methods without scopes produce an error.')
     command.newFlag(
-      'inmemory', 'bool', default='false', aliases='M',
+      'inmemory', 'bool', default='false',
       summary='If true, use memory filesystem instead of disk filesystem.')
     command.newFlag(
       'metadir', 'str', default='.meta2',
@@ -309,27 +302,27 @@ def Main():
       'args', multi=True, summary='All other args')
     flags = command.instantiate(sys.argv).asValues()
 
+    # Initialize meta-level Compiler
+    metax.c.Compiler.CONFIG = config
+    metax.c.Compiler.Initialize(flags)
+
     if flags.verbose and flags.verbosity == 0:
       flags.verbosity = 1
     elif flags.verbosity > 0 and not flags.verbose:
       flags.verbose = True
 
-    # Initialize meta-level Compiler
-    metax.c.Compiler.CONFIG = config
-    metax.c.Compiler.Initialize(flags)
-    metax.root.MetaObject.ConfigIs(config)
-
     # Invoke the compiler
-    if True:
-      metax.c.Compiler.Entry(flags.args, parent=command)
-    else:
-      # Create a Compiler instance.
-      metac = metax.c.Compiler(metal=flags.metalang, basel=flags.baselang)
-      # Ensure that the repository directory exists.
-      if not metac.verifyDirectory(metadir='.meta2'):
-        sys.exit(1)
-      # Process the commandline.
-      metac.interact(flags.args)
+    try:
+      # CODETANGLE(meta2_entry_main): First arg must be 'main'
+      argv = ['main'] + flags.args
+      #argv = flags.args
+      metax.c.Compiler.Entry(argv, parent=command)
+    except Exception as e:
+      # Perform base-to-meta line remapping on the exception string.
+      err = traceback.format_exc()
+      metac = metax.c.Compiler.Current()
+      print metac
+      print err
 
 
 if __name__ == '__main__':

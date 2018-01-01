@@ -160,7 +160,7 @@
 (defconst metaoopl2-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
 (defconst metaoopl2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "accessor" "assoc" "behavior" "block" "category" "class" "command" "field" "flag" "lifecycle" "loop" "method" "namespace" "native" "receiver" "remark" "resource" "testx" "var"))
-(defconst metaoopl2-attribute-keys '("#" "->" "->" "<" "<<" "<<<" "=" "@" "aliases" "associations" "assocs" "autogen" "autokey" "children" "comment" "config" "default" "delim" "dispatch" "extensibility" "finalize" "flags" "inheritance" "init" "key" "kind" "lazy" "location" "metaparent" "multiplicity" "mutability" "name" "optimization" "pack" "params" "parent" "path" "placement" "position" "posts" "preports" "pres" "presence" "provides" "replacer" "returns" "returns" "scope" "select" "setup" "setupcase" "span" "status" "suffixes" "super" "target" "teardown" "teardowncase" "test" "testparent" "tests" "toplevel" "type" "value" "visibility"))
+(defconst metaoopl2-attribute-keys '("#" "->" "->" "<" "<<" "<<<" "=" "@" "aliases" "associations" "assocs" "autogen" "autokey" "children" "color" "comment" "config" "default" "delim" "dispatch" "extensibility" "finalize" "flags" "inheritance" "init" "key" "kind" "lazy" "location" "metaparent" "multiplicity" "mutability" "name" "optimization" "pack" "params" "parent" "path" "placement" "position" "posts" "preports" "pres" "presence" "provides" "replacer" "returns" "returns" "scope" "select" "setup" "setupcase" "span" "status" "suffixes" "super" "target" "teardown" "teardowncase" "test" "testparent" "tests" "toplevel" "type" "value" "visibility"))
 (defconst metaoopl2-feature-values '("<concrete" "abstract" "aliaskey" "autodispatch" "closure" "cls" "concrete" "const" "decl" "defn" "extendable" "feature" "final" "finalizer" "general" "immutable" "initializer" "inline" "instance" "lib" "meta" "multi" "mutable" "named" "new" "nokey" "nometa" "nometanotest" "nonvirtual" "normal" "notest" "noval" "optional" "outline" "override" "package" "packed" "post" "postx" "pre" "prex" "primary" "private" "protected" "public" "raw" "required" "ro" "rw" "rwx" "scoped" "secondary" "showkey" "showval" "specific" "static" "std" "superx" "test" "undef" "unpacked" "user" "usertest" "userval" "virtual"))
 (defconst metaoopl2-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
 (defconst metaoopl2-basewords      '("alignas" "alignof" "and" "and_eq" "as" "asm" "assert" "auto" "bitand" "bitor" "bool" "break" "case" "catch" "char" "char16_t" "char32_t" "class" "compl" "const" "const_cast" "constexpr" "continue" "debugger" "decltype" "def" "default" "del" "delete" "do" "double" "dynamic_cast" "elif" "else" "enum" "except" "exec" "explicit" "export" "extends" "extern" "false" "finally" "float" "for" "friend" "from" "function" "global" "goto" "if" "implements" "import" "in" "inline" "instanceof" "int" "interface" "is" "lambda" "let" "long" "mutable" "namespace" "new" "noexcept" "not" "not_eq" "nullptr" "operator" "or" "or_eq" "package" "pass" "print" "private" "protected" "public" "raise" "register" "reinterpret_cast" "return" "short" "signed" "sizeof" "static" "static_assert" "static_cast" "struct" "super" "switch" "template" "this" "thread_local" "throw" "true" "try" "typedef" "typeid" "typename" "typeof" "union" "unsigned" "using" "var" "virtual" "void" "volatile" "wchar_t" "while" "with" "xor" "xor_eq" "yield"))
@@ -232,6 +232,8 @@
 
 ; Various methods set these variables
 (setq metaoopl2-current-construct-kind nil)
+(if (not (boundp 'metaoopl2-meta-binary))
+  (setq metaoopl2-meta-binary "meta2"))
 
 (defun metaoopl2-goto-construct-line (&optional target-dent)
   ;; Find the line defining the construct within which the current line
@@ -1297,3 +1299,84 @@ we need its actual indentation to be reported)."
             (setq font-lock-beg found-point))))))
 
 (provide 'metaoopl2-mode)
+
+;; The following is based on
+;;    https://emacs.stackexchange.com/questions/519/key-bindings-specific-to-a-buffer
+;; as a means of providing an "index" for meta files.
+
+(defvar metaoopl2-minor-mode-map (make-sparse-keymap)
+  "Keymap while metaoopl2-minor-mode is active.")
+
+(define-minor-mode metaoopl2-minor-mode
+  "A temporary minor mode to be activated."
+  nil
+  :lighter " MetaMinor"
+  metaoopl2-minor-mode-map)
+
+(defun metaoopl2-index-to-line ()
+  "Provides an index to file mapping features.
+
+  This is to be used in a buffer that displays a mapping from meta construct
+  to line number, as produced by 'meta2 hier' or 'meta2 hier --org'. One can
+  navigate to a desired line and press return to invoke this method, which
+  does the following:
+   - finds the line number specified on the current line
+   - obtains the buffer the current index file is associated with (top line)
+   - switches point to the window containing the named buffer and moves to
+     the desired line number.
+  "
+  (interactive)
+  (let ((p (point))
+        (line (thing-at-point 'line t))
+        lnum tmp buffer window)
+    (message line)
+    (cond
+      ((string-match "^ *\\([0-9]+\\)\\|\\[\\([0-9]+\\)\\]\n" line)
+         (setq lnum 
+          (string-to-number (or (match-string 1 line) (match-string 2 line))))
+         (message (format "found lnum %d" lnum))
+         (goto-char (point-min))
+         (setq tmp (thing-at-point 'line t))
+         (goto-char p)
+         (message (format "here with first line '%s'" tmp))
+         (cond
+            ((string-match "^buffer: \\(.*\\)" tmp)
+               (setq tmp (match-string 1 tmp))
+               (message (format "here with %s:%d" tmp lnum))
+               (setq buffer (get-buffer tmp))
+               (setq window (get-buffer-window buffer))
+               (select-window window)
+               (goto-line lnum)
+            )
+            (t (message "ERROR: Failed to find path in first line")))
+      )
+      (t (message "failed")))
+  )
+)
+(define-key metaoopl2-minor-mode-map (kbd "RET") 'metaoopl2-index-to-line)
+
+(defun metaoopl2-create-index (&optional prefix)
+  (interactive "P")
+  (let ((command
+         (concat
+          metaoopl2-meta-binary 
+          " index "
+          (if prefix
+              "--kind=default --min=1 --adj=-1 "
+              "--kind=org1 --min=1 ")
+          (buffer-file-name)))
+        (bufname (buffer-name (current-buffer))))
+    (switch-to-buffer-other-window "*Meta Index*")
+    (erase-buffer)
+    (insert (format "buffer: %s\n" bufname))
+    ; (message (format "here with '%s'" command))
+    (insert (shell-command-to-string command))
+    (metaoopl2-mode)
+    (orgstruct-mode)
+    (metaoopl2-minor-mode 1)
+    (goto-char (point-min))
+    (next-line 1)
+  )
+)
+
+(provide 'metaoopl2-minor-mode)
