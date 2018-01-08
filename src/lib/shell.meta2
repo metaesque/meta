@@ -17,13 +17,16 @@ namespace metax.lib.shell #:
   allows one to:
     - associate commands with implementations via defineCommand()
     - define variables of three different kinds:
-       - environment
-         - ...?
        - shell
          - these are set explicitly by the 'set' command.
-       - context
+       - childvar
          - these are dictated by the current working directory
          - they are readonly
+       - environment
+         - variables that are 'inherited' into subprocesses.
+         - NOTE: As of 2018/01/02, env.var. support is minimal, since the
+           code currently has no mechansim whereby one can invoke
+           subprocesses, and thus no real need  for env.vars.
     - define aliases for commands
     - view command history
 
@@ -33,11 +36,21 @@ namespace metax.lib.shell #:
       lifecycle scope:
         self.defineComand('<newcommand>', self.methodImplementCommand)
         ...
-        
         root = self.filesystem()
-        subdir = 
+        readme = root.add('file', 'README', content='Example content')
+        root.add('symlink', 'docs.txt', link=readme)
+        misc = root.add('dir', 'misc')
+        home = root.add(
+          'dir', 'home', childvar='user', generator=Users, childvar=freshold=120)
+        # In the above, the signature of Users is 
+        #    Users(dir:Directory) : vec<Node>
+        # and it should return a list of newly created Node instances that
+        # have already been registered within the 'dir' arg.
 
-
+     def main():
+       shell = MyShell()
+       shell.run()
+      
 scope:
 
   nometanotest
@@ -48,6 +61,7 @@ scope:
 
   native scope:
     REQUIRED = object()
+    UNDEF = object()
   end;
 
   class Shell #:
@@ -59,15 +73,21 @@ scope:
     std assoc logging;
     std assoc os;
     std assoc re;
+    std assoc sre;
+    std assoc shlex;
     std assoc subprocess;
   scope:
 
     meta
     lifecycle scope:
-      meta.HISTORY_RE = re.compile('^\s*!(-?\d+)\s*$')
+      meta.HISTORY_RE = re.compile('^\s*!(-?\d+|!)\s*$')
 
     field history : @vec #:
       Maintains a history of commands executed.
+    
+    field rcfile : str #:
+      Where the rc init file for this shell resides.  Contents are loaded
+      at the start of run().
 
     field fp : ostream = out #:
       Where to write output.
@@ -86,7 +106,7 @@ scope:
               }
             },
           'context': {},
-          'env': {}
+          'env': {},
         }, sh.vars())
     end field vars;
 
@@ -125,7 +145,7 @@ scope:
       scope:
         self._cwd = value
         if value is not None:
-          self.log('Switching to %s\n', value.abspath())
+          /# self.log('Switching to %s\n', value.abspath())
           /# We need to reset the context vars based on the current directory.
           path = value.abspath()
           if not path.endswith('/'):
@@ -133,12 +153,19 @@ scope:
           family = value.familyPath()
           var_re = re.compile('<([^>\s]+)>')
           family_str = var_re.sub('(?P<\\1>[^\/]+)', family)
-          path_re = re.compile(family_str)
+          try:
+            path_re = re.compile(family_str)
+          except sre.error as e:
+            print 'FAMILY: %s' % family
+            print 'FAMILY_STR: %s' % family_str
+            print 'ERROR: %s' % e
+            raise Exception('testing things')
           pmatch = path_re.match(path)
           if pmatch:
             self._vars['context'] = pmatch.groupdict()
           else:
-            raise Error('Failed to parse\n  %s\nwith\n  %s\n' % (path, family_str))
+            raise Error(
+              'Failed to parse\n  %s\nwith\n  %s\n' % (path, family_str))
       test:
         sh = test.shell
         root = sh.filesystem()
@@ -153,7 +180,7 @@ scope:
           result.append(metax.lib.shell.File(parent, 'subfile'))
           return result
 
-        d = metax.lib.shell.GeneratingDirectory(
+        d = metax.lib.shell.DynamicDirectory(
           root, 'dir', context='test', generator=Gen, freshold=10)
         sh.changeDirCommand('dir/subdir')
         dd = sh._cwd
@@ -173,7 +200,11 @@ scope:
 
       /# The 'vars' field maps variable names to a dict maintaining the value
       /# and meta-information about the variable.
-      self._vars = {'env': {}, 'context': {}, 'shell': {}}
+      self._vars = {
+        'env': {},
+        'context': {},
+        'shell': {}
+      }
       self.defineVariable(
         'prompt', str, default='goosh> ',
         summary='The string to print when prompting for input')
@@ -194,8 +225,6 @@ scope:
 
       /# The 'aliases' field maps command names to aliases
       self._aliases = {}
-
-      self.aliasCommand('ls', 'ls -F')
 
       /# Directories are grouped into families, and each directory family
       /# is created from the same template.  This field is a list of
@@ -223,10 +252,7 @@ scope:
 
       if rcfile is None:
         rcfile = os.path.join(os.getenv('HOME', '/'), '.wshrc')
-      if os.path.exists(rcfile):
-        with open(rcfile) as fp:
-          for line in fp:
-            self.runCommand(line)
+      self.rcfileIs(rcfile)
     end lifecycle;
 
     method log params:
@@ -317,7 +343,7 @@ scope:
         One of:
           'context' --> directory context variable
           'shell'   --> a \"normal\" variable   
-          'env'     --> environment variable (is this needed?)
+          'env'     --> environment variable
       var default : any = null #:
         The default value for this variable
       var summary : str = '' #:
@@ -341,6 +367,13 @@ scope:
     end method defineVariable;
 
     method run scope:
+      rcfile = self.rcfile()
+      if os.path.exists(rcfile):
+        with open(rcfile) as fp:
+          for line in fp:
+            for command, args in self.split(line):
+              self.runCommand(command, args)
+
       while True:
         /# Obtain the command.
         sys.stdout.write(self.getvar('prompt'))
@@ -348,9 +381,76 @@ scope:
         line = sys.stdin.readline()
         if not line:
           line = 'quit'
-        /# process command
-        self.runCommand(line)
+
+        /# process commands
+        for command, args in self.split(line):
+          self.runCommand(command, args)
     end method run;
+
+    method split : vec<tuple<str,vec<str>>> #:
+      Split a string into a list of str/list pairs.
+    params:
+      var value : str;
+    scope:
+      tokens = shlex.split(value)
+      args = []
+      commands = []
+      commands.append(args)
+      for token in tokens:
+        if token and token[-1] == ';':
+          token = token[:-1]
+          if token:
+            args.append(token)
+          args = []
+          commands.append(args)
+        else:
+          args.append(token)
+      result = []
+      for args in commands:
+        command = args.pop(0)
+        result.append((command, args))
+      return result
+    test:
+      test.iseqvec(
+        [('cd', ['a b']), ('echo', ['a b; c', 'foo bar'])],
+        test.shell.split('cd \'a b\'; echo "a b; c" "foo bar"'))
+    end method split;
+
+    method unsplit : str #:
+      Convert a command/args pair to a single string.
+    params:
+      var command : str #:
+        The initial command token.
+      var args : vec<str> #:
+        Args to the command
+    scope:
+      parts = [command]
+      for arg in args:
+        if ' ' in arg:
+          /# Whitespace exists in the arg ... needs quoting
+          if "\"" in arg:
+            if "'" in arg:
+              /# Both " and ' are in the string.
+              parts.append("\"%s\"" % arg.replace("'", "\\'"))
+            else:
+              /# There is a " but no '
+              parts.append("'%s'" % arg)
+          elif "'" in arg:
+            /# There is a ' but no "
+            parts.append("\"%s\"" % arg)
+          else:
+            /# There is neither ' nor "
+            parts.append("'%s'" % arg)
+        else:
+          /# No whitespace
+          parts.append(arg)
+      return ' '.join(parts)
+    test:
+      test.iseq(
+        '''echo a 'b c' 'd \" e' "f ' g" "he said "don\\'t""''',
+        test.shell.unsplit(
+          'echo', ['a', 'b c', 'd \" e', "f ' g", 'he said "don\'t"']))
+    end method unsplit;
 
     protected
     method runCommand : any #:
@@ -361,42 +461,42 @@ scope:
         Currently no way to distinguish between a successful invocation that
         returns null and an unsuccessful invocation.
     params:
-      var line : str #:
-        The command to process.
+      var command : str #:
+        The command to execute.
+      var args : vec<str> #:
+        A collection of tokens to parse as a command.
     scope:
       result = None
 
-      /# If the line is a history reference, obtain the actual history line.
-      /# TODO(wmh): Should instead replace history references within the
-      /# existing line, instead of replacing the entire line.
-      history_match = self.HISTORY_RE.match(line)
+      history_match = self.HISTORY_RE.match(command)
       if history_match:
-        index = int(history_match.group(1))
-        line = self._history[index]
-        logging.info('Obtained %d from history = %s', index, line)
+        /# If the command is a history reference, obtain the actual history line.
+        numbang = history_match.group(1)
+        index = -1 if numbang == '!' else int(numbang)
+        command, hargs = self._history[index]
+        logging.info('Obtained %d from history = %s', index, hargs)
+        args = hargs + args
 
-      /# Parse the line into a command and arguments.
-      /# TODO(wmh): must improve this to support quoted arguments.
-      args = self.parseArgs(line)
-      command = args[0]
-      args.pop(0)
-
-      /# Determine if the command is an alias, and if so, expand it.
-      if command in self._aliases:
-        args = self.parseArgs(self._aliases[command])
-        command = args[0]
-        args.pop(0)
+      elif command in self._aliases:
+        /# The command is an alias.
+        /#  - note that we do not apply aliases to commands from history, as
+        /#    they already had aliases applied when they were first invoked.
+        prearg_groups = self.split(self._aliases[command])
+        if len(prearg_groups) > 1:
+          print 'ERROR: Not supporting aliases producing %d commands' % len(prearg_groups)
+        command, preargs = prearg_groups[0]
+        args = preargs + args
 
       /# Identify the associated method and execute it.
       if command:
         self.dispatch(command, args)
-        self._history.append(line.rstrip())
+        self._history.append((command, args))
 
       return result
     test:
       sh = test.shell
-      sh.runCommand("alias ls 'ls -F'")
-      test.iseq(["alias ls 'ls -F'"], sh._history)
+      sh.runCommand('alias', ['ls', 'ls -F'])
+      test.iseq([('alias', ['ls', 'ls -F'])], sh._history)
       test.iseq({'ls': 'ls -F'}, sh._aliases)
     end method runCommand;
 
@@ -437,79 +537,6 @@ scope:
       return result
     test:
     end method dispatch;
-
-    method parseArgs #:
-      Parse a string into a list of args.
-    params:
-      var command : str #:
-        The string to parse.
-    scope:
-      canonical_command = command.strip()
-      max = len(canonical_command) - 1
-      args = []
-      esc = ''
-      lastc = ''
-      arg = ''
-      i = -1
-      c = ''
-      while i < max:
-        i += 1
-        /# single quotes, double quotes and spaces.
-        lastc = c
-        c = canonical_command[i]
-        if esc:
-          /# We are currently parsing a quoted argument, terminated by
-          /# an unescaped c that matches 'esc'.
-          if c == esc and lastc != '\\':
-            /# TODO(wmh): Do we save the arg now, or wait for whitespace to
-            /# allow for "some arg"plusmore.
-            args.append(arg)
-            arg = ''
-            esc = ''
-          else:
-            arg += c
-
-        elif arg:
-          /# We are in the midst of parsing a simple arg - terminated by
-          /# whitespace, continued by anything else.
-          if c == ' ':
-            /# terminate this simple arg
-            args.append(arg)
-            arg = ''
-          else:
-            /# Part of the arg - append c to arg
-            arg += c
-
-        else:
-          /# We are between args consuming whitespace.
-          if c == '\"' or c == "'":
-            /# Indicate a quoted arg
-            esc = c
-            arg = ''
-          elif c != ' ':
-            /# A non-space - start a new arg.
-            arg = c
-          else:
-            /# whitespace - consume and continue
-            pass
-      if arg:
-        args.append(arg)
-      return args
-    test:
-      sh = test.shell
-      test.iseq(
-        ['command', 'arg1', 'arg2', 'arg3'],
-        sh.parseArgs('command arg1 arg2 arg3'))
-      test.iseq(
-        ['command', 'arg1', 'arg2', 'arg3'],
-        sh.parseArgs('command  arg1    arg2      arg3'))
-      test.iseq(
-        ['command', 'arg1 with spaces', 'arg2 with spaces'],
-        sh.parseArgs('command  "arg1 with spaces" \'arg2 with spaces\''))
-      test.iseq(
-        ['command', 'arg1 with "spaces" ', "arg2 with 'spaces' "],
-        sh.parseArgs('command  ' + " 'arg1 with \"spaces\" '" + ' "arg2 with \'spaces\' " '))
-    end method parseArgs;
 
     remark #:
       ----------------------------------------------------------------------
@@ -592,12 +619,14 @@ scope:
       else:
         start = 0
       for index in xrange(start, size):
-        self.log('%5d  %s\n', index, self._history[index])
+        cmd, args = self._history[index]
+        line = self.unsplit(cmd, args)
+        self.log('%5d  %s\n', index, line)
     test:
       sh = test.shell
-      sh.runCommand("alias ls 'ls -F'")
+      sh.runCommand('alias', ['ls', 'ls -F'])
       sh.defineVariable('a', int, default=0, summary='test var')
-      sh.runCommand('set a 1')
+      sh.runCommand('set', ['a', '1'])
       sh.historyCommand()
       test.iseqtext(
         "    0  alias ls 'ls -F'\n"
@@ -632,9 +661,9 @@ scope:
           print node.content()
     test:
       sh = test.shell
-      sh.runCommand("alias ls 'ls -F'")
+      sh.runCommand('alias', ['ls', 'ls -F'])
       sh.defineVariable('a', int, default=0, summary='test var')
-      sh.runCommand('set a 1')
+      sh.runCommand('set', ['a', '1'])
       sh.historyCommand()
       test.iseqtext(
         "    0  alias ls 'ls -F'\n"
@@ -684,14 +713,15 @@ scope:
       test.iseqtext(
         'alias          : Create an alias for a command.\n'
         'aliases        : Print all existing aliases.\n'
+        'cat            : Show the contents of one or more files.\n'
         'cd             : Switch to a specified directory.\n'
         'help           : Provide summary of commands.\n'
         'history        : Show the history of commands.\n'
         'ls             : List contents of directory.\n'
-        'printenv       : Print all variables.\n'
         'pwd            : Print working directory.\n'
         'quit           : Exit the shell.\n'
-        'set            : Set a shell variable to a given value.\n',
+        'set            : Set a shell variable to a given value.\n'
+        'vars           : Print all variables.\n',
         test.out.getvalue())
     end method helpCommand;
 
@@ -760,25 +790,42 @@ scope:
         /# relative path
         dir = self._cwd
 
-      /# We refresh dir itself to make sure we are working with up-to-date information
+      /# We refresh dir itself to make sure we are working with up-to-date
+      /# information
       dir.refresh()
 
       /# Traverse directories, generating as we go
       for part in parts:
-        /# Part should be a subdirectory of dir
-        if dir.contains(part):
-          dir = dir.child(part)
-          if dir.isDir():
-            /# We set the directory each time thru, so that the context vars are
-            /# set each time.
-            self.cwdIs(dir)
-            /# We ensure that the subdir is still fresh.
-            dir.refresh()
-          else:
-            print 'ERROR: %s is not a directory' % dir.abspath()
+        if part == '..':
+          /# Move up to parent.
+          dir = dir.parent()
+          if dir is None:
+            print 'WARNING: Cannot move above root'
             break
+          else:
+            self.cwdIs(dir)
+            dir.refresh()
+        elif part == '.':
+          /# Noop.
+          pass
         else:
-          raise InvalidDirectoryError('Directory %s has no child %s' % (dir.abspath(), part))
+          /# Part should be a subdirectory of dir
+          if dir.contains(part):
+            dir = dir.child(part)
+            if dir.isDir():
+              /# We set the directory each time thru, so that the context vars are
+              /# set each time.
+              self.cwdIs(dir)
+              /# We ensure that the subdir is still fresh.
+              dir.refresh()
+
+              /# print '***** HERE with %s = %s' % (dir.abspath(), dir.infomap())
+
+            else:
+              print 'ERROR: %s is not a directory' % dir.abspath()
+              break
+          else:
+            raise InvalidDirectoryError('Directory %s has no child %s' % (dir.abspath(), part))
     end method changeDirCommand;
 
     method setvarCommand #:
@@ -886,8 +933,10 @@ scope:
 
       This is only for shell variables ... use getctx() for context variables.
 
-      TODO(wmh): why not have this method support both shell and context vars?
-      TODO(wmh): decide what to do about env vars (keep/document or remove?)
+      TODO(wmh): why not have this method support all kinds of vars, instead
+      of just shell vars?
+      TODO(wmh): add support for obtaining env vars. Should they be accessible
+      via getvar, or do we add a getenv()?
 
       Raises:
         Error: If the variable does not exist.
@@ -991,14 +1040,14 @@ scope:
   end class Shell;
 
   abstract
-  class FileSystemObject #:
+  class Node #:
     Abstract superclass of classes representing filesystem objects.
   scope:
 
     field name : str #:
       The name (within parent) of this directory
 
-    field parent : FileSystemObject #:
+    field parent : Node #:
       The parent directory.  It may be None in two situations:
         1) self is the root of the filesystem
         2) self is an instance that cannot be fully initialized with
@@ -1021,7 +1070,7 @@ scope:
             /# TODO(wmh): Consider switching to a less magical implementation.
             value.registerChild(self)
       test:
-        /# Note that parentIs() is invoked by FileSystemObject.__init__ and
+        /# Note that parentIs() is invoked by Node.__init__ and
         /# thus setUp() has invoked it a number of times.  Thus, testing
         /# parent() is a means of testing parentIs().  We add some additional
         /# tests here to verify that current parent deletion works.
@@ -1045,7 +1094,7 @@ scope:
     end field parent;
 
     lifecycle params:
-      var parent : FileSystemObject;
+      var parent : Node;
       var name : str;
     scope:
       self.nameIs(name)
@@ -1096,9 +1145,9 @@ scope:
       test.subfile = metax.lib.shell.File(test.dir, 'subfile')
       test.file = metax.lib.shell.File(test.root, 'file')
     end lifecycle;
-  end class FileSystemObject;
+  end class Node;
 
-  class Directory < FileSystemObject #:
+  class Directory < Node #:
     Represents a directory within which the shell can navigate.
   scope:
 
@@ -1106,9 +1155,10 @@ scope:
       The collection of subfiles/directories (dictionary maps name to
       instance of Directory or File)
 
-    field opaque : map #:
+    field infomap : *map #:
       A collection of key/value pairs that clients can read/write as they
       choose. Useful for storing information used in generator functions.
+      Intentionally a pointer because this is often unused.
 
     lifecycle params:
       var parent : Directory;
@@ -1140,8 +1190,12 @@ scope:
       parent = self.parent()
       if parent:
         result = parent.familyPath()
-        if parent.isGenerator():
-          result += '<%s>' % parent.childContext()
+        /# MEMORY(wmh): If you are coming back to this code after being away for
+        /# awhile, do not go messing with it without understanding what is going
+        /# on. No, it is not a typo that we are checking the parent for
+        /# generator status, or using the parent childvar.
+        if parent.isGenerator() and parent.childvar():
+          result += '<%s>' % parent.childvar()
         else:
           result += self.name()
       else:
@@ -1152,6 +1206,16 @@ scope:
       test.iseq('/', test.root.familyPath())
       test.iseq('/dir/', test.dir.familyPath())
       test.iseq('/dir/subdir/', test.subdir.familyPath())
+
+      test.defineFiles(generator=True)
+      gendir = test.gendir
+      test.iseq('/hier/', gendir.familyPath())
+      namespace = gendir.child('wmh')
+      test.iseq('/hier/<namespace>/', namespace.familyPath())
+      klass = namespace.child('Triangle')
+      test.iseq('/hier/<namespace>/<class>/', klass.familyPath())
+      method = klass.child('area')
+      test.iseq('/hier/wmh/Triangle/area', method.abspath())
     end method familyPath;
 
     method listChildren #:
@@ -1396,7 +1460,7 @@ scope:
       test.iseq(False, test.dir.contains('nondir'))
     end method contains;
 
-    method child : FileSystemObject #:
+    method child : Node #:
       Obtain the child object identified by name.
       Returns:
         null if name isn't a child.
@@ -1414,11 +1478,12 @@ scope:
     end method child;
 
     method registerChild params:
-      var child : FileSystemObject;
+      var child : Node;
     scope:
       self._children[child.name()] = child
+      /# print 'Added %s below %s' % (child.name(), self.name())
     test:
-      /# Because FileSystemObject.__init__ calls registerChild to register
+      /# Because Node.__init__ calls registerChild to register
       /# every object with its parent, we can test registerChild by
       /# ensuring that dicts have their expected values.
       test.iseq(test.file, test.root._children['file'])
@@ -1427,41 +1492,54 @@ scope:
       test.iseq(test.subdir, test.dir._children['subdir'])
     end method registerChild;
 
-    method newChild : FileSystemObject #:
+    method add : Node #:
       Create a new file system object and register with self.
 
-      The kind (dir, file or symlink) is determined by kind. If dir,
-      whether it Directory or GeneratingDirectory is determined by existence
-      of context/generator/freshold.
+      The kind (dir, file or symlink) is determined by kind. If dir, whether it
+      Directory or DynamicDirectory is determined by existence of the
+      generator param.
+
+      IMPORTANT: There are two places where add can be invoked:
+        1. In some function that statically creates a directory hierarchy
+        2. In a generator function
+      It does not make sense to add a generating subdir to a generating dir
+      in case #1 ... it only makes sense in #2, sicne the statically added
+      child will be erased the first time the parent directory is refreshed.
     params:
       var kind : str #:
         One of 'dir', 'file' or 'symlink'
       var name : str #:
         A string representing a unique (base) name within the parent
-      var context : str = null #:
-        The name of the context variable (within the shell) to store
-        'name' into.  If specified, a GeneratingDirectory is created,
-        and generator and freshold are both required.
       var generator : method = null #:
         A method that accepts a single Directory as argument, and returns the
-        list of FileSystemObject instances that that Directory should have as
+        list of Node instances that that Directory should have as
         children.
+      var childvar : str = null #:
+        Must be specified if generator is specified, and ignored if generator
+        is null.  Represents the context variable associated with child
+        objects within the newly created directory.
       var freshold : int = -1 #:
         Number of seconds that the child contents of this Directory are
         considered fresh (accesses after that duration will result in the
         generator being invoked again).
+      var content : str = null #:
+        Only legal for kind 'file'. Specifies the contents of the file.
+      var link : Node = null #:
+        Only legal for kind 'symlink'. Specifies the object linked to.
+      var info : map = null #:
+        If provided, the infomap field of the created Node is set to this
+        value. Only legal for kind 'dir'.
     scope:
-      if context:
-        if not generator or freshold < 0:
-          raise Error('Must provide generator and freshold if context given.')
-        result = GeneratingDirectory(
-          self, name, context, generator, freshold)
+      if generator:
+        if freshold < 0:
+          raise Error('Must provide freshold if generator.')
+        result = DynamicDirectory(self, name, childvar, generator, freshold)
       elif kind == 'dir':
         result = Directory(self, name)
       else:
-        if context or generator or freshold > -1:
+        if generator or freshold > -1:
           raise Error(
-            'Non-dir children should not specify context, generator or freshold')
+            'Non-dir children should not specify childvar, generator or freshold')
         if kind == 'file':
           result = File(self, name)
         elif kind == 'symlink':
@@ -1469,39 +1547,115 @@ scope:
         else:
           raise Error('Invalid kind "%s"' % kind)
 
-      self.registerChild(result)
+      /# Deal with content, link, and infomap
+      if content is not None:
+        if kind == 'file':
+          result.contentIs(content)
+        else:
+          raise Error(
+            'The content keyword is only legal for kind file not %s' % kind)
+      if link is not None:
+        if kind == 'symlink':
+          result.linkIs(link)
+        else:
+          raise Error(
+            'The link keyword is only legal for kind symlink not %s' % kind)
+      if info is not None:
+        if kind == 'dir':
+          result.infomapIs(info)
+          /# print '**** Have set %s info to %s' % (result.abspath(), info)
+        else:
+          raise Error(
+            'The infomap keyword is only legal for kind dir not %s' % kind)
+      /# We do NOT need to invoke registerChild() here, because during 
+      /# creation of result we passed in the parent (aka self) and the
+      /# Directory initializer implicitly invokes registerChild() on the
+      /# parent when non-null.
       return result
     test:
-    end method newChild;
+    end method add;
+
+    method info : any #:
+      Get/set a key in the infomap dict.
+
+      Returns:
+        The value associated with 'key' (if assignment is requested, the
+        value returned is for what was in the key before assignment, not after)
+    params:
+      var key : str #:
+        An arbitrary key in info.
+      var value : any = UNDEF #:
+        What value to assign to the key.  If UNDEF, no assignment is made.
+    scope:
+      infomap = self.infomap()
+      if infomap is None:
+        /# We have not set any keys on this dir's infomap yet.
+        if value is UNDEF:
+          /# We are getting ... no map means result always null.
+          result = None
+        else:
+          /# We are setting ... create a map and initialize.
+          result = None
+          self.infomapIs({key: value})
+      else:
+        /# We have an infomap.
+        if value is UNDEF:
+          /# We are getting the value.
+          result = infomap.get(key, None)
+        else:
+          /# We are getting then setting the value.
+          result = infomap.get(key, None)
+          infomap[key] = value
+      return result
+    test:
+      d = test.dir
+      test.isnull(d._infomap)
+      test.isnull(d.info('a'))
+      test.isnull(d._infomap)
+      test.isnull(d.info('a', 1))
+      test.iseq({'a': 1}, d._infomap)
+      test.iseq(1, d.info('a'))
+    end method info;
 
     test
     lifecycle setup:
       /# the root directory
-      root = metax.lib.shell.Directory(None, '')
-      test.root = root
-      test.dir = metax.lib.shell.Directory(root, 'dir')
-      test.subdir = metax.lib.shell.Directory(test.dir, 'subdir')
-      test.file = metax.lib.shell.File(root, 'file')
-      test.subfile = metax.lib.shell.Directory(test.dir, 'subfile')
+      test.defineFiles()
     end lifecycle;
 
   end class Directory;
 
-  class GeneratingDirectory < Directory #:
-    Represents a directory within which the shell can navigate.
-    
-    This subclass of Directory represents a directory whose children are
-    generated by invoking a 'generator' method, and whose name is 
+  class DynamicDirectory < Directory #:
+    Represents a directory in which its content is dynamically created.
+
+    A special 'generator' function produces the dynamic content, and an
+    associated freshness value (freshold) is maintained (previously computed
+    dynamic data is considered fresh until it is older than the specified
+    freshness time).
+
+    Note that it does not make sense to call add() on an instance of
+    this class, because such an invocation is a static child (the existence
+    of which will go away the first time the generating directory is refreshed).
+    Any such child directories must be specified in the generator.
   assocs:
     usertest std assoc datetime;
     test std assoc time;
   scope:
 
     field generator : method #:
-      The contents of the directory are produced by invoking this method
+      The contents of the directory are produced by invoking this method Accepts
+      a single Directory as argument, and returns the list of Node
+      instances that that Directory should have as children. The objects should
+      already be registered as children of the directory argument, and should be
+      in the children() map of that argument (both of which happens
+      automatically if one uses arg.add() to create the children).
 
-    raw
-    field last_update : float #:
+    field childvar : str #:
+      The name of the context variable associated with the children of this
+      directory instance.  This may be null to indicate that the children of
+      this directory are not all part of some categorizable group.
+
+    field updated : float #:
       Each instance records the last time it was updated. We mark it non-updated
       on initialization so that the first call to '_refresh' will update
       children from self._generator.
@@ -1511,74 +1665,64 @@ scope:
       May want to find a more efficient means of storing this though 
       (for example based on the generic path of this node).
 
-    raw
-    field child_context : str #:
-      Generated directories are context variables, and '_child_context'
-      maintains the name of the context variable to store into.
-
     lifecycle #:
       Initialize an instance.
     params:
       var parent : Directory;
       var name : str;
-      var context : str #:
-        The name of the context variable (within the shell) to store
-        'name' into.
-      var generator : method #:
-        Accepts a single Directory as argument, and returns the list
-        of FileSystemObject instances that that Directory should have
-        as children.
-      var freshold : int #:
-        Number of seconds that the child contents of this Directory
-        are considered fresh (accesses after that duration will result
-        in the generator being invoked again).
+      var childvar -> childvar;
+      var generator -> generator;
+      var freshold -> freshold;
     super (parent, name)
     scope:
-      self._generator = generator
-      self._last_update = datetime.datetime.fromtimestamp(0)
-      self._freshold = freshold
-      self._child_context = context
+      self._updated = datetime.datetime.fromtimestamp(0)
       /# IMPORTANT: We do NOT invoke _refresh() within this constructor, as this
-      /# would result in an exponential initialization of all transitive children
-      /# that have generators.  Instead, directories are made "active" ONLY be 'cd'ing
-      /# into them, and 'cd' (aka changeDirCommand) is responsible for the initial
-      /# (and all subsequent) refreshes.
+      /# would result in an exponential initialization of all transitive
+      /# children that have generators. Instead, directories are made "active"
+      /# ONLY be 'cd'ing into them, and 'cd' (aka changeDirCommand) is
+      /# responsible for the initial (and all subsequent) refreshes.
     end lifecycle;
-
-    method lastUpdate scope:
-      return self._last_update
-    test:
-      d = test.dir
-      tm = 1407887423.0
-      d._last_update = tm
-      test.iseq(tm, d.lastUpdate())
-    end method lastUpdate;
-
-    method childContext scope:
-      return self._child_context
-    test:
-      test.iseq('special', test.dir.childContext())
-    end method childContext;
 
     method isGenerator scope:
       return True
     test:
-      test.iseq(False, test.root.isGenerator())
-      test.iseq(True, test.dir.isGenerator())
-      test.iseq(False, test.subdir.isGenerator())
+      test.isfalse(test.root.isGenerator())
+      test.isfalse(test.dir.isGenerator())
+      test.isfalse(test.subdir.isGenerator())
+      test.istrue(test.gendir.isGenerator())
     end method isGenerator;
+
+    override
+    method child : Node #:
+      Obtain the child object identified by name.
+      Returns:
+        null if name isn't a child.
+    params:
+      var name : str;
+    scope:
+      /# We invoke refresh() to ensure that there is actual content to search.
+      self.refresh()
+      return super(DynamicDirectory, self).child(name)
+    test:
+      test.iseq(test.dir, test.root.child('dir'))
+      test.iseq(test.file, test.root.child('file'))
+      test.iseq(None, test.root.child('subfile'))
+      test.iseq(test.subfile, test.dir.child('subfile'))
+      test.iseq(test.subdir, test.dir.child('subdir'))
+      test.iseq(None, test.dir.child('nondir'))
+    end method child;
 
     method updateTime params:
       var value : time = null;
     scope:
       if not value:
         value = datetime.datetime.now()
-      self._last_update = value
+      self._updated = value
     test:
-      d = test.dir.lastUpdate()
+      d = test.gendir.updated()
       time.sleep(0.001)
-      test.dir.updateTime()
-      test.istrue(d < test.dir.lastUpdate())
+      test.gendir.updateTime()
+      test.istrue(d < test.gendir.updated())
     end method updateTime;
 
     protected
@@ -1587,71 +1731,70 @@ scope:
 
       Returns:
         true if refreshing occurred, false if self still fresh.
+    params:
+      var force : bool = false #:
+        If true, refresh regardless of whether cached data is fresh or  not.
+      var verbose : bool = false #:
+        If true, print out some details of actions performed.
     scope:
       now = datetime.datetime.now()
-      td = now - self.lastUpdate()
+      td = now - self.updated()
       total_seconds = td.seconds + td.days * 24 * 3600
 
-      if total_seconds > self.freshold():
-        /# Invoke my generator to obtain a list of FileSystemObjects
-        child_list = self._generator(self)
-
-        /# Initialize my _children field.
+      if total_seconds > self.freshold() or force:
+        /# We clear the set of children, so that the generator has a fresh
+        /# slate within which to generate new children.
         children = self._children
         children.clear()
+
+        /# Invoke my generator to obtain a list of Nodes
+        child_list = self._generator(self)
+
+        /# Although it is not strictly necessary to require generators to
+        /# return the list of children, since the act of creating the children
+        /# will implicitly register them as needed, we do require generators
+        /# to return the list of children so that we can verify some invariants:
+        /#  - the parent of each returned child is self
+        /#  - the parent knows about the child.
+        if not isinstance(child_list, (list, tuple)):
+          raise Error(
+            'The generator for %s returned %s ... must return children' %
+            (self.abspath(), str(child_list)))
+
+        /# Do some verification.
         for child in child_list:
-          child.parentIs(self)
+          assert child.parent() is self
+          assert children.get(child.name()) is child
 
         /# Update our lasted-updated field
         self.updateTime(now)
-
-        /# logging.debug('Refreshed %s at %s', self.abspath(), now)
 
         result = True
       else:
         result = False
       return result
     test:
-      /# Since GeneratingDirectory.__init__ calls _refresh, and setUp()
-      /# creates test.dir as a GeneratingDirectory, we test test.dir to
-      /# verify refresh.
-      test.iseq(test.subfile, test.dir.child('subfile'))
-      test.iseq(test.subdir, test.dir.child('subdir'))
-      test.iseq(test.dir, test.subfile.parent())
-      test.iseq(test.dir, test.subdir.parent())
+      test.iseqvec(['games', 'metax', 'wmh'], sorted(test.gendir.children()))
 
       /# We've set the freshness threshold to 10 seconds, so calling _refresh
-      /# now should NOT require an update.
-      test.iseq(False, test.dir.refresh())
+      /# now should not require an update.
+      test.isfalse(test.gendir.refresh())
 
-      /# By setting the last_updated value back 30 seconds, we ensure that
+      /# By setting the updatedd value back 30 seconds, we ensure that
       /# a new call to _refresh will trigger an update.
       d = datetime.datetime.now()
-      test.dir.updateTime(d - datetime.timedelta(seconds=30))
-      test.iseq(True, test.dir.refresh())
-      test.istrue(test.dir.lastUpdate() >= d)
+      test.gendir.updateTime(d - datetime.timedelta(seconds=30))
+      test.istrue(test.gendir.refresh())
+      test.istrue(test.gendir.updated() >= d)
     end method refresh;
 
     test
     lifecycle setup:
-      root = metax.lib.shell.Directory(None, '')
-      test.root = root
-      test.file = metax.lib.shell.File(root, 'file')
-
-      test.subdir = metax.lib.shell.Directory(None, 'subdir')
-      test.subfile = metax.lib.shell.Directory(None, 'subfile')
-
-      generator = lambda x: (test.subdir, test.subfile)
-      test.dir = metax.lib.shell.GeneratingDirectory(
-        root, 'dir', context='special', generator=generator, freshold=10)
-
-      test.root.refresh()
-      test.dir.refresh()
-      test.subdir.refresh()
+      test.defineFiles(generator=True)
     end;
-  end class GeneratingDirectory;
+  end class DynamicDirectory;
 
-  class File < FileSystemObject #:
+  class File < Node #:
     Represents a terminal file, which the shell can interact with.
   scope:
 
@@ -1667,17 +1810,17 @@ scope:
     end lifecycle;
   end class File;
 
-  class Symlink < FileSystemObject #:
-    Represents a symlink to another FileSystemObject instance.
+  class Symlink < Node #:
+    Represents a symlink to another Node instance.
   scope:
 
-    field link : FileSystemObject #:
+    field link : Node #:
       The filesystem object linked to.
 
     lifecycle params:
       var parent : Directory;
       var name : str;
-      var link : FileSystemObject;
+      var link : Node;
     super (parent, name)
     scope:
       self._link = link
@@ -1691,8 +1834,8 @@ scope:
       var name : str;
     scope:
       /# TODO(wmh): This is rather fragile, as it delegates to self._link
-      /# for all methods not defined in FileSystemObject, but does NOT delegate
-      /# for those methods that ARE defined in FileSystemObject, which might
+      /# for all methods not defined in Node, but does NOT delegate
+      /# for those methods that ARE defined in Node, which might
       /# mean we don't invoke the desired method.  Might want to use
       /# __getattribute__ instead!
       return getattr(self._link, name)
@@ -1707,6 +1850,71 @@ scope:
       test.shell = sh
       sh.registerDirectoryFamily('/dir/([^/]+)', ('special',))
     end lifecycle;
+
+    method defineFiles params:
+      var generator : bool = false #:
+        If true, define some generators too.
+    scope:
+      root = metax.lib.shell.Directory(None, '')
+      test.root = root
+      test.dir = metax.lib.shell.Directory(root, 'dir')
+      test.subdir = metax.lib.shell.Directory(test.dir, 'subdir')
+      test.file = metax.lib.shell.File(root, 'file')
+      test.subfile = metax.lib.shell.Directory(test.dir, 'subfile')
+
+      if generator:
+        def GenMethod(p):
+          /# All elements in result are simple files whose names are methods.
+          return [
+            p.add('file', method)
+            /# In a real application, the method names would come from somme
+            /# dynamic source (otherwise there would be no need to generate
+            /# them dynamically).
+            for method in ('draw', 'area', 'perimeter')
+          ]
+        def GenClass(p):
+          /# All elements in result are directories whose names are classes
+          /# and whose contents are generated methods.
+          return [
+            p.add(
+              'dir', klass, childvar='method', generator=GenMethod,
+              freshold=120)
+            /# In a real application, the class names would come from somme
+            /# dynamic source (otherwise there would be no need to generate
+            /# them dynamically).
+            for klass in ('Shape', 'Triangle', 'Rectangle')
+          ]
+        def GenSpace(p):
+          /# All elements in result are directories whose names are namespaces
+          /# and whose contents are generated classes.
+          return [
+            p.add(
+              'dir', namespace, childvar='class', generator=GenClass,
+              freshold=120)
+            /# In a real application, the namespace names would come from somme
+            /# dynamic source (otherwise there would be no need to generate
+            /# them dynamically).
+            for namespace in ('metax', 'wmh', 'games')
+          ]
+
+        generator = lambda rec: (
+          rec.add('file', 'a'),
+          rec.add('file', 'b'),
+          rec.add(
+            'dir', 'subgen',
+            generator=lambda r: (
+              r.add('file', 'c'),
+              r.add('dir', 'jobs', childvar='job', generator=lambda rr: (
+                rr.add('file', 'd')), freshold=20),
+            ),
+            freshold=100))
+        test.gendir = root.add(
+          'dir', 'hier', childvar='namespace', generator=GenSpace, freshold=10)
+
+        test.root.refresh()
+        test.gendir.refresh()
+    end;
+
   end class TestCase;
 
 end namespace metax.lib.shell;

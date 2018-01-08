@@ -4,6 +4,7 @@ scope:
 
   class Shell < metax.lib.shell.Shell assocs:
     std assoc cStringIO;
+    std assoc os;
   scope:
 
     field compiler : metax.c.Compiler #:
@@ -14,12 +15,17 @@ scope:
     scope:
       self.setvarCommand('prompt', 'meta> ')
 
+      self.rcfileIs(
+        os.path.join(os.getenv('HOME'), '.config', 'metaxy', 'metarc'))
+
       /# Register commands
       /#  - If the method associated with a command accepts arbitrary args,
       /#    a dispatcher keyword param is not needed. However, if the method
       /#    does not accept arbitrary args, one should provide dispatcher
       /#    keyword.
       self.defineCommand('context', self.showMetaContext)
+      self.defineCommand('hier', self.showHierarchy)
+      self.defineCommand('sym', self.showSymbols)
 
       /# Directory hierarchy:
       /#  /disk/<nmsp1>/<nmsp2>/.../<class>
@@ -30,13 +36,76 @@ scope:
       /#    and the entire construct hierarchy within each metafile
       /#     - ability to print out the Context associated with arbitrary block
       root = self.filesystem()
-      mem = root.newChild(
-        'dir', 'mem', context='metabbrev', generator=self.generateMetafiles,
-        /# It is fast to regenerate, and we want to ensure up-to-date info.
-        freshold=1)
-      disk = root.newChild('dir', 'disk')
+      disk = root.add('dir', 'disk')
+      /#mem = root.add('dir', 'mem')
+      /#mem.add('dir', 'mem', generator=self.generateMetafiles, freshold=1)
+
+      /# Defining directory 'mem'
+      mem = root.add(
+        'dir', 'mem', childvar='metafile', freshold=1,
+        /# Generating the children of 'mem', each of which is a metafile abbrev.
+        generator=lambda mem: [
+          /# Defining a directory representing a metafile
+          mem.add(
+            'dir', metafile.abbrev(), childvar='namespace', freshold=1,
+            info={'construct': metafile.construct()},
+            /# Generating the children of the metafile dir, each of which is
+            /# a fully-qualified namespace.
+            generator=lambda metafile_dir: [
+              /# Defining a directory representing a namespace
+              metafile_dir.add(
+                'dir', namespace.id(), childvar='class', freshold=1,
+                info={'construct': namespace},
+                /# Generating the children of the namespace dir, each of which
+                /# is a class id within the namespace.
+                generator=lambda namespace_dir: [
+                  /# Defining a directory representing a class
+                  namespace_dir.add(
+                    'dir', klass.id(), childvar='method', freshold=1,
+                    info={'construct': klass},
+                    /# Generating the children of the class dir, each of which
+                    /# is a method id within the class.
+                    generator=lambda klass_dir: [
+                      /# Defining a directory representing a method.
+                      klass_dir.add(
+                        'dir', method.id(), childvar=None, freshold=1,
+                        info={'construct': method},
+                        /# Generating the children of the method dir
+                        generator=lambda method_dir: [
+                          /# TODO(wmh): What should we display here? Will
+                          /# probably need to define it in a function, as this
+                          /# lambda won't be expressive enough to generate
+                          /# file contents, etc.
+                          /#
+                          /# Possibilities:
+                          /#   meta --> file containing meta source code.
+                          /#   py   --> file containing python source code
+                          /#   cc   --> file containing c++ source code
+                          /#   ...
+                        ]
+                      )
+                      for method in klass_dir.info('construct').attrval('scope:')
+                      if method.kind() == 'method'
+                    ],
+                  )
+                  for klass in namespace_dir.info('construct').attrval('scope:')
+                  if klass.kind() == 'class'
+                ],
+              )
+              for namespace in metafile_dir.info('construct').attrval('scope:')
+              if namespace.kind() == 'namespace'
+            ],
+          )
+          for metafile in self.compiler().metaorder()
+        ]
+      )
     end lifecycle;
 
+    remark #:
+      ----------------------------------------------------------------------
+      Overriding parent methods
+
+    override
     method dispatch : bool #:
       Find and execute a command based on a command and args provided by user.
 
@@ -93,36 +162,6 @@ scope:
       return result
     end method dispatch;
 
-    method invokeMethod : any #:
-      Invoke a method with args.
-
-      The metax.lib.shell.Shell class assumes by default that all methods
-      registered via defineCommand() accept an arbitrary number of args.
-      However, in metax.c.shell.Shell we want to interact with methods that
-      were auto-generated via Meta's 'command' construct, and those methods
-      accept zero args, instead obtaining args from self.flags().rest. This
-      method provides a dispatcher mechanism to allow us to use a non-standard
-      method invocation policy in this module.
-    params:
-      var name : str #:
-        The method name being invoked.  The 'name' param of a previous call
-        to defineCommand().
-      var method : method #:
-        The method to execute. The 'method' param of a previous invocation of
-        defineCommand()
-      var args : vec<str> #:
-        The args obtained from the prompt.
-    scope:
-      flags = self.flags()
-      cmd = flags._command_()
-      while cmd.id() != 'main':
-        cmd = cmd.parent()
-      root = cmd
-      root.show()
-      root.show(mode='help')
-    test:
-    end method invokeMethod;
-
     override
     method helpCommand #:
       Provide summary of commands.
@@ -140,6 +179,10 @@ scope:
     test:
     end method helpCommand;
 
+    remark #:
+      ----------------------------------------------------------------------
+      Command methods
+
     method showMetaContext : any #:
       Print out the Context instance identified by directory or args.
     params:
@@ -150,22 +193,101 @@ scope:
       if nmsp:
         /# If namespace is set, we know that cwd contains the construct,
         /# and we can obtain its context and print it.
-        construct = dir.opaque()['construct']
-        context = construct.context()
-        context.show()
+        construct = dir.info('construct')
+        if construct:
+          context = construct.context()
+          context.show()
     test:
     end method showMetaContext;
 
+    method showHierarchy #:
+      Print out the hierarchy in the current context.
+       - if in a class directory, print out the inheritance hierarchy.
+       - if in a method directory, print out the ancestor definitions.
+    params:
+      multi var args : vec;
+    scope:
+      below = False
+      if args and args[0] in ('--below', '--b', '-b'):
+        below = True
+
+      nmsp = self.getctx('namespace', default=None)
+      if nmsp:
+        /# We know we are in a directory containing a 'construct'
+        dir = self.cwd()
+        construct = dir.info('construct')
+        if construct:
+          if construct.isClass():
+            /# First, we print out the hierarchy above us.
+            ancestors = construct.ancestors()
+            indent = ''
+            for ancestor in ancestors:
+              print '%s%s' % (indent, ancestor.idfqn())
+              indent += '  '
+            /# Now, if requested, we print out the hierarchy below us.
+            if below:
+              self._showHierarchy(construct, indent)
+            else:
+              print '%s%s' % (indent, construct.idfqn())
+          elif construct.isMethod():
+            print 'Have method!'
+          else:
+            print 'Warning: no hierarchy action defined for %s' % dir.abspath()
+    test:
+    end method showHierarchy;
+
+    method showSymbols #:
+      Print out the symbol table in the current context.
+       - if in a namespace directory, print out its symbol table
+       - if in a class directory, print out its symbol table
+       - if in a method directory, print out its symbol table
+    params:
+      multi var args : vec;
+    scope:
+      if args:
+        print 'Warning; args ignored'
+      nmsp = self.getctx('namespace', default=None)
+      if nmsp:
+        /# We know we are in a directory containing a 'construct'
+        dir = self.cwd()
+        construct = dir.info('construct')
+        if construct:
+          construct.symbols().show()
+    test:
+    end method showSymbols;
+
+    method _showHierarchy #:
+      Print out this class and all subclasses indented to show hierarchy.
+    params:
+      var klass : ClassConstruct #:
+        The klass to show the descendent hierarchy of.
+      var indent : str #:
+        The indent before this class.
+    scope:
+      fp = sys.stdout
+      fp.write('%s%s\n' % (indent, klass.idfqn()))
+      subindent = indent + '  '
+      children = klass.childclasses()
+      for name in sorted(children):
+        child = children[name]
+        self._showHierarchy(child, subindent)
+    test:
+    end method _showHierarchy;
+
+    remark #:
+      ----------------------------------------------------------------------
+      Generator methods
+
     method generateMetafiles  #:
-      Create directories representing the currently parsed metafiles.
+      Dynamically populate 'parent' with child directories, the names of which
+      are the abbrevs of all currently parsed metafiles.  The content of
+      each subdir is expected to be namespace names.
     params:
       var parent : Directory;
     scope:
       result = []
-      metac = self.compiler()
-      order = metac.metaorder()
-      for metafile in order:
-        dir = parent.newChild(
+      for metafile in self.compiler().metaorder():
+        dir = parent.add(
           'dir', metafile.abbrev(), context='namespace',
           generator=self.generateConstructs, freshold=1)
         dir.opaqueIs({'construct': metafile.construct()})
@@ -175,44 +297,123 @@ scope:
     end method generateMetafiles;
 
     method generateConstructs #:
-      Given a directory with opaque['construct'] storing a Construct,
-      generate a set of directories representing the children of that
-      construct.
+      Given a directory whose opaque() field has key 'construct' storing a
+      Construct, generate a set of directories representing the children of that
+      construct with a specific kind.  The kind is dictated by the kind of
+      'construct'. For example, if the construct stored in opaque() is a
+      namespace, only children with kind 'class' are shown. If the construct
+      is a class, only children with kind 'method' are shown, etc.
     params:
       var parent : Directory;
+      var kind : str #:
+        Only children with the specified kind are considered.
+    scope:
+      return self._generateConsSym(parent, kind, symbols=False)
+    test:
+    end method generateConstructs;
+
+    method generateSymbols #:
+      Given a directory whose opaque() field has key 'construct' storing a
+      Construct, generate a set of directories representing all symbols in
+      the symboltable of the stored construct whose associated construct
+      has kind 'kind'.
+    params:
+      var parent : Directory;
+      var kind : str #:
+        Only children with the specified kind are considered.
+    scope:
+      return self._generateConsSym(parent, kind, symbols=True)
+    test:
+    end method generateSymbols;
+
+    method _generateConsSym #:
+      Given a directory whose opaque() field has key 'construct' storing a
+      Construct, generate a set of directories representing either:
+        1. the children of that construct with kind 'child_kind'
+        2. the symbols in the symboltable of that construct whose associated
+           construct has kind 'child_kind'
+    params:
+      var parent : Directory;
+      var child_kind : str;
+      var symbols : bool = false #:
+        If true, show symbols not constructs.
     scope:
       result = []
       construct = parent.opaque()['construct']
       kind = construct.kind()
       scope = construct.attrval('scope:', default=None) or []
 
-      def Create(scope, kind, subkind, output, generator=None):
+      debug = True
+
+      def GenerateChildren(scope, kind, subkind, output, generator=None):
         if generator is None:
           generator = self.generateConstructs
         for child in scope:
           if child.kind() != kind: continue
-          dir = parent.newChild(
+          dir = parent.add(
             'dir', child.id(), context=subkind,
             generator=generator, freshold=1)
           dir.opaqueIs({'construct': child})
           output.append(dir)
 
+      def GenerateSymbols(construct, target_kind, cvar, output):
+        generator = self.generateSymbols
+        table = construct.symbols()
+        symbols = table.allSymbols()
+        for sym, info in symbols.iteritems():
+          cons = info['construct']
+          if cons.kind() == target_kind:
+            dir = parent.add(
+              'dir', sym, context=cvar, generator=generator, freshold=1)
+            dir.opaqueIs({'construct': cons})
+            if debug:
+              print '  Setting %s = %s (%s -> %s)' % (sym, cons.kindfqn(), cvar, dir.familyPath())
+            output.append(dir)
+          else:
+            if debug:
+              print 'WARNING: Ignoring symbol %s (%s) within %s' % (
+                sym, cons.kindfqn(), construct.kindfqn())
+
+      newform = True
+
       if kind == 'File':
         /# Create namespaces that generate classes.
-        Create(scope, 'namespace', 'class', result)
+        GenerateChildren(scope, 'namespace', 'class', result)
 
       elif kind == 'namespace':
-        /# Create classes that generate methods and fields
-        Create(scope, 'class', 'method', result)
+        if newform:
+          /# Show the symbol table of the namespace with classes being dirs.
+          /# TODO(wmh): For symbols that are namespaces, make symlinks.
+          GenerateSymbols(construct, 'class', 'class', result)
+        else:
+          /# Create classes that generate methods and fields
+          GenerateChildren(scope, 'class', 'method', result)
 
       elif kind == 'class':
-        /# Create methods that has special generator.
-        Create(
-          scope, 'method', 'fixme', result, generator=self.generateMethodDir)
+        if newform:
+          /# Show the symbol table of the class, with methods being dirs.
+          /# TODO(wmh): What other symbols appear within a class symbol table?
+          GenerateSymbols(construct, 'method', 'method', result)
+        else:
+          /# Create methods that has special generator.
+          GenerateChildren(
+            scope, 'method', 'fixme', result, generator=self.generateMethodDir)
+
+      elif kind == 'method':
+        if newform:
+          /# Show the symbol table of the method.
+          /#  - methods without complex scope have a limited symbol table
+          /#    (only parameters), whereas methods with complex-valued scopes
+          /#    will have a full symbol table with all top-level local vars
+          /#    also available in the symtable, and the possibility of showing
+          /#    sub-blocks as subdirs, with their own symbol tables.
+          GenerateSymbols(construct, 'var', 'var', result)
+        else:
+          pass
 
       return result
     test:
-    end method generateConstructs;
+    end method _generateConsSym;
 
     method generateMethodDir #:
       Generate the content of a directory representing a method.
@@ -226,7 +427,7 @@ scope:
 
       fp = cStringIO.StringIO()
       method.write(fp=fp)
-      meta = parent.newChild('file', 'meta')
+      meta = parent.add('file', 'meta')
       meta.contentIs(fp.getvalue())
       result.append(meta)
 

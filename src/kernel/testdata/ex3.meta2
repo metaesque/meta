@@ -1,0 +1,46 @@
+namespace demo.imsfield #:
+  Tests for instance fields, meta fields and static fields
+scope:
+
+  class A scope:
+
+    field instance_var : int = 7 #:
+      A instance variable.
+
+    raw
+    field instance_var2 : str = 'instancevar' #:
+      A raw instance variable.
+      TODO(wmh): Make value 'instance var' when default attribute is
+      of type 'expr' not 'word'. Same for fields below.
+
+    raw tmppublic
+    field instance_var3 : A #:
+      A raw public instance variable with no explicit value.
+
+    meta
+    field ClassVar : int = 70 #:
+      A class variable.
+
+    meta raw
+    field ClassVar2 : str = 'classvar' #:
+      A raw class variable.
+
+    meta raw tmppublic
+    field ClassVar3 : A #:
+      A raw public class variable with no explicit value.
+
+    static
+    field StaticVar : int = 700 #:
+      A static variable.
+
+    static raw
+    field StaticVar2 : str = 'staticvar' #:
+      A raw static variable.
+
+    static raw tmppublic
+    field StaticVar3 : A #:
+      A raw public static variable with no explicit value.
+
+  end class A;
+
+end namespace demo.imsfield;

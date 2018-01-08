@@ -8,18 +8,36 @@ default:
 
 # target test:
 #   Run tests on the Meta implementation of Meta.
-test: meta-py
-	meta2 -r metax.fs metax.logs metax.c metax.root metax.cli metax.test
+test: fullmeta-py
+	meta2 -b py -r metax.fs metax.logs metax.c metax.root metax.cli metax.test
 
 # target slowtest:
 #   Run tests on the Meta implementation of Meta.
 #   Why is this so slow???
-slowtest: meta-py
-	meta2 metax.fs metax.logs metax.c metax.root metax.cli metax.test
+slowtest: fullmeta-py
+	meta2 -b py metax.fs metax.logs metax.c metax.root metax.cli metax.test
 
 # target meta-%:
-#   Compile all code needed for Meta to function.
+#   Compile all code needed in order to compile and execute a Meta program in
+#   the specified baselang.
+#   - required:
+#     - root.meta2: everything inherits from metax.root.Object and relies on 
+#       metax.root.MetaObject for resources, etc.
+#     - test.meta2: all unit tests inherit from metax.test.TestCase
+#   - pseudo-optional:
+#     - cli.meta2: only needed if the Meta code needs metax.root.MetaObject.CLI(),
+#       which is simply set to null when the CLI is unavailable.
+#   - not required:
+#     - parser.meta2: only needed if one wants to compile Meta in this baselang
+#     - fs.meta2: only needed by parser.meta2
+#     - logs.meta2: only needed by parser.meta2
+#     - shell.meta2: only needed if the Meta code uses metax.c.shell or metax.lib.shell
 meta-%:
+	meta2 -b $* root.meta2 test.meta2
+
+# target fullmeta-%:
+#   Compile all code needed to compile Meta in the specified baselang.
+fullmeta-%:
 	meta2 -b $* *.meta2
 
 # target oopl:
@@ -30,76 +48,25 @@ oopl:
 
 # target shell:
 #   Pull up the interactive meta shell
-shell: meta-py
+shell: fullmeta-py
 	meta2 shell
 
 # target emacs:
 #   Create the emacs major mode for a given metalang, version 2
-emacs: meta-py
+emacs: fullmeta-py
 	meta2 emacs
 
 # target cards1-%:
 #   Compile a very simple .meta2 file into a baselang.
-cards1-%: meta-%
+cards1-%: fullmeta-py
 	cd testdata; meta2 -b $* cards1.meta2
 
 # target cards2-%:
 #   Compile a simple .meta2 file into a baselang and invoke unit tests.
-cards2-%: meta-%
-	cd testdata; meta2 -b $* -r cards2.meta2 demo.cards2
+cards2-%: fullmeta-py
+	cd testdata; meta2 -b $* -rv cards2.meta2 demo.cards2
 
 # target html-%:
 #   Generate the HTML files for a metafile and its basefiles.
-html-%: meta-%
+html-%: fullmeta-py
 	cd testdata; meta2 -b $* html cards1.meta2
-
-##############################################################################
-# Targets for the older version of meta2
-#  - this older version was implemented by parser.meta
-#  - parser.meta is compiled using parser.py
-#  - with the existence of parser.meta2, we can completely remove
-#    parser.py and parser.meta and make 'meta2' be 'metac', remove
-#    the 2 suffix from files, etc.
-
-# target otest:
-#   Run tests on the Meta implementation of Meta.
-otest: ometa-py
-	metac -r metax.fs metax.logs metax.c 
-
-# target oslowtest:
-#   Run tests on the Meta implementation of Meta.
-#   Why is this so slow???
-oslowtest: ometa-py
-	metac metax.fs metax.logs metax.c 
-
-# target ometa-%:
-#   Compile all code needed for the rewrite of Meta into Meta<Pyton> (meta2)
-#   based on {parser,fs,logs}.meta and {root,test}.meta2.
-ometa-%:
-	metac fs.meta logs.meta parser.meta 2>&1 | metafilt
-	meta2old -b $* root.meta2 test.meta2
-
-# target oshell:
-#   Pull up the interactive meta shell
-oshell: ometa-py
-	meta2old shell
-
-# target oemacs:
-#   Create the emacs major mode for a given metalang, version 2
-oemacs: ometa-py
-	meta2old emacs
-
-# target ocards1-%:
-#   Compile a very simple .meta2 file into a baselang.
-ocards1-%: ometa-%
-	cd testdata; meta2old -b $* cards1.meta2
-
-# target ocards2-%:
-#   Compile a simple .meta2 file into a baselang and invoke unit tests.
-ocards2-%: ometa-%
-	cd testdata; meta2old -b $* -r cards2.meta2 demo.cards2
-
-# target ohtml-%:
-#   Generate the HTML files for a metafile and its basefiles.
-ohtml-%: ometa-%
-	cd testdata; meta2old -b $* html cards1.meta2

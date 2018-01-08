@@ -1286,7 +1286,76 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
 - Should Meta support python-like continuations in all baselangs?
    - https://www.ps.uni-saarland.de/~duchier/python/continuations.html
 
+- Support for multiple inheritance (state and/or interface).
+  - Meta can do a lot here, but there is almost zero support for
+    multiple inheritance as of 2018-01-01, even at the level of
+    individual baselangs (never mind making it work for Meta<X1|X2>).
+
+- Support for interfaces
+
 ## TODO
+
+- In type specifications, support named params:
+
+    For example:
+      tuple<dirname:str,basename:str>
+    vs
+      tuple<str,str>
+
+    And
+      map<{name:str,height:float,cards:int,present:bool}>
+    vs
+      map<str,any>
+      
+- For every native type, introduce a class in the Meta library that
+  provides a baselang-independent implementation and describes the
+  public interface available.  Introduce some secondary simplex attribute
+  on 'executable' to allow specification of native code:
+  
+    class Vector<T> < Container<T> #:
+      A collection of contiguous element indexed by integer
+       - get(index) = O(1)
+       - set(index) = O(1)
+       - sort() = O(N)
+    nativetype<py> list
+    nativetype<cc> std::vector<$T>
+    nativetype<js> Array
+    scope:
+    
+      field allocated : int #:
+        How many elements are allocated.
+      field size : int #:
+        How many elements are assigned.
+       
+      lifecycle params:
+        var size : int = 0 #:
+          Initialize size of list.
+      scope:
+      end;
+      
+      method size : int aliases "len,length" #:
+        Number of elements in vector.
+      scope<*>:
+        return @self.size;
+      native<py> 'len($rec)'
+      native<cc> '$rec->size()'
+      native<js> 'this.length'
+      end method;
+    end class;
+    
+    NOTES:
+     - there should be both 'native' and 'native:' defined on methods
+        - native accepts a string, and represents baselang code that can be
+          used to implement the method as a statement
+        - native: defines a block of baselang code and implies that the
+          method cannot be implemented in the given baselang as a statement
+          (requires multiple lines).  The result can still be used as a RHS,
+          as long as it is possible to insert lines of code into the
+          baselang code stream before the line requiring the RHS.
+
+- Support aliases for method and field names
+  - will at the very least be useful for 
+
 
 - The 'default' attribute of 'var', 'field' and 'flag' should have type 'expr'
   not 'word'
@@ -1295,6 +1364,26 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
      or
         var item : map = {'a': 1, 'b': 2};
         
+- In describing Meta, emphasize the utility in being able to add good ideas
+  from arbitrary languages into all baselangs
+   - 'new' vs 'override' semantics on methods is crucial ... not all baselangs
+     support it.  Meta can ensure this semantics exists everywhere.
+   - python-like repl
+   - java-like per-class entry points
+   - ability to distinguish "nullable ptr" vs "non-nullable ref" vs "value"
+   - easy-to-use multi-match regexp
+   - variable interpolation in strings
+   - units of measurement
+   - unified test environment
+   - formalized resources and associations
+   - automated uml generation
+   - source code configuration and canonicalization
+     - index generation
+   - trivial aspect-oriented capabilities
+   - cross-language native embedding
+   - cross-language typechecking
+   - 'auto' type
+
 - NamespaceConstruct.expandMeta() needs updating so that each namespace has an
   'id' with not dots in it. The code in
      NamespaceConstruct.createImplicitParents()
@@ -1309,13 +1398,14 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
 - Statement level support!!
   - recursive loading of dependency classes
   - proper initialization of symbol tables
-        
-- Implement the 'simplex' attribute type
-   - used for block-valued attributes that are of type 'simple'
-     when the selector is a baselang, and are of type 'complex'
-     when the selector is '*'.
      
-- Define metax.error, a namespace consisting solely of exception classes.
+- Decide how to handle exceptions
+  - See discussion above entitled 'Exception classes'.
+  - Looks like providing a mapping from conceptual exception naems to
+    baselang equivalents is the way to go for now.
+    - This could be a real problem moving forward...
+
+Define metax.error, a namespace consisting solely of exception classes.
    - each exception class should inherit from appropriate baselang 
      classes where possible.
    - each should be clearly documented with when it should be raised
@@ -1348,63 +1438,20 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
   - need to get C++ unit testing working
   - may need to improve the type system.
 
-- Get implicit meta-level receiver vars working
-  - each baselang has a hard or soft receiver variable name
-  - meta introduces its own naming convention
-     - self for instance methods in user classes
-     - test for instance methods in test classes
-     - meta for class methods (in either user or test classes)
-  - any reference to the meta names ('self', 'test', 'meta') within
-    baselang-level scopes should be replaced by the appropriate
-    baselang names/syntax.
-     - for example, in C++, if baselang scope code contains 'self.'
-       it should be replaced with '(*this).'
-
-- 'entry' and 'action' constructs
-
-- nested flag/arg parsing
-  - introduce metax.lib.Command class with 'flags', 'args' and 'actions'
-  - A command line is represented by a Command instance
-     - if the application uses actions, the first non-flag identifies the
-       action, for which a new Command instance is created and added to
-       the actions() field of the parent Command.
-     - if the application does not use actions, all non-flag args on the
-       command-line are grouped together into the args() field (and
-       can be interspersed with the flags ... not possible if actions exist).
-
 - uml generation
    - this should use the HTML syntax so that we can draw association lines
      from field to field rather than just class to class.
 
-- implement 'meta2 shell', which starts an interactive shell within which
-  one can explore meta-level code interactive.
-   - parse/expand/translate/compile metafiles
-   - print out arbitrary constructs
-   - run code in arbitrary baselang
-   - validate repository
-   - peruse repository (all known classes)
-     - support 'cd' in the shell  
-     - have /nmsp contain namespaces
-     - have /meta contain .meta source code
+- implement behavior stubs?
+  - Problem: if one looks for a method in a class but it is defined
+    in a behavior instead, it can be confusing.
+  - Solution: support "behavior stubs" ... method declarations
+    in classes with a featval 'stub' to indicate they are replaced
+    by a behavior.
 
-- implement behaviors in meta2
-  - Should introduce a special syntax in classes:
       class Foo scope:
         stub method methname;
       end class;
-    which acts as an (optional) placeholder within classes,
-    promising replacement from a behavior (or some other yet to
-    be created construct). .e.g
-      behavior methname scope:
-        receiver Foo scope:
-          ...
-        end;
-      end behavior;
-
-    This 'stub method' would be most useful in the root classes for
-    abstract methods ... useful to have a place where one can see all
-    of the to-be-implemented-in-subclasses methods, without having
-    to repeat docstrs, params, etc.
 
 - Provide a 'Meta' symbol in every namespace, to give access to:
   - all reflection capabilities

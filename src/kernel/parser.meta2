@@ -59,8 +59,9 @@ namespace metax.c #:
   /#       subclasses must handle a null value)
   /#     - Perform type-specific parsing of the secondary attribute value.
   /#     - Set the value of the Attribute instance created above.
-  /#     - The termcode of the passed-in construct instance is changed from -1
-  /#       to >= 0 if a terminator (implicit or explicit) is found.
+  /#     - The termcode of the passed-in construct instance is changed from
+  /#       TERM_UNINIT to 0<=<16 if a terminator (implicit or explicit) is
+  /#       found.
   /#
   /#   - More notes:
   /#    - Every time ${file}.meta file is compiled:
@@ -131,7 +132,7 @@ namespace metax.c #:
   /#
   /#           namespace nm.sp scope;
   /#           class Person;
-  /#       
+  /#
   /#           method f : int scope:
   /#             ...
   /#           end method f;
@@ -151,6 +152,8 @@ namespace metax.c #:
   /#          - Sub1 is added in Part1
   /#          - Sub2 is NOT added inside Sub1, but rather Part1
   /#          - Part2 is NOT added inside Part1, but rather the parent File.
+testpreports:
+  # This is a test
 scope:
 
   class Error < metax.root.Error;
@@ -193,9 +196,17 @@ scope:
     EMPTY = 5
     SELF = 6
 
+    /# What to store in termcode when the terminator has not yet been
+    /# initialized.
+    /#  - this is different from '0', which means "verified that terminator is
+    /#    implicit"
+    /#  - this used to be -1, but we want to pack termcode and termline together
+    /#    so we avoid negative numbers at least until field packing exists and
+    /#    supports negative numbers (if we decide to allow them in packed
+    /#    fields).
+    TERM_UNINIT = 16
     NEWSUFFIX = '2'
     SUFFIX = '.meta' + NEWSUFFIX
-
     SPECIAL_PREFIX_RE = re.compile(r'^\s*>\|')
 
     /# Provide a means of debugging control flow.
@@ -205,6 +216,7 @@ scope:
       /#  - set to 1 to see the overall flow of expandMeta() calls.
       /#  - set to 2 to see more details
       'expand': 0,
+      'imports': 0,
       'translate': 0,
       'compile': 0,
     })
@@ -213,8 +225,10 @@ scope:
       return val.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
     /# TODO(wmh): Move this someplace cleaner. For example, metax.logs.
-    def dsep(title='', end=False, prefix=False, width=80, delim='#',
-             subtitle=None, fp=sys.stdout):
+    def dsep(
+      title='', end=False, prefix=False, width=80, delim='#', subtitle=None,
+      fp=sys.stdout
+    ):
       """Print a named start/end separator
 
       Args:
@@ -495,7 +509,7 @@ scope:
      no! u#*T -> use #u*T
      no! s#*T -> use #s*T
      no! w#*T -> use #w*T
-     
+
     Legal type prefixes are:
       @#?
       &?(#?[usw]?\*)*#?
@@ -629,7 +643,7 @@ scope:
         /#      - ?
         /#    - if only store number of seconds relative to 00:00:00
         /#      - should this be related to the concept of Duration?
-        /# 
+        /#
         /# Would be preferable to find high-level names that don't assume a
         /# particular implementation (and provide implementation-specific
         /# variants similar to how we'll do for map and vec).
@@ -791,7 +805,7 @@ scope:
     test:
       /# Create a namespace for use when a type needs to resolve a relative
       /# class.
-      _, _, context, _ = self.cachedInfo()      
+      _, _, context, _ = self.cachedInfo()
       namespace = metax.c.NamespaceConstruct.NewFromData('nm.sp', context)
       nmspfunc = lambda: namespace
 
@@ -1382,6 +1396,254 @@ scope:
 
   end class TypeWrapper;
 
+  class SymbolTable #:
+    Maintain a collection of symbol/construct mappings, supporting inheritance.
+  scope:
+
+    field construct : Construct #:
+      The construct that owns this symboltable.
+      TODO(wmh): This should be a weak reference.
+
+    field parent : SymbolTable #:
+      The parent symboltable. NamespaceConstructs have a null parent in their
+      symbol table, but ClassConstruct symbol tables reference the symbol table
+      of their namespace, and MethodConstruct symbol tables reference the
+      symbol table of their class.
+
+    field symbols : @map<str,map> #:
+      Maps symbol name to symbol data. The data is a map with keys:
+        construct: Construct
+          May be a VarConstruct, a MethodConstruct, a ClassConstruct, or a
+          a NamespaceConstruct.
+        source: Construct
+          Where the symbol was obtained from
+        note: str (optional)
+          Human-readable notes about the symbol
+
+    lifecycle params:
+      var construct -> construct;
+      var parent -> parent;
+    scope:
+    end;
+
+    method allSymbols : map<str,Construct> #:
+      All symbols transitively visible within this table.
+    scope:
+      result = {}
+      table = self
+      while table is not None:
+        symbols = table.symbols()
+        for symbol, data in symbols.iteritems():
+          if symbol not in result:
+            result[symbol] = data
+        table = table.parent()
+      return result
+    test:
+      test.iseqvec(
+        ['Card'],
+        sorted(test.ntable.allSymbols().keys()))
+      test.iseqvec(
+        ['Card', '__init__', 'f', 'show'],
+        sorted(test.ctable.allSymbols().keys()))
+      test.iseqvec(
+        ['height', 'name', 'self'],
+        sorted(test.mtable.allSymbols().keys()))
+    end method allSymbols;
+
+    method findInfo : map #:
+      Resolve a symbol into its associated map. See field symbols for details.
+    params:
+      var symbol : str #:
+        The symbol to resolve.
+    scope:
+      result = None
+      table = self
+      while result is None and table:
+        result = table.symbols().get(symbol, None)
+        table = table.parent()
+      return result
+    test:
+      test.iseq('height', test.mtable.findInfo('height')['construct'].id())
+      test.iseq('f', test.ctable.findInfo('f')['construct'].id())
+      test.iseq('Card', test.ctable.findInfo('Card')['construct'].id())
+      test.isnull(test.ctable.findInfo('not-a-symbol'))
+    end method findInfo;
+
+    method find : Construct #:
+      Resolve a symbol into its associated construct.
+    params:
+      var symbol : str #:
+        The symbol to resolve.
+    scope:
+      result = None
+      table = self
+      while result is None and table:
+        result = table.symbols().get(symbol, None)
+        table = table.parent()
+      return result['construct'] if result else None
+    test:
+      test.iseq('height', test.mtable.find('height').id())
+      test.iseq('f', test.ctable.find('f').id())
+      test.iseq('Card', test.ctable.find('Card').id())
+      test.isnull(test.ctable.find('not-a-symbol'))
+    end method find;
+
+    method register #:
+      Register a symbol with this table.
+    params:
+      var symbol : str #:
+        The symbol name.
+      var construct : Construct #:
+        The construct associated with the symbol.
+      var source : Construct = null #:
+        Where this symbol is defined.  This param is almost always null,
+        because self.construct() is almost always the value to use.
+      var note : str = null #:
+        Any human-readable notes associated with the symbol.
+    scope:
+      symbols = self.symbols()
+      if symbol in symbols:
+        raise Error(
+          'Attempt to re-register %s within %s' %
+          (symbol, self.construct().kindfqn()))
+      if source is None:
+        source = self.construct()
+      data = {'construct': construct, 'source': source}
+      if note:
+        data['note'] = note
+      symbols[symbol] = data
+    test:
+      /# register was called in setup.
+      test.iseq(3, len(test.mtable.symbols()))
+    end method register;
+
+    method show #:
+      Print out a symbol table
+    params:
+      var fp : ostream = out #:
+        Where to write output
+      var indent : str = '' #:
+        Indentation before each line of output.
+      var full : bool = false #:
+        If true, show inherited symbols too.
+      var width : int = -1 #:
+        The amount of space reserved for symbol names in output.
+        If negative, width of longest symbol is used.
+    scope:
+      construct = self.construct()
+      symbols = self.allSymbols() if full else self.symbols()
+      subindent = indent + '  '
+      fp.write('%sSymbolTable for %s:\n' % (indent, construct.kindfqn()))
+      if symbols:
+        if width < 0:
+          width = max([len(s) for s in symbols])
+        for symbol in sorted(symbols):
+          data = symbols[symbol]
+          construct = data['construct']
+          location = ' (%s)' % data['source'].kind() if full else ''
+          notestr = data.get('note', None)
+          note = ' [%s]' % notestr if notestr else ''
+          fp.write(
+            '%s%s = %s%s%s\n' %
+            (subindent, symbol.ljust(width), construct.kindfqn(), location,
+             note))
+      else:
+        fp.write('%s  empty\n' % indent)
+    test:
+      fp = test.fp()
+      test.mtable.show(fp=fp, width=20)
+      test.mtable.show(fp=fp, full=True, width=20)
+      test.ctable.show(fp=fp)
+      test.ctable.show(fp=fp, full=True)
+
+      test.iseqtext(
+        >|"""SymbolTable for method nm.sp.Card.show:
+        >|  height               = var height
+        >|  name                 = var name
+        >|  self                 = var self
+        >|SymbolTable for method nm.sp.Card.show:
+        >|  height               = var height (method)
+        >|  name                 = var name (method)
+        >|  self                 = var self (method)
+        >|SymbolTable for class nm.sp.Card:
+        >|  __init__ = method nm.sp.Card.__init__
+        >|  f        = method nm.sp.Card.f
+        >|  show     = method nm.sp.Card.show
+        >|SymbolTable for class nm.sp.Card:
+        >|  Card     = class nm.sp.Card (namespace)
+        >|  __init__ = method nm.sp.Card.__init__ (class)
+        >|  f        = method nm.sp.Card.f (class)
+        >|  show     = method nm.sp.Card.show (class)
+        >|""",
+        test.out())
+    end method show;
+
+    test
+    lifecycle setup:
+      test.defineClassAndMethods('py')
+      TypeInst = metax.c.Type.Instance
+
+      context = test.context
+
+      /# Namespace symbol tables contain:
+      /#  - symbols for each class defined within the namespace.
+      /#  - symbols of dependent namespaces.
+      test.ntable = metax.c.SymbolTable(test.namespace, None)
+      test.ntable.register(test.klass.id(), test.klass)
+
+      /# Class symbol tables contain:
+      /#  - methods defined on them (user classes have user methods,
+      /#    meta classes have meta methods)
+      /#  - fields defined on them (user classes have user fields,
+      /#    meta classes have meta fields). The raw field name is stored.
+      /#
+      /# This symbol table is used when establishing what symbols are legal
+      /# at a call-site whose receiver is of class type C ... only symbols
+      /# in the symbol table of C are legal.
+      test.ctable = metax.c.SymbolTable(test.klass, test.ntable)
+      test.ctable.register(test.method.id(), test.method)
+      test.ctable.register(test.method2.id(), test.method2)
+      test.ctable.register(test.initializer.id(), test.initializer)
+
+      /# Method symbol tables contain:
+      /#  - all parameters
+      /#  - all local variables not within lexically scoped blocks.
+      /#  - the special receiver pseudovar ('self' or 'test' or 'meta')
+      /#  - (not?) meta-level fields/methods within user-level class method.
+      /#  - DOES NOT inherit from class symboltable directly (indirectly
+      /#    via the special receiver pseudovar).
+      /#
+      /# This symbol table is used when resolving variable references within
+      /# method scope (e.g. default values of params, super args, local vars,
+      /# etc.). If we have:
+      /#     method f params:
+      /#       var a : int = b;
+      /#     super (a, C)
+      /#     scope:
+      /#       var f : int = g;
+      /#     end;
+      /# we need to be able to "see" variables 'b', 'C' and 'g' from the method
+      /# symbol table in order for the syntax to be legal.
+      test.mtable = metax.c.SymbolTable(test.method, None)
+      test.mtable.register(
+        'height',
+        metax.c.VarConstruct.NewFromData(
+          'height', context, termcode=1,
+          secondaries=[(':', TypeInst('real'))]))
+      test.mtable.register(
+        'name',
+        metax.c.VarConstruct.NewFromData(
+          'name', context, termcode=1,
+          secondaries=[(':', TypeInst('str'))]))
+      test.mtable.register(
+        'self',
+        metax.c.VarConstruct.NewFromData(
+          'self', context, termcode=1,
+          secondaries=[(':', TypeInst(test.klass.fqn()))]))
+    end lifecycle;
+
+  end class SymbolTable;
+
   class ExprParser #:
     Parses expressions of the following forms:
      - num        : [-+0-9]
@@ -1432,14 +1694,19 @@ scope:
         r'(?P<meta>meta!|!)?(?P<id>[a-zA-Z_][a-zA-Z0-9_]*)')
 
       cls.ID_RE = re.compile(
+        /# TODO(wmh): Remove the 'meta!' and '!' clauses ... not needed in v2?
         r'^(?P<meta>meta!|!)?'
         r'(?P<id>[a-zA-Z_][a-zA-Z0-9_]*)'
-        /# The /get notation is a hack to allow method ids to end with /get.
+        /# The :get notation is a hack to allow method ids to end with :get.
         /# A workaround for the fact that field constructs generate a
         /# getter with the same name, but Meta does not allow the same id
-        /# to appear in the same scope.  We distinguish with /get and strip
-        /# off the /get when we go to generate code.
-        r'(?:/(?P<spec>get))?$')
+        /# to appear in the same scope.  We distinguish with :get and strip
+        /# off the :get when we go to generate code. In the interests of
+        /# consistency, we suffix setters and reffers similarly although they
+        /# do not have the same name conflict as getters. It may, however,
+        /# be useful to distinguish between fooIs (a user-provided method)
+        /# and fooIs:set (a auto-generated setter for a user-provided field).
+        r'(?:[:](?P<spec>get|set|ref))?$')
 
       cls.XID_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_.]*$')
 
@@ -1465,7 +1732,7 @@ scope:
       if metafile is None:
         metafile = MetaFile('/fake/path.meta', None, text='\n')
         cls.DummyMetaFile = metafile
-      
+
       text = src + '\n'
       metafile.linesIs(Line.FromText(text))
       metafile.textIs(text)
@@ -3315,12 +3582,14 @@ scope:
         '((?:^|\n) *)?\$\{([a-zA-Z0-9_-]+)(?:\?([^\}]*))?\}')
     end lifecycle;
 
-    field chunks : vec<line:str|segment:BaseSegment> #:
+    field chunks : vec<any> #:
       The collection of str and BaseSegment instances making up this
       BaseSegment.  The str values cannot contain any newlines (including
       at end of string), and each str value represents exactly one line
       of output. Each BaseSegment represents multiple lines of output (and
       has an associated position in the .meta source file).
+      TODO(wmh): Add support to Meta for type specifications of the form:
+        vec<line:str|segment:BaseSegment>
 
     field indent : @str #:
       How much indentation exists before each line in this BaseSegment.
@@ -5660,7 +5929,7 @@ scope:
     field value : vec<str> #:
       The list of legal words.
 
-    lifecycle ListAttribute params:
+    lifecycle params:
       var parent : Construct;
       var key : str;
       var value : str;
@@ -5775,6 +6044,32 @@ scope:
     feature-key-specific legal values
   scope:
   end class MultiFeatureAttribute;
+
+  class EndAttribute < Attribute #:
+    This is an experiment in reprsenting the termination syntax for a construct
+    using an Attribute instead of an integer termcode.  Pros and cons are:
+      + allows us to record the line and column of the 'end' syntax.
+      - incurs significantly more memory, especially if it is present for
+        every single construct.
+        # This may be amelioratable by not creating EndAttribute instances
+          during parsing, and only doing so during instantiation of templates.
+          This requires more effort to find the end-of-construct unless we
+          record end-of-construct during parsing (we could encode this inside
+          termcode!)
+
+    Things to do:
+     - Modify (at least) the MethodConstruct templates to introduce an ${end}
+       variable that stores an empty string and an instance of EndAttribute.
+     - Provide a mechanism for establishing the line number within meta source
+       code of the end of a construct (either the explicit 'end ...;' or ';',
+       or from implicit analysis).
+       - this can be done heuristically within ExecutableConstruct.translateMeta
+         while populating the varset (expensive) or can be made much more
+         efficient by encoding line number of end syntax within
+         MetaFile.parseSecondaryAttribute() ... for example by packing it within
+         termcode.
+  scope:
+  end class EndAttribute;
 
   abstract
   class BlockAttribute < Attribute #:
@@ -6386,7 +6681,7 @@ scope:
         attrkey = self.key()
         block_uid = self.htmlId()
         control_line = (
-          ' simple %s %s %s %s ' % 
+          ' simple %s %s %s %s ' %
           (construct.kind(), block_uid, self.key(), basel))
         fp.write(control_line + 'start\n')
 
@@ -6509,14 +6804,21 @@ scope:
       actual key/abbrev seen in the source (that key/abbrev is what is
       used as the key in this attributes field).
 
-    field termcode : int = -1 #:
+    field terminator : int = 0 #:
+      A field within which termcode and termline are encoded.
+      TODO(wmh): When packed semantics is available, we will not need to
+      define an explicit field for terminator, and can instead just define
+      fields termcode and termline.
+
+    field termcode : int = TERM_UNINIT #:
       Encodes how this construct was terminated:
-        0 (or -1) = implicit (no terminator specified)
+        0 (or TERM_UNINIT) = implicit (no terminator specified)
         1 = ';'
         3 = 'end;'
         7 = 'end <cons>;'
        11 = 'end <id>;'
        15 = 'end <cons> <id>;'
+       16+= uninitialized
 
       The above values are based on the following bit mask semantics:
         bit 0 = 0x1 = ';'
@@ -6557,8 +6859,8 @@ scope:
       whether it should be used or deleted.
     end field metadata;
 
-    lifecycle Construct params:
-      var id -> id;
+    lifecycle params:
+      var uid -> id;
       var parent -> parent;
       var context -> context;
       var precount -> precount = 0;
@@ -6566,7 +6868,11 @@ scope:
       /# IMPORTANT: Subclasses (e.g. NamespaceConstruct) rely on this
       /# constructor NOT registering the id ... they may need to change it.
       if not isinstance(self, MetaLanguageConstruct):
-        assert context is not None, 'Construct %s has null context' % id
+        assert context is not None, 'Construct %s has null context' % uid
+
+      /#if self.kind() == 'class':
+      /#  print 'CREATING %s (%s)' % (uid, id(self))
+
     end;
 
     method kindid : str #:
@@ -6730,7 +7036,7 @@ scope:
       var context : Context;
       var parent : ComplexBlock = null #:
         The block this contruct is being added to. Note that this may be null
-        (caller responsibility to register as desired). Note also that 
+        (caller responsibility to register as desired). Note also that
         registration happens at end of method if parent provided.
       var features : vec<tuple<str,str>> = null #:
         Key/value[/line] tuples for feature attributes.
@@ -6800,7 +7106,8 @@ scope:
             /# all.  Useful when forming the tuples passed in as secondaries
             /# from code that may or may not produce null values ... avoids
             /# caller having to do checks.
-            print '**** WARNING: IGNORING %s (None) within %s' % (skey, construct.kindfqn())
+
+            /# print '**** WARNING: IGNORING %s (None) within %s' % (skey, construct.kindfqn())
             continue
           elif isinstance(sval, Attribute):
             secondary = sval
@@ -7539,7 +7846,7 @@ scope:
       /# Print the terminator
       /#  - if the last attribute was multi-lined, insert indentation.
       termcode = self.termcode()
-      if termcode > 0:
+      if termcode > 0 and termcode != TERM_UNINIT:
         if termcode == 1:
           fp.write(self.termstr() + '\n')
         else:
@@ -7555,11 +7862,12 @@ scope:
             termstr = '<span class="face-end">' + termstr + '</span>'
             htmlid = self.fqn()
             cout = mode.setdefault('out', {}).setdefault('construct', {})
-            cout.setdefault('all', []).append(htmlid) 
-            cout.setdefault(self.kind(), []).append(htmlid) 
+            cout.setdefault('all', []).append(htmlid)
+            cout.setdefault(self.kind(), []).append(htmlid)
 
           fp.write(indent + termstr + '\n')
 
+      /# Number of lines/chars written is unknown
       return -1
     test:
       construct = test.defineConstructs()
@@ -7705,7 +8013,7 @@ scope:
         context = self.context()
       termcode = self.termcode()
 
-      if termcode <= 0:
+      if termcode == 0 or termcode == TERM_UNINIT:
         result = ''
       else:
         items = []
@@ -7792,6 +8100,15 @@ scope:
         include transitively created constructs. If null, do not accumulate.
     end method expandMeta;
 
+    method importMeta : vec<BaseFile> #:
+      Import dependent metafiles and link data-structures based on resulting
+      constructs. For most constructs this is a noop ... really only meaningful
+      for files, namespaces and classes, so we provide a default noop
+      implementation.
+    scope:
+      /# noop
+    end method importMeta;
+
     abstract
     method translateMeta : vec<BaseFile> #:
       Perform all actions needed to translate this construct into a specific
@@ -7804,6 +8121,7 @@ scope:
       meaningful for files, namespaces and classes, so we provide a default noop
       implementation.
     scope:
+      /# noop
     end method compileMeta;
 
   end class Construct;
@@ -8172,7 +8490,7 @@ scope:
       namespace_primary : bool
         true if this baselang treats namespaces as primary (e.g. does not have
         per-class source files). ex. python is namespace_primary. javascript
-        can be either namespace_primary or not. C++ and Java are not 
+        can be either namespace_primary or not. C++ and Java are not
         namespace_primary.
       definition_separate : bool
         true if this baselang has a separate source file for declarations.
@@ -8182,7 +8500,7 @@ scope:
         The character sequence used to start a one-line comment.
         TODO(wmh): Must add endrem for those languages that do not have a
         comment syntax for one-line comments (e.g. CSS has no such thing, so
-        some OOPL may also).                                              
+        some OOPL may also).
       self : str
         The variable used to refer to the receiver within instance methods.
       cls : str
@@ -8236,7 +8554,7 @@ scope:
       }
 
       /# TODO(wmh): Change to std::any
-      any = Type.Instance('any') 
+      any = Type.Instance('any')
       cls.TEMPLATES = {
         'vec': (('TV', any),),
         /# NOTE: In C++, we need the map key to be 'std::string' (rather than
@@ -8862,14 +9180,14 @@ scope:
                 subcall_index = i + 1
                 executable = child
                 rec += '.' + subvar
-                /#print 'HERE with %s' % child.kindfullid()
+                /#print 'HERE with %s' % child.kindfqn()
                 /#child.showSymbols()
                 metatype = child.implicitType()
                 /#print subcalls[subcall_index:]
                 /#print metatype
                 break
               else:
-                raise Error('Unexpected %s' % child.kindfullid())
+                raise Error('Unexpected %s' % child.kindfqn())
 
           if not metatype and typecheck:
             metafile.warning(
@@ -8878,7 +9196,7 @@ scope:
             DC += 1
             if DC > 10:
               raise Error('here')
-            /# print 'Here with %s and %s' % (executable.kindfullid() if executable else executable, rec)
+            /# print 'Here with %s and %s' % (executable.kindfqn() if executable else executable, rec)
             if executable:
               executable.showSymbols()
 
@@ -9215,10 +9533,16 @@ scope:
       fieldmap = params.get('fields', {})
 
       for field in myclass.fields():
-        metatype = field.attrval('type', default=metax.c.LOOKUP)
         fid = field.id()
+        metatype = field.attrval('type')
+        fkind = field.attrval('kind')
         default = fieldmap.get(fid, self.defaultValue(metatype))
-        if fid in initmap:
+        if fkind == 'static':
+          /# Static fields are not initialized in initializers. They are handled
+          /# on a per-baselang basis in FieldConstruct.translateMeta(),
+          /# *Oopl.formatFieldDefintiion(), etc.
+          pass
+        elif fid in initmap:
           /# There is an explicit initialization of this field in the
           /# user-provided code, so we do NOT provide a default initialization.
           fval = initmap[fid]
@@ -9274,7 +9598,7 @@ scope:
       /#    syntax ('self.' in python, 'this->' in C++, etc.)
       /#  - The user may also refer to the receiver by a special meta-level
       /#    name, dictated by the 'location' of the method (user, test, meta)
-      /#    and which always uses '.' to access methods/state. 
+      /#    and which always uses '.' to access methods/state.
       /#     - for location user the variable is self
       /#     - for location test the variable is test
       /#     - for location meta the variable is meta
@@ -9320,7 +9644,11 @@ scope:
             rawfield = m.group('rawfield')
             if rawfield:
               /# CODETANGLE(fieldinit): See FieldConstruct.expandMeta(), which
-              /# specifies how rawfields are formed from field names.
+              /# specifies how rawfields are formed from field names. 
+              /# TODO(wmh): Generalize this code to use the 'field_prefix' and
+              /# 'field_suffix' keys of Context.TOKENS. Make sure to handle
+              /# public fields that do not make a difference between rawfield
+              /# and field.
               fname = rawfield
               if fname[0] == '_':
                 fname = fname[1:]
@@ -9330,7 +9658,7 @@ scope:
               fval = re.sub(r's*\);?\s*$', '', m.group('value'))
             /# print 'LINE: %s [fname=%s fval=%s]' % (line, fname, fval)
             initmap[fname] = fval
-      return initmap            
+      return initmap
     test:
       init_lines = [
         'self._py_js_cc = 1',
@@ -9363,7 +9691,7 @@ scope:
       Chk('cc', 'meta', {'cc': '7', 'cc2': '8', 'pyjscc': '21', 'py_js_cc': '1'})
 
     end method analyzeExecutableForFields;
-   
+
     method defaultValue : str #:
       The default value for a given metatype.
     params:
@@ -9571,7 +9899,7 @@ scope:
         If true, look for a 'Returns:' section.
     scope:
       /# The comment simple block of an executable has the following structure:
-      /#   <comment> ::- 
+      /#   <comment> ::-
       /#      <text> [<nl> 'Returns:' <return_text>]
       if not attribute:
         if not construct:
@@ -9717,7 +10045,7 @@ scope:
 
         /# TODO(wmh): Need a better means of specifying regexp class in python.
         'regexp': {'base': 're._pattern_type', 'default': 'None'},
-        
+
         'nulltype': {'base': 'types.NoneType', 'default': 'None'},
         'class': {'base': 'type', 'default': 'None'},
         'method': {'base': 'types.MethodType', 'default': 'None'},
@@ -9940,9 +10268,9 @@ scope:
        - Generating C++ crosstool with a Skylark Remote Repository: https://bazel.build/designs/2016/02/16/cpp-autoconf.html
        - Using Skylark remote repositories to auto-detect the C++ toolchain: https://blog.bazel.build/2016/03/31/autoconfiguration.html
        - Yet Another CROSSTOOL Writing Tutorial: https://github.com/bazelbuild/bazel/wiki/Yet-Another-CROSSTOOL-Writing-Tutorial
-     
+
     Documentation on CROSSTOOL:
-      
+
   assocs:
     std assoc subprocess;
   scope:
@@ -10269,7 +10597,7 @@ scope:
           res = '&' + prefix
         else:
           raise InternalError('Should never reach this')
-          
+
         if result is None:
           result = Type.Instance(
             res + base, namespace_function=namespace_function)
@@ -10522,7 +10850,7 @@ scope:
       Chk('const std::weak_ptr<const const std::shared_ptr<'
           'const const std::unique_ptr<const nm::sp::A>>>',
           MetaType('#w*#s*#u*#nm.sp.A'), 'nm.sp.A')
-      
+
       Chk('std::ostream*', MetaType('ostream'), 'std::ostream')
       Chk('std::ostream&', MetaType('&ostream'), 'std::ostream')
 
@@ -11148,7 +11476,7 @@ scope:
             /# Tests actually run faster with less optimization. In fact, it
             /# might be best to use 'WHITESPACE_ONLY', but that is currently
             /# producing errors.
-            'high': 'SIMPLE',  
+            'high': 'SIMPLE',
             'max': 'ADVANCED'}
           build['compilation_level'] = optmap[flags.optimize_level]
           build['entry_points'] = [construct.fqn()]
@@ -11312,8 +11640,8 @@ scope:
       test.iseq(
         ('cc_library',
          {
-          /# 'copts': ['-Imetastrap', '-Iexternal/gtest/include'], 
-          'name': 'Card', 
+          /# 'copts': ['-Imetastrap', '-Iexternal/gtest/include'],
+          'name': 'Card',
           'visibility': ['//visibility:public'],
           'srcs': ['Card.cc'],
           'deps': [],
@@ -12021,6 +12349,34 @@ scope:
 
   end behavior formatDependency;
 
+  behavior formatExpr #:
+    Convert an Expr to baselang syntax.
+  params:
+    var value : any #:
+      TODO(wmh): In the transitional period where we are switching 'default'
+      and various other attributes from type 'word' to type 'expr', the value
+      passed to this behavior may be an Expr or a string, and the code should
+      handle both.  Once we are fully converted, we can remove the string
+      handling code.
+    var mtype : Type #:
+      The type of the expression.  Only used if value is None, in which case
+      the default value associated with this type is used.
+  scope:
+
+    receiver BaseLanguageOopl scope:
+      if value is None:
+        result = self.defaultValue(mtype)
+      elif isinstance(value, basestring):
+        result = value
+      elif isinstance(value, Expr):
+        result = 'fix me'
+      else:
+        raise Error('Unknown value type %s for formatExpr' % type(value))
+      return result
+    end;
+
+  end behavior formatExpr;
+
   behavior formatFieldDefinition #:
     Obtain the baselang code needed to define this field.
   params:
@@ -12030,9 +12386,19 @@ scope:
     abstract receiver BaseLanguageOopl;
 
     receiver OoplPython scope:
+      /# instance fields are defined in initializers, meta fields are
+      /# defined in metaclass initializers, but static fields are defined
+      /# here.
+      kind = field.attrval('kind')
+      if kind == 'static':
+        default = field.attrval('default', default=None)
+        mtype = field.attrval('type', default=metax.c.LOOKUP)
+        basedef = self.formatExpr(default, mtype)
+        result = ['%s = %s' % (field.rawfield(), basedef)]
+      else:
+        result = []
+      return result
     test:
-      /# Fields are defined in initializers. No field-specific syntax.
-      return []
     end receiver OoplPython;
 
     receiver OoplJavascript scope:
@@ -12050,9 +12416,9 @@ scope:
         /# The 'str' type should be implementable using:
         /#   const std::string
         /#   std::string_view
-        /#   any class that 
+        /#   any class that
         /#    - provides the read-only portion of std::string API
-        /#    - can support '*str' means nullable 
+        /#    - can support '*str' means nullable
         /#    - can support '&str' means non-nullable
         /#    - does not need to implement '*str' as a pointer to a class
         /#    - does not need to implement '&str' as a ref to a class
@@ -12180,7 +12546,7 @@ scope:
         basetype = self.typeToBase(
           param['type'], class_construct=myclass, defqn=True)
         /#print '%-30s = %-30s = %s' % (param['type'].raw(), basetype2, basetype)
-        
+
         if default is None:
           lines.append(' * @param {%s} %s' % (basetype, param['name']))
         else:
@@ -12224,7 +12590,7 @@ scope:
           /# Using @property does not appear to work properly.
           /# TODO(wmh): Add an '@extends {class}' line for the parent.
           lines.append(' * @extends {%s}' % pspec['fqn'])
-        
+
         if myclass.isTestCase():
           /# Meta<Javascript> generates javascript tests within subclasses of
           /# goog.testing.TestCase. However, the test-harness running code
@@ -12344,7 +12710,7 @@ scope:
         variadics.append(params['varmap'])
       if variadics:
         result.append('varargs')
-        /# http://usejsdoc.org/tags-param.html#multiple-types-and-repeatable-parameters        
+        /# http://usejsdoc.org/tags-param.html#multiple-types-and-repeatable-parameters
       return '(%s)' % ', '.join(result)
     test:
     end receiver OoplJavascript;
@@ -12427,9 +12793,6 @@ scope:
       metafqn = parentdata['metafqn']
       basefqn = parentdata['fqn']
       parentspec = basefqn or metafqn
-
-      if not parentdata.get('external', False):
-        class_construct.addDependency(metafqn, 'cls', 'parent')
       return parentspec
     test:
     end receiver OoplPython;
@@ -12481,8 +12844,6 @@ scope:
       /# a child of parent_name.
       parent_spec = ' extends ' + parent_name
 
-      if not parentdata.get('external', False):
-        class_construct.addDependency(metafqn, 'cls', 'parent')
       return parent_spec
     test:
     end receiver OoplJavascript;
@@ -12502,8 +12863,6 @@ scope:
           /# TODO(wmh): Generalize ... not always public inheritance.
           parent_spec = ' : public ' + basefqn
 
-        if not parent_data.get('external', False):
-          class_construct.addDependency(metafqn, 'cls', 'parent')
       else:
         parent_spec = ''
       return parent_spec
@@ -12514,14 +12873,6 @@ scope:
       test.iseq(
         ' : public metax::root::Object',
         test.baselang.formatParentSpec(klass))
-      test.iseq(
-        {
-          'metax.root.Object': {
-            'reason': 'parent', 'kind': 'cls', 'fqn': 'metax.root.Object',
-            'target': '//metax/root:Object'
-          }
-        },
-        klass.deps())
     end receiver OoplCpp;
 
   end behavior formatParentSpec;
@@ -12569,7 +12920,7 @@ scope:
 
   behavior metaMethodBody : vec<str> #:
     Returns the list of lines in baselang syntax used to implement the
-    special 'meta' method in every user-level class to return the 
+    special 'meta' method in every user-level class to return the
     singleton instance of the metaclass.
   params:
     var metainst : str #:
@@ -12930,14 +13281,14 @@ scope:
       /#   ...
       /#   <teardowncase_output>
       /#   [----------] <M> tests from <class>Test (<class_ms> ms total)
-      /# 
+      /#
       /#   [----------] Global test environment tear-down
       /#   <env_teardown_output>
       /#   [==========] 3 tests from 1 test case ran. (1 ms total)
       /#   [  PASSED  ] 2 tests.
       /#   [  FAILED  ] 1 test, listed below:
       /#   [  FAILED  ] FrenchDeckTest.test_asStr
-      /# 
+      /#
       /#    1 FAILED TEST
       /#   <env_finalizer_output>
       /#
@@ -13075,7 +13426,7 @@ scope:
           'us': StrToMicroSeconds(end_dict['mtime']),
           'ok': ok
         }
-        
+
       /# Establish overall status2
       if 11 in matches:
         assert matches[11]['failed'] > 0
@@ -13088,7 +13439,7 @@ scope:
       count = matches[7]['count']
       assert count == matches[4]['count']
       tdata['count2'] = int(count)
-      
+
       /# Establish time taken for all tests.
       tdata['time2'] = matches[7]['time2']
 
@@ -13129,7 +13480,7 @@ scope:
         >| 1 FAILED TEST
         >|""")
       tdata = {
-        'methods': {}, 
+        'methods': {},
         /# 'log': logdata, 'logpath': '?', 'dir': '?', 'namespace': '?', 'class': '?'
       }
       baselang, _, _, _ = test.cachedInfo('cc')
@@ -13180,7 +13531,7 @@ scope:
           Use the baselang-defined receiver variable. Note that python and
           perl do not have a lang-defined variable name, but by convention
           the receiver is 'self' in both languages (and 'cls' for class
-          methods).                                                      
+          methods).
         meta:
           Use the meta-defined receiver variable ('self' for instance,
           'meta' for metaclass, 'test' for testclass)
@@ -13680,6 +14031,85 @@ scope:
       D.expand.end()
     end method expandMeta;
 
+    method importMeta #:
+      Import additional .meta files identified during expandMeta.
+    scope:
+      D.imports.sinfo(self.id())
+
+      debug = False
+
+      /# We obtain the set of metafiles that this metafile depends on that
+      /# have not already been parsed.
+      metapaths = set()
+      metafile = self.metafile()
+      metac = metafile.compiler()
+      existing_classes = metac.classes()
+      existing_metafiles = metac.metafiles()
+      fs = metac.fs()
+      baselang = metac.baselang()
+      if debug:
+        print 'HERE in FileConstruct.importMeta for %s' % metafile.path()
+      for fqn in metafile.classdeps():
+        if fqn in existing_classes:
+          /# We already have the class parsed, so we do not need to check its
+          /# meta file.
+          pass
+        else:
+          class_path = fs.join(metac.repositoryPath(), baselang.classPath(fqn))
+          meta_path = metac.basePathToMeta(class_path)
+
+          /# Canonicalize path
+          if meta_path is None:
+            /# This can happen, for example, when a user specifies 
+            /#   cls assoc <class>;
+            /# when <class> is not a legal class.
+            klass = metac.classes().get(fqn, None)
+            metafile.error(
+              'Failed to find class %s' % fqn,
+              line=klass.primary().line() if klass else -1)
+          elif fs.exists(meta_path):
+            meta_path = fs.realpath(meta_path)
+
+          /# Register metafile
+          if debug:
+            print '  %s = %s' % (fqn, meta_path)
+          if meta_path in existing_metafiles:
+            pass
+          else:
+            metapaths.add(meta_path)
+
+      /# We import all of the dependent metafiles.
+      for meta_path in metapaths:
+        if debug:
+          print '  *** Loading %s' % meta_path
+        metafile = metac.getMeta(
+          meta_path, expand=True,
+          /# I suspect there are times where we will need to perform a
+          /# recursive invocation of imports, but am not yet clear whether it
+          /# is better to do it depth-first (here) or breadth-first (by
+          /# iterating within this method until no more metafiles exist).
+          /# Prelminary experiments with setting this to True were causing us
+          /# to load the same file multiple times, but that may be fixed
+          /# (and if not, can be fixed).
+          imports=False,
+          /# We definitely don't need to translate or compile these classes.
+          translate=False, compile=False)
+        if debug:
+          print '  *** Loaded %s' % metafile.path()
+
+      /# Establish which metafiles need to be transitively loaded due to
+      /# additional unresolved dependencies in the above code.
+      /#  - TODO(wmh): what needs to be done here?
+
+      /# Now we have our children perform post-import actions.
+      scope, children = self.attrpair('scope:')
+      user_children = list(children)
+      for child in user_children:
+        child.importMeta()
+
+      D.imports.end()
+    end method importMeta;
+
     method translateMeta scope:
       D.translate.sinfo(self.id())
       scope, children = self.attrpair('scope:')
@@ -13808,7 +14238,7 @@ scope:
     scope:
     test:
     end method myclassIs;
-   
+
   end class OoplConstruct;
 
   abstract
@@ -13817,16 +14247,43 @@ scope:
     identifiers to sub-constructs accessible at runtime.
   scope:
 
-    field symbols : @map<str,Construct> #:
-      Maps symbols defined within the construct to Construct instances.
-      Allows us to do type inference on callsites. Note that this is only
-      populated for complex-block executable scopes, not for simple-block scopes.
-      Includes:
-       - 'var' constructs within 'params' attribute
-       - 'var' constructs within complex block
-       - 'function' and 'closure' constructs within complex block
-      Note that there are non-local symbols visible from within executable
-      scope (metaclass instances, etc.) that are NOT stored in this field.
+    field symbols : SymbolTable #:
+      The symbols visible from code within the level of this construct.
+      For example:
+       - namespaces contain the singleton class instances (MetaFoo, MetaBar,
+         etc).  They do NOT contain the class names themselves, as not all
+         baselangs treat classes as first-class objects.
+       - classes contain all method and field names
+          - the symboltable of class B should link to the symboltable of
+            class A if B is a child of A.
+          - if class symbol tables link to parent class symbol tables, does
+            that mean that we need to support multiple parents to also support
+            'inheriting' from namespaces? We *could* copy parent data into
+            symbol tables at time of linking, but this incurs more space
+            overhead and makes it more difficult to support dynamic modification
+            of classes at runtime within Meta (if symbol tables inherit,
+            dynamically adding a field to a class C means it is immediately
+            available in subclasses without us having to update symboltables
+            other than C).
+       - methods contain all params and local vars not within a lexically
+         scoped subblock.
+       - lexical blocks contain vars introduced within the block
+
+    lifecycle params:
+      var uid : str;
+      var parent : ComplexBlock;
+      var context : Context;
+      var precount : int = 0;
+    super (uid, parent, context, precount)
+    scope:
+      /# NOTE: The first arg passed to SymbolTable should be a SymbolTable
+      /# instance (for classes, for example, it is the SymbolTable associated
+      /# with the parent class). At time of construct creation, we do not
+      /# necessarily have such a construct, so the parent field of these symbol
+      /# tables must be patched up within *Construct.importMeta() when the
+      /# inheritance hierarchy is guaranteed to exist.
+      self.symbolsIs(SymbolTable(self, None))
+    end;
 
     method registerSymbol #:
       Add a symbol to this construct's symbol table.
@@ -13836,21 +14293,15 @@ scope:
       var construct : Construct #:
         The construct associated with the symbol.
     scope:
-      symbols = self.symbols()
-      if name in symbols:
-        if symbols[name] is not construct:
-          raise Error(
-            'Attempt to re-register symbol "%s" in %s' %
-            (name, self.kindfqn()))
-      else:
-        /# print 'In %-40s setting %-15s = %s' % (self.kindfqn(), name, construct.kindfqn())
-        symbols[name] = construct
+      table = self.symbols()
+      /# print '%s registering symbol %s = %s' % (self.kindfqn(), name, construct.kindfqn())
+      table.register(name, construct, source=self)
     test:
       test.defineClassAndMethods('py')
       method = test.method
-      test.iseq({}, test.klass.symbols())
+      test.iseq([], sorted(test.klass.symbols().allSymbols()))
       test.klass.registerSymbol(method.id(), method)
-      test.iseq({'show': method}, test.klass.symbols())
+      test.iseq(['show'], sorted(test.klass.symbols().allSymbols()))
     end method registerSymbol;
 
     method symbolNamed : Construct #:
@@ -13859,10 +14310,10 @@ scope:
       var name : &str #:
         The name of the symbol desired.
       var kind : str = null #:
-        If not null, and the symbol identified by 'name' is not of kind 'kind',
+        If not null, and the symbol identified by 'name' is not of kind 'kind'
         print an error to the metafile.
     scope:
-      result = self.symbols().get(name, None)
+      result = self.symbols().find(name)
       if kind and (not result or result.kind() != kind):
         metafile = self.metafile()
         if result:
@@ -13885,20 +14336,25 @@ scope:
     end method symbolNamed;
 
     method establishType : Type #:
-      Obtain the type of the specified variable.
+      Given the name of a variable within a particular scope that has a
+      symbol table, establish the type of that variable.
+
+      Returns:
+        null if the variable does not exist in the symboltable.
     params:
       var varname : str #:
         Name of variable.
     scope:
       result = None
-      symbols = self.symbols()
-      construct = symbols.get(varname, None)
+      table = self.symbols()
+      construct = table.find(varname)
       if construct:
         try:
           result = construct.effectiveType()
         except AttributeError as e:
-          print 'WARNING: Failed to find effective type for %s (%s)' % (
-            construct.kindfullid(), construct.__class__.__name__)
+          print 'WARNING: Failed to find effective type for %s (%s): %s' % (
+            construct.kindfqn(), construct.__class__.__name__, str(e))
+          result = None
       return result
     test:
     end method establishType;
@@ -14008,9 +14464,9 @@ scope:
         parts = id.split('.')
         final_nmsp = parts.pop()
 
-        /# The only time we should find a '.' in a namespace id is when 
-        /# the normal parsing flow of MetaFile.parseConstruct finds 
-        /# a namespace in a meta source file with nested id. 
+        /# The only time we should find a '.' in a namespace id is when
+        /# the normal parsing flow of MetaFile.parseConstruct finds
+        /# a namespace in a meta source file with nested id.
         /# In such a situation, its parent should be a FileConstruct.
         filecons = parent.parent()
         assert filecons.kind() == 'File'
@@ -14130,13 +14586,18 @@ scope:
         /# similar for the user namespace.
 
         /# Create the test namespace
+        secondaries = [
+          ('comment:', ['Auto-generated test namespace for %s.' % name]),
+          ('scope:', [])
+        ]
+        testpreports_attr = self.attr('testpreports:', default=None)
+        if testpreports_attr:
+          secondaries.append(('preports:', testpreports_attr.value()))
         testspace = NamespaceConstruct.NewFromData(
           /# TODO(wmh): Verify that the implicit testspace should share the
           /# same context as the user namespace.
           test_name, context, parent=parent,
-          secondaries=[
-            ('comment:', ['Auto-generated test namespace for %s.' % name]),
-            ('scope:', [])],
+          secondaries=secondaries,
           precount=1,
         )
         self.testspaceIs(testspace)
@@ -14234,10 +14695,41 @@ scope:
           output.append(testspace)
       D.expand.end()
     test:
+      /# Using a local compiler instead of cached one because we were seeing
+      /# errors in this test when all tests were included, but not when it
+      /# was run stand-alone (implies some corruption between tests).
+      metac = metax.c.Compiler(metal='oopl', basel='python')
       cards1, scope, namespace, path = test.getMetaFile(
-        'oopl', 'cards1', debuglevel=0)
+        'oopl', 'cards1', compiler=metac)
       namespace.expandMeta()
     end method expandMeta;
+
+    method importMeta scope:
+      D.imports.sinfo(self.id())
+
+      /# For namespaces, importMeta is primarily a means to invoke
+      /# ClassConstruct.importMeta(), which does more heavy lifting. However,
+      /# this method is also where we register each class within the namespace
+      /# in the symboltable of the namespace.
+      table = self.symbols()
+      assert table.construct() is self
+      scope, children = self.attrpair('scope:')
+      for child in children:
+        child.importMeta()
+
+        /# CODETANGLE(highlevel_symbols): For namespaces, what resides in the
+        /# symboltable are the names of classes within the namespace, and the
+        /# names of other namespaces that have been specified as required.
+        /#  - highlevel symbols for classes = class ids (which represent the
+        /#    metaclass).
+        /#  - baselang symbols for classes = singleton instance of metaclass,
+        /#    at least in baselangs without first-class classes).
+        /#  - We are currently implementing high-level semantics.
+        if child.isClass():
+          if not child.isMeta():
+            table.register(child.id(), child, source=self)
+      D.imports.end()
+    end method importMeta;
 
     method translateMeta : vec<BaseFile> #:
       Namespace compilation code.
@@ -14895,6 +15387,8 @@ scope:
     meta
     method MetaInstifyName : str #:
       Convert a class name to a metaclass instance name.
+      TODO(wmh): Can we make this an instance method, or is it used in 
+      situations where an instance isn't avialable?
     params:
       var name : str #:
         relative or fully qualified name of class to make a Meta version of.
@@ -15006,14 +15500,21 @@ scope:
         raw: str
           The raw parent string as found in the meta source code.
         fqn: str
-          The fully qualified name of the parent class
+          The fully qualified name of the parent class in baselang syntax
+        metafqn: str
+          The fully qualified name of the parent class in meta syntax
         external: bool
           True if the parent class is NOT defined within Meta. Somewhat
           redundant relative to 'class' except that this can be determined
           earlier in parsing than the class can be.
         class: ClassConstruct
           The ClassConstruct instance representing the parent. Is null for
-          a parent not defined in Meta.
+          all classes until ClassConstruct.importMeta() is invoked, and is
+          always null for a parent not defined in Meta.
+
+    field childclasses : @map<str,ClassConstruct> #:
+      Maps class ids to ClassConstruct, for those classes that inherit
+      directly from this class.
 
     field underclass : ClassConstruct #:
       The ClassConstruct that this class is based upon.
@@ -15157,13 +15658,7 @@ scope:
         else:
           target = self.baselang().nameToBuildTarget(fqn, lib=kind=='lib')
 
-      /#if target is not None:
-      /#  atarget = self.baselang().nameToBuildTarget(fqn, lib=kind=='lib')
-      /#  if target != atarget:
-      /#    print '*********** HERE with %s and %s and %s and %s' % (fqn, kind, target, atarget)
-
       deps = self.deps()
-      /# print '%-40s: %-40s : %-10s = %s' % (self.fqn(), fqn, kind, target)
       if fqn in deps:
         info = deps[fqn]
         if info['kind'] != kind:
@@ -15173,7 +15668,15 @@ scope:
           print '**** WARNING: for %s dep %s has target %s vs %s' % (
             self.kindfqn(), fqn, target, info['target'])
       else:
-        deps[fqn] = {'fqn': fqn, 'kind': kind, 'target': target, 'reason': reason}
+        deps[fqn] = {
+          'fqn': fqn, 'kind': kind, 'target': target, 'reason': reason}
+        metafile = self.metafile()
+        if target:
+          metafile.registerDependentClass(fqn)
+          /# print 'Adding %s as dependency of %s' % (fqn, metafile.path())
+        else:
+          /# print 'NOT adding %s as dependency of %s' % (fqn, metafile.path())
+          pass
     test:
     end method addDependency;
 
@@ -15298,10 +15801,10 @@ scope:
         testcase_in_test = testblock.cons('TestCase', default=None) if testblock else None
         testcase_in_user = userblock.cons('TestCase', default=None)
         if (
-          testcase_in_test or 
+          testcase_in_test or
           (testcase_in_user and testcase_in_user.attrval('location') == 'test')
         ):
-          testparent = 'TestCase' 
+          testparent = 'TestCase'
         else:
           testparent = 'metax.test.TestCase'
         /# print '**** HERE!!! %s = %s' % (self.kindfqn(), testparent)
@@ -15472,7 +15975,6 @@ scope:
           if parent[0] == Context.TOKENS['explicit_class_indicator']:
             pdata['external'] = True
           parentclasses.append(pdata)
-          metafile.registerDependentClass(pdata['fqn'])
         else:
           /# For the special case of 'no parent', we have the choice of
           /#  1) adding a pdata in which 'fqn' is 'void'
@@ -15486,6 +15988,65 @@ scope:
       self.parentclassesIs(parentclasses)
     test:
     end method initParentClasses;
+
+    new
+    method ancestors : vec<ClassConstruct> #:
+      Obtain the ancestors of this class (does NOT include self).
+      TODO(wmh): Need to support ancestors that are outside Meta.
+       - create a special ExternalClassConstruct subclass of ClassConstruct?
+    scope:
+      result = []
+      klass = self
+      while klass is not None:
+        parentclasses = klass.parentclasses()
+        if parentclasses:
+          parent_info = parentclasses[0]
+          klass = parent_info['class']
+          if klass is None:
+            raise Error('Should never reach here')
+          else:
+            result.append(klass)
+        else:
+          klass = None
+      result.reverse()
+      return result
+    test:
+    end method ancestors;
+
+    method parentclass : ClassConstruct #:
+      Obtain a parent class by index in superclass list.
+
+      NOTE: Until ClassConstruct.importMeta() is invoked on this class,
+      this method will return null.
+    params:
+      var index : int = 0 #:
+        The index in self.parentclasses() of desired parent.
+    scope:
+      parentclasses = self.parentclasses()
+      if index < len(parentclasses):
+        result = parentclasses[index]['class']
+      else:
+        /# TODO(wmh): Raise exception?
+        result = None
+      return result
+    test:
+    end method parentclass;
+
+    method idfqn : str #:
+      Return id or fqn depending on whether this class is in same nmsp as parent.
+
+      WARNING: Should only be invoked after ClassConstruct.importMeta() has
+      been invoked!
+    scope:
+      parent = self.parentclass()
+      pspace = parent.namespace() if parent else None
+      if pspace and pspace.fqn() == self.namespace().fqn():
+        result = self.id()
+      else:
+        result = self.fqn()
+      return result
+    test:
+    end method idfqn;
 
     method expandMeta : vec<Construct> #:
       Expansion depends on variant
@@ -15517,6 +16078,7 @@ scope:
       baselang = self.baselang()
       basel = baselang.id()
       metafile = self.metafile()
+      metac = metafile.compiler()
       context = self.context()
       namespace = self.namespace()
       incnmsp = namespace.fqn() == 'metax.c'
@@ -15970,7 +16532,7 @@ scope:
             else:
               /# We add an explicit 'super' and 'params:' attributes.
               fauxfile = metax.c.MetaFile(
-                '/faux/faux.meta', self.compiler(), text='(meta__name)\n')
+                '/faux/faux.meta', metac, text='(meta__name)\n')
               super_expr = ExprParser(fauxfile).parse()
               super = ExprAttribute(initializer, 'super', super_expr)
               /# Create a 'params:' attribute.
@@ -15989,7 +16551,7 @@ scope:
                     (':', Type.Instance('&str')), ('=', '""')]},
                     /# TODO(wmh): In Meta, we need a baselang-independent
                     /# mechanism for initializing a variable to the empty
-                    /# value of its type (e.g. "" for string, [] for vec, 
+                    /# value of its type (e.g. "" for string, [] for vec,
                     /# {} for map, etc.). Consider introducing the
                     /# meta-level pseudovar 'empty'. Then we could do:
                     /#   method f : int params:
@@ -16043,7 +16605,7 @@ scope:
             /#   var symbols : &map #:
             /#     The symbols available within the class.
             /# This signature may need to evolve as more baselangs are added
-            /# and we see how the metaclass support in those baselangs 
+            /# and we see how the metaclass support in those baselangs
             /# interact with the mandates of Meta.
             /#
             /# All metaclasses should inherit from metax.root.ObjectMetaRoot,
@@ -16063,7 +16625,7 @@ scope:
 
             /# Create a 'super' attribute
             fauxfile = metax.c.MetaFile(
-              '/faux/faux.meta', self.compiler(),
+              '/faux/faux.meta', metac,
               text='(name, bases, symbols)\n')
             super_expr = ExprParser(fauxfile).parse()
             super = ExprAttribute(initializer, 'super', super_expr)
@@ -16081,6 +16643,12 @@ scope:
           D.expand.info(
             'Validated %s (%s)' % (self.kindfqn(), self.variant()), level=2)
 
+        /# Register this class with the compiler.
+        metac.registerClass(self)
+
+        /# Compute dependencies for this class!
+        self.registerDependencies()
+
       D.expand.end()
     test:
       cards1, scope, namespace, path = test.getMetaFile(
@@ -16090,6 +16658,63 @@ scope:
       test.iseq(2, len(output))
       test.isfalse(cards1.hasErrors(show=True))
     end method expandMeta;
+
+    method importMeta #:
+      Link this class with all of its ancestor classes, now that all dependent
+      metafiles have been transitively parsed, expanded and imported.
+    scope:
+      D.imports.sinfo(self.id())
+
+      metafile = self.metafile()
+      metac = metafile.compiler()
+
+      /# Establish the ClassConstruct instances of parents
+      /#  - initialize self.parentclasses[i]['class']
+      /#  - add entry to parent_construct.childclasses() for self
+      /#  - patch up the parent() field in self.symbols() table.
+      parentclasses = self.parentclasses() or []
+      for index, parent_info in enumerate(parentclasses):
+        fqn = parent_info['metafqn']
+        parent_class = metac.classes().get(fqn, None)
+        if parent_class is None:
+          /# This can mean various things:
+          /#  - the parent class was not defined within Meta
+          /#  - the parent class is incorrectly specified by the user
+          /#  - there is a bug in Meta
+          if not parent_info['external']:
+            print 'PARENT INFO: %s' % str(parent_info)
+            metafile.warning(
+              'Failed to import parent %s' % fqn,
+              line=self.primary().line())
+          else:
+            /# The parent is defined in the baselang, not in Meta. We create
+            /# an ExternalClassConstruct instance to represent it.
+            parent_class = ExternalClassConstruct(
+              /# Passing null context poses problems, so passing self's
+              /# context even though it isn't entirely accurate.
+              parent_info['id'], None, self.context(), precount=0)
+            parent_info['class'] = parent_class
+            parent_class.childclasses()[self.id()] = self
+        else:
+          /# We have successfully identified a ClassConstruct for the parent.
+          parent_info['class'] = parent_class
+          parent_class.childclasses()[self.id()] = self
+          if index == 0:
+            /# For now, there is only one parent symbol table, but we should
+            /# probably allow SymbolTable to have arbitrary numbers of parents.
+            symbols = self.symbols()
+            assert symbols.parent() is None
+            symbols.parentIs(parent_class.symbols())
+          
+      /# We now recurse down to constructs within the class so that they can
+      /# update any state that relies on full resolution of the class
+      /# inheritance change.
+      scope, children = self.attrpair('scope:')
+      for child in children:
+        child.importMeta()
+
+      D.imports.end()
+    end method importMeta;
 
     method translateMeta : vec<BaseFile> #:
       Baselang-independent class compilation code.
@@ -16192,9 +16817,6 @@ scope:
       /# parentspec: str
       /#   the baselang syntax needed to define all parents (extends/implements)
       parentspec = baselang.formatParentSpec(self)
-
-      /# Add explicit and implicit imports
-      self.registerDependencies()
 
       /# Now process dependencies into targets and imports
       imports, targets = baselang.formatDependencies(self)
@@ -16373,6 +16995,14 @@ scope:
       metaclass = self.metaclass()
       namespace = self.namespace()
       assocs = self.attrval('associations:', default=metax.c.EMPTY)
+
+      /# Parent imports
+      parent_classes = self.parentclasses()
+      if parent_classes:
+        parentdata = parent_classes[0]
+        if not parentdata.get('external', False):
+          pfqn = parentdata['metafqn']
+          self.addDependency(pfqn, 'cls', 'parent')
 
       /# Explicit imports
       for dep in assocs:
@@ -16714,6 +17344,49 @@ scope:
 
   end class ClassConstruct;
 
+  class ExternalClassConstruct < ClassConstruct #:
+    A class defined external to Meta, in baselang-space.
+
+    There are admittedly a massive number of unused fields declared and
+    initialized by inheriting from ClassConstruct, but there will presumably be
+    a relatively small number of classes, never mind non-meta classes, so I'm
+    assuming it won't be an issue. Enterprise scale may need a different
+    solution (eg. ClassInterface above ClassConstruct and
+    ExternalClassConstruct)
+  scope:
+
+    lifecycle params:
+      var id : str;
+      var parent : ClassConstruct;
+      var context : Context;
+      var precount : int = 0;
+    super (id, parent, context, precount=precount)
+    scope:
+      self.variantIs('baselang')
+      /# TODO(wmh): We could do baselang introspection (for those languages
+      /# supporting it) to initialize fields like parentclasses(), deps(),
+      /# testclass(), namespace(), fields(), etc.  For now, we do not do so.
+      self.parentclassesIs([])
+    end;
+
+    method parentclass : ClassConstruct #:
+      Obtain a parent class by index in superclass list.
+
+      NOTE: Until ClassConstruct.importMeta() is invoked on this class,
+      this method will return null.
+    params:
+      var index : int = 0 #:
+        The index in self.parentclasses() of desired parent.
+    scope:
+      /# TODO(wmh): We could use baselang introspection to obtain the
+      /# actual parent class of this baselang class, and dynamically
+      /# create a new ExternalClassConstruct.
+      return None
+    test:
+    end method parentclass;
+
+  end class ExternalClassConstruct;
+
   class CategoryConstruct < OoplConstruct #:
     Represents a 'category' construct.
 
@@ -16724,12 +17397,12 @@ scope:
        levels (namespace, method, etc.) and having CategoryConstruct be a
        subclass of ClassicConstruct is misleading and wasteful in those
        situations (although ClassicConstruct defines few fields currently,
-       I expect its state to grow significantly).                   
+       I expect its state to grow significantly).
 
     TODO(wmh): Decide whether this construct is even worth the complexities it
     imposes.
      - need to ensure uniqueness of all symbols defined transitively down
-       all nested categories (pretty easy to do by registering every 
+       all nested categories (pretty easy to do by registering every
        non-category child of a category with the namespace/class/method the
        category is residing in).
   scope:
@@ -16751,7 +17424,7 @@ scope:
     scope:
       D.expand.sinfo(self.kindfqn())
 
-      /# We want the effect to be the same as if the category construct 
+      /# We want the effect to be the same as if the category construct
       /# wasn't present, while still maintaining the grouping provided
       /# by categories.
       /#  - construct ids must be unique across entire nested category
@@ -16911,11 +17584,19 @@ scope:
 
       if toplevel:
         streams.initStreams('command_init', 'command_body')
+        /# TODO(wmh): Determine why the following produces a problem in
+        /# importMeta() when we specify ('metax.cli', 'lib', ...). This yields
+        /# class path .../metax/.cli.py (instead of metax/cli/__init__.py) and
+        /# thus a null meta path. Note that it is not strictly sufficient
+        /# to import metax.cli.Command ... also need Flag and Arg and Values.
+        /# Works fine for Python, but may not for other baselangs.
         metaclass.addDependency(
-          'metax.cli', 'lib', 'needed for entry point')
+          'metax.cli.Command', 'cls', 'needed for entry point')
 
       command_init = streams.stream('command_init')
       command_body = streams.stream('command_body')
+
+      /# print '*** For %s found %s lines in body before start' % (self.kindfqn(), len(command_body))
 
       /# We need to add code to command_init to create a new
       /# metax.cli.Command instance.
@@ -16945,7 +17626,7 @@ scope:
             /# in error.
             /# TODO(wmh): Use a less hacky mechanism here.
             metafile.error(
-              'The special %s command must occur last' % 
+              'The special %s command must occur last' %
               special_default_command, line=child.primary().line())
             break
 
@@ -16957,6 +17638,16 @@ scope:
           else:
             command_body.append(
               "%selif %s == '%s':" % (indent, sub_var, child.id()))
+          /# We encode within the baselang output stream some information about
+          /# where within the .meta file the upcoming code block resides.
+          cscope = child.attr('scope:', default=metax.c.REQUIRED)
+          command_body.append(
+            '%s  %s ^METAFILE^ %s' % (indent, rem, metafile.path()))
+          command_body.append(
+            '%s  %s ^METALINE^ %s:command %d' %
+            (indent, rem, child.fqn(), cscope.line()))
+          /# We recursively expand the child command construct, which will write
+          /# lines into the command_body and command_init streams.
           child.expandMeta()
 
         elif kind == 'block':
@@ -17216,7 +17907,7 @@ scope:
       type = self.attrval('type', default=None) or Type.Instance('str')
       default = self.attrval('default', default=None)
       if default is None:
-        default = baselang.typeToBase(type)
+        default = baselang.defaultValue(type)
       summary, desc = self.splitComment()
 
       /# Establish if this is a flag or arg.
@@ -17238,9 +17929,10 @@ scope:
       /# Generate the code.
       output.append(
         "%s%s.new%s(" % (indent, command_var, 'Arg' if isarg else 'Flag'))
+      baselang_default = baselang.metabaseValue(default)
       output.append(
         "%s  '%s', mytype='%s', default=%s," % (
-          indent, name, typestr, baselang.metabaseValue(default)))
+          indent, name, typestr, baselang_default))
       if aliases:
         aval = aliases.asStr(unquote=True)
         output.append("%s  aliases='%s'," % (indent, aval))
@@ -17259,7 +17951,7 @@ scope:
 
   end class FlagConstruct;
 
-  class BlockConstruct < OoplConstruct #:
+  class BlockConstruct < SymbolConstruct #:
     Represents a 'block' construct.
 
     TODO(wmh): Decide whether this class should inherit from ClassicConstruct
@@ -17362,10 +18054,12 @@ scope:
 
         /# print 'FieldConstruct.expandMeta: %s' % fqn
 
-        kind = self.attrval('kind', default=metax.c.LOOKUP)
+        kind = self.attrval('kind')
         scope, accessors = self.attrpair('scope:', default=None)
-        pack = self.attrval('pack', default=metax.c.LOOKUP)
+        pack = self.attrval('pack')
+        tmpvis = self.attrval('visibility')
         typeattr, type = self.attrpair('type', default=metax.c.LOOKUP)
+        select = self.attrval('select')
         isconst = type.isBaseConst()
 
         /# Register this field with the class.
@@ -17375,8 +18069,11 @@ scope:
         if pack == 'packed':
           raise Error('Not yet handling packed fields')
         tokens = Context.TOKENS
-        /# CODETANGLE(fieldinit): See BaseLanguageOopl.initCode()
-        rawfield = tokens['field_prefix'] + name + tokens['field_suffix']
+        /# CODETANGLE(fieldinit):
+        if tmpvis == 'tmppublic':
+          rawfield = name
+        else:
+          rawfield = tokens['field_prefix'] + name + tokens['field_suffix']
         self.rawfieldIs(rawfield)
         stmtend = baselang.config('stmtend')
 
@@ -17416,69 +18113,87 @@ scope:
                 /# below.
                 pass
 
+        /# Establish which accessors to generate
+        /#  - TODO(wmh): Improve on this by making the 'select' attribute
+        /#    a multi-valued field.
+        genacc = {}
+        if select == 'raw':
+          /# By definition of 'raw', there are no accessors for raw fields.
+          genacc['get'] = False
+          genacc['set'] = False
+          genacc['ref'] = False
+        else:
+          /# We generate accessors. However, if the field has const type,
+          /# we don't generate a setter or reffer.
+          genacc['get'] = True
+          genacc['set'] = not isconst
+          genacc['ref'] = not isconst
+
         /# The line number in the metafile at which the field is defined. It
         /# is used for:
         /#  - indicating the (faux) metafile line number of the accessor method
         /#  - indicating the (faux) metafile line number of the accessor scope
         primary_line = self.primary().line()
         dest_scope = self.parent()
-        features = [('optimization', 'inline')]
-        if kind != 'instance':
-          features.append(('kind', kind))
-        /# Define the getter
-        getname = name + '/get'
-        getter_return = baselang.accessorType(
-          type, 'get', namespace_function=nmspfunc)
-        getter = MethodConstruct.NewFromData(
-          getname, context,
-          features=features + [('mutability', 'const')],
-          secondaries=[
-            (':', getter_return),
-            ('scope:', bodymap['get'], primary_line),
-          ],
-          primary_line=primary_line)
-        getter.myclassIs(myclass)
-        D.expand.info('Created getter ' + getter.fqn(), level=2)
 
-        if lazylines:
-          /# The getter (and reffer?) have lazy lines, so we need to
-          /# generate some additional code to replace getter scope:.
-          newlines = []
-          /# TODO(wmh): Compile a var construct to assign an value to
-          /# a result var?
-          resvar = '__meta_result'
-          recstr = baselang.receiverStr(getter, sep=True)
-          rawvar = '%s%s' % (recstr, self.rawfield())
-          newlines.append('%s = %s' % (resvar, rawvar))
+        /# Getter
+        if genacc['get']:
+          features = [('optimization', 'inline')]
+          if kind != 'instance':
+            features.append(('kind', kind))
+          getname = name + ':get'
+          getter_return = baselang.accessorType(
+            type, 'get', namespace_function=nmspfunc)
+          getter = MethodConstruct.NewFromData(
+            getname, context,
+            features=features + [('mutability', 'const')],
+            secondaries=[
+              (':', getter_return),
+              ('scope:', bodymap['get'], primary_line),
+            ],
+            primary_line=primary_line)
+          getter.myclassIs(myclass)
+          D.expand.info('Created getter ' + getter.fqn(), level=2)
 
-          /# TODO(wmh): Make this a baselang method.
-          if baselang.id() == 'python':
-            if type.isValue():
-              newlines.append('if not %s:' % resvar)
-            else:
-              newlines.append('if %s is None:' % resvar)
-            for i in range(0, len(lazylines)-1):
-              newlines.append('  ' + lazylines[i])
-            resval = lazylines[-1][3:]
-            newlines.append('  %s = %s' % (resvar, resval))
-            newlines.append('  %s = %s' % (rawvar, resvar))
-            /# TODO(wmh): This can easily be obtained for all baselangs
-            /# by compiling a 'return' construct.  See the getter code
-            /# in Compiler._expandField() for an example.
-            newlines.append('return ' + resvar)
-            gscope = getter.attrval('scope:')
-            del gscope[:]
-            gscope.extend(newlines)
+          if lazylines:
+            /# The getter (and reffer?) have lazy lines, so we need to
+            /# generate some additional code to replace getter scope:.
+            newlines = []
+            /# TODO(wmh): Compile a var construct to assign an value to
+            /# a result var?
+            resvar = '__meta_result'
+            recstr = baselang.receiverStr(getter, sep=True)
+            rawvar = '%s%s' % (recstr, rawfield)
+            newlines.append('%s = %s' % (resvar, rawvar))
+
+            /# TODO(wmh): Make this a baselang method.
+            if baselang.id() == 'python':
+              if type.isValue():
+                newlines.append('if not %s:' % resvar)
+              else:
+                newlines.append('if %s is None:' % resvar)
+              for i in range(0, len(lazylines)-1):
+                newlines.append('  ' + lazylines[i])
+              resval = lazylines[-1][3:]
+              newlines.append('  %s = %s' % (resvar, resval))
+              newlines.append('  %s = %s' % (rawvar, resvar))
+              /# TODO(wmh): This can easily be obtained for all baselangs
+              /# by compiling a 'return' construct.  See the getter code
+              /# in Compiler._expandField() for an example.
+              newlines.append('return ' + resvar)
+              gscope = getter.attrval('scope:')
+              del gscope[:]
+              gscope.extend(newlines)
+        else:
+          getter = None
 
         /# Define the setter
         /#  - See ../../README.md section 'Accessors' for a discussion about
         /#    setter return types. Setters return void.
         /#  - We don't define a setter if the field is const.
-        if isconst:
-          setter = None
-        else:
+        if genacc['set']:
           setret = 'void'
-          setname = name + 'Is'
+          setname = name + 'Is:set'
           setter = MethodConstruct.NewFromData(
             setname, context,
             features=features,
@@ -17489,7 +18204,7 @@ scope:
             primary_line=primary_line)
           params = ExecutableConstruct.CreateParams(
             [
-              {'var': 'value', 
+              {'var': 'value',
                'secondaries': [
                  ('type', baselang.accessorType(
                    type, 'setarg', namespace_function=nmspfunc))]},
@@ -17497,13 +18212,13 @@ scope:
           setter.registerAttribute(params, position='-scope:')
           setter.myclassIs(myclass)
           D.expand.info('Created setter ' + setter.fqn(), level=2)
+        else:
+          setter = None
 
         /# Define the reffer
         /#  - we don't define a reffer if the field is const.
-        if isconst:
-          reffer = None
-        else:
-          refname = name + 'Ref'
+        if genacc['ref']:
+          refname = name + 'Ref:ref'
           reffer = MethodConstruct.NewFromData(
             refname, context,
             features=features,
@@ -17515,6 +18230,8 @@ scope:
             primary_line=primary_line)
           reffer.myclassIs(myclass)
           D.expand.info('Created reffer ' + reffer.fqn(), level=2)
+        else:
+          reffer = None
 
         /# We insert all accessor methods after the field construct.
         /#  - by inserting reffer, then setter, then getter, we end up
@@ -17532,9 +18249,44 @@ scope:
           dest_scope.registerConstruct(getter, position=position)
           myclass.registerSymbol(getter.id(), getter)
 
-        /# Register the field as a symbol in myclass.
-        /#  - we currently do NOT register the raw field (but maybe we should?)
-        myclass.registerSymbol(self.id(), self)
+        /# QUESTION: Do we register rawfield or field?
+        /#  - From a practical perspective, it is cleaner to register rawfield,
+        /#    as that would allow us to register the getter with the :get suffix
+        /#    (but doing so means we have to map user-provided field names to
+        /#    raw names when resolving -> provide references).
+        /#  - From a conceptual perspective, it depends on whether symbols in
+        /#    the symbol-table represent what is actually visible to the
+        /#    baselang, or whether the symboltable stores conceptual symbols
+        /#    that get mapped down to baselang representations later.
+        /#   
+        /#  - Symbols are conceptual names:
+        /#    + implementing -> provide semantics is easy
+        /#    + in namespace, conceptual symbols would be classnames (baselang
+        /#      symbols would require us using the MetaFoo singleton instance,
+        /#      at least in languages without first-class classes). Being able
+        /#      to refer to classes instead of metaclasses is intuitive, and
+        /#      makes it viable for us to define the auto-generator for 
+        /#        /mem/<metafile>/<namespace>/<class>/<method>
+        /#      to be "show the symbol table of the current construct", which
+        /#      is pretty convenient.
+        /#    + we get to use a high-level receiver string instead of the
+        /#      receiver varying from baselang to baselang (admittedly though,
+        /#      there is still the 'self'/'meta'/'test' ambiguity).
+        /#    - fields use field id not rawfield, at getter needs to be suffixed with :get
+        /#    - we need to define a means of mapping high-level symbols to
+        /#      baselang level.
+        /#    - The most intuitive "conceptual" name for a field is its id.
+        /#      The most intuitive "conceptual" name for a getter is its id.
+        /#      There is an inherent conflict here that is resolved if we use
+        /#      the rawname for fields.
+        /#  - Symbols are baselang names:
+        /#    + no need to perform high-level-to-baselang mapping of symbols,
+        /#      since the symbols are already in baseang syntax.
+        /#
+        /#  - The current implementation is to have the symbol table store
+        /#    conceptual names.  We can revisit if we find problems with this.
+        /# CODETANGLE(highlevel_symbols):
+        myclass.registerSymbol(name, self)
 
       D.expand.end()
     test:
@@ -17935,10 +18687,19 @@ scope:
         else:
           /# We currently have some hackery in place around getter method ids,
           /# which are the same as the underlying field. To avoid having the
-          /# field and getter conflict, we add a special '/get' to the getter
+          /# field and getter conflict, we add a special ':get' to the getter
           /# in FieldConstruct.expandMeta() and a special clause in
           /# ExprParser.ID_RE.  We remove it here.
-          execname = self.id().replace('/get', '')
+          /#
+          /# To make it less hacky, the following code is sufficiently general
+          /# to convert <name>:get to <name>, <name>Is:set to <name>Is, and
+          /# <name>Ref:ref to <name>Ref. In particular, it strips off a suffix
+          /# of the form ':(get|set|ref)$'.
+          execname = self.id()
+          m = ExprParser.ID_RE.match(execname)
+          if m and m.group(3):
+            /# print '***** HERE with %s' % execname
+            execname = (m.group(1) or '') + m.group(2)
 
         /# Establish baselang syntax for method return type.
         return_str = baselang.typeToBase(returntype, class_construct=myclass)
@@ -18041,7 +18802,7 @@ scope:
     end method translateMeta;
 
     private
-    method methodInfo 
+    method methodInfo
     returns tuple<ComplexBlock,vec<str>,vec<str>,vec<str>,vec<str>,str> #:
       Obtain various aspects of the method:
 
@@ -18103,7 +18864,7 @@ scope:
           and not metac.flags().implicit_scopes
         ):
           metafile.warning(
-            '%s is general but missing scope<%s>' % 
+            '%s is general but missing scope<%s>' %
             (self.fqn(), baselang.suffix()[1:]),
             line=self.primary().line())
       elif scope_attr.isSimpleBlock():
@@ -18160,7 +18921,7 @@ scope:
 
           if len(scope_lines) == 0:
             scope_lines = baselang.emptyBlockCode(self)
-            
+
         /# Obtain params and comment.
         params = baselang.formatParams(self, preamble)
         comment = baselang.formatMethodComment(self, width=width)
@@ -18176,7 +18937,7 @@ scope:
           /#  - preamble is empty or contains only a super() call.
           if (
             False and
-            not scope_lines 
+            not scope_lines
             and not postamble
             and (
               not preamble
@@ -18363,10 +19124,76 @@ scope:
 
   class MethodConstruct < ExecutableConstruct #:
     Represents a 'method' construct.
+
+    - parse:
+       - nothing
+    - expand:
+       - not currently invoked
+    - import:
+       - 
   scope:
+
+    field supermethod : MethodConstruct #:
+      The method being overridden in an ancestor by this definition. Will be
+      null if no ancestor defines the method (it will also always be null before
+      importMeta() has been invoked on this instance).
 
     method kind : str scope:
       return 'method'
+
+    method importMeta #:
+      Look up the inheritance chain for a method with the same name.
+       - allows us to enforce 'new'/'override' semantics
+       - allows us to implement 'super var' semantics in parameters by being
+         able to identify the types of params from their parent equivalents
+    scope:
+      name = self.id()
+      D.imports.sinfo(name)
+
+      myclass = self.myclass()
+      parentclass = myclass.parentclass()
+      if parentclass is not None:
+        psymbols = parentclass.symbols()
+        super_method = psymbols.find(name)
+        if super_method:
+          self.supermethodIs(super_method)
+          attrkind = self.attrval('kind')
+          if attrkind == 'initializer':
+            /# Knowing the parent initializer will be useful for many purposes.
+            pass
+          else:
+            /# TODO(wmh): methods from behaviors are not showing up as being
+            /# overridden.
+            if name != 'meta':
+              /# print '  In %s found parent definition %s' % (self.kindfqn(), super_method.kindfqn())
+              pass
+
+      /# Now initialize the symbol table of the method.
+      /#  - for methods with simple blocks, we only have access to the params
+      /#  - for methods with complex blocks, we have all vars specified at
+      /#    top-level within the method as well.
+      table = self.symbols()
+      params = self.attrval('params:', default=None) or []
+      for i, pvar in enumerate(params):
+        table.register(pvar.id(), pvar, source=self, note='From param #%d' % (i+1))
+
+      scope = self.attr('scope:', default=None)
+      if scope:
+        if scope.isComplexBlock():
+          /# TODO(wmh): Do we add all top-level 'var' constructs now? A variable
+          /# cannot be used until declared in most baselangs, so pre-populating
+          /# the symbol table is problematic unless we add an 'inactive' field
+          /# that allows us to indicate when a symbol is and is not active.
+          pass
+        else:
+          /# TODO(wmh): We could do some heuristic analysis of the baselang
+          /# source code fairly easily. Or, if we have access to a
+          /# statement-level parser for each baselang, we can identify all
+          /# variable declarations.
+          pass
+      
+      D.imports.end()
+    end method importMeta;
 
   end class MethodConstruct;
 
@@ -18397,7 +19224,7 @@ scope:
 
       D.expand.sinfo(
         '%s in %s variant %s location %s moved %s metaclass %s' %
-        (self.kindfqn(), myclass.kindfqn(), myclass.variant(), 
+        (self.kindfqn(), myclass.kindfqn(), myclass.variant(),
          self.attrval('location'), moved, myclass.metaclass()))
       /# if False and myclass.id() == 'TestCase':
       /#   myclass.showDebug()
@@ -18434,7 +19261,7 @@ scope:
         /#
         /# Some reminder notes about Meta and unittests (and how lifecycles
         /# interact)
-        /#  - Most baselangs that support xUnit testing will have a root 
+        /#  - Most baselangs that support xUnit testing will have a root
         /#    TestCase class with setup-each, teardown-each, setup-once and
         /#    teardown-once methods (exactly names depend on baselang) and a
         /#    constructor that accepts a string representing the name of the
@@ -18599,7 +19426,7 @@ scope:
         fattr, fval = self.attrpair(fkey, default=None)
         if fval is not None:
           default_feature_map[fkey] = fval
-        
+
       scope, receivers = self.attrpair('scope:', default=None)
       for receiver in receivers:
 
@@ -18650,7 +19477,7 @@ scope:
           class_scope = receiver_class.attr('scope:', default=REQUIRED)
           /# method creation
           method = MethodConstruct.NewFromData(
-            name, context, parent=class_scope, features=features, 
+            name, context, parent=class_scope, features=features,
             secondaries=secondaries, primary_line=receiver.primary().line())
           method.myclassIs(receiver_class)
           assert method.primary().line() == receiver.primary().line()
@@ -18782,7 +19609,7 @@ scope:
           /# TODO(wmh): Fix this issue with attrpair ... if we need to LOOKUP,
           /# then locattr will by definition not have a proper line number
           /# in the meta source file.  We should fall back to some default
-          /# (the primary attribute line number, for example). 
+          /# (the primary attribute line number, for example).
 
           if location == 'user':
             /# We are good as-is
@@ -18865,15 +19692,15 @@ scope:
     Abstract construct above constructs that can
     appear within executable code.
   scope:
-
-    method kind : str scope:
-      return 'statement'
-
   end class StatementConstruct;
 
   class VarConstruct < StatementConstruct #:
     Represents a 'var' construct.
   scope:
+
+    field implicitType : Type #:
+      The implicit type of this var based on, for example, the type of the
+      value specified in a default attribute.  May be (and usually is) null.
 
     method kind : str scope:
       return 'var'
@@ -18882,16 +19709,52 @@ scope:
       test.iseq('var', varcons.kind())
     end;
 
+    method effectiveType : Type #:
+      The type of this var.
+    scope:
+      result = self.attrval('type')
+      if result.isAny():
+        implicit = self.implicitType()
+        if implicit:
+          result = implicit
+      return result
+    end method effectiveType;
+
   end class VarConstruct;
 
   class LoopConstruct < StatementConstruct #:
     Represents a 'loop' construct.
   scope:
-
     method kind : str scope:
       return 'loop'
-
   end class LoopConstruct;
+
+  behavior isNamespace : bool #:
+    Test if a construct is a namespace
+  scope:
+    receiver Construct scope:
+      return False
+    receiver NamespaceConstruct scope:
+      return True
+  end behavior isNamespace;
+
+  behavior isClass : bool #:
+    Test if a construct is a class.
+  scope:
+    receiver Construct scope:
+      return False
+    receiver ClassConstruct scope:
+      return True
+  end behavior isClass;
+
+  behavior isMethod : bool #:
+    Test if a construct is a method
+  scope:
+    receiver Construct scope:
+      return False
+    receiver MethodConstruct scope:
+      return True
+  end behavior isMethod;
 
   class MetaFile #:
     A metafile (with functionality for parsing, as well as final state).
@@ -18928,6 +19791,7 @@ scope:
         /# Block-valued
         'simple': (SimpleBlock, None, None),
         'complex': (ComplexBlock, None, None),
+        'simplex': (SimpleBlock, None, None),
 
         /# List-valued
         /#'word-list': (WordListAttribute, None, None),
@@ -18964,6 +19828,7 @@ scope:
         'type': Err,       # is there a meaningful empty type?
 
         'complex': lambda: tuple(),
+        'simplex': lambda: tuple(),
         'simple': lambda: tuple(),
 
         'word-list': lambda: tuple(),
@@ -19056,9 +19921,9 @@ scope:
         translated: finished translating, have not yet compiled
         compiling: currently compiling
         compiled: finished compiling
-        ready: ready for analysis, etc.
+        complete: all actions have been accomplished.
 
-    lifecycle MetaFile params:
+    lifecycle params:
       var path -> path;
       var compiler -> compiler;
       var debuglevel -> debuglevel = 0;
@@ -19565,6 +20430,7 @@ scope:
         The fully qualified name of the class depended upon.
     scope:
       self.classdeps().add(fqcn)
+      /# print 'Now have %d deps in %s' % (len(self.classdeps()), id(self))
     test:
     end method registerDependentClass;
 
@@ -19854,8 +20720,9 @@ scope:
         if not construct:
           /# No more constructs in this block.
           break
-
-        if construct.termcode() < 0:
+        
+        termcode = construct.termcode()
+        if termcode == TERM_UNINIT:
           /# We have encountered an error during parsing.
           /#  - skip forward to end of current block.
           self.skipToIndent(indent - blockdent)
@@ -20181,7 +21048,7 @@ scope:
 
       /# Register the primary with the construct
       construct.registerAttribute(primary)
-      construct.termcodeIs(-1)
+      construct.termcodeIs(TERM_UNINIT)
 
       /# Now parse secondary attributes.
       while True:
@@ -20214,7 +21081,7 @@ scope:
       /# Handle termination issues
       termcode = construct.termcode()
       index = self.index()
-      if termcode > -1:
+      if termcode != TERM_UNINIT:
         /# The construct has been successfully parsed.
         self.debug('  termcode %d' % termcode)
         /# We expect the construct to be at end-of-line, except when an
@@ -20392,8 +21259,8 @@ scope:
          spaces but not newlines, except for block-values, which consume
          newlines up to a line with less indent than needed for the block
          value).
-       - construct.termcode() must be -1 when this method is invoked, and
-         is changed to 0 or greater if a terminator is found (in which
+       - construct.termcode() must be TERM_UNINIT when this method is invoked,
+         and is changed to 0 or greater if a terminator is found (in which
          case null is returned)
 
       Returns:
@@ -20412,7 +21279,7 @@ scope:
         required to be indented at.
     scope:
       debug = False
-      assert construct.termcode() == -1
+      assert construct.termcode() == TERM_UNINIT
       index = self.index()
       lnum = self.lnum()
       line = self.line()
@@ -20435,7 +21302,7 @@ scope:
         self.error('Expecting indent %d not %d' % (indent, line.indent()))
         return (None, litkey)
 
-      elif termcode > -1:
+      elif termcode != TERM_UNINIT:
         /# If we've found an end-of-construct, set it and return.
         construct.termcodeIs(termcode)
         self.indexIs(value_start)
@@ -20480,7 +21347,7 @@ scope:
               /#  - Can we find a way of skipping to next construct instead of
               /#    all the way to end of scope?
               self.skipToIndent(indent-1)
-              construct.termcodeIs(-1)
+              construct.termcodeIs(TERM_UNINIT)
             else:
               /# May or may not be implicit construct termination but we assume
               /# it is an implicit termination and detect errors later.
@@ -20496,11 +21363,16 @@ scope:
           /# The most likely situation is that an attribute key has been
           /# mistyped.
           self.skipToIndent(indent-1)
-          construct.termcodeIs(-1)
+          construct.termcodeIs(TERM_UNINIT)
         return (None, litkey)
 
       /# Some important values
       type = secondary['type']
+      if type == 'simplex':
+        /# A block marked as simplex is complex if the attribute selector is
+        /# '*', and simple otherwise.
+        type = 'complex' if basel == '*' else 'simple'
+        /# print 'SET type simplex to %s for %s %s' % (type, construct.kindfqn(), basel)
 
       self.debug('  akey "%s" (%s : %s) [%s] %d' % (litkey, key, type, basel, value_start))
 
@@ -20606,7 +21478,7 @@ scope:
           word, allow_invalid=True, cons=construct.kind(),
           namespace_function=namespace_function)
 
-      elif type == 'simple':
+      elif type == 'simple' or type == 'simplex':
         /# Parse an indented list of strings
         context = construct.context()
         blockdent = context.token('blockdent')
@@ -20814,7 +21686,7 @@ scope:
         metafile.set(index=87, lnum=4)
         context = metafile.context()
         construct = metax.c.MethodConstruct.NewFromData(
-          'f', context, termcode=-1)
+          'f', context, termcode=TERM_UNINIT)
         metax.c.Debug = True
 
         /# Parse the scope<cc>:
@@ -20842,7 +21714,7 @@ scope:
 
       Returns:
        0) termcode : int
-         The termcode. Returns -1 if no terminator was found
+         The termcode. Returns TERM_UNINIT if no terminator was found
        1) index : int
          The index within self.text() after the terminator and skipped spaces.
     params:
@@ -20880,7 +21752,7 @@ scope:
               'Parsing %s %s but found terminator for %s %s' %
               (construct.kind(), construct.id(), kind, id))
       else:
-        termcode = -1
+        termcode = TERM_UNINIT
         index = line.start()
       return (termcode, index)
     test:
@@ -21140,10 +22012,10 @@ scope:
          The information related to the secondary, or null if no secondary
        4) index : int
          The index after the token (and after spaces have been skipped).
-         If termcode is not negative, this is the index after the terminator
+         If termcode is not TERM_UNINIT, this is the index after the terminator
          (spaces skipped but not newlines).
        5) termcode : int
-           -1 if a secondary token is identified, else a non-negative
+           TERM_UNINIT if a secondary token is identified, else an
            integer identifying an implicit (0) or explict (>0) termination.
     params:
       var construct : Construct #:
@@ -21184,7 +22056,7 @@ scope:
         cankey = info['cankey']
         /# Advance past the autokey char.
         index += 1
-        termcode = -1
+        termcode = TERM_UNINIT
 
       else:
         /# The next word is either a secondary token, a terminator token, or an
@@ -21237,7 +22109,7 @@ scope:
         else:
           /# The current token doesn't match any terminator ... it may or may
           /# not be a secondary.
-          termcode = -1
+          termcode = TERM_UNINIT
           info = secondaries.get(basetoken, None)
           if info:
             cankey = info['cankey']
@@ -21292,7 +22164,7 @@ scope:
          {'valopt': False, 'cankey': 'config:', 'default': '<empty>',
           'keyopt': False, 'type': 'complex', 'autokey': None,
           'children': ['Construct', 'BaseLanguage']},
-          25, -1),
+          25, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(
           schema, 18, context, context.consmap()['MetaLanguage']))
 
@@ -21302,7 +22174,7 @@ scope:
          {'valopt': False, 'cankey': 'type', 'default': '<empty>',
           'keyopt': False, 'type': 'word', 'autokey': None
           },
-         87, -1),
+         87, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(
           attr, 85, context, context.consmap()['Attribute']))
 
@@ -21340,7 +22212,7 @@ scope:
       Chk(
         ('', 'default', None,
          {'valopt': False, 'cankey': 'default', 'default': '<empty>', 'keyopt': False, 'type': 'word', 'autokey': None},
-         16, -1),
+         16, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(attr, 15, context, attrinfo))
 
       /###
@@ -21360,17 +22232,17 @@ scope:
       Chk(
         ('type<meta>', 'type', 'meta',
          {'valopt': False, 'cankey': 'type', 'default': '<empty>',
-          'keyopt': False, 'type': 'word', 'autokey': None}, 11, -1),
+          'keyopt': False, 'type': 'word', 'autokey': None}, 11, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(attr, 0, context, attrinfo))
       Chk(
         ('type<*>', 'type', '*',
          {'valopt': False, 'cankey': 'type', 'default': '<empty>',
-          'keyopt': False, 'type': 'word', 'autokey': None}, 19, -1),
+          'keyopt': False, 'type': 'word', 'autokey': None}, 19, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(attr, 11, context, attrinfo))
       Chk(
         ('type', 'type', None,
          {'valopt': False, 'cankey': 'type', 'default': '<empty>',
-          'keyopt': False, 'type': 'word', 'autokey': None}, 23, -1),
+          'keyopt': False, 'type': 'word', 'autokey': None}, 23, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(attr, 19, context, attrinfo))
 
       /# Second line, variants on 'comment' (block-valued)
@@ -21380,17 +22252,17 @@ scope:
       Chk(
         ('comment<meta>:', 'comment:', 'meta',
          {'valopt': False, 'cankey': 'comment:', 'default': '<empty>',
-          'keyopt': False, 'type': 'simple', 'autokey': None}, index + 15, -1),
+          'keyopt': False, 'type': 'simple', 'autokey': None}, index + 15, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(attr, index, context, attrinfo))
       Chk(
         ('comment<*>:', 'comment:', '*',
          {'valopt': False, 'cankey': 'comment:', 'default': '<empty>',
-          'keyopt': False, 'type': 'simple', 'autokey': None}, index + 27, -1),
+          'keyopt': False, 'type': 'simple', 'autokey': None}, index + 27, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(attr, index + 15, context, attrinfo))
       Chk(
         ('comment:', 'comment:', None,
          {'valopt': False, 'cankey': 'comment:', 'default': '<empty>',
-          'keyopt': False, 'type': 'simple', 'autokey': None}, index + 35, -1),
+          'keyopt': False, 'type': 'simple', 'autokey': None}, index + 35, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(attr, index + 27, context, attrinfo))
 
       /# Third line, variants on ':' (alias for 'type')
@@ -21400,17 +22272,17 @@ scope:
       Chk(
         (':<meta>', 'type', 'meta',
          {'valopt': False, 'cankey': 'type', 'default': '<empty>',
-          'keyopt': False, 'type': 'word', 'autokey': None}, index + 8, -1),
+          'keyopt': False, 'type': 'word', 'autokey': None}, index + 8, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(attr, index, context, attrinfo))
       Chk(
         (':<*>', 'type', '*',
          {'valopt': False, 'cankey': 'type', 'default': '<empty>',
-          'keyopt': False, 'type': 'word', 'autokey': None}, index + 13, -1),
+          'keyopt': False, 'type': 'word', 'autokey': None}, index + 13, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(attr, index + 8, context, attrinfo))
       Chk(
         (':', 'type', None,
          {'valopt': False, 'cankey': 'type', 'default': '<empty>',
-          'keyopt': False, 'type': 'word', 'autokey': None}, index + 14, -1),
+          'keyopt': False, 'type': 'word', 'autokey': None}, index + 14, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(attr, index + 13, context, attrinfo))
 
       /# Fourth line, variants on '::' (alias for 'scope')
@@ -21421,24 +22293,24 @@ scope:
       index = 75
       test.iseq(index, metafile.index())
       Chk(
-        (':<meta>:', None, 'meta', None, index + 9, -1),
+        (':<meta>:', None, 'meta', None, index + 9, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(attr, index, context, attrinfo))
       schema = metax.c.ConstructConstruct('MetaLanguage', None, context)
       schemainfo = context.consmap()['MetaLanguage']
       Chk(
         (':<meta>:', 'scope:', 'meta',
          {'valopt': False, 'cankey': 'scope:', 'default': '<empty>',
-          'keyopt': False, 'type': 'complex', 'autokey': None}, index + 9, -1),
+          'keyopt': False, 'type': 'complex', 'autokey': None}, index + 9, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(schema, index, context, schemainfo))
       Chk(
         (':<*>:', 'scope:', '*',
          {'valopt': False, 'cankey': 'scope:', 'default': '<empty>',
-          'keyopt': False, 'type': 'complex', 'autokey': None}, index + 15, -1),
+          'keyopt': False, 'type': 'complex', 'autokey': None}, index + 15, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(schema, index + 9, context, schemainfo))
       Chk(
         ('::', 'scope:', None,
          {'valopt': False, 'cankey': 'scope:', 'default': '<empty>',
-          'keyopt': False, 'type': 'complex', 'autokey': None}, index + 17, -1),
+          'keyopt': False, 'type': 'complex', 'autokey': None}, index + 17, metax.c.TERM_UNINIT),
         metafile.peekSecondaryToken(schema, index + 15, context, schemainfo))
 
     end method peekSecondaryToken;
@@ -21842,6 +22714,21 @@ scope:
       D.expand.end()
     end method expandMeta;
 
+    method importMeta #:
+      Import additional .meta files identified during expandMeta.
+    scope:
+      D.imports.sinfo(self.path())
+
+      self.stateIs('importing')
+      start = time.time()
+      self.construct().importMeta()
+      self.stats()['import'] = time.time() - start
+      self.stateIs('imported')
+
+      D.imports.end()
+    test:
+    end method importMeta;
+
     method translateMeta scope:
       D.translate.sinfo(self.path())
 
@@ -21892,17 +22779,21 @@ scope:
     std assoc difflib;
     std assoc json;
     std assoc importlib;
+    test std assoc metastrap #:
+      TODO(wmh): Establish how to specify a bazel target for metastrap.
     std assoc platform;
     std assoc pprint;
     std assoc re;
     std assoc sre_constants;
     std assoc subprocess;
+    std assoc sys;
     std assoc time;
     std assoc traceback;
 
     cls assoc metax.c.shell.Shell;
     cls assoc metax.fs.Filesystem;
-    lib assoc metax.cli;
+    cls assoc metax.cli.Command;
+    cls assoc metax.cli.Values;
 
     resource emacs_template path "../templates/meta-mode-template.el";
     resource oopl_tgz path "../templates/oopl.tgz";
@@ -22080,9 +22971,9 @@ scope:
         >|    .face-end       { color: rgb(139, 139, 131); /* ivory4 */ }
         >|    .face-name      { color: rgb(0, 0, 255); /* blue1 */ }
         >|    .face-comment   { color: rgb(0, 139, 139); /* cyan4 */ }
-        >|    
+        >|
         >|    .ellipsis { color: black; }
-        >|    
+        >|
         >|    /**
         >|     * Each line of code in a .meta program is specified by:
         >|     *   <div>
@@ -22104,9 +22995,9 @@ scope:
         >|     *    favor, but I'd like to understand where it is coming from.
         >|     */
         >|    .linenum  {
-        >|        display: inline-block; 
+        >|        display: inline-block;
         >|        width: 4ex;
-        >|        text-align: right; 
+        >|        text-align: right;
         >|        margin: 0px;
         >|        color: rgb(179, 179, 171);
         >|        /* border: 1px solid red; */
@@ -22227,14 +23118,14 @@ scope:
         >|    <script src="http://cdn.jsdelivr.net/gh/highlightjs/cdn-release@9.12.0/build/highlight.min.js"></script>
         >|
         >|    <script type="text/javascript">
-        >|      
+        >|
         >|      var allids = ${#allids#};
-        >|      
+        >|
         >|      function highlightCode() {
         >|        console.log('starting!');
         >|        var baselang_divs = document.getElementsByClassName('baselang');
         >|        for (var i = 0; i < baselang_divs.length; ++i) {
-        >|          var div = baselang_divs[i];                          
+        >|          var div = baselang_divs[i];
         >|          console.log('Highlighting ' + div.id);
         >|          hljs.highlightBlock(div);
         >|        }
@@ -22255,7 +23146,7 @@ scope:
         >|          }
         >|        } else {
         >|          console.log('ERROR: Failed to find node with id ' + id);
-        >|        } 
+        >|        }
         >|        var enode = document.getElementById(id + ':e');
         >|        if (enode) {
         >|          // console.log('enode color = ' + enode.style.color);
@@ -22275,7 +23166,7 @@ scope:
         >|          node.style.display = 'block';
         >|        } else {
         >|          console.log('ERROR: Failed to find node with id ' + id);
-        >|        } 
+        >|        }
         >|        var enode = document.getElementById(id + ':e');
         >|        if (enode) {
         >|          enode.style.color = 'black';
@@ -22293,7 +23184,7 @@ scope:
         >|          node.style.display = 'none';
         >|        } else {
         >|          console.log('ERROR: Failed to find node with id ' + id);
-        >|        } 
+        >|        }
         >|        var enode = document.getElementById(id + ':e');
         >|        if (enode) {
         >|          enode.style.color = 'red';
@@ -22311,7 +23202,7 @@ scope:
       /# TODO(wmh): Temporary hack. The per-construct color mapping should
       /# be obtained from the current Context and its ConsInfo instances.
       cls.ConstructColorMap = {
-        'class': 'red',  # 255, 0, 0 
+        'class': 'red',  # 255, 0, 0
         'behavior': 'red',
         'method': 'orange',  # 255, 165, 0
         'field': 'orange',
@@ -22328,8 +23219,6 @@ scope:
       This method must be invoked before anything else in order to initialize
       class-level state based on command-line flags.
     params:
-      var flags : any #:
-        TODO(wmh): Remove this param!
       var metadata : map = null #:
         Maps metalang id to metalang info.
         TODO(wmh): This arg will be changed/removed when we more fully move
@@ -22378,6 +23267,12 @@ scope:
 
     field metaorder : @vec<MetaFile> #:
       The MetaFile instances in the order they were parsed.
+
+    field classes : @map<ClassConstruct> #:
+      Maps fqcn to ClassConstruct, for every class that has had expandMeta
+      invoked on it across all MetaFiles in this compiler.
+      TODO(wmh): Determine if we should register classes earlier than
+      expandMeta.
 
     field argmap : map #:
       A grouping of args into categories.
@@ -22531,6 +23426,22 @@ scope:
       self.cli()._command_Is(command)
     test:
     end method updateCLI;
+
+    method registerClass #:
+      Register an expanded class with myself.
+    params:
+      var klass : ClassConstruct;
+    scope:
+      fqn = klass.fqn()
+      classes = self.classes()
+      if fqn in classes and classes[fqn] is not klass:
+        /#raise Error(
+        print 'ERROR: ' + (
+          'Attempt to double register class %s (%s vs %s)' %
+          (fqn, id(klass), id(classes[fqn])))
+      classes[fqn] = klass
+    test:
+    end method registerClass;
 
     method fs : metax.c.Filesystem #:
       The filesystem wrapper.
@@ -22895,7 +23806,7 @@ scope:
             text = fp.read()
           bootstrap_context = self.bootstrapContext()
           metafile = self.parseMeta(
-            path=metapath, text=text, context=bootstrap_context, is_schema=True)
+            metapath, text=text, context=bootstrap_context, is_schema=True)
           if metafile.hasErrors(show=True):
             raise Error('Failed to parse %s' % metapath)
           file = metafile.construct()
@@ -23285,8 +24196,10 @@ scope:
     scope:
       result = None
       fs = self.fs()
-      map_path = fs.join(
-        fs.dirname(basepath), '.' + fs.basename(basepath) + '.map')
+
+      /# map_path = fs.join(
+      /#   fs.dirname(basepath), '.' + fs.basename(basepath) + '.map')
+      map_path = self.mapPath(basepath)
       if fs.exists(map_path):
         with open(map_path, 'r') as fp:
           result = fp.readline()[:-1]
@@ -23310,7 +24223,7 @@ scope:
         /# In meta2, the first line contains
         /#   <source>
         /# (where <source> is the source .meta file), and all subsequent lines
-        /# contain 
+        /# contain
         /#   <baseline> <metaline> <fullid>
         /# However,in meta1, the first line contains
         /#   <baseline> <metaline> <fullid> <source>
@@ -23333,7 +24246,7 @@ scope:
           if m:
             mapping.append(
               (int(m.group('baseline')),
-              int(m.group('metaline')), 
+              int(m.group('metaline')),
               m.group('fullid')))
           else:
             fs.close(fp)
@@ -23346,12 +24259,10 @@ scope:
     end method loadMapFile;
 
     method parseMeta : MetaFile #:
-      Parse a metafile.
+      Unconditinoally parse a metafile.
     params:
-      var path : str = null #:
-        The path to parse. Usually specified, but one can instead
-        provide the contents via 'text'. One of 'path' or 'text'
-        must be provided.
+      var path : str #:
+        The path to parse. Even if text is provided, path must be also.
       var text : str = null #:
         The text representing the contents of the metafile to parse.
         Provided to support in-memory parsing in situations where
@@ -23368,84 +24279,87 @@ scope:
       /# We canonicalize the path
       fs = self.fs()
       if fs.exists(path):
-        /# CODETANGLE(canonical_metapath)
         realpath = fs.realpath(path)
-        if realpath != path:
-          /# print 'HERE WITH\n  %s\n  %s' % (realpath, path)
-          pass
-        path = realpath
-
+        abspath = fs.abspath(realpath)
+        if abspath != realpath:
+          raise Error(
+            'abspath of realpath should equal realpath? %s vs %s' %
+            (abspath, realpath))
+      else:
+        raise Error('Path %s does not exist' % path)
       metafiles = self.metafiles()
 
-      if False and path and path in metafiles:
-        /# TODO(wmh): We should NOT reparse files that have already been
-        /# parsed, but avoiding re-parsing is causing 3 (of 294) tests to
-        /# fail (NamespaceConstruct.{expand,translate}Meta() and
-        /# Compiler.parseMeta().  Fix this!
-        metafile = metafiles[path]
-        metafile.warning('Not reparsing %s' % path)
+      /# (Sometimes) print a warning if we are reparsing
+      if True:
+        if path in metafiles:
+          print 'WARNING: Reparsing %s (path)' % path
+        elif realpath in metafiles:
+          print 'WARNING: Reparsing %s (realpath)' % path
 
-      else:
+      /# Unconditionally parse.
+      if context is None:
+        metalang = self.metalang()
+        context = metalang.context()
         if context is None:
-          metalang = self.metalang()
-          context = metalang.context()
-          if context is None:
-            raise Error('Failed to find a context for Meta(%s)' % metalang.name())
-        metafile = MetaFile(path, self, debuglevel=debuglevel, text=text)
-        metafile.parseMeta(context, is_schema=is_schema)
+          raise Error('Failed to find a context for Meta(%s)' % metalang.name())
+      metafile = MetaFile(realpath, self, debuglevel=debuglevel, text=text)
+      metafile.parseMeta(context, is_schema=is_schema)
 
-        abspath = fs.abspath(path)
-        metafiles[path] = metafile
-        metafiles[abspath] = metafile
+      /# Determine a unique abbrev for this metafile.
+      def AbbrevExists(abr):
+        return abr in metafiles and metafiles[abr] is not metafile
+      abbrev = fs.basename(abspath).replace('.meta2', '').replace('.meta', '')
+      abbrev2 = fs.basename(fs.dirname(abspath)) + '_' + abbrev
+      if not AbbrevExists(abbrev):
+        pass
+      elif False and not AbbrevExists(abbrev2):
+        abbrev = abbrev2
+      else:
+        orig = abbrev
+        num = 1
+        while AbbrevExists(abbrev):
+          num += 1
+          abbrev = orig + '_' + str(num)
+      metafile.abbrevIs(abbrev)
 
-        def AbbrevExists(abr):
-          return abr in metafiles and metafiles[abr] is not metafile
-
-        abbrev = fs.basename(abspath).replace('.meta2', '').replace('.meta', '')
-        abbrev2 = fs.basename(fs.dirname(abspath)) + '_' + abbrev
-        if not AbbrevExists(abbrev):
-          pass
-        elif False and not AbbrevExists(abbrev2):
-          abbrev = abbrev2
-        else:
-          orig = abbrev
-          num = 1
-          while AbbrevExists(abbrev):
-            num += 1
-            abbrev = orig + '_' + str(num)
-        metafile.abbrevIs(abbrev)
-        metafiles[abbrev] = abbrev
-        /# print 'Assigning %s = %s' % (abbrev, abspath)
-
-        self.metaorder().append(metafile)
+      /# Register variants of the path in metafiles.
+      metafiles[path] = metafile
+      metafiles[realpath] = metafile
+      metafiles[abbrev] = abbrev
+      self.metaorder().append(metafile)
 
       return metafile
     test:
+      /# We create standalone compilers instead of using the cached ones to
+      /# ensure a full test.
+
       /# Parse ex1.meta, which is written in Meta(Meta)
-      _, _, _, metal = test.cachedInfo(metal='meta')
+      /#_, _, _, metac = test.cachedInfo(metal='meta')
+      metac = metax.c.Compiler(metal='meta', basel='stub')
       ex1, scope, construct, _ = test.getMetaFile(
-        'meta', 'ex1', context=metal.bootstrapContext())
+        'meta', 'ex1', context=metac.bootstrapContext(), compiler=metac)
       test.isinst(ex1, metax.c.MetaFile)
       test.isinst(scope, metax.c.ComplexBlock)
       test.isinst(construct, metax.c.MetaLanguageConstruct)
 
       /# Parse ex2.meta, which is written in Meta(Oopl)
       /# metax.c.Debug = True
+      metac = metax.c.Compiler(metal='oopl', basel='python')
       ex2, scope, construct, path = test.getMetaFile(
-        'oopl', 'ex2', debuglevel=0)
+        'oopl', 'ex2', debuglevel=0, compiler=metac)
       /# Verify there were no errors during parsing
       test.isfalse(ex2.hasErrors(show=True))
       /# Confirm that the canonicalization of the result matches the
       /# input (this assumes the ex2 input is kept in clean form)
-      with test.compiler.fs().open(path, 'r') as fp:
+      with metac.fs().open(path, 'r') as fp:
         text = fp.read()
       fp = test.newStr()
       construct.write(fp=fp)
       test.iseqtext(text, fp.getvalue())
     end method parseMeta;
 
-    method processMetas : tuple<vec<MetaFile>,int,int> #:
-      Parse, expand, translate and compile .meta files.
+    method getMetas : tuple<vec<MetaFile>,int,int> #:
+      Parse, expand, translate and compile .meta files (only if not already parsed)
     params:
       var paths : vec<str> #:
         The .meta files to process.
@@ -23453,17 +24367,28 @@ scope:
         If true, print out progress.
       var fp : ostream = null #:
         If non-null, write out progress to given stream.
+      var expand : bool = true #:
+        If false, do not expand (or import or translate or compile)
+      var imports : bool = true #:
+        If false, do not import (or translate or compile)
+      var translate : bool = true #:
+        If false, do not translate (or compile)
+      var compile : bool = true #:
+        If false, do not compile.
     scope:
       errors = 0
       warnings = 0
       metafiles = []
       for path in paths:
-        metafile, e, w = self.processMeta(path, debug=debug, fp=fp)
-        errors += e
-        warnings += w
+        /# metafile, e, w = self.processMeta(
+        metafile = self.getMeta(
+          path, debug=debug, fp=fp,
+          expand=expand, imports=imports, translate=translate, compile=compile)
+        errors += len(metafile.errors())
+        warnings += len(metafile.warnings())
         metafiles.append(metafile)
       return metafiles, errors, warnings
-    end method processMetas;
+    end method getMetas;
 
     method processMeta : tuple<MetaFile,int,int> #:
       Parse, expand, translate and compile a single .meta file.
@@ -23480,7 +24405,9 @@ scope:
       var fp : ostream = null #:
         If non-null, write out progress to given stream.
       var expand : bool = true #:
-        If false, do not expand (or translate or compile)
+        If false, do not expand (or import or translate or compile)
+      var imports : bool = true #:
+        If false, do not import (or translate or compile)
       var translate : bool = true #:
         If false, do not translate (or compile)
       var compile : bool = true #:
@@ -23505,18 +24432,24 @@ scope:
         metafile.expandMeta()
         if metafile.hasErrors(show=True):
           errors += 1
-        elif translate:
-          /# Translate
-          metafile.translateMeta()
+        elif imports:
+          /# Import
+          metafile.importMeta()
           if metafile.hasErrors(show=True):
             errors += 1
-          elif compile:
-            /# Compile
-            metafile.compileMeta()
+          elif translate:
+            /# Translate
+            metafile.translateMeta()
             if metafile.hasErrors(show=True):
               errors += 1
-            if metafile.hasErrors(show=True, category='W'):
-              warnings += 1
+            elif compile:
+              /# Compile
+              metafile.compileMeta()
+              if metafile.hasErrors(show=True):
+                errors += 1
+              if metafile.hasErrors(show=True, category='W'):
+                warnings += 1
+              metafile.stateIs('complete')
       return metafile, errors, warnings
     test:
     end method processMeta;
@@ -23528,24 +24461,36 @@ scope:
       var path : str #:
         The path of the metafile.
       var expand : bool = true #:
-        If false, do not expand (or translate or compile)
+        If false, do not expand (or import or translate or compile)
+      var imports : bool = true #:
+        If false, do not import (or translate or compile)
       var translate : bool = true #:
         If false, do not translate (or compile)
       var compile : bool = true #:
         If false, do not compile.
+      var debug : bool = false #:
+        If true, print out progress.
+      var fp : ostream = null #:
+        If non-null, write out progress to given stream.
     scope:
       /# Canonicalize path.
       fs = self.fs()
-      if fs.exists(path):
-        /# CODETANGLE(canonical_metapath)
-        path = fs.realpath(path)
+      if not fs.exists(path):
+        raise Error('%s does not exist' % path)
+      realpath = fs.realpath(path)
 
-      result = self.metafiles().get(path, None)
+      result = self.metafiles().get(realpath, None)
       if result is None:
         result, _, _ = self.processMeta(
-          path, expand=expand, translate=translate, compile=compile)
+          realpath, debug=debug, fp=fp,
+          expand=expand, imports=imports, translate=translate, compile=compile)
       else:
-        print 'Used cached %s' % path
+        if result.state() != 'complete':
+          /# raise Error(
+          /#   'metafile %s has state %s' % (result.path(), result.state()))
+          pass
+        if debug or True:
+          print 'Used cached %s' % path
       return result
     test:
     end method getMeta;
@@ -23736,7 +24681,7 @@ scope:
       var resolve : bool = false #:
         If true, a valid metafile or fqn is to be resolved into a construct
         (available as third element of the triples in result['pair']). If
-        
+
     scope:
       fs = self.fs()
       metafile_paths = []
@@ -23823,10 +24768,10 @@ scope:
          'args': ['nm.sp', 'nm.sp.Class', 'nm.sp.Class.meth', 'c.meta'],
          'badfiles': ['a.meta2', 'b.meta2'],
          'triples': [
-           ('a.meta2', 'badfile', None), 
-           ('b.meta2', 'badfile', None), 
+           ('a.meta2', 'badfile', None),
+           ('b.meta2', 'badfile', None),
            ('nm.sp', 'unknown', None),
-           ('nm.sp.Class', 'unknown', None), 
+           ('nm.sp.Class', 'unknown', None),
            ('nm.sp.Class.meth', 'unknown', None),
            ('c.meta', 'unknown', None)
          ]},
@@ -23847,7 +24792,7 @@ scope:
 
       for metafile_path in metafile_paths:
         /# Parse the metafile.
-        metafile = self.parseMeta(path=metafile_path, debuglevel=debuglevel)
+        metafile = self.parseMeta(metafile_path, debuglevel=debuglevel)
         if metafile.errors():
           print 'Found parse errors for ' + metafile_path
           errors += 1
@@ -24480,13 +25425,18 @@ scope:
         """Strip leading/trailing lines of whitespace from data list."""
         i = 0
         n = len(data)
-        while i < n and not data[i].strip():
-          i += 1
-        while n > 0 and not data[n-1].strip():
-          n -= 1
+        if False:
+          /# We should NOT be stripping blank leading/trailing lines if they
+          /# represent actual output produced by the code ... if spurious
+          /# blank lines are being introduced, fix that issue rather than
+          /# stripping potentially valuable empty lines from actual output.
+          while i < n and not data[i].strip():
+            i += 1
+          while n > 0 and not data[n-1].strip():
+            n -= 1
         for j in range(i, n):
           print prefix + data[j]
-      
+
       /# We'll add one dict per test to data, merging stdout and stderr.
       /#   name: str
       /#     fqn of test.
@@ -24545,10 +25495,10 @@ scope:
                 item['stdout'].append(head)
             else:
               item['stdout'].append(line)
-            
+
       /# Parse stderr
       /#  - we are expecting records of the form:
-      /#      
+      /#
       /#      =================================================================
       /#      ERROR: test_attrinfo (__main__.ContextTest)
       /#      -----------------------------------------------------------------
@@ -24597,7 +25547,7 @@ scope:
           postamble = errlines[j:]
           break
         elif current_fqn is None:
-          print 'UNKNOWN STDERR: %s' % line          
+          print 'UNKNOWN STDERR: %s' % line
         else:
           /# A line of stderr for current fqn, if one exists.
           item = datamap[current_fqn]
@@ -25499,12 +26449,12 @@ scope:
           mapfile = mappings.get(map_path, None)
           if mapfile is None:
             if fs.exists(map_path):
+              mapfile = self.loadMapFile(map_path)
+              mappings[map_path] = mapfile
               if debug:
                 ofp.write('META: Loading %s\n' % map_path)
                 print 'PATH: ' + path
                 print 'MAPP: ' + map_path
-              mapfile = self.loadMapFile(map_path)
-              mappings[map_path] = mapfile
             else:
               if debug:
                 ofp.write('META: Ignoring %s (no %s)\n' % (path, map_path))
@@ -25516,6 +26466,8 @@ scope:
           if mapfile:
             metapath, metaline = mapfile.baseToMeta(linenum)
             /# Establish the metapath string to write.
+            if debug:
+              print 'NOTE: Converting baseline %d to meta gives %s' % (linenum, metaline)
             if metakind == 'path':
               pass
             elif metakind == 'abbrev':
@@ -25527,7 +26479,7 @@ scope:
 
             /# Establish the metapath line number.
             if metaline is None:
-              print 'NO metaline'
+              /# print 'NO metaline'
               metadata = None
             else:
               metadata['metaline'] = metaline
@@ -25626,8 +26578,8 @@ scope:
       Returns:
        0) rc: int
             The return code.
-       1) stdout: str 
-       2) stderr: str 
+       1) stdout: str
+       2) stderr: str
     params:
       var args : vec<str> #:
         The args (not including the bazel command itself).
@@ -25655,8 +26607,8 @@ scope:
       Returns:
        0) rc: int
             The return code.
-       1) stdout: str 
-       2) stderr: str 
+       1) stdout: str
+       2) stderr: str
     params:
       var command : str #:
         The command being executed.
@@ -25764,12 +26716,793 @@ scope:
       /#     The map file
       /#   bazel: str
       /#     The file containing the BUILD snippet for the class.
-      
+
       for basel in ('python', 'javascript', 'cpp'):
         topdir = fs.join(repopath, 'oopl', basel)
 
     test:
     end method parseRepository;
+
+    method generateUmlDiagram #:
+      Generate a UML diagram (using graphviz dot) for all metafiles.
+    params:
+      var metafiles : vec<MetaFile>;
+      var destpath : str #:
+        Where to write the dot output.
+      var config : map #:
+        Specifies information about how and what should be displayed in the UML.
+        Legal keys are:
+          field: dict
+            name: str
+              Only those fields whose name matches the regexp are chosen.
+            visibility: restr
+              Only those fields whose visibility matches the regexp are chosen.
+            level: restr
+              Only those fields whose level matches the regexp are chosen.
+          method: dict
+            name: str
+              Only those fields whose name matches the regexp are chosen.
+            visibility: restr
+              Only those methods whose visibility matches the regexp are chosen.
+            level: restr
+              Only those methods whose level matches the regexp are chosen.
+            params: str = 'none'
+              One of
+                none = do not show params
+                required-names = show required names, no types, no optionals
+                required = show required names and types, no optionals
+                all-names = show required and optional names, no types or defaults
+                all = show required and optional names and types, no defaults
+                all* = show required and optional names and types, with default vals
+      var show_user : bool = true #:
+        Show user classes.
+      var show_meta : bool = false #:
+        Show metaclasses. If false, means do not show user-defined meta
+        classes either.
+      var show_test : bool = false #:
+        Show testclasses. If false, means do not show user-defined test
+        classes either.
+      var display : bool = false #:
+        If True, display the generated UML image.
+      var verbose : bool = false #:
+        If true, print out details of actions performed.
+    scope:
+      debug = False
+      fs = self.fs()
+
+      /# See
+      /#   http://www.ffnn.nl/pages/articles/media/uml-diagrams-using-graphviz-dot.php
+      /#   https://fsteeg.wordpress.com/2006/11/17/uml-class-diagrams-with-graphviz/
+      /# for a discussion on how we can use graphviz dot to render UML class
+      /# diagrams.
+      /#
+      /# See also
+      /#   http://www.umlgraph.org/
+      /#   https://www.graphviz.org/doc/info/attrs.html
+      /#   http://rich-iannone.github.io/DiagrammeR/graphviz_and_mermaid.html (more for the visualization of graphviz options than for DiagrammeR)
+      /#   http://rich-iannone.github.io/DiagrammeR/img/X11_Color_Names.png
+      basepath, suffix = fs.splitext(destpath)
+      if suffix != '.dot':
+        /# We do this to ensure the person didn't accidentaly type something like:
+        /#   % metac -U env.meta root.meta
+        /# which would tromp over env.meta. Should be
+        /#   % metac -U out.dot env.meta root.meta
+        print 'ERROR: UML output file "%s" must end with .dot' % (
+          destpath)
+        return False
+      impath = basepath + '.png'
+
+      /# IMPLEMENTATION:
+      /#  - We need to know:
+      /#    - for each class
+      /#      - what its base name is
+      /#      - what namespace it is in
+      /#      - what its parent(s) is
+      /#      - which fields to display
+      /#      - which methods to display
+      /#      - the associations this class has with other classes
+      baselang = self.baselang()
+
+      /# Create a mapping from namespace fqn to dict containing:
+      /#   construct: NamespaceConstruct
+      /#   scope: ComplexBlock
+      /#   classes: collections.OrderedDict()
+      /#     Maps class ids to 
+      /#
+      /# Also create a mapping from class fqn to dict containing:
+      /#    name: str
+      /#    fqn: str
+      /#    namespace: ?  (str or NamespaceConstruct?)
+      /#    parent: ?  (str or ClassConstruct?)
+      /#    construct: ClassConstruct
+      /#    field: collections.OrderedDict()
+      /#      name: str
+      /#      construct: FieldConstruct
+      /#      visibility: str
+      /#      level: str
+      /#      type: Type
+      /#    method: collections.OrderedDict()
+      /#      name: str
+      /#      construct: MethodConstruct
+      /#      visibility: str
+      /#      level: str
+      /#      type: Type
+      allclasses = self.classes()
+      namespaces = {}
+      classes = {}
+
+      for metafile in metafiles:
+        /# Per-metafile processing
+        filec = metafile.construct()
+        for namespace in filec.attrval('scope:', default=None) or []:
+          /# Per-namespace processing
+          if namespace.kind() != 'namespace': continue
+          nscope = namespace.attr('scope:', default=REQUIRED)
+          nclasses = {}
+          for klass in nscope.value():
+            /# Per-class processing
+            if klass.kind() != 'class': continue
+            variant = klass.variant()
+            if variant == 'user' and not show_user: continue
+            if 'meta' in variant and not show_meta: continue
+            if 'test' in variant and not show_test: continue
+            cfqn = klass.fqn()
+            cid = klass.id()
+
+            fields = collections.OrderedDict()
+            methods = collections.OrderedDict()
+            parents = klass.parentclasses()
+            parentinfo = parents[0] if parents else {}
+            pfqn = parentinfo.get('metafqn', parentinfo.get('fqn', None))
+            cinfo = {
+              'name': cid,
+              'fqn': cfqn,
+              'parent': pfqn,
+              'namespace': namespace,
+              'construct': klass,
+              'field': fields,
+              'method': methods,
+            }
+            for classic in klass.attrval('scope:', default=None) or []:
+              kind = classic.kind()
+              if kind == 'field':
+                fmdata = fields
+                fmtype = classic.attrval('type', default=None)
+                /# TODO(wmh): Decide how field visibility is going to be
+                /# handled. The visibility of the state itself is private by
+                /# default, but we probably need to allow for it to be protected
+                /# or public.
+                visibility = 'private'
+              elif kind == 'method':
+                fmdata = methods
+                fmtype = classic.attrval('returns', default=None)
+                visibility = classic.attrval('visibility')
+              else:
+                continue
+              fmdata = cinfo[kind]
+              efqn = classic.fqn()
+              location = classic.attrval('location')
+              attrkind = classic.attrval('kind')
+              fmdata[efqn] = {
+                'name': classic.id(),
+                'construct': classic,
+                'visibility': visibility,
+                'level': location,
+                'type': fmtype,
+              }
+            classes[cfqn] = cinfo
+            nclasses[cid] = cinfo
+          ninfo = {
+            'construct': namespace,
+            'scope': nscope,
+            'classes': nclasses
+          }
+          namespaces[namespace.fqn()] = ninfo
+
+      /# Add an entry to 'classes' for the root class of the baselang.
+      /#  - TODO(wmh): Generalize to all baselangs.
+      if baselang.id() == 'python':
+        classes['object'] = {
+          'name': 'object', 
+          'fqn': 'object',
+          'construct': None,
+          'field': {},
+          'method': {},
+          'namespace': None,
+          'parent': None,
+        }
+
+      associnfo = config.pop('assocs') if 'assocs' in config else {}
+      /# print 'associnfo: %s' % str(associnfo)
+
+      def Match(value, restr):
+        /# Determine if a value matches a restr.
+        if not restr or restr == 'false':
+          result = False
+        elif restr == 'true':
+          result = True
+        else:
+          r = re.compile(restr)
+          result = r.search(value)
+        return result
+
+      def Matches(construct, config, level, visibility, debug=False):
+        /# Determine if a construct matches a config.
+        /#  - if config is empty, we assume no match.
+        /#  - if any item in the config fails, it means no match
+        /#  - only if all items in the config match is it a match.
+        if not config:
+          return False
+        kind = construct.kind()
+        kindid = construct.kindid()
+        cfg = config.get(kind, {})
+        fails = []
+        data = {'name': construct.id(), 'level': level, 'visibility': visibility}
+        for key in data:
+          if key in cfg:
+            value = data[key]
+            if not Match(value, cfg[key]):
+              fails.append(
+                '%s has %s %s !~ %s' % (kindid, key, value, cfg[key]))
+        if debug and fails:
+          print '#' * 40
+          print construct.kindid()
+          print '=' * 40
+          pprint.pprint(fails)
+        return len(fails) == 0
+
+      def MethodSignature(method, cfg):
+        result = method.id()
+        ptype = cfg.get('params', 'none')
+        plist = []
+        if ptype != 'none':
+          params = method.attrval('params:', default=None) or []
+          reqonly = 'required' in ptype
+          namesonly = '-names' in ptype
+          for var in params:
+            default = var.attrval('default', default=None)
+            if default is not None and reqonly:
+              /# We've finished parsing all the required args and are not to
+              /# include optional args.
+              plist.append('...')
+              break
+            psig = var.id()
+            if not namesonly:
+              ptype = var.attrval('type')
+              psig += ' : ' + ptype.raw()
+              /# TODO(wmh): Fix this ... all* isn't a type in v2
+              if default is not None and ptype == 'all*':
+                psig += ' = ' + default
+            plist.append(psig)
+        result += '(' + ', '.join(plist) + ')'
+        return result
+
+      def DotSafeId(name):
+        /# Convert an identifier to one that is safe for use in graphviz dot.
+        return name.replace('.', '_')
+
+      def DotSafeField(field):
+        /# Convert a field (an entry within a record-valued label) to dot safety.
+        return field.replace('<', '\\<').replace('>', '\\>').replace('|', '\\|')
+
+      vismap = {
+        /# http://www.uml-diagrams.org/visibility.html
+        'pubget': '+',
+        'public': '+',
+        'protected': '#',
+        'private': '-',
+        'package': '~',
+      }
+
+      /# Each element is a dict containing
+      /#   src: str (required)
+      /#     a fully qualified class name
+      /#   dest: str (required)
+      /#     a fully qualified class name
+      /#   edge: dict (optional)
+      /#     graphviz edge key/value pairs. Common keys include:
+      /#       arrowtail
+      /#       headlabel
+      /#       taillabel
+      /#       constraint
+      /#     See http://www.graphviz.org/doc/info/attrs.html for details
+      associations = []
+
+      /# Analyze namespaces, classes, methods and fields looking for UML-related
+      /# constructs.  This includes:
+      /#  - inheritance relationships between classes
+      /#  - the collection of fields defined within each class (and their
+      /#    types and visibility)
+      /#  - the collection of methods defined within each class (and their
+      /#    return types, visibility and args).
+      /#  - the associations between classes:
+      /#     - any field whose type is a non-library class defines an
+      /#       association between the class containing the field and the
+      /#       class identified by the type of the field.
+      /#        - whether it is composition or delegation
+      for nmsp, nmdata in namespaces.iteritems():
+        namespace = nmdata['construct']
+        if debug:
+          print '  ' + namespace.kindid()
+        for clsname, clsdata in nmdata['classes'].iteritems():
+          classy = clsdata['construct']
+          if debug:
+            print '    ' + classy.kindid()
+          clsdata['uml_fields'] = []
+          clsdata['uml_methods'] = []
+          for fmkind in ('field', 'method'):
+            for fmid, fmdata in clsdata[fmkind].iteritems():
+              fmcons = fmdata['construct']
+              vis = fmdata['visibility']
+              level= fmdata['level']
+              if Matches(fmcons, config, level, vis):
+                if debug:
+                  print '      ' + fmcons.kindid()
+                fmtype = fmdata['type']
+                /# Establish any extra text to appear after the name
+                /# before the type.
+                extra = ''
+                if fmkind == 'field':
+                  signature = fmcons.id()
+                elif fmkind == 'method':
+                  /# TODO(wmh): Conditionally add parameters (or params plus
+                  /# types). Various config options:
+                  /#  - do not show any params
+                  /#  - show only required param names
+                  /#  - show only required param names and types
+                  /#  - show only required param names and types, with a
+                  /#    special indicator if there are optional params.
+                  /#  - show positional and optional names (with indicator
+                  /#    for optional names).
+                  /#  - show positional and optional names and types
+                  /#  - show positional and optional names and types, and
+                  /#    default values for optional params.
+                  signature = MethodSignature(fmcons, config[fmkind])
+
+                /# Indicate the level.
+                if level == 'meta':
+                  signature = '<u>' + signature + '</u>'
+
+                /# Add an entry for this field/method.
+                umlkey = 'uml_' + fmkind + 's'
+                clsdata[umlkey].append(
+                  '%s %s : %s' %
+                  (vismap[vis], signature, fmtype.raw()))
+
+              if fmkind == 'field':
+                /# We analyze the fields looking for references to other
+                /# classes, which indicates an association
+                fmtype = fmdata['type']
+                basetype = fmtype.base()
+                if fmtype.isPrimitive():
+                  pass
+                elif fmtype.isNative():
+                  /# TODO(wmh): For all container-based native types, we need
+                  /# to see if the elements are class types.
+                  if basetype == 'vec':
+                    /# Check if elements are class types.
+                    print 'FixMe: Currently ignoring %s.%s.%s : %s' % (
+                      nmsp, clsname, fmid, fmtype.raw())
+                  elif 'map' in basetype:
+                    /# Check if values are class types.
+                    print 'FixMe: Currently ignoring %s.%s.%s : %s' % (
+                      nmsp, clsname, fmid, fmtype.raw())
+                else:
+                  /# Not primitive and not native means class type.
+                  assoc_fqn = fmtype.base()
+                  if assoc_fqn is None:
+                    /# The type is not legal. Could be a disjunctive type.
+                    assoc_nmsp = None
+                    assoc_name = None
+                  else:
+                    assoc_nmsp, assoc_name = assoc_fqn.rsplit('.', 1)
+
+                  good = assoc_fqn in classes
+                  print '%s%s.%s.%s : %s [%s]' % (
+                    '*' if good else ' ',
+                    nmsp, clsname, fmid, fmtype.raw(), assoc_fqn)
+                  if good:
+                    edge = {
+                      'arrowtail': 'odiamond',
+                      'taillabel': '"1"',
+                      'headlabel': '"0..1"' if fmtype.isPtr() else '"1"',
+                      'label': '"%s"' % fmid,
+                    }
+                    associations.append(
+                      {'src': DotSafeId(clsdata['fqn']),
+                       'dest': DotSafeId(assoc_fqn),
+                       'edge': edge})
+
+      /# Now create the .dot file.
+      /#  - See http://www.graphviz.org/doc/info/attrs.html for details on what
+      /#    attributes exist for nodes, edges, etc.
+      with open(destpath, 'w') as fp:
+        fp.write("""
+          >|digraph G {
+          >|  fontname = "Bitstream Vera Sans"
+          >|  fontsize = 8
+          >|
+          >|  node [
+          >|    fontname = "Bitstream Vera Sans"
+          >|    fontsize = 8
+          >|    shape = "record"
+          >|    style = "filled"
+          >|    fillcolor = "gray95"
+          >|    height = 0.25
+          >|  ]
+          >|
+          >|  edge [
+          >|    fontname = "Bitstream Vera Sans"
+          >|    fontsize = 8
+          >|  ]
+          >|""")
+        /# Print out the namespaces and each class within them.
+        max_entries = 50
+        for nmsp in sorted(namespaces):
+          fp.write('\n')
+          fp.write('  subgraph cluster_%s {\n' % DotSafeId(nmsp))
+          fp.write('    label = "Namespace %s"\n\n' % nmsp)
+          cmap = namespaces[nmsp]['classes']
+          for name in sorted(cmap):
+            clsdata = cmap[name]
+
+            /# TODO(wmh): Is this restricting of sizes necessary any more?
+            fields = clsdata['uml_fields']
+            if len(fields) > max_entries:
+              fields = fields[:max_entries-1] + ['...']
+            methods = clsdata['uml_methods']
+            if len(methods) > max_entries:
+              methods = methods[:max_entries-1] + ['...']
+
+            fqn = clsdata['fqn']
+            fp.write('    %s [\n' % DotSafeId(fqn))
+
+            /# Now render the label for this class. At the very least, it contains
+            /# the name of the class, but may also include 0 or more fields and
+            /# 0 or more methods.
+            /#
+            /# TODO(wmh): Consider switching to using HTML-like labels per
+            /#   http://www.graphviz.org/doc/info/shapes.html/#html
+            /# They are more flexible relative to the more concise format in
+            /#   http://www.graphviz.org/doc/info/shapes.html/#record
+            /# for example:
+            /#   HTML supports <u>, <s>, etc. whereas I don't think it is possible
+            /#   to underline or strikethru in record labels without html syntax.
+            /# but there are some questions to resolve:
+            /#  - how to specify newlines in a particular row of the table?
+            /#    Presumably just <br>?
+            /#  -
+            if fields or methods:
+              fp.write(
+                /# NOTE(wmh): It is apparently necessary to end the fields and
+                /# mehods lists with a \l so that the last field doesn't get
+                /# centered instead of left-justified.  This is probably a bug in
+                /# graphviz that will get fixed ... consider testing this later
+                /# (2016/08/28).
+                '      label = "{%s|%s\l|%s\l}"\n' %
+                (name,
+                 '\\l'.join([DotSafeField(field) for field in fields]),
+                 '\\l'.join([DotSafeField(method) for method in methods])))
+            else:
+              fp.write('      label = "{%s}"\n' % name)
+            fp.write('    ]\n')
+          fp.write('  }\n')
+
+        /# Find all classes that are in the inheritance hierarchy that we
+        /# haven't created nodes for.
+        missing = []
+        for fqn in sorted(classes):
+          cmap = classes[fqn]
+          fqparent = cmap['parent']
+          if fqparent and fqparent not in classes:
+            if fqparent not in missing:
+              /# Remeber the parent
+              missing.append(fqparent)
+              pklass = allclasses.get(fqparent, None)
+              ppcs = pklass.parentclasses()
+              pc = ppcs[0] if ppcs else None
+              ppc = pc['fqn'] if pc else None
+              /# print ' *** MISSING %s = %s' % (fqparent, ppc)
+              classes[fqparent] = {
+                'name': fqparent, 'fqn': fqparent, 'parent': ppc}
+
+        /# Create an 'external' subgraph and add all missing classes to it.
+        fp.write('  subgraph cluster_external {\n')
+        fp.write('    label = "Classes not in this compilation"\n')
+        for fqn in missing:
+          fp.write('    %s [\n' % DotSafeId(fqn))
+          fp.write('      label = "{%s}"\n' % fqn)
+          fp.write('    ]\n')
+          /# Remember that we've generated this class.
+          classes[fqn] = {
+            'name': fqn, 'fqn': fqn, 'parent': None}
+        fp.write('  }\n')
+
+        /# Now specify the parent/child inheritance relationships.
+        fp.write("""
+          >|  edge [
+          >|    dir = "back"
+          >|    arrowtail = "empty"
+          >|  ]
+          >|""")
+        for fqn in sorted(classes):
+          cmap = classes[fqn]
+          parent = cmap['parent']
+          if parent is None:
+            pass
+          elif parent in classes:
+            fp.write('  %s -> %s\n' % (DotSafeId(parent), DotSafeId(fqn)))
+          else:
+            /# The 'parent' is probably a baselang parent not defined in Meta.
+            /# We dump it verbatim.
+            fp.write('  %s -> %s\n' % (DotSafeId(parent), DotSafeId(fqn)))
+            /# print 'WARNING: %s has unknown parent %s' % (fqn, parent)
+
+        /# Now specify associations.
+        if False:
+          for assoc in associations:
+            edgecfg = assoc.get('edge', {})
+            fp.write(
+              '  %s -> %s [%s]\n' %
+              (assoc['src'], assoc['dest'],
+               ', '.join(['%s=%s' % (k,edgecfg[k]) for k in sorted(edgecfg)])))
+
+        /# Finish the dot file.
+        fp.write('}\n')
+        if verbose:
+          print 'Wrote ' + destpath
+
+      /# Now create the image file.
+      args = ['dot', '-Tpng', '-o', impath, destpath]
+      if verbose:
+        print 'Command: ' + ' '.join(args)
+      p = subprocess.Popen(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      stdout, stderr = p.communicate()
+      if stderr:
+        print 'ERROR: %s' % stderr
+      else:
+        if verbose:
+          print 'Wrote ' + impath
+
+        /# Now display the image file.
+        if display:
+          args = ['display', impath]
+          if verbose:
+            print 'Command: ' + ' '.join(args)
+          try:
+            subprocess.check_output(args)
+          except KeyboardInterrupt:
+            pass
+    test:
+      root_command, cli = metastrap.ParseArgv(
+        ['dummy-binary'], metax.cli, root_module=metax.root)
+
+      metafile, file_scope, namespace, path = test.getMetaFile(
+        'oopl', 'cards2', expand=True, imports=True)
+      metac = metafile.compiler()
+      config = metac.__class__.CONFIG
+      fs = metac.fs()
+      dotpath = fs.join(config['src_root'], 'src', 'kernel', 'tmp.dot')
+      metac.generateUmlDiagram([metafile], dotpath, config={})
+    end method generateUmlDiagram;
+
+    meta
+    method MakeSnapshot #:
+      Create a new snapshot (and, optionally, release).
+
+      A snapshot is a private copy of the meta and baselang source code needed
+      to implement Meta.
+      - Snapshots are used to ameliorate the issues with writing self-modifying code
+        - The meta compiler uses classes in metax.*, and invoking the meta
+          compiler writes classes in metax.*, so any bugs introduced breaks
+          the compiler.
+        - By being able to use an snapshot of the metax.* code instead of the
+          'live' metax.* code, we can recover from such issues.
+        - Snapshots are a fourth layer to the traditional three-layer version:
+            <major>.<minor>.<release>.<snapshot>
+      
+      A release is a public copy of the meta and baselang source code needed to
+      implement Meta.
+      - Releases will be available on http://metaxy.org for download
+
+      TODO(wmh): Consider making this a meta method in metax.c.Compiler. But it
+      is more high-level than the compiler. Maybe define metax.c.Env?
+    params:
+      var fs : metax.fs.FileSystem #:
+        The filesystem instance to use for I/O operations.
+      var verbose : bool = false #:
+        If true, print out actions performed.
+      var make_release : bool = false #:
+        If true, make a public release (creates .tgz file)
+    scope:
+      /###  
+      /# We first check if there are any .meta2 symlinks below the kernel dir.
+      /#  - such symlinks usually occur because of an accidental invocation of
+      /#    meta2 within a subdir.
+      /#  - if there is a .meta2 symlink inside a directory that is included
+      /#    as a resource, we will have a problem when we use 'tar czhf' to
+      /#    tar up files ... symlinks are followed, and having spurious .meta2
+      /#    links around brings in a massive amount of additional unnecessary files.
+      /#  - we'll need to loosen this up a bit in the future, but better safe than
+      /#    broken.
+      config = meta.Config()
+      kerneldir = fs.join(config['src_root'], 'src', 'kernel')
+      for path in (
+        fs.join(kerneldir, 'testdata', '.meta2'),
+      ):
+        if fs.exists(path):
+          fs.unlink(path)
+          if verbose:
+            print 'NOTE: Removed ' + path
+      problems = subprocess.check_output(
+        ['find', '.', '-type', 'l', '-a', '-name', '.meta2', '-a',
+         '-mindepth', '2',  '-print'],
+        cwd=kerneldir)
+      if problems:
+        print 'WARNING: Not produces snapshot because of spurious .meta2 links.'
+        print problems
+        sys.exit(1)
+      bazel_links = subprocess.check_output(
+        ['find', '.', '-type', 'l', '-a', '-name', 'bazel-*', '-print'],
+        cwd=kerneldir)
+      if bazel_links:
+        print 'WARNING: Found bazel-* links.'
+        print bazel_links
+        ans = raw_input('Remove (yes|no)? ').strip()
+        if ans.lower() == 'yes':
+          for path in bazel_links.strip().split('\n'):
+            fs.unlink(path)
+            if verbose:
+              print 'Removed ' + path
+        bazel_links = subprocess.check_output(
+          ['find', '.', '-type', 'l', '-a', '-name', 'bazel-*', '-print'],
+          cwd=kerneldir)
+        if bazel_links:
+          print 'Not proceeding.'
+          sys.exit(1)
+
+      /###
+      /# Establish the new version number
+      /# CODETANGLE(version_path): in metastrap.py
+      release_dir = fs.join(config['src_root'], 'lib', 'versions')
+      vre = re.compile(r'^v(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$')
+      versions = []
+      for base in fs.listdir(release_dir):
+        m = vre.match(base)
+        if m:
+          major = int(m.group(1))
+          minor = int(m.group(2))
+          release = int(m.group(3))
+          snapshot = int(m.group(4) or 0)
+          assert major == 0   # for now
+          assert minor == 7   # for now
+          versions.append((base, major, minor, release, snapshot))
+      versions = sorted(
+        versions, cmp=lambda p1, p2: (
+          cmp(p1[1], p2[1]) or cmp(p1[2], p2[2]) or cmp(p1[3], p2[3]) or
+          cmp(p1[4], p2[4])))
+      previous_version, major, minor, release, snapshot = versions[-1]
+
+      release_version = None
+      if make_release:
+        release_version = 'v%d.%d.%d' % (major, minor, release + 1)
+        new_version = release_version + '.00'
+      else:
+        new_version = 'v%d.%d.%d.%02d' % (major, minor, release, snapshot + 1)
+        
+      newpath = fs.join(release_dir, new_version)
+
+      /###
+      /# Create the new version dir
+      assert not fs.exists(newpath)
+      fs.mkdir(newpath, 0755)
+      if verbose:
+        print 'NOTE: Created %s' % newpath
+
+      /###
+      /# Copy metastrap.py <newpath>/src
+      import metastrap
+      metastrap_path = metastrap.__file__
+      if metastrap_path.endswith('.pyc'):
+        metastrap_path = metastrap_path.replace('.pyc', '.py')
+      metastrap_dest = fs.join(newpath, 'metastrap.py')
+      fs.copyfile(metastrap_path, metastrap_dest)
+      if verbose:
+        print 'NOTE: Copied %s to %s' % (metastrap_path, metastrap_dest)
+
+      /###
+      /# Copy <<src_root>>/src/kernel/*.meta2 to <newpath>/src
+      srcdir = fs.join(newpath, 'src')
+      fs.mkdir(srcdir, 0755)  
+      for base in fs.listdir(kerneldir):
+        if base.endswith('.meta2') and base != '.meta2':
+          srcfile = fs.join(kerneldir, base)
+          destfile = fs.join(srcdir, base)
+          fs.copyfile(srcfile, destfile)
+          if verbose:
+            print 'NOTE: Copied %s to %s' % (srcfile, destfile)
+            
+      /###
+      /# Copy <<repository_path>>/oopl/python/metax to <newpath>/lib
+      /#  - we specifically want symlinks to be converted into real files so
+      /#    that the copy is self-contained. HOWEVER, this is dangerous if
+      /#    there are symlinks that are massive ... how to address this?
+      repometax = fs.join(
+        config['repository_path'], 'oopl', 'python', 'metax')
+      libdir = fs.join(newpath, 'lib')
+      fs.mkdir(libdir, 0755)
+      destmetax = fs.join(libdir, 'metax')
+      fs.copytree(repometax, destmetax, symlinks=False)
+      if verbose:
+        print 'NOTE: Copied %s to %s' % (repometax, destmetax)
+
+      /###
+      /# Copy <<src_root>>/src/schema/{meta,oopl}/schema.meta to <newpath>/schema
+      schemasrc = fs.join(config['src_root'], 'src', 'schema')  
+      schemadir = fs.join(newpath, 'schema')
+      metadir = fs.join(schemadir, 'meta')
+      oopldir = fs.join(schemadir, 'oopl')
+      fs.mkdir(schemadir, 0755)  
+      fs.mkdir(metadir, 0755)  
+      fs.mkdir(oopldir, 0755)
+      meta_schema_src = fs.join(schemasrc, 'meta', 'schema.meta')
+      oopl_schema_src = fs.join(schemasrc, 'oopl', 'schema.meta')
+      meta_schema_dst = fs.join(metadir, 'schema.meta')
+      oopl_schema_dst = fs.join(oopldir, 'schema.meta')
+      fs.copyfile(meta_schema_src, meta_schema_dst)
+      if verbose:
+        print 'NOTE: Copied %s to %s' % (meta_schema_src, meta_schema_dst)
+      fs.copyfile(oopl_schema_src, oopl_schema_dst)
+      if verbose:
+        print 'NOTE: Copied %s to %s' % (oopl_schema_src, oopl_schema_dst)
+
+      /###
+      /# Copy $HOME/.config/metameta to <newpath>/config/metameta
+      configdir = fs.join(newpath, 'config')
+      fs.mkdir(configdir, 0755)
+      config_src = fs.join(fs.getenv('HOME'), '.config', 'metaxy')
+      config_dst = fs.join(configdir, 'metaxy')
+      fs.copytree(config_src, config_dst)
+      if verbose:
+        print 'NOTE: Copied %s to %s' % (config_src, config_dst)
+
+      /###
+      /# Update the 'current' link
+      current_link = fs.join(release_dir, 'current')
+      if fs.lexists(current_link):
+        if not fs.islink(current_link):
+          raise IOError('Expecting %s to be a symlink' % current_link)
+        fs.unlink(current_link)
+      fs.symlink(newpath, current_link)
+
+      /###
+      /# Update the 'stable' link
+      stable_link = fs.join(release_dir, 'stable')
+      if fs.lexists(stable_link):
+        if not fs.islink(stable_link):
+          raise IOError('Expecting %s to be a symlink' % stable_link)
+        fs.unlink(stable_link)
+      fs.symlink(
+        fs.join(release_dir, previous_version), stable_link)
+
+      /###
+      /# Create a tar file (for releases)
+      /#  - see https://superuser.com/questions/119928/weird-bug-in-tar-not-including-files-named-init-py
+      /#    for details on why the env.vars. are being set.
+      if make_release:
+        release_path = fs.join(release_dir, release_version)
+        fs.symlink(newpath, release_path)
+        tarbase = release_version + '.tgz'
+        tarpath = fs.join(release_dir, tarbase)
+        env = copy.copy(fs.environ())
+        env['COPY_EXTENDED_ATTRIBUTES_DISABLE'] = 'true'
+        env['COPYFILE_DISABLE'] = 'true'
+        tarcmd = ['tar', '-czhf', tarbase, release_version]
+        subprocess.call(tarcmd, cwd=release_dir, env=env)
+        if verbose:
+          print 'NOTE: Created ' + tarpath
+    end method MakeSnapshot;
 
     command main #:
       The public interface to the Meta compiler.
@@ -25807,7 +27540,7 @@ scope:
         /#    variable is assumed to have the name of the main construct
         /#
         /# CODETANGLE(meta2_entry_main): First arg must be 'main'
-        assert args[0] == 'main'  
+        assert args[0] == 'main'
         while meta__names[0] != 'main':
           meta__names.pop(0)
           meta__names.append(False)
@@ -25919,7 +27652,7 @@ scope:
           metafile_paths = argmap['metafiles']
           fp = sys.stdout
           try:
-            metafiles, errors, warnings = self.processMetas(metafile_paths, fp=fp)
+            metafiles, errors, warnings = self.getMetas(metafile_paths, fp=fp)
           except Exception as e:
             text = traceback.format_exc()
             if False:
@@ -25929,7 +27662,7 @@ scope:
             ifp = cStringIO.StringIO(text)
             /# Note that the baselang being compiled is NOT what is important
             /# when performing baseling-to-metaline conversions ... it is the
-            /# baselang being used to compile the code that is important! 
+            /# baselang being used to compile the code that is important!
             /# This parser.meta code is currently assuming a python implementation,
             /# so that is the baselang we use.
             baselang = self.metalang().baselangNamed('python')
@@ -25956,8 +27689,15 @@ scope:
       scope:
         named block ::
           config = Compiler.CONFIG
-          for var in sorted(config):
-            print '%-20s = %s' % (var, config.get(var, '<INVALID>'))
+          cli = self.cli()
+          if len(cli.rest) == 1:
+            var = cli.rest[0]
+            print config.get(var, '<INVALID>')
+          else:
+            vars = cli.rest or sorted(config)
+            for var in vars:
+              print '%-20s = %s' % (var, config.get(var, '<INVALID>'))
+      end command config;
 
       command emacs #:
         Generate an emacs major mode for the current meta language.
@@ -25966,6 +27706,25 @@ scope:
         named block ::
           self.generateMajorMode()
       end command emacs;
+
+      command get #:
+        Get a .meta file (parse, expand, import, translate and compile).
+      scope:
+        named block ::
+          cli = self.cli()
+          argmap = self._parseArgs(cli.rest)
+          errors = False
+          metafiles = []
+          for path in argmap['metafiles']:
+            metafile = self.getMeta(
+              path, expand=True, imports=True, translate=True, compile=True)
+            if metafile.hasErrors(show=True):
+              errors = True
+              break
+            metafiles.append(metafile)
+          if not errors:
+            self.writeSummary(metafiles)
+      end command get;
 
       command help #:
         Implement the 'help' command.
@@ -25977,8 +27736,8 @@ scope:
           command.help()
       end command help;
 
-      command index aliases "hier,hierarchy" #:
-        Print out the hierarchy of namespaces/classes/methods.
+      command index #:
+        Print out the index of namespaces/classes/methods.
       scope:
         flag min @ m : int = 0 #:
           Do not print out constructs with level less than this.
@@ -26240,7 +27999,7 @@ scope:
 
       command mirror #:
         Mirror a meta-generate python hierarchy to another directory.
-        
+
         Creates symlinks for all production .py files. Useful in, for example,
         GAE.
       scope:
@@ -26256,7 +28015,7 @@ scope:
       end command parents;
 
       command parse #:
-        Parse a specified .meta file.
+        Parse a specified .meta file.  Consider using 'get' instead.
       scope:
         named block ::
           cli = self.cli()
@@ -26264,7 +28023,7 @@ scope:
           errors = False
           metafiles = []
           for path in argmap['metafiles']:
-            metafile = self.parseMeta(path=path)
+            metafile = self.parseMeta(path)
             if metafile.hasErrors(show=True):
               errors = True
               break
@@ -26305,7 +28064,7 @@ scope:
               parts = fqcn.split('.')
               clsname = parts.pop()
               nmsp = '.'.join(parts)
-              
+
               /# TODO(wmh): Create a baselang behavior for this
               if baselang.id() == 'python':
                 /# TODO(wmh): How to get this to interact with Bazel?
@@ -26361,7 +28120,7 @@ scope:
           /# (Maybe) clean the repository so we can start afresh.
           rc, _, _ = self.executeBazelCommand(
             ['clean', '--expunge'], cwd=wdir, dryrun=False, prompt=True)
-        
+
           /# As of 2017-12-22, we have a special setup flow for C++, because the
           /# default C++ compiler on macos (clang) does not handle std::any, so
           /# we use g++ instead, which does.
@@ -26439,13 +28198,13 @@ scope:
                 /# Command instantiation identified a command.
 
                 /# We update the global metax.cli.Values() instance with a
-                /# new Command. 
+                /# new Command.
                 self.updateCLI(cmd)
 
                 /# Individual commands should set this. In fact, consider
                 /# deleting this field.
                 self.argmapIs(None)
-                
+
                 func_name = command + '_command'
                 method = getattr(self, func_name, None)
                 if method:
@@ -26455,6 +28214,19 @@ scope:
                 else:
                   print 'Unknown command "%s" (ignored)' % command
       end command shell;
+
+      command snapshot @ snap #:
+        Create a snapshot.
+      scope:
+        flag release @ rel : bool = false #:
+          If true, perform a release rather than a snapshot.
+
+        named block ::
+          cli = self.cli()
+          verbose = cli.verbose or True  # FIX ME
+          self.__class__.MakeSnapshot(
+            self.fs(), verbose=verbose, make_release=cli.release)
+      end command snapshot;
 
       command summarize #:
         Print out a summary of all specified metafiles.
@@ -26497,8 +28269,36 @@ scope:
       command uml #:
         Generate a UML diagram of all classes in all specified metafiles.
       scope:
+        flag display @ d : bool #:
+          Display the UML diagram after generating it.
+          By default, the image file is produced but not displayed.
+        flag showuser : bool = true #:
+          Display user-defined classes.
+        flag showtest : bool = false #:
+          Display testclasses.
+        flag showmeta : bool = false #:
+          Display metaclasses.
+
         named block ::
-          print 'WARNING: Command "uml" is not yet implemented.'
+          cli = self.cli()
+
+          argmap = self._parseArgs(cli.rest)
+          errors = False
+          paths = argmap['metafiles']
+          if paths:
+            dotpath = 'out.dot'
+            config = {}
+            metafiles = []
+            for path in paths:
+              metafile = self.getMeta(path)
+              if not metafile.hasErrors(show=True):
+                metafiles.append(metafile)
+            self.generateUmlDiagram(
+              metafiles, dotpath, config=config, display=cli.display,
+              show_user=cli.showuser, show_meta=cli.showmeta,
+              show_test=cli.showtest)
+          else:
+            print 'Must provide metafile(s) to generate uml for'
       end command uml;
 
       command __default__ #:
@@ -26508,17 +28308,23 @@ scope:
           /# As a convenience, if all are .meta2 files or fqns, we assume the
           /# action is a combination of 'compile' and 'test.
           allargs = flags.rest
-          argmap = self._parseArgs(allargs, implicit=True)
-          if not argmap['args'] and not argmap['badfiles']:
-            /# All args are .meta2. or fqns. We parse/expand/compile the
-            /# .meta2 files then invoke the blaze test targets associated with
-            /# each fqn.
-            self.argmapIs(argmap)
-            if self.compile_command():
-              if argmap['fqns']:
-                self.test_command()
-          else:
-            print 'ERROR : Unknown command "%s"' % selected_command.name()
+          if allargs:
+            command = allargs[0]
+            argmap = self._parseArgs(allargs, implicit=True)
+            if (
+              not argmap['args']
+              and not argmap['badfiles']
+              and (argmap['metafiles'] or argmap['fqns'])
+            ):
+              /# All args are .meta2. or fqns. We parse/expand/compile the
+              /# .meta2 files then invoke the blaze test targets associated with
+              /# each fqn.
+              self.argmapIs(argmap)
+              if self.compile_command():
+                if argmap['fqns']:
+                  self.test_command()
+            else:
+              print 'ERROR : Unknown command "%s"' % command
       end command __default__;
 
     end command main;
@@ -26786,15 +28592,45 @@ scope:
         The resource name to obtain.
       var context : Context = null #:
         If null, uses compiler.metalang().context().
+      var compiler : Compiler = null #:
+        Which compiler instance to use.
       var debuglevel : int = 0;
+      var expand : bool = false #:
+        If true, expand the metafile
+      var imports : bool = false #:
+        If true, import the metafile deps
     scope:
       path = metax.root.Object.Resource(resname, fqn='metax.c_test.TestCase')
-      _, metalang, _, compiler = self.cachedInfo(metal=metal)
-      self.compiler = compiler
+
+      if compiler:
+        metalang = compiler.metalang()
+        assert metalang.id() == metal, 'Metalang %s != %s' % (metalang.id(), metal)
+      else:
+        _, metalang, _, compiler = self.cachedInfo(metal=metal)
+        self.compiler = compiler
+
+      if imports and not expand:
+        expand = True
+
       if context is None:
         context = metalang.context()
-      metafile = compiler.parseMeta(
-        path=path, debuglevel=debuglevel, context=context)
+
+      /# TODO(wmh): It may be dangerous to re-use a pre-existing parsed file
+      /# here!
+      fs = compiler.fs()
+      realpath = fs.realpath(path) if fs.exists(path) else path
+      metafile = compiler.metafiles().get(realpath, None)
+      if metafile is None:
+        metafile = compiler.parseMeta(
+          realpath, debuglevel=debuglevel, context=context)
+        if expand and not metafile.hasErrors():
+          metafile.expandMeta()
+          if imports and not metafile.hasErrors():
+            metafile.importMeta()
+      else:
+        /# print 'REUSING %s' % path
+        pass
+
       file = metafile.construct()
       scope = file.rawattr('scope:')
       value = scope.value()
@@ -26951,7 +28787,7 @@ scope:
       /#    is initialized. Note that this is baselang specific (e.g. we
       /#    have to have the proper baselang instance in the compiler instance).
       klass = metax.c.ClassConstruct.NewFromData(
-        'Card', context, 
+        'Card', context, parent=self.namespace.attr('scope:'),
         secondaries=[('parent', 'metax.root.Object'), ('scope:', [])])
       klass.initParentClasses()
       klass.variantIs('user')
@@ -26985,13 +28821,13 @@ scope:
       MetaType = metax.c.Type.Instance
       params = metax.c.ExecutableConstruct.CreateParams(
         [{'var': 'a', 'secondaries': [(':', MetaType('str'))]},
-         {'var': 'b', 
+         {'var': 'b',
           'secondaries': [
             (':', MetaType('int')),
             /# ('=', metax.c.ExprParser(self.metafileFor('1\n')).parse())
             ('=', '1'),
           ]},
-         {'var': 'c', 
+         {'var': 'c',
           'secondaries': [
             (':', MetaType('bool')),
             /# ('=', metax.c.ExprParser(self.metafileFor('1\n')).parse())

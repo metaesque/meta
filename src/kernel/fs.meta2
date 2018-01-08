@@ -427,14 +427,38 @@ scope:
     test:
     end method join;
 
-    method split : vec<str> #:
-      Split a file into its parts.
+    method split : tuple<str,str> #:
+      Split a file into dirname and basename+suffix
     params:
       var path : str;
     scope:
       return os.path.split(path)
     test:
     end method split;
+
+    method splitext : tuple<str,str> #:
+      Split a file into basepath and suffix
+    params:
+      var path : str;
+    scope:
+      return os.path.splitext(path)
+    test:
+    end method splitext;
+
+    method splitall : tuple<str,str,str> #:
+      Split a file into dirname, basename, and suffix
+    params:
+      var path : str;
+    scope:
+      dirname, basesuff = os.path.split(path)
+      basename, suffix = os.path.splitext(basesuff)
+      return (dirname, basename, suffix)
+    test:
+      fs = metax.fs.Filesystem(rootdir='/foo')
+      test.iseq(
+        ('/some/dir', 'base', '.suff'),
+        fs.splitall('/some/dir/base.suff'))
+    end method splitall;
 
     method emulateIO #:
       Make this instance use memory instead of disk.
@@ -735,6 +759,21 @@ scope:
     test:
     end method copyfile;
 
+    method copytree #:
+      Copy a src dirt to a dest dir.
+    params:
+      var src : str #:
+        The source path.
+      var dest : str #:
+        The destination path.
+      var symlinks : bool = false #:
+        If true, keep symlinks as symlinks.  By default, they are converted
+        into real files during the copy.
+    scope:
+      shutil.copytree(src, dest, symlinks=symlinks)
+    test:
+    end method copytree;
+
     method cwd : str #:
       The current working directory
     scope:
@@ -747,7 +786,7 @@ scope:
       var thedir : str;
       var mode : int = 0755;
     scope:
-      print 'MKDIR: %s' % thedir
+      /# print 'MKDIR: %s' % thedir
       os.mkdir(thedir, mode)
     end method mkdir;
 

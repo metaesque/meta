@@ -77,10 +77,7 @@ scope:
 
   end class ObjectMetaRoot;
 
-  native scope:
-    /# TODO(wmh): Remove this.
-    NEWSUFFIX = '2'
-
+  native _ scope<py>:
     /# _CLI: metax.cli.Values
     /#   - Stores an instance of metax.cli.Values, providing access to the set of
     /#     flags and args dictated by the command line. Also provides access to
@@ -240,7 +237,7 @@ scope:
             metarep = '/Users/wmh/src/wmh/lib/meta2'
             print 'WARNING: Temporarily using hardcoded repopath %s' % metarep
           else:
-            metarep += NEWSUFFIX
+            metarep += '2'  # NEWSUFFIX
         parts = [metarep, 'oopl', 'python']
         parts.extend(subparts)
       /# CODETANGLE(resource_dir): In metax.c (parser.meta).

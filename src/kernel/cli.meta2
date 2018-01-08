@@ -254,6 +254,14 @@ scope:
 
   class Command < Part #:
     Represents a command, associated flags, and optional args.
+  assocs:
+    std assoc sys #:
+      TODO(wmh): Meta should automatically include implicit dependencies
+      due to use of native types. For example, if a method uses:
+         var fp : ostream = out
+      in Python this gets mapped to 
+         fp = sys.stdout
+      and Meta should add an implicit reliance on module 'sys'.
   scope:
 
     field order : @vec<Command> #:

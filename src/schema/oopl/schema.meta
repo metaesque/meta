@@ -70,6 +70,11 @@ config:
       Lines to insert before any imports within a namespace.  Used to provide
       path modification in python, etc.
 
+    secondary
+    Attribute testpreports: : simple = <empty> #:
+      Lines to insert before any imports within a test namespace.  Used to provide
+      path modification in python, etc.
+
     Attribute comment:;
     Attribute config:;
     Attribute scope: children <class|behavior|native>;
@@ -446,6 +451,21 @@ config:
     end Attribute select;
 
     feature
+    Attribute visibility : <tmppublic|tmpprivate> = tmpprivate #:
+      The visibility of the field.
+
+      TODO(wmh): This attribute is temporary. It is subsumed by the 
+      multi-valued version of 'select', and code should start migrating
+      away from the use of this field.  Hence the 'tmp' prefix on
+      legal values.
+    config:
+      FeatureValue tmppublic #:
+        The field itself (as opposed to its accessors) is public.
+      FeatureValue tmpprivate #:
+        The field itself (as opposed to its accessors) is private.
+    end Attribute visibility;
+
+    feature
     Attribute status : <required|optional> = required #:
       Whether this field is optional.
     config:
@@ -553,7 +573,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: : simple children <_statement_>;
+    Attribute scope: : simplex children <_statement_>;
 
     secondary
     Attribute test: : simple = <empty> children <_statement_> #:
@@ -773,7 +793,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: : simple children <_statement_>;
+    Attribute scope: : simplex children <_statement_>;
 
   end Construct _executable_;
 
@@ -808,7 +828,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <_statement_>;
+    Attribute scope: : simplex children <_statement_>;
 
     Template python scope:
       >|
@@ -916,7 +936,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: aliases <init:|::> children <_statement_> #:
+    Attribute scope: : simplex aliases <init:|::> children <_statement_> #:
       The initializer block.
 
     secondary
@@ -925,19 +945,19 @@ config:
       collection.
 
     secondary
-    Attribute setup: : simple = <empty> #:
+    Attribute setup: : simplex = <empty> #:
       A request to generate a baselang-specific setup unittest method.
 
     secondary
-    Attribute setupcase: : simple = <empty> #:
+    Attribute setupcase: : simplex = <empty> #:
       A request to generate a baselang-specific setup testcase method.
 
     secondary
-    Attribute teardown: : simple = <empty> #:
+    Attribute teardown: : simplex = <empty> #:
       A request to generate a baselang-specific teardown unittest method.
 
     secondary
-    Attribute teardowncase: : simple = <empty> #:
+    Attribute teardowncase: : simplex = <empty> #:
       A request to generate a baselang-specific teardown testcase method.
 
   end Construct lifecycle;
@@ -1009,7 +1029,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: : simple children <_statement_>;
+    Attribute scope: : simplex children <_statement_>;
 
   end Construct receiver;
 
@@ -1074,7 +1094,7 @@ config:
       The name of the native.
 
     Attribute comment:;
-    Attribute scope: : simple children <_statement_>;
+    Attribute scope: : simplex children <_statement_>;
 
   end Construct native;
 
@@ -1137,7 +1157,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: : simple children <_statement_>;
+    Attribute scope: : simplex children <_statement_>;
 
   end Construct testx;
 
@@ -1208,7 +1228,6 @@ config:
     end Attribute default;
 
     Attribute comment:;
-    Attribute scope: : simple;
 
   end Construct flag;
 
@@ -1220,7 +1239,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <_statement_> ;
+    Attribute scope: : simplex children <_statement_> ;
 
   end Construct _statement_;
 
@@ -1262,14 +1281,13 @@ config:
         for both instance and virtual blocks is preferred.
     end Attribute kind;
 
-
     primary
     Attribute block : id = <auto> #:
       The name of the block.
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: : simple children <_statement_> ;
+    Attribute scope: : simplex children <_statement_> ;
 
   end Construct block;
 
@@ -1321,7 +1339,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <_statement_>;
+    Attribute scope: : simplex children <_statement_>;
 
   end Construct loop;
 

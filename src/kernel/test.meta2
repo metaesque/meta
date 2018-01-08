@@ -271,7 +271,7 @@ scope:
     end method UnsetAll;
   end class StubHolder;
 
-  native fixme scope:
+  native fixme scope<py>:
     import cStringIO
     cStringIOClass = cStringIO.StringIO().__class__
   end native;    
@@ -1657,22 +1657,7 @@ scope:
       self.assertFalse(mname in tc._fsinfo)
     end method revertFilesystem;
 
-    method assertDictContains params:
-      var data : map;
-      var subdata : map;
-    scope<py>:
-      for k, v in subdata.iteritems():
-        if k not in data:
-          self.fail('Failed to find %s in dict' % k)
-        elif data[k] != v:
-          self.fail('%s = %s != %s' % (k, data[k], v))
-    scope<js>:
-      throw new Error('TestCase.assertDictContains() not yet implemented');
-    scope<cc>:
-      throw metax::root::Error(
-        "TestCase.assertDictContains() not yet implemented");
-    scope<*>:
-      remark #:
+    method assertDictContains #:
         keyval iterate over subdata into (k,v) scope:
           expr switch scope:
             case [k not in data] scope:
@@ -1686,6 +1671,20 @@ scope:
               @self.fail('Failed to find ${k} in dict');
             case [data[k] != v] scope:
               @self.fail('${k} = ${data[k]} != ${v}');
+    params:
+      var data : map;
+      var subdata : map;
+    scope<py>:
+      for k, v in subdata.iteritems():
+        if k not in data:
+          self.fail('Failed to find %s in dict' % k)
+        elif data[k] != v:
+          self.fail('%s = %s != %s' % (k, data[k], v))
+    scope<js>:
+      throw new Error('TestCase.assertDictContains() not yet implemented');
+    scope<cc>:
+      throw metax::root::Error(
+        "TestCase.assertDictContains() not yet implemented");
     end method assertDictContains;
 
     method startswith params:

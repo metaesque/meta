@@ -1,5 +1,7 @@
 #!/usr/bin/python
 import copy
+import cStringIO
+import importlib
 import os
 import re
 import shutil
@@ -10,355 +12,116 @@ import traceback
 import metastrap
 # metastrap.AutoCompile()
 
-# Issues to resolve:
-#  - in order to create a metax.c.Compiler instance, we must first
-#    establish which version of the meta2 code is desired.
-#     - the beta version is available in <<repository_path>>/oopl/python/metax
-#     - named versions are availabe in <<src_root>>/lib/versions/v<version>
-#     - sys.path will always include <<repository_path>>/oopl/python
-#     - if a version other than beta is desired, we insert
-#       <<src_root>>/lib/versions/v<version>
-#    sys.path to use the user-specified version of the meta compiler
-
-# We need to:
-#  - ensure that PYTHONPATH is properly configured to find metameta2
-#    source code (which means we need to know which version of the code
-#    is desired).  Or do we? The reason metameta was introduced
-#    initially was because multiple scripts needed to know the same
-#    info (metac, metafilt, metapy, etc.). But in the new world, there
-#    is only one binary, 'meta2' (to be renamed 'metac' eventually), that
-#    needs this info. And that script can be responsible for ensuring
-#    the proper version is loaded
-#     - in python, the script can modify sys.path based on a scan of
-#       sys.argv for --meta_version
-#     - in C++, 'meta2' is a wrapper script that invokes a version
-#       specific C++ binary
-#     - ... etc.
-
-Verbose = metastrap.Verbose
-
-def MakeSnapshot(verbose=Verbose, make_release=False):
-  """Create a new snapshot (and, optionally, release).
-
-  A snapshot is a private copy of the meta and baselang source code needed
-  to implement Meta.
-  - Snapshots are used to ameliorate the issues with writing self-modifying code
-    - The meta compiler uses classes in metax.*, and invoking the meta
-      compiler writes classes in metax.*, so any bugs introduced breaks
-      the compiler.
-    - By being able to use an snapshot of the metax.* code instead of the
-      'live' metax.* code, we can recover from such issues.
-    - Snapshots are a fourth layer to the traditional three-layer version:
-        <major>.<minor>.<release>.<snapshot>
-  
-  A release is a public copy of the meta and baselang source code needed to
-  implement Meta.
-  - Releases will be available on http://metaxy.org for download
-
-  TODO(wmh): Consider making this a meta method in metax.c.Compiler. But it
-  is more high-level than the compiler. Maybe define metax.c.Env?
-
-  Args:
-    verbose: bool
-      If true, print out actions performed.
-    make_release: bool
-      If true, make a public release (creates .tgz file)
-  """
-  ###  
-  # We first check if there are any .meta2 symlinks below the kernel dir.
-  #  - such symlinks usually occur because of an accidental invocation of
-  #    meta2 within a subdir.
-  #  - if there is a .meta2 symlink inside a directory that is included
-  #    as a resource, we will have a problem when we use 'tar czhf' to
-  #    tar up files ... symlinks are followed, and having spurious .meta2
-  #    links around brings in a massive amount of additional unnecessary files.
-  #  - we'll need to loosen this up a bit in the future, but better safe than
-  #    broken.
-  config = metastrap.Config()
-  kerneldir = os.path.join(config['src_root'], 'src', 'kernel')
-  for path in (
-    os.path.join(kerneldir, 'testdata', '.meta2'),
-  ):
-    if os.path.exists(path):
-      os.unlink(path)
-      if verbose:
-        print 'NOTE: Removed ' + path
-  problems = subprocess.check_output(
-    ['find', '.', '-type', 'l', '-a', '-name', '.meta2', '-a',
-     '-mindepth', '2',  '-print'],
-    cwd=kerneldir)
-  if problems:
-    print 'WARNING: Not produces snapshot because of spurious .meta2 links.'
-    print problems
-    sys.exit(1)
-  bazel_links = subprocess.check_output(
-    ['find', '.', '-type', 'l', '-a', '-name', 'bazel-*', '-print'],
-    cwd=kerneldir)
-  if bazel_links:
-    print 'WARNING: Found bazel-* links.'
-    print bazel_links
-    ans = raw_input('Remove (yes|no)? ').strip()
-    if ans.lower() == 'yes':
-      for path in bazel_links.strip().split('\n'):
-        os.unlink(path)
-        if verbose:
-          print 'Removed ' + path
-    bazel_links = subprocess.check_output(
-      ['find', '.', '-type', 'l', '-a', '-name', 'bazel-*', '-print'],
-      cwd=kerneldir)
-    if bazel_links:
-      print 'Not proceeding.'
-      sys.exit(1)
-
-  ###
-  # Establish the new version number
-  # CODETANGLE(version_path): in metastrap.py
-  release_dir = os.path.join(config['src_root'], 'lib', 'versions')
-  vre = re.compile(r'^v(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$')
-  versions = []
-  for base in os.listdir(release_dir):
-    m = vre.match(base)
-    if m:
-      major = int(m.group(1))
-      minor = int(m.group(2))
-      release = int(m.group(3))
-      snapshot = int(m.group(4) or 0)
-      assert major == 0   # for now
-      assert minor == 7   # for now
-      versions.append((base, major, minor, release, snapshot))
-  versions = sorted(
-    versions, cmp=lambda p1, p2: (
-      cmp(p1[1], p2[1]) or cmp(p1[2], p2[2]) or cmp(p1[3], p2[3]) or
-      cmp(p1[4], p2[4])))
-  previous_version, major, minor, release, snapshot = versions[-1]
-
-  release_version = None
-  if make_release:
-    release_version = 'v%d.%d.%d' % (major, minor, release + 1)
-    new_version = release_version + '.0'
-  else:
-    new_version = 'v%d.%d.%d.%d' % (major, minor, release, snapshot + 1)
-    
-  newpath = os.path.join(release_dir, new_version)
-
-  ###
-  # Create the new version dir
-  assert not os.path.exists(newpath)
-  os.mkdir(newpath, 0755)
-  if verbose:
-    print 'NOTE: Created %s' % newpath
-
-  ###
-  # Copy <<src_root>>/src/kernel/*.meta2 to <newpath>/src
-  srcdir = os.path.join(newpath, 'src')
-  os.mkdir(srcdir, 0755)  
-  for base in os.listdir(kerneldir):
-    if base.endswith('.meta2') and base != '.meta2':
-      srcfile = os.path.join(kerneldir, base)
-      destfile = os.path.join(srcdir, base)
-      shutil.copyfile(srcfile, destfile)
-      if verbose:
-        print 'NOTE: Copied %s to %s' % (srcfile, destfile)
-        
-  ###
-  # Copy <<repository_path>>/oopl/python/metax to <newpath>/lib
-  #  - we specifically want symlinks to be converted into real files so
-  #    that the copy is self-contained. HOWEVER, this is dangerous if
-  #    there are symlinks that are massive ... how to address this?
-  repometax = os.path.join(
-    config['repository_path'], 'oopl', 'python', 'metax')
-  libdir = os.path.join(newpath, 'lib')
-  os.mkdir(libdir, 0755)
-  destmetax = os.path.join(libdir, 'metax')
-  shutil.copytree(repometax, destmetax, symlinks=False)
-  if verbose:
-    print 'NOTE: Copied %s to %s' % (repometax, destmetax)
-
-  ###
-  # Copy <<src_root>>/src/schema/{meta,oopl}/schema.meta to <newpath>/schema
-  schemasrc = os.path.join(config['src_root'], 'src', 'schema')  
-  schemadir = os.path.join(newpath, 'schema')
-  metadir = os.path.join(schemadir, 'meta')
-  oopldir = os.path.join(schemadir, 'oopl')
-  os.mkdir(schemadir, 0755)  
-  os.mkdir(metadir, 0755)  
-  os.mkdir(oopldir, 0755)
-  meta_schema_src = os.path.join(schemasrc, 'meta', 'schema.meta')
-  oopl_schema_src = os.path.join(schemasrc, 'oopl', 'schema.meta')
-  meta_schema_dst = os.path.join(metadir, 'schema.meta')
-  oopl_schema_dst = os.path.join(oopldir, 'schema.meta')
-  shutil.copyfile(meta_schema_src, meta_schema_dst)
-  if verbose:
-    print 'NOTE: Copied %s to %s' % (meta_schema_src, meta_schema_dst)
-  shutil.copyfile(oopl_schema_src, oopl_schema_dst)
-  if verbose:
-    print 'NOTE: Copied %s to %s' % (oopl_schema_src, oopl_schema_dst)
-
-  ###
-  # Copy $HOME/.config/metameta to <newpath>/config/metameta
-  configdir = os.path.join(newpath, 'config')
-  os.mkdir(configdir, 0755)
-  config_src = os.path.join(os.getenv('HOME'), '.config', 'metameta')
-  config_dst = os.path.join(configdir, 'metameta')
-  shutil.copyfile(config_src, config_dst)
-  if verbose:
-    print 'NOTE: Copied %s to %s' % (config_src, config_dst)
-
-  ###
-  # Update the 'current' link
-  current_link = os.path.join(release_dir, 'current')
-  if os.path.lexists(current_link):
-    if not os.path.islink(current_link):
-      raise IOError('Expecting %s to be a symlink' % current_link)
-    os.unlink(current_link)
-  os.symlink(newpath, current_link)
-
-  ###
-  # Update the 'stable' link
-  stable_link = os.path.join(release_dir, 'stable')
-  if os.path.lexists(stable_link):
-    if not os.path.islink(stable_link):
-      raise IOError('Expecting %s to be a symlink' % stable_link)
-    os.unlink(stable_link)
-  os.symlink(
-    os.path.join(release_dir, previous_version), stable_link)
-
-  ###
-  # Create a tar file (for releases)
-  #  - see https://superuser.com/questions/119928/weird-bug-in-tar-not-including-files-named-init-py
-  #    for details on why the env.vars. are being set.
-  if make_release:
-    release_path = os.path.join(release_dir, release_version)
-    os.symlink(newpath, release_path)
-    tarbase = release_version + '.tgz'
-    tarpath = os.path.join(release_dir, tarbase)
-    env = copy.copy(os.environ)
-    env['COPY_EXTENDED_ATTRIBUTES_DISABLE'] = 'true'
-    env['COPYFILE_DISABLE'] = 'true'
-    tarcmd = ['tar', '-czhf', tarbase, release_version]
-    subprocess.call(tarcmd, cwd=release_dir, env=env)
-    if verbose:
-      print 'NOTE: Created ' + tarpath
-
-
 def Main():
-  config = metastrap.Config()
-  version, expected_metax_dir = metastrap.ConfigureVersion()
-  expected_metax_path = os.path.join(expected_metax_dir, 'metax', 'c')
-
-  import metax.c
-  if metax.c.__path__[0] != expected_metax_path:
-    raise IOError(
-      'Expecting metax.c to resolve to\n  %s\nnot\n  %s' %
-      (expected_metax_path, metax.c.__path__[0]))
-  import metax.root
-  import metax.cli
-  
-  args = sys.argv[1:]
-  if not args:
-    # TODO(wmh): Print out more help
-    print 'Provide some args'
+  compiler_class, command, cli = metastrap.ImportMeta()
+  if not cli:
+    print 'ERROR: Exiting due to errors.'
     sys.exit(1)
 
-  # We process a few special actions before creating a metax.c.Compiler
-  # (they are guaranteed to be available even when the compiler itself is
-  # broken).
-  action = args[0]
-  
-  if action in ('rel', 'release'):
-    MakeSnapshot(verbose=True, make_release=True)
-  
-  elif action in ('snap', 'snapshot'):
-    MakeSnapshot(verbose=True, make_release=False)
+  cli = command.instantiate(sys.argv).asValues()
 
-  elif action == 'config':
-    vars = args[1:] or sorted(config)
-    if len(vars) == 1:
-      print config.get(vars[0], '<INVALID>')
-    else:
-      for var in vars:
-        print '%-20s = %s' % (var, config.get(var, '<INVALID>'))
+  # Although we don't need metax.c within this script (we already
+  # have compiler_class from above), other modules will be
+  # importing metax.c (and various other metax.* modules), so we
+  # perform one last sanity check to ensure that a new import of
+  # metax.c yields the same module as compiler_class is in.
+  import metax.c
+  assert metax.c is sys.modules[compiler_class.__module__]
 
-  else:
-    # Did not recognize action as being any of the pre-compile ones, so we
-    # create the compiler and have it handle the args.
+  # Initialize the compiler class.
+  compiler_class.Initialize()
 
-    # Temporary Command instance
-    command = metax.cli.Command('meta2')
-    command.newFlag(
-      'baselang', 'str', default='python', aliases='b',
-      summary='The baselang to compile into.',
-      desc='If this is <special>, a metalang-specific default is used')
-    command.newFlag(
-      'debug', 'int', default=0, aliases='A',
-      summary='Controls meta parsing debug level.')
-    command.newFlag(
-      'implicit_scopes', 'bool', default='false',
-      summary='If true, methods without scopes are given a default body.',
-      desc='By default, methods without scopes produce an error.')
-    command.newFlag(
-      'inmemory', 'bool', default='false',
-      summary='If true, use memory filesystem instead of disk filesystem.')
-    command.newFlag(
-      'metadir', 'str', default='.meta2',
-      summary='The subdir to write code to.',
-      desc="A value of .meta2 is treaed specially, being symlinked to repo")
-    command.newFlag(
-      'metalang', 'str', default='oopl', aliases='L',
-      summary='The metalang the code is defined in.')
-    command.newFlag(
-      'optimize_level', 'enum<off|low|avg|high|max>', default='high', aliases='O',
-      summary='The amount of optimization to enable compiled files.',
-      desc='')
-    command.newFlag(
-      'raw', 'bool', default='false',
-      summary=(
-        'If True, do not convert file references to meta '
-        '(keep baselang paths).'))
-    command.newFlag(
-      'rawtests', 'bool', default='false', aliases='r',
-      summary='If true, do not use bazel to run tests.',
-      desc=(
-        'Some baselangs can invoke the test harness without bazel, and for such\n'
-        'baselangs this flag disables bazel. Can yield significantly faster\n'
-        'test runtimes.'))
-    command.newFlag(
-      'test', 'bool', default='false', aliases='t',
-      summary='If true, invoke unit tests on all namespaces in all metafiles processed.')
-    command.newFlag(
-      'verbose', 'bool', default='false', aliases='v',
-      summary='If true, print out additional diagnostics.')
-    command.newFlag(
-      'verbosity', 'int', default='0', aliases='V',
-      summary='Levels of verbosity. Tied to --verbose.')
-    command.newFlag(
-      'write_goldens', 'bool', default='false', aliases='W',
-      summary='If true, tests involving goldens write instead of compare.')
-    command.newArg(
-      'args', multi=True, summary='All other args')
-    cli = command.instantiate(sys.argv).asValues()
+  # Invoke the compiler
+  try:
+    # CODETANGLE(meta2_entry_main): First arg must be 'main'
+    argv = ['main'] + cli.args
+    compiler_class.Entry(argv, parent=command)
+  except Exception as e:
+    # Perform base-to-meta line remapping on the exception string.
+    print '****** EXCEPTION: %s' % type(e)
+    err = traceback.format_exc()
+    metac = compiler_class.Current()
+    if metac is None:
+      # TODO(wmh): This means the attempt to instantiate the specified
+      # version of the compiler failed.  We attempt to instantiate an
+      # older version instead.
+      print 'NOTE: metac is None'
+      version = metastrap.Version
+      new_version = None
+      if version == 'beta':
+        new_version = 'current'
+      elif version == 'current':
+        new_version = 'stable'
+      if new_version:
+        # TODO(wmh): We have identified a new version of metax.c.  The question is,
+        # how do we load this new version into python, given that metax.c already
+        # exists?
+        #  - reload(metax.c) just reloads the source already identified for metax.c
+        #    without checking sys.path to see if a new path is available.
+        #  - deleting metax.c from sys.path and doing an 'import metax.c' does not
+        #    work (it finds the old version, so python's cache of already-loaded
+        #    modules is someplace other than sys.modules).
+        #  - modifying metax.c.__file__ and/or metax.c.__path__ does not appear to
+        #    work either.
+        #  - we make a symlink from new_path to new_path + '_' + new_version,
+        #    and import that module instead (after modifying sys.path to ensure
+        #    that new_path appears first in path).
+        new_path = metastrap.VersionPath(new_version)
+        print 'In meta2 with version %s path %s' % (new_version, new_path)
 
-    if cli.verbose and cli.verbosity == 0:
-      cli.verbosity = 1
-    elif cli.verbosity > 0 and not cli.verbose:
-      cli.verbose = True
+        # Adjust sys.path so that the new path appears first in the list.
+        sys.path.insert(0, new_path)
 
-    # Initialize meta-level Compiler
-    metax.root.MetaObject.Initialize(cli)
-    metax.c.Compiler.Initialize(cli)
+        if False:
+          # The 'reload' method just looks at the pre-existing source files
+          # associated with metax.c when we instead want python to re-examine
+          # sys.path.
+          print 'SRC BEFORE: %s' % metax.c.__file__          
+          reload(metax.c)
+          print 'SRC AFTER: %s' % metax.c.__file__          
 
-    # Invoke the compiler
-    try:
-      # CODETANGLE(meta2_entry_main): First arg must be 'main'
-      argv = ['main'] + cli.args
-      #argv = cli.args
-      metax.c.Compiler.Entry(argv, parent=command)
-    except Exception as e:
-      # Perform base-to-meta line remapping on the exception string.
-      err = traceback.format_exc()
-      metac = metax.c.Compiler.Current()
-      print metac
-      print err
+        elif False:
+          # Modifying metax.c.__file__ first does not work
+          print 'SRC BEFORE: %s' % metax.c.__file__
+          metax.c.__file__ = new_path + '/__init__.pyc'          
+          reload(metax.c)
+          print 'SRC AFTER: %s' % metax.c.__file__          
+
+        elif False:
+          # Modifying metax.c.__path__ first does not work
+          print 'SRC BEFORE: %s' % metax.c.__file__
+          metax.c.__path__ = [new_path]
+          reload(metax.c)
+          print 'SRC AFTER: %s' % metax.c.__file__          
+
+        elif False:
+          # Deleting all symbols associated with metax.c first does not work.
+          print 'Before fix, found %d symbols in sys.modules' % len(sys.modules)
+          for nfqn in sorted(sys.modules):
+            if nfqn == 'metax.c' or nfqn.startswith('metax.c.'):
+              del sys.modules[nfqn]
+          print 'After  fix, Found %d symbols in sys.modules' % len(sys.modules)
+          # TODO(wmh): Try reload!
+          import metax.c
+
+        elif True:
+          new_metaxname = 'metax_' + new_version
+          metax_src = os.path.join(new_path, 'metax')
+          metax_dst = os.path.join(new_path, new_metaxname)
+          if not os.path.lexists(metax_dst):
+            print '  symlinked %s to %s' % (metax_src, metax_dst)
+            os.symlink(metax_src, metax_dst)
+          metax_c = importlib.import_module(new_metaxname + '.c')
+          metax_cli = importlib.import_module(new_metaxname + '.cli')
+          print metax_c.Compiler
+          print metax_cli.Command
+
+        # Create the new instance of Compiler with appropriate flags.
+        print 'Here'
+        print err
+    if metac:
+      ifp = cStringIO.StringIO(err)
+      print metac.filterMetaOutput(ifp=ifp, debug=False)
 
 
 if __name__ == '__main__':

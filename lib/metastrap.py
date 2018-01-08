@@ -15,9 +15,13 @@ import sys
 Verbose = False
 
 # _Config: dict
-#   A cache of key/value pairs parsed from ~/.config/metameta. Used
+#   A cache of key/value pairs parsed from ~/.config/metaxy/config.meta. Used
 #   to optimize Config().
 _Config = None
+
+# Version: str
+#   The version of Meta being used, as established by ConfigureVersion().
+Version = None
 
 def Config(verbose=Verbose):
   """Parse the meta config file.
@@ -44,7 +48,7 @@ def Config(verbose=Verbose):
     # <<src_root/src/kernel/parser.meta2.
     vre = re.compile(r'var\s+(?P<var>\S+)\s+=\s+(?P<val>\S+)')
     # TODO(wmh): Add a --config flag to metameta2.py!
-    configpath = os.path.join(os.getenv('HOME'), '.config', 'metameta')
+    configpath = os.path.join(os.getenv('HOME'), '.config', 'metaxy', 'config.meta')
     if verbose:
       print 'NOTE: Reading %s' % configpath
     result = {}
@@ -72,6 +76,9 @@ def ConfigureVersion(verbose=Verbose):
   """
   config = Config()
 
+  # The list of paths to add, in reverse order, to the beginning of sys.path.
+  updates = []
+
   # Ensure that the Meta repository_path is the first place we look for code.
   #  - TODO(wmh): This may be too heavy-handed ... people want to have some
   #    control over the order in which python libraries are being found, and
@@ -83,10 +90,8 @@ def ConfigureVersion(verbose=Verbose):
   # happens in Meta(Oopl), and this 'meta2' script by definition means we want
   # the python implementation ... hence the hard-coding of metalang and baselang.
   repopath = os.path.join(config['repository_path'], 'oopl', 'python')
-  sys.path.insert(0, repopath)
   metaxpath = repopath
-  if verbose:
-    print 'NOTE: Added %s to front of sys.path' % repopath
+  updates.append(repopath)
 
   # Establish the version of Meta library code to use
   version = 'beta'
@@ -103,18 +108,49 @@ def ConfigureVersion(verbose=Verbose):
         sys.argv.pop(i)
   if verbose:
     print "NOTE: Using meta version '%s'" % version
+
+  global Version
+  Version = version
         
   if version != 'beta':
     # CODETANGLE(version_path): in meta2
-    path = os.path.join(config['src_root'], 'lib', 'versions', version, 'lib')
+    path = VersionPath(version)
     if not os.path.exists(path):
       raise IOError('Failed to find a Meta version in ' + path)
-    sys.path.insert(0, path)
     metaxpath = path
-    if verbose:
-      print 'NOTE: Added %s to front of sys.path' % path
+    updates.append(path)
+
+  UpdatePythonPath(updates, verbose=verbose)
         
   return version, metaxpath
+
+
+def UpdatePythonPath(updates, verbose=False):
+  if updates:
+    # We want the last element of updates to be first in sys.path, which
+    # happens when we insert each at position 0, start to last.
+    #
+    # TODO(wmh): If any of the newpaths already exist in sys.path, should we
+    # keep their existing position, or always add at the beginning of sys.path?
+    for newpath in updates:
+      sys.path.insert(0, newpath)
+      if verbose:
+        print 'NOTE: Added %s to front of sys.path' % newpath
+
+
+def VersionPath(version):
+  """Obtain the path to add to sys.path to load a given version of Meta.
+
+  Args:
+    version: str
+      A subdir of <<src_root>>/lib/versions.
+  """
+  config = Config()  
+  result = os.path.join(config['src_root'], 'lib', 'versions', version, 'lib')
+  if not os.path.exists(result):
+    raise Exception(
+      '%s does not exist (%s is an invalid version)' % result)
+  return result
 
 
 def RegisterPath(path, verbose=False):
@@ -137,6 +173,139 @@ def RegisterPath(path, verbose=False):
     pypath = '%s:%s' % (path, pypath) if pypath else path
     env['PYTHONPATH'] = pypath
   
+
+def ImportMeta():
+  """Configure sys.path to import the proper version of Meta, and import.
+
+  Returns: tuple<class,metax.cli.Command,metax.cli.Values>
+   1. The metax.c.Compiler class to use for interacting with Meta.
+   2. The metax.cli.Command instance defining the top-level flags of Meta.
+   3. The metax.cli.Values instance wrapping the instantiated metax.cli.Command
+      (note that the wrapped command in (3) is usually NOT the same as (2) ...
+      it will usually be a sub-command of (2)).
+  """
+  # Issues this method addresses:
+  #  - in order to create a metax.c.Compiler instance, we must first
+  #    establish which version of the meta2 code is desired.
+  #     - the beta version is available in <<repository_path>>/oopl/python/metax
+  #     - named versions are available in <<src_root>>/lib/versions/v<version>
+  #     - sys.path will always include <<repository_path>>/oopl/python
+  #     - if a version other than beta is desired, we insert
+  #       <<src_root>>/lib/versions/v<version>
+  #    sys.path to use the user-specified version of the meta compiler
+
+  # ConfigureVersion
+  #   - modifies sys.argv by removing --meta_version
+  #   - modifies sys.path by adding <<repository_path>>/oopl/python and, if
+  #     a version other than 'beta' was specified, another path BEFORE
+  #     the above path, which provides access to metax.
+  version, expected_metax_dir = ConfigureVersion()
+  expected_metax_path = os.path.join(expected_metax_dir, 'metax', 'c')
+
+  # Import some core metax modules and verify they have the desired version.
+  import metax.c
+  metax_path = os.path.dirname(metax.c.__file__)
+  if metax_path != expected_metax_path:
+    raise IOError(
+      'Expecting metax.c to resolve to\n  %s\nnot\n  %s' %
+      (expected_metax_path, metax.c.__path__[0]))
+  import metax.root
+  import metax.cli
+
+  command, cli = ParseArgv(sys.argv, metax.cli, root_module=metax.root)
+  
+  return metax.c.Compiler, command, cli
+
+
+def ParseArgv(argv, cli_module, root_module=None):
+  """Parse low-level command-line args into a metax.cli.Command instance.
+
+  Args:
+    argv: vec<str>
+      The command-line args to parse. Index 0 is the executable.
+    cli_module: module (required)
+      The metax.cli module to use.
+    root_module: module (optional)
+      The metax.root module to use. If not null, root_module.Initialize(cli)
+      is invoked to set the global CLI instance.
+
+  Returns: tuple<metax.cli.Command,metax.cli.Values>
+   1. The top-level Command instance. Never null.
+   2. The Values wrapper around the instantiated Command instance. Null on error.
+  """
+  # Define the metax.cli.Command instance that describes top-level Meta compiler
+  # flags. These are the only flags that general Metax compiler code will rely
+  # on.
+  command = cli_module.Command('meta2')
+  command.newFlag(
+    'baselang', 'str', default='python', aliases='b',
+    summary='The baselang to compile into.',
+    desc='If this is <special>, a metalang-specific default is used')
+  command.newFlag(
+    'debug', 'int', default=0, aliases='A',
+    summary='Controls meta parsing debug level.')
+  command.newFlag(
+    'implicit_scopes', 'bool', default='false',
+    summary='If true, methods without scopes are given a default body.',
+    desc='By default, methods without scopes produce an error.')
+  command.newFlag(
+    'inmemory', 'bool', default='false',
+    summary='If true, use memory filesystem instead of disk filesystem.')
+  command.newFlag(
+    'metadir', 'str', default='.meta2',
+    summary='The subdir to write code to.',
+    desc="A value of .meta2 is treaed specially, being symlinked to repo")
+  command.newFlag(
+    'metalang', 'str', default='oopl', aliases='L',
+    summary='The metalang the code is defined in.')
+  command.newFlag(
+    'optimize_level', 'enum<off|low|avg|high|max>', default='high', aliases='O',
+    summary='The amount of optimization to enable compiled files.',
+    desc='')
+  command.newFlag(
+    'raw', 'bool', default='false',
+    summary=(
+      'If True, do not convert file references to meta '
+      '(keep baselang paths).'))
+  command.newFlag(
+    'rawtests', 'bool', default='false', aliases='r',
+    summary='If true, do not use bazel to run tests.',
+    desc=(
+      'Some baselangs can invoke the test harness without bazel, and for such\n'
+      'baselangs this flag disables bazel. Can yield significantly faster\n'
+      'test runtimes.'))
+  command.newFlag(
+    'test', 'bool', default='false', aliases='t',
+    summary='If true, invoke unit tests on all namespaces in all metafiles processed.')
+  command.newFlag(
+    'verbose', 'bool', default='false', aliases='v',
+    summary='If true, print out additional diagnostics.')
+  command.newFlag(
+    'verbosity', 'int', default='0', aliases='V',
+    summary='Levels of verbosity. Tied to --verbose.')
+  command.newFlag(
+    'write_goldens', 'bool', default='false', aliases='W',
+    summary='If true, tests involving goldens write instead of compare.')
+  command.newArg(
+    'args', multi=True, summary='All other args')
+
+  # Instantiate the command line args against the above Command, putting all
+  # unknown args/flags into 'args'.
+  instantiated = command.instantiate(sys.argv)
+  if instantiated:
+    cli = instantiated.asValues()
+    if cli.verbose and cli.verbosity == 0:
+      cli.verbosity = 1
+    elif cli.verbosity > 0 and not cli.verbose:
+      cli.verbose = True
+    # Initialize metax.root.MetaObject
+    if root_module:
+      root_module.MetaObject.Initialize(cli)
+  else:
+    cli = None
+
+  return command, cli
+
 
 # http://dangerontheranger.blogspot.com/2012/07/how-to-use-sysmetapath-with-python.html
 class MetaImporter(object):

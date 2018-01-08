@@ -206,6 +206,7 @@ config:
         type : a Meta type
         simple : a simple block (i.e. an indented collection of lines)
         complex : a complex block (i.e. an indented collection of constructs)
+        simplex : a block that is complex if selector is '*', else simple
 
     secondary
     Attribute children : enum = <empty> #:
