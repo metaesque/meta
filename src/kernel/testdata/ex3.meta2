@@ -8,7 +8,7 @@ scope:
       A instance variable.
 
     raw
-    field instance_var2 : str = 'instancevar' #:
+    field instance_var2 : str = 'instance var' #:
       A raw instance variable.
       TODO(wmh): Make value 'instance var' when default attribute is
       of type 'expr' not 'word'. Same for fields below.
@@ -17,17 +17,26 @@ scope:
     field instance_var3 : A #:
       A raw public instance variable with no explicit value.
 
+    field instance_var4 : bool = false #:
+      A instance variable of type bool ... can handle pseudovars.
+
+
     meta
     field ClassVar : int = 70 #:
       A class variable.
 
     meta raw
-    field ClassVar2 : str = 'classvar' #:
+    field ClassVar2 : str = "class var" #:
       A raw class variable.
 
     meta raw tmppublic
     field ClassVar3 : A #:
       A raw public class variable with no explicit value.
+
+    meta
+    field ClassVar4 : bool = true #:
+      A class variable of type bool ... can handle pseudovars
+
 
     static
     field StaticVar : int = 700 #:
@@ -36,10 +45,20 @@ scope:
     static raw
     field StaticVar2 : str = 'staticvar' #:
       A raw static variable.
+      TODO(wmh): It may be useful to allow a string-valued default value
+      to NOT have quotes if it has no spaces.  Currently, such expressions
+      are being parsed as expr type 'var' rather than 'str', and are thus not
+      exercising the 'str' portion of BaseLanguageOopl._compileExpr. In order
+      to have it realize it should be a 'str', we would need to perform some
+      special-casing in the parser. Is it worth it?
 
     static raw tmppublic
     field StaticVar3 : A #:
       A raw public static variable with no explicit value.
+
+    static
+    field StaticVar4 : bool = false #:
+      A static variable of type bool ... can handle pseudovars
 
   end class A;
 

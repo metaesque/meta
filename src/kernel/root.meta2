@@ -218,7 +218,10 @@ scope:
       /# provide a memory-only filesystem. Figure out how to handle this.
       import os
       if fqn is None:
-        fqn = cls.__module__ + '.' + cls.__name__
+        if '.' in resource_id:
+          fqn, resource_id = resource_id.rsplit('.', 1)
+        else:
+          fqn = cls.__module__ + '.' + cls.__name__
       namespace_fqn, clsname = fqn.rsplit('.', 1)
       subparts = namespace_fqn.split('.')
 

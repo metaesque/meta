@@ -2208,32 +2208,18 @@ scope:
     end method _parseNum;
 
     protected
-    method _parseVar : map #:
+    method _parseVar : str #:
       Parse a id.
 
-      Note that pseudo vars like 'true', 'false', 'null', etc. are also parsed
-      by this method. There are some special pseudo-vars, like 'meta!out' (or
-      '!out') that are not exactly identifiers, since they contain '!'. We
-      special-case these by accepting 'meta!' or '!' at the beginning of a
-      variable.
+      Note that pseudo vars like 'true', 'false', 'null' and native vars like
+      'out', 'err', etc. are also parsed by this method
 
-      Note that by allowing vars to start with '!' or 'meta!', we are
-      introducing an ambiguity between variables and field accesssor
-      invocations. Does 'meta!out' refer to the special psuedo variable or to a
-      variable in current scope with a field named 'out'? As long as we require
-      callsites to start with '@' this ambiguity is avoided, but if we want to
-      drop the '@', we'll need to resolve the ambiguity. For variables prefixed
-      by '!' this isn't an ambiguity (callsites don't start with '!' ... unless
-      we make the receiver optional) and variables starting with 'meta!' are
-      easy to special-case (either by disallowing local variable 'meta' and/or
-      by checking whether there is both a local variable named 'meta' and an
-      associated special var and reporting an ambiguity error in such cases).
-
-      Some variables accsesible within a particular scope are not entirely
+      Some variables accessible within a particular scope are not entirely
       local. For example, suppose class 'A' within namespace 'nm.sp' has a
       method 'f', a public raw class field 'M' and a public raw static variable
-      'S'. From within method 'm', both 'M' and 'S' are visible, but what
-      syntax is used to access them?
+      'S'. From within method 'm', both 'M' and 'S' may (or may not) be 
+      considered visible.  If they are visible, what syntax is used to access
+      them?
        - for class fields, we have callsite notation for this:
            @nm.sp.A!M
          and if M wasn't raw, we could use accessor notation instead:
@@ -2955,12 +2941,21 @@ scope:
     params:
       var unquote : bool = false #:
         If true, and kind is 'str', remove quotes if they exist.
+      var quote : bool = false #:
+        If true, and kind is 'str', add quotes if they do not exist.
+      var delim : str = null #:
+        If non-null, and kind is 'str', use the specified quote delimiter.
+        If null, uses the quoting provided in the str value itself.
     scope:
       kind = self.kind()
       if kind == 'str':
         result = self.value()
         if unquote and result and result[0] == "\"" and result[-1] == "\"":
           result = result[1:-1]
+        elif quote and result and (result[0] != "\"" and result[0] != "'"):
+          if delim is None:
+            delim = "'"
+          result = delim + result + delim
       else:
         /# TODO(wmh): Do a better for the more complex types.
         result = str(self.value())
@@ -4860,6 +4855,11 @@ scope:
         /# attribute, so we use it.
         attribute = empty
         done = True
+      elif type == 'expr' and default == '<special>':
+        /# TODO(wmh): Can we avoid making this check here? Very specialized,
+        /# and every additional check slows down the compiler, as this method
+        /# is called very often.
+        default = None
       elif type == 'type':
         /# We need to upgrade the string-valued default to a Type instance.
         default = Type.Instance(default)
@@ -5812,9 +5812,60 @@ scope:
         /# elif value == '<special>':
         /#  value = None
         elif not isinstance(value, Expr):
-          raise Error(
-            'ExprAttribute value must be an Expr not %s (%s %s)' %
-            (type(value), self.litkey(), str(value)))
+          /# Temporary transitional code.
+          /# - while we convert the 'default' attribute of 'var', 'field' and
+          /#   'flag' from 'word' to 'expr', we implicitly convert some basic
+          /#   string values to Expr instances.
+          /# TODO(wmh): Remove this code when we are fully migrated!
+          print 'In ExprAttribute.valueIs() with non-expr "%s"' % value
+          if value == '""':
+            raise Error('here')
+          error = True
+          m = re.match(r'^[-+](\d+)(?:\.\d+)?$', str(value))
+          if m:
+            /# We have an int or float
+            error = False
+            kind = 'num'
+            if m.group(2) is None:
+              val = int(value)
+            else:
+              val = float(value)
+          elif value == '<special>':
+            /# TODO(wmh): This is actually supposed to be a type-specific
+            /# default (so if the variable is of type 'int', we assign 0, if it
+            /# is a Ptr, we assign baselang null, if it is a str, we assign
+            /# baselang empty string, etc. We do not have enough info here in
+            /# this method to establish that default (needs Type instance), so
+            /# we set the value to None so that downstream clients can deals
+            /# with it.
+            /# CODETANGLE(special_expr): TODO(wmh): Decide whether <special> is
+            /# indicated by an Expr with value() None, or by an Expr that is
+            /# None.
+            if False:
+              val = None
+              kind = 'str'
+            else:
+              value = None
+            error = False
+          else:
+            /# The only other string-valued Expr's we handle are vars and
+            /# strings.  For now, we just always assume str.
+            error = False
+            kind = 'str'
+            val = value
+
+          if error:
+            raise Error(
+              'ExprAttribute value must be an Expr not %s (%s %s)' %
+              (type(value), self.litkey(), str(value)))
+          elif value is None:
+            /# CODETANGLE(special_expr): TODO(wmh): Decide whether <special> is
+            /# indicated by an Expr with value() None, or by an Expr that is
+            /# None.
+            pass
+          else:
+            value = Expr(kind, value, val)
+
         /# NOTE(wmh): The user defining the accessor scope needs access to
         /# both the receiver variable and the field name. If the scope is
         /# implemented in <*>, both of these can be abstracted away, but if
@@ -7046,7 +7097,8 @@ scope:
         Type, not a str), or can also be Attribute subclass instances
         wrapping the proper value type (thus, 'scope:' can either be a
         list of strings or a SimpleBlock, 'params:' can be a ComplexBlock, etc.
-      var precount : precount = 0;
+      var precount : precount = 0 #:
+        How many empty lines appear before this construct in the source file.
       var termcode : int = 15;
       var position : str = null #:
         The name of some construct in the new parent preceeded by '+'
@@ -7848,7 +7900,10 @@ scope:
       termcode = self.termcode()
       if termcode > 0 and termcode != TERM_UNINIT:
         if termcode == 1:
-          fp.write(self.termstr() + '\n')
+          if prev and prev.isBlock():
+            fp.write(indent + self.termstr() + '\n')
+          else:
+            fp.write(self.termstr() + '\n')
         else:
           /# TODO(wmh): Sometimes we need a newline, sometimes we dont
           if prev and prev.isBlock():
@@ -8944,6 +8999,9 @@ scope:
       var executable : ExecutableConstruct = null #:
         The context within which this expr is being compiled.  Used in order
         to establish type of result from type analysis.
+        TODO(wmh): This should probably be renamed to symbol_construct of type
+        SymbolConstruct ... for vars it will be a MethodConstruct, but for
+        fields it will be a ClassConstruct.
       var typecheck : bool = true #:
         If False, do not typecheck, even if executable is provided.
         Useful for disabling certain warnings.
@@ -9059,12 +9117,12 @@ scope:
         /#    doesn't do interpolation within single-quoted strings.
         strlit = expr.value()
         if basel in ('cpp', 'java'):
-          result = '\"' + strlit[1:-1] + '\"'
+          result = expr.asStr(quote=True, delim='\"')
         elif basel in ('python', 'javascript'):
-          result = strlit
+          result = expr.asStr(quote=True)
         elif basel == 'perl':
           /# TODO(wmh): Clean this up.
-          result = strlit
+          result = expr.asStr(quote=True)
         else:
           raise Error('Provide implementation of str literals in %s' % basel)
         lines[-1] += result
@@ -9536,7 +9594,14 @@ scope:
         fid = field.id()
         metatype = field.attrval('type')
         fkind = field.attrval('kind')
-        default = fieldmap.get(fid, self.defaultValue(metatype))
+
+        /# We first see if the field exists in fieldmap
+        defval = fieldmap.get(fid, None)
+        if defval is None:
+          /# TODO(wmh): Should we do LOOKUP on 'default' to get '<special>', or
+          /# set it to null here?
+          default = field.attrval('default', default=None)
+          defval = self.formatExpr(default, metatype, field)
         if fkind == 'static':
           /# Static fields are not initialized in initializers. They are handled
           /# on a per-baselang basis in FieldConstruct.translateMeta(),
@@ -9546,20 +9611,20 @@ scope:
           /# There is an explicit initialization of this field in the
           /# user-provided code, so we do NOT provide a default initialization.
           fval = initmap[fid]
-          /# print 'HERE with %s and %s = %s = %s' % (method.fqn(), fid, fval, default)
-          if fval == default:
+          /# print 'HERE with %s and %s = %s = %s' % (method.fqn(), fid, fval, defval)
+          if fval == defval:
             method.metafile().warning(
               'Explicit initalization of %s to %s not necessary (is default)' %
-              (fid, default), attr=scope_attr)
+              (fid, defval), attr=scope_attr)
         elif basel == 'cpp' and metatype.isValue() and not metatype.isPrimitive():
           /# There is no need to initialize the field, because C++ has already
           /# invoked a constructor on the field class to initialize the field
           /# before this method was entered.
-          /# print 'Skipping %s = %s' % (field.rawfield(), default)
+          /# print 'Skipping %s = %s' % (field.rawfield(), defval)
           pass
         else:
           output.append(
-            '%s%s = %s%s' % (recsepstr, field.rawfield(), default, stmtend))
+            '%s%s = %s%s' % (recsepstr, field.rawfield(), defval, stmtend))
     test:
       ooplpy, _, context, _ = test.cachedInfo(basel='python')
       metafile = test.parserFor('Oopl', '')
@@ -12351,6 +12416,9 @@ scope:
 
   behavior formatExpr #:
     Convert an Expr to baselang syntax.
+
+    TODO(wmh): FIX THIS!  BaseLanguageOopl.compileExpr() already does this,
+    and much better.
   params:
     var value : any #:
       TODO(wmh): In the transitional period where we are switching 'default'
@@ -12361,15 +12429,39 @@ scope:
     var mtype : Type #:
       The type of the expression.  Only used if value is None, in which case
       the default value associated with this type is used.
+    var construct : Construct #:
+      A MethodConstruct or FieldConstruct, etc.
   scope:
 
     receiver BaseLanguageOopl scope:
       if value is None:
+        /# CODETANGLE(special_expr): TODO(wmh): Decide whether <special> is
+        /# indicated by an Expr with value() None, or by an Expr that is None.
         result = self.defaultValue(mtype)
       elif isinstance(value, basestring):
         result = value
       elif isinstance(value, Expr):
-        result = 'fix me'
+        if True:
+          metafile = construct.context().metafile()
+          executable = construct if isinstance(construct, ExecutableConstruct) else None
+          result, restype = self.compileExpr(value, metafile, executable=executable)
+        else:
+          kind = value.kind()
+          if kind == 'str':
+            result = value.value()
+            /# CODETANGLE(special_expr): TODO(wmh): Decide whether <special> is
+            /# indicated by an Expr with value() None, or by an Expr that is None.
+            if result is None:
+              result = self.defaultValue(mtype)
+          elif kind == 'id':
+            result = value.value()
+            /# TODO(wmh): Handle pseudovars here!
+            /# result = self.pseudovars().get(result, result)
+          elif kind == 'num':
+            result = value.value()
+          else:
+            print '*** HERE with %s = %s' % (value, mtype.raw())
+            result = 'fix me'
       else:
         raise Error('Unknown value type %s for formatExpr' % type(value))
       return result
@@ -12393,7 +12485,11 @@ scope:
       if kind == 'static':
         default = field.attrval('default', default=None)
         mtype = field.attrval('type', default=metax.c.LOOKUP)
-        basedef = self.formatExpr(default, mtype)
+        /# print '%s : %s = %s' % (field.fqn(), mtype.raw(), default)
+
+        /# TODO(wmh): Replace this with compileExpr() when we are fully
+        /# migrated to 'default' always being of type 'expr'.
+        basedef = self.formatExpr(default, mtype, field)
         result = ['%s = %s' % (field.rawfield(), basedef)]
       else:
         result = []
@@ -12674,8 +12770,10 @@ scope:
         for param in pdata:
           part = param['name']
           if 'default' in param:
-            default = param['default']
+            default = self.formatExpr(
+              param['default'], param['type'], executable)
             defval = self.pseudovars().get(default, default)
+            /# print '%s : %s = %s [%s]' % (param['name'], param['type'].raw(), param['default'], defval)
             part += '=' + defval
           result.append(part)
       if 'varvec' in params:
@@ -12698,7 +12796,8 @@ scope:
         for param in pdata:
           part = param['name']
           if 'default' in param:
-            default = param['default']
+            default = self.formatExpr(
+              param['default'], param['type'], executable)
             defval = self.pseudovars().get(default, default)
             /# As of ES2015, default parameters exist in javascript.
             /#   https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Default_parameters
@@ -12735,7 +12834,9 @@ scope:
               /# In C++, default args can be added to declaration or
               /# definition but not both.  Since the default args are part of
               /# the public interface, we assign them in decl not defn.
-              default = param['default']
+              print param
+              default = self.formatExpr(
+                param['default'], param['type'], executable)
               defval = self.pseudovars().get(default, default)
               part += ' = ' + defval
           result.append(part)
@@ -13555,8 +13656,15 @@ scope:
         myclass = method.myclass()
       if location is None:
         location = method.attrval('location')
+      attrkind = method.attrval('kind')
       if style == 'base':
-        if self.id() in ('python', 'perl'):
+        if attrkind == 'static':
+          /# TODO(wmh): Some baselangs will need to use fqn rather than id.
+          /# Also, in C++, the separator between the receiver and method is
+          /# different for static methods than for instance/meta methods, and
+          /# will have to be special-cased in FieldConstruct.expandMeta().
+          result = myclass.id()
+        elif self.id() in ('python', 'perl'):
           if myclass.isMeta():
             result = 'cls'
           else:
@@ -14064,7 +14172,7 @@ scope:
             /#   cls assoc <class>;
             /# when <class> is not a legal class.
             klass = metac.classes().get(fqn, None)
-            metafile.error(
+            metafile.warning(
               'Failed to find class %s' % fqn,
               line=klass.primary().line() if klass else -1)
           elif fs.exists(meta_path):
@@ -14075,7 +14183,7 @@ scope:
             print '  %s = %s' % (fqn, meta_path)
           if meta_path in existing_metafiles:
             pass
-          else:
+          elif meta_path:
             metapaths.add(meta_path)
 
       /# We import all of the dependent metafiles.
@@ -15538,10 +15646,12 @@ scope:
         user: the user defined class
         test: the implicitly generated test class associated with a user class
         meta: the implicitly generated meta class associated with a user class
-        metatest: the implicit metaclass of an implicit test class
-        testmeta: the implicit testclass of an implicit meta class
+        metatest: the implicit metaclass of an implicit test class for a user class
+        testmeta: the implicit testclass of an implicit meta class for a user class
         testuser: a user-provided test class
         metauser: a user-provided meta class
+        testmetauser: an implicit metaclass for a user-provided test class
+        metatestuser: an implicit testclass for a user-provided meta class
         null: not yet initialized
 
     field resources : @map #:
@@ -15634,7 +15744,7 @@ scope:
     method isMeta : bool #:
       True if this class is a meta class.
     scope:
-      return self.variant() in ('meta', 'metatest', 'metauser')
+      return self.variant() in ('meta', 'metatest', 'metauser', 'metatestuser')
     test:
     end method isMeta;
 
@@ -15738,8 +15848,11 @@ scope:
         assert userclass.testclass() is self
         assert underclass is userclass
         assert testclass is None
-        assert metaclass is not None
-        assert metaclass.underclass() is self
+        if Compiler.IMPL['metatestclass']:
+          assert metaclass is not None
+          assert metaclass.underclass() is self
+        else:
+          assert metaclass is None
 
       elif variant == 'testmeta':
         assert userclass is not None
@@ -15760,7 +15873,10 @@ scope:
         assert underclass is userclass
         assert metaclass is None
         assert testclass is not None
-        assert testclass.underclass() is self
+        if Compiler.IMPL['testmetaclass']:
+          assert testclass.underclass() is self
+        else:
+          assert testclass.underclass() is self.underclass()
 
       elif variant == 'metatest':
         assert userclass is not None
@@ -15774,6 +15890,7 @@ scope:
         assert underclass is None
         assert testclass is None
         assert metaclass is None
+
     test:
     end method validate;
 
@@ -16183,24 +16300,27 @@ scope:
             precount=1)
 
           /# Create the auto-generated metaclass for the auto-generated testclass
-          metatestname = ClassConstruct.MetaifyName(testname)
-          metatestblock = testblock
-          /# For now, while we are using root.meta instead of root.meta2, but
-          /# this will need to change when we implement root.met2
-          metatestparent = ClassConstruct.MetaifyName('metax.test.TestCase')
-          metatestclass = ClassConstruct.NewFromData(
-            /# TODO(wmh): Verify that metatest class should share same context as
-            /# user class.
-            metatestname, context, parent=metatestblock,
-            features=[('location', 'meta')],
-            secondaries=[
-              ('parent', metatestparent),
-              ('comment:',
-               ['Auto-generated meta class for auto-generated test class ' + testclass.fqn()]),
-              ('scope:', []),
-            ],
-            position='-' + testname,
-            precount=1)
+          if Compiler.IMPL['metatestclass']:
+            metatestname = ClassConstruct.MetaifyName(testname)
+            metatestblock = testblock
+            metatestparent = ClassConstruct.MetaifyName(testparent)
+            metatestparent2 = ClassConstruct.MetaifyName('metax.test.TestCase')
+            /# print 'For %s\n  %s\n  %s' % (self.kindfqn(), metatestparent, metatestparent2)
+            metatestclass = ClassConstruct.NewFromData(
+              /# TODO(wmh): Verify that metatest class should share same context as
+              /# user class.
+              metatestname, context, parent=metatestblock,
+              features=[('location', 'meta')],
+              secondaries=[
+                ('parent', metatestparent),
+                ('comment:',
+                 ['Auto-generated meta class for auto-generated test class ' + testclass.fqn()]),
+                ('scope:', []),
+              ],
+              position='-' + testname,
+              precount=1)
+          else:
+            metatestclass = None
         else:
           testclass = None
           metatestclass = None
@@ -16210,23 +16330,32 @@ scope:
           metaclass = self.generateMetaClass()
           metaname = metaclass.id()
 
-          /# Create the auto-generated testclass for the auto-generated metaclass
-          testmetaname = ClassConstruct.TestifyName(metaname)
-          testmetablock = testblock
-          testmetaparent = testparent
-          testmetaclass = ClassConstruct.NewFromData(
-            /# TODO(wmh): Verify that meta class should share same context as
-            /# user class.
-            testmetaname, context, parent=testmetablock,
-            features=[('location', 'test')],
-            secondaries=[
-              ('parent', testmetaparent),
-              ('comment:',
-               ['Auto-generated test class for auto-generated meta class %s.' %
-                metaclass.fqn()]),
-              ('scope:', []),
-            ],
-            precount=1)
+          if not Compiler.IMPL['testmetaclass']:
+            /# There is very little benefit to creating an auto-generated test
+            /# class associated with the auto-generated meta-class of a user
+            /# class. Rather, methods defined on metaclasses can have their test
+            /# methods defined on the auto-generated test class of the user
+            /# class. This makes things conceptually simpler without loss of
+            /# generality.
+            testmetaclass = None
+          else:
+            /# Create the auto-generated testclass for the auto-generated metaclass
+            testmetaname = ClassConstruct.TestifyName(metaname)
+            testmetablock = testblock
+            testmetaparent = testparent
+            testmetaclass = ClassConstruct.NewFromData(
+              /# TODO(wmh): Verify that meta class should share same context as
+              /# user class.
+              testmetaname, context, parent=testmetablock,
+              features=[('location', 'test')],
+              secondaries=[
+                ('parent', testmetaparent),
+                ('comment:',
+                 ['Auto-generated test class for auto-generated meta class %s.' %
+                  metaclass.fqn()]),
+                ('scope:', []),
+              ],
+              precount=1)
         else:
           metaclass = None
           testmetaclass = None
@@ -16309,7 +16438,13 @@ scope:
           metaclass.variantIs('meta')
           metaclass.userclassIs(self)
           metaclass.underclassIs(self)
-          metaclass.testclassIs(testmetaclass)
+          if Compiler.IMPL['testmetaclass']:
+            metaclass.testclassIs(testmetaclass)
+          else:
+            /# We are not generating test clases for metaclasses of userclasses,
+            /# and are instead adding test methods for meta-methods to the
+            /# testclass of the userclass.
+            metaclass.testclassIs(testclass)
           metaclass.metaclassIs(None)
           metaclass.namespaceIs(namespace)
           newclasses.append(metaclass)
@@ -16368,13 +16503,25 @@ scope:
           /# been moved to the testspace ... full expansion is needed.
           proceed = True
 
+          /#print '********* HERE with %s' % self.kindfqn()
+
           /# We need to generate a metaclass for the user-provide testclass.
           testmetaclass = self.generateMetaClass()
-          testmetaclass.variantIs('testusermeta')
+          testmetaclass.variantIs('metatestuser')
           testmetaclass.namespaceIs(namespace)
           testmetaclass.initParentClasses()
-          /# TODO(wmh): Determine if it is necessary to invoke expandMeta().
-          /# testmetaclass.expandMeta()
+          
+          /# IMPORTANT: We cannot expand the testmetaclass until we have
+          /# fully expanded the testclass, since the testclass may have
+          /# meta-level fields and methods that need to be added to the
+          /# testmetaclass.
+          /# TODO(wmh): Fix this ... the testmetaclass is currently being
+          /# expanded before the testclass itself.
+          newclasses.append(testmetaclass)
+
+      elif variant == 'metatestuser':
+        /# The auto-generated meta class of a user-defined test class.
+        proceed = True
 
       elif variant == 'metauser':
         /# We are in a user-provided meta class
@@ -16403,9 +16550,7 @@ scope:
         /# Invoke expandMeta() on child constructs.
         /#  - we make a copy of children so that we do NOT expand the implicit
         /#    children added to children by calls to child.expandMeta().
-        /#  - we only invoke
-        user_children = list(children)
-        for child in user_children:
+        for child in list(children):
           child.myclassIs(self)
           child.expandMeta()
 
@@ -16477,19 +16622,22 @@ scope:
             /# associated scope:) always be explicitly defined in user classes,
             /# and leave it up to the user to properly delegate up the
             /# stack.
-            params = metax.c.ExecutableConstruct.CreateParams(
-              [
-                {'var': 'args',
-                 'features': [('multiplicity', 'multi')],
-                 'secondaries': [(':', Type.Instance('vec'))]},
-                {'var': 'kwds',
-                 'features': [('multiplicity', 'multi')],
-                 'secondaries': [(':', Type.Instance('map'))]},
-              ],
-              context)
-            secondaries.append(('params:', params))
-            super_expr = ExprParser.StrExpr('(args, kwds)')
-            secondaries.append(('super', super_expr))
+            if basel == 'python':
+              params = metax.c.ExecutableConstruct.CreateParams(
+                [
+                  {'var': 'args',
+                   'features': [('multiplicity', 'multi')],
+                   'secondaries': [(':', Type.Instance('vec'))]},
+                  {'var': 'kwds',
+                   'features': [('multiplicity', 'multi')],
+                   'secondaries': [(':', Type.Instance('map'))]},
+                ],
+                context)
+              secondaries.append(('params:', params))
+              super_expr = ExprParser.StrExpr('(args, kwds)')
+              secondaries.append(('super', super_expr))
+            else:
+              print '***** FIX ME FIX ME!'
 
           secondaries.append(('scope:', [], -1))
           initializer = MethodConstruct.NewFromData(
@@ -16502,6 +16650,18 @@ scope:
           /#print 'WARNING: created implicit %s (%s)' % (initializer.fqn(), self.isTest())
           /# initializer.write()
           self.registerInitializer(initializer)
+
+          /# In situations where we have classes like:
+          /#    class Error < metax.root.Error;
+          /#    class InternalError < Error;
+          /# note that the termcode for both of the above is 1. After inserting
+          /# the implicit initializer, it is not very readable to terminate with
+          /# just a semicolon, so we upgrade the termcode. Similarly, we insert
+          /# an empty line before such constructs in the interests of readability.
+          if self.termcode() == 1:
+            self.termcodeIs(3)
+          if self.precount() == 0:
+            self.precountIs(1)
 
         if self.isTest():
           /# There are two different kinds of classes that can appear within a
@@ -16548,7 +16708,7 @@ scope:
                     /# this by introducing a TEST_M macro that invokes the
                     /# constructor with the method name (after which we could
                     /# remove the default value below).
-                    (':', Type.Instance('&str')), ('=', '""')]},
+                    (':', Type.Instance('&str')), ('=', Expr('str', '""', '""'))]},
                     /# TODO(wmh): In Meta, we need a baselang-independent
                     /# mechanism for initializing a variable to the empty
                     /# value of its type (e.g. "" for string, [] for vec,
@@ -16624,10 +16784,22 @@ scope:
               context)
 
             /# Create a 'super' attribute
-            fauxfile = metax.c.MetaFile(
-              '/faux/faux.meta', metac,
-              text='(name, bases, symbols)\n')
-            super_expr = ExprParser(fauxfile).parse()
+            if True:
+              /# Explicit creation
+              super_expr = Expr(
+                'plist', '(name, bases, symbols)', 
+                [
+                  Expr('var', 'name', 'name'),
+                  Expr('var', 'bases', 'bases'),
+                  Expr('var', 'symbols', 'symbols')
+                ]
+              )
+            else:
+              /# Indirect and slow creation
+              fauxfile = metax.c.MetaFile(
+                '/faux/faux.meta', metac,
+                text='(name, bases, symbols)\n')
+              super_expr = ExprParser(fauxfile).parse()
             super = ExprAttribute(initializer, 'super', super_expr)
 
             iscope = initializer.attr('scope:', default=None)
@@ -16681,10 +16853,10 @@ scope:
           /#  - the parent class was not defined within Meta
           /#  - the parent class is incorrectly specified by the user
           /#  - there is a bug in Meta
-          if not parent_info['external']:
-            print 'PARENT INFO: %s' % str(parent_info)
+          if not parent_info.get('external', False):
+            /# print 'PARENT INFO: %s' % str(parent_info)
             metafile.warning(
-              'Failed to import parent %s' % fqn,
+              'Failed to import parent %s for %s' % (fqn, self.fqn()),
               line=self.primary().line())
           else:
             /# The parent is defined in the baselang, not in Meta. We create
@@ -17057,7 +17229,9 @@ scope:
           /# CODETANGLE(implicit_objectmeta)
           'metax.root.ObjectMeta', 'cls', 'every class depends on ObjectMeta')
 
-      /# If this class is a test class, we always import the class it tests.
+      /# If this class is a test class, we always import:
+      /#  - the class it tests.
+      /#  - metax.test (for metax.test.main()) ... in python
       if self.isTest():
         underclass = self.underclass()
         if underclass:
@@ -17071,6 +17245,14 @@ scope:
             tsfqn = 'goog.testing.testSuite'
             self.addDependency(
               tsfqn, 'cls', 'implicit import in ClassConstruct.translateMeta()',
+              target=None)
+
+          /# In python, the metax.test module is needed because metax.test.main()
+          /# is invoked to start the test suite.
+          if basel == 'python':
+            self.addDependency(
+              'metax.test', 'lib', 
+              'implicit import of metax.test so metax.test.main() is available',
               target=None)
         else:
           /# Means we have an explicit user-provided test class.
@@ -17109,6 +17291,7 @@ scope:
     method generateImplicitMeta : MethodConstruct #:
       Generate a 'meta' method for this class.
     scope:
+      result = None
       /# TODO(wmh): Once confident that the generation of this method is
       /# working properly in all baselangs, some optimizations can be
       /# performed:
@@ -17126,60 +17309,71 @@ scope:
       context = self.context()
       metaclass = self.metaclass()
       if metaclass is None:
-        raise InternalError(
-          'Must initialize metaclass before invoking generateImplicitMeta().')
-
-      /# Define an implicit method named 'meta' that returns the
-      /# singleton instance of the metaclass defining this class.
-      /#  - if metaclasses have been disabled, the method should return null.
-      /# TODO(wmh): When statement-level constructs exist, define this
-      /# method in Meta<*>:
-      metaclass_instname = ClassConstruct.MetaInstifyName(name)
-      test_body = ["%s noop" % Context.TOKENS['remark']]
-      if baselang.id() == 'python':
-        test_body.append('pass')
-      meta_body = baselang.metaMethodBody(metaclass_instname, metaclass)
-
-      /# We need to establish whether the 'meta' method is defined on an
-      /# ancestor or not. Once we have full hierarchy info we can establish
-      /# this directly, but for now the following heuristic:
-      /#  - if fqn is metax.root.Object, inheritance new
-      /#  - if fqn is metax.root.ObjectMetaRoot, inheritance new
-      /#  - if fqn is metax.test.TestCase, inheritance new
-      /#  - if class does not inherit from any of the above, inheritance new
-      /#  - otherwise inheritance override
-      if fqn in (
-        'metax.root.Object',
-        'metax.root.ObjectMetaRoot',
-        'metax.test.TestCase'
-      ):
-        inheritance = 'new'
-      else:
-        inheritance = 'override'
-      features = [
-        ('inheritance', inheritance),
-        ('autogen', 'notest'),
-      ]
-      secondaries = [
-        /# We use * instead of & because we want to support the conditional
-        /# inclusion of metaclasses.
-        ('returns', Type.Instance('*metax.root.ObjectMetaRoot')),
-        ('scope:', meta_body),
-        ('test:', test_body)
-      ]
+        /# TODO(wmh): Determine when this is an error, and when this is working
+        /# as intended!
+        if Compiler.IMPL['metatestclass']:
+          raise InternalError(
+            'Must initialize metaclass of %s before invoking '
+            'generateImplicitMeta().' % fqn)
+        else:
+          /# Do not generate a 'meta' method.
+          scope = None
 
       if scope:
         /# We do not create a 'meta' method if there is no explicit scope:
         /# in the class.  This deals with the common case of someting like
         /#   class Error < metax.root.Error;
+        /# and also situations where no metaclass exists for the class.
+        /#
         /# However, this may pose problems in other situations ... we can
         /# reconsider how to handle this if it is an issue. Added because
         /# NewFromData() was failing when parent=None and position!=null.
-        metaMethod = MethodConstruct.NewFromData(
-          'meta', context, parent=scope,
+
+        /# Define an implicit method named 'meta' that returns the
+        /# singleton instance of the metaclass defining this class.
+        /#  - if metaclasses have been disabled, the method should return null.
+        /# TODO(wmh): When statement-level constructs exist, define this
+        /# method in Meta<*>:
+        metaclass_instname = ClassConstruct.MetaInstifyName(name)
+        test_body = ["%s noop" % Context.TOKENS['remark']]
+        if baselang.id() == 'python':
+          test_body.append('pass')
+        meta_body = baselang.metaMethodBody(metaclass_instname, metaclass)
+
+        /# We need to establish whether the 'meta' method is defined on an
+        /# ancestor or not. Once we have full hierarchy info we can establish
+        /# this directly, but for now the following heuristic:
+        /#  - if fqn is metax.root.Object, inheritance new
+        /#  - if fqn is metax.root.ObjectMetaRoot, inheritance new
+        /#  - if fqn is metax.test.TestCase, inheritance new
+        /#  - if class does not inherit from any of the above, inheritance new
+        /#  - otherwise inheritance override
+        if fqn in (
+          'metax.root.Object',
+          'metax.root.ObjectMetaRoot',
+          'metax.test.TestCase'
+        ):
+          inheritance = 'new'
+        else:
+          inheritance = 'override'
+        features = [
+          ('inheritance', inheritance),
+          ('autogen', 'notest'),
+        ]
+        secondaries = [
+          /# We use * instead of & because we want to support the conditional
+          /# inclusion of metaclasses.
+          ('returns', Type.Instance('*metax.root.ObjectMetaRoot')),
+          ('scope:', meta_body),
+          ('test:', test_body)
+        ]
+
+        result = MethodConstruct.NewFromData(
+          'meta', context, parent=scope, precount=1,
           features=features, secondaries=secondaries,
           primary_line=-1, position='+')
 
+      return result
     test:
     end method generateImplicitMeta;
 
@@ -17751,7 +17945,7 @@ scope:
         command_init.append('if selected_command is None:')
         command_init.append('  return')
         command_init.append('meta__names = selected_command.names()')
-        command_init.append('flags = selected_command.asValues()')
+        command_init.append('cli = selected_command.asValues()')
 
         /# We create the entry method.
         method_name = 'Entry'
@@ -17766,7 +17960,7 @@ scope:
             'secondaries': [
               (':', Type.Instance('metax.root.Command')),
               ('#:', ['A parent command. Usually null.']),
-              ('=', 'null'),
+              ('=', Expr('var', 'null', 'null')),
             ]},
           ],
           context)
@@ -17906,8 +18100,9 @@ scope:
       aliases = self.attrval('aliases', default=None)
       type = self.attrval('type', default=None) or Type.Instance('str')
       default = self.attrval('default', default=None)
-      if default is None:
-        default = baselang.defaultValue(type)
+      baselang_default = baselang.formatExpr(default, type, self)
+      /#if default is None:
+      /#  default = baselang.defaultValue(type)
       summary, desc = self.splitComment()
 
       /# Establish if this is a flag or arg.
@@ -17929,7 +18124,7 @@ scope:
       /# Generate the code.
       output.append(
         "%s%s.new%s(" % (indent, command_var, 'Arg' if isarg else 'Flag'))
-      baselang_default = baselang.metabaseValue(default)
+      /# baselang_default = baselang.metabaseValue(default)
       output.append(
         "%s  '%s', mytype='%s', default=%s," % (
           indent, name, typestr, baselang_default))
@@ -18559,6 +18754,10 @@ scope:
             /#      (e.g. no secondaries are needed)
             testdata = []
             testbase = ExecutableConstruct.TestifyName(self.id())
+            /# TODO(wmh): Generalize to all baselangs
+            if testbase == 'test___init__':
+              testbase = ExecutableConstruct.TestifyName(myclass.id())
+
             voidtype = Type.Instance('void')
 
             if variant == 'meta' or kind == 'initializer':
@@ -18584,11 +18783,10 @@ scope:
                   'Not yet handling complex test: blocks', attribute=testattr)
               else:
                 /# Simple block of lines.
-                testname = ExecutableConstruct.TestifyName(self.id())
                 if len(testlines) == 0:
                   testlines = baselang.emptyBlockCode(
                     None, message=missing_message)
-
+                  
                 testdata.append({
                   'name': testbase,
                   'features': [],
@@ -18600,11 +18798,11 @@ scope:
             elif testsattr:
               /# We have one or more testx constructs.
               for testx in testxes:
-                testname = (
-                  ExecutableConstruct.TestifyName(self.id()) + '_' + testx.id())
+                testname = testbase + '_' + testx.id()
                 metafile.info(
                   'Not yet handling testx constructs',
                   line=testx.primary().line())
+                /# TODO(wmh): Fix this! Add methods with name 'testname'
 
             else:
               /# Neither 'test:' nor 'tests:' was defined.
@@ -18861,7 +19059,7 @@ scope:
           self.myclass().variant() == 'user'
           /# If --implicit_scopes is specified, we are to generate a dummy
           /# scope block rather than report a warning.
-          and not metac.flags().implicit_scopes
+          and not metac.cli().implicit_scopes
         ):
           metafile.warning(
             '%s is general but missing scope<%s>' %
@@ -19006,7 +19204,9 @@ scope:
           {'var': 'name',
            'secondaries': [('type', Type.Instance('int'))]},
           {'var': 'age',
-           'secondaries': [(':', Type.Instance('int')), ('=', '77')]},
+           'secondaries': [
+             (':', Type.Instance('int')),
+             ('=', metax.c.Expr('int', '77', 77))]},
           {'var': 'rest', 'features': [('multiplicity', 'multi')],
            'secondaries': [(':', Type.Instance('vec'))]},
         ],
@@ -19108,7 +19308,11 @@ scope:
               item = {'name': name, 'type': type}
               if provides:
                 item['provides'] = provides
-              if default != '<special>':
+              /# CODETANGLE(special_expr): TODO(wmh): Decide whether <special>
+              /# is indicated by an Expr with value() None, or by an Expr that
+              /# is None. Depending on which is decided, default below is either
+              /# never None, or never '<special>'.
+              if default is not None and default != '<special>':
                 item['default'] = default
               if comlines:
                 item['comment'] = comlines
@@ -22529,7 +22733,7 @@ scope:
     scope:
       fs = self.fs()
       metac = self.compiler()
-      flags = metac.flags()
+      flags = metac.cli()
       metadir = flags.metadir
       if metadir != metax.c.SUFFIX:
         self.warning(
@@ -23212,6 +23416,25 @@ scope:
       /# Initialized in Initialize(). Replaces all envars with a single
       /# file containing all configuration options.
       cls.CONFIG = None
+
+      /# A collection of constants controlling implementation paths.
+      cls.IMPL = {
+        /# If true, do create an auto-generated test class for the
+        /# auto-generated meta-class of each user-class (and put the test blocks
+        /# of meta methods defined within user-classes within this test class).
+        /# If false, do NOT create a test class for metaclasses of userclasses,
+        /# and put the test blocks of meta methods within the testclass of the
+        /# userclass instead.
+        'testmetaclass': False,
+        /# If true, do create an auto-generated metaclass for the auto-generated
+        /# testclass of each userclass. If false, do NOT create such a
+        /# metaclass. The latter implies that meta fields and meta methods
+        /# are not supported on test classes. In general, static fields/methods
+        /# should always suffice for auto-generated test classes, but there
+        /# will definitely be places where meta fields/methods will be needed
+        /# on explicit test-classes provided by users.
+        'metatestclass': False,
+      }
     end lifecycle;
 
     meta
@@ -23381,6 +23604,7 @@ scope:
 
       self.metalangIs(metalang)
       self.levelsIs(levels)
+
 
       /# The baselang doesn't need to be set upon creation, but will be
       /# needed for actions involving expansion and compilation.
@@ -23877,6 +24101,7 @@ scope:
           /# baselang.postCreationInitialization(metalang=metalang, name=)
           metalang.registerBase(baselang)
 
+
         /# Register metalang in cache.
         metalangs[metalang.id()] = metalang
         metalangs[metalang.id().lower()] = metalang
@@ -23973,6 +24198,7 @@ scope:
       /# MetaFile. Note that MetaFile.parseMeta() will invoke subclone() on this
       /# instance to create a metafile-specific Context instance.
       /#metalang.write()
+
       for construct in metalang.rawattr('config:').value():
 
         if debug:
@@ -24051,6 +24277,8 @@ scope:
               replacer = AttrVal(attribute, 'replacer', default=None)
               comment  = AttrVal(attribute, 'comment',  default=None)
 
+              /# print '%s is %s : %s = %s' % (construct.kindfqn(), akey, type, default)
+
               keyopt = False
               valopt = False
               autokey = None
@@ -24072,6 +24300,7 @@ scope:
                   /# consinfo.primary() maps primary tokens all to the same map.
                   consinfo.primary()[kind]['valopt'] = True
               elif akind == 'secondary':
+                /# if default == '<special>': default = None
                 consinfo.registerSecondary(
                   akey, type=type, default=default, aliases=aliases,
                   keyopt=keyopt, valopt=valopt, autokey=autokey, children=children)
@@ -25243,13 +25472,14 @@ scope:
           raw_commands.append(rawcom)
 
       /# Establish the metafilt args.
-      metafilt = fs.join(fs.getenv('METAROOT'), 'bin', 'metafilt')
-      if not fs.exists(metafilt):
-        raise Error('Failed to find ' + metafilt)
-      /# filt_args = [metafilt, '--debug', '-V', 'beta', '-b', baselang.id()]
-      /# filt_args = [metafilt, '-V', 'beta', '-b', baselang.id(), '--cwd', cwd]
-      filt_args = [metafilt]
       dofilt = False
+      if dofilt:
+        metafilt = fs.join(fs.getenv('METAROOT'), 'bin', 'metafilt')
+        if not fs.exists(metafilt):
+          raise Error('Failed to find ' + metafilt)
+        /# filt_args = [metafilt, '--debug', '-V', 'beta', '-b', baselang.id()]
+        /# filt_args = [metafilt, '-V', 'beta', '-b', baselang.id(), '--cwd', cwd]
+        filt_args = [metafilt]
 
       if rawtests:
         /# We are to invoke the underlying test harness instead of bazel.
@@ -27550,7 +27780,7 @@ scope:
         metax.root.MetaObject.CLI()._command_Is(selected_command)
 
         /# Create the Compiler instance.
-        metac = metax.c.Compiler(metal=flags.metalang, basel=flags.baselang)
+        metac = metax.c.Compiler(metal=cli.metalang, basel=cli.baselang)
         metax.c.Compiler.CurrentIs(metac)
         /# Ensure that the repository directory exists.
         if not metac.verifyDirectory(metadir='.meta2'):
@@ -27707,6 +27937,33 @@ scope:
           self.generateMajorMode()
       end command emacs;
 
+      command expand #:
+        Expand a specified .meta file.  Consider using 'get' instead.
+      scope:
+        named block ::
+          cli = self.cli()
+          fs = self.fs()
+          argmap = self._parseArgs(cli.rest)
+          errors = False
+          metafiles = []
+          for path in argmap['metafiles']:
+            metafile = self.getMeta(
+              path, expand=True,
+              imports=False, translate=False, compile=False)
+            if metafile.hasErrors(show=True):
+              pass
+            else:
+              newpath = path + '.exp'
+              newpath = newpath.replace('.meta2.exp', '.exp.meta2')
+              file_construct = metafile.construct()
+              with fs.open(newpath, 'w') as fp:
+                for construct in file_construct.attrval('scope:', default=None) or []:
+                  if construct.kind() != 'namespace': continue
+                  construct.write(fp=fp)
+              print 'Wrote ' + newpath
+            metafiles.append(metafile)
+      end command expand;
+
       command get #:
         Get a .meta file (parse, expand, import, translate and compile).
       scope:
@@ -27735,84 +27992,6 @@ scope:
           command = self.cli()._command_()
           command.help()
       end command help;
-
-      command index #:
-        Print out the index of namespaces/classes/methods.
-      scope:
-        flag min @ m : int = 0 #:
-          Do not print out constructs with level less than this.
-        flag max @ M : int = 100000 #:
-          Do not print out constructs with level greater than this.
-        flag kind : str = 'org1' #:
-          Selects amongst a variety of named formats and delimiters. If
-          form is provided explicitly, the form value specified by kind
-          is overridden, but the delim of kind is maintained.
-          TODO(wmh): Should be of type enum<num|org1|org2>, but
-          need to provide user-level access to Meta enum types to support this.
-        flag form : str = '' #:
-          The 'form' value to pass to Construct.writeIndex. Usually easier
-          to use --kind unless the options don't match needs.
-        flag suffix : str = '' #:
-          The 'suffix' value to pass to Construct.writeIndex
-        flag adj : int = 0 #:
-          How much to adjust level by when computing indent value.
-        flag filter : str = '' #:
-          If present, only summary lines matching this regexp are shown.
-
-        named block ::
-          baselang = self.baselang()
-          fs = self.fs()
-          flags = self.cli()
-
-          kinds = {
-            /# Line number at left margin, then indented kind and id
-            'num': {},
-            /# Indentation, then '- ', then kind, id and [line]
-            'org1': {
-              'form': '%(indent)s%(sep)s %(kind)s %(id)s [%(line)d]',
-              'delim': ' ',
-              'sep': '-',
-              'adj': -1,
-            },
-            /# Indentation using '*', then kind, id and [line]
-            'org2': {
-              'form': '%(indent)s %(kind)s %(id)s [%(line)d]',
-              'delim': '*',
-            },
-          }
-
-          kwds = {
-            'sep': ' ',
-            'minlevel': flags.min,
-            'maxlevel': flags.max,
-            'adj': flags.adj,
-          }
-
-          if flags.kind:
-            more = kinds.get(flags.kind, None)
-            if more is not None:
-              kwds.update(more)
-            else:
-              print 'WARNING: --kind %s is unknown (ignored)' % flags.kind
-          if flags.form:
-            kwds['form'] = flags.form
-          if flags.suffix:
-            kwds['suffix'] = flags.suffix
-          if flags.filter:
-            try:
-              kwds['filter'] = re.compile(flags.filter)
-            except sre_constants.error as e:
-              print 'ERROR: regexp "%s" is invalid (ignored)' % flags.filter
-
-          argmap = self._parseArgs(flags.rest, resolve=True)
-
-          for arg, status, construct in argmap['triples']:
-            if construct:
-              lines = construct.writeIndex(**kwds)
-              for line in lines:
-                print line
-            else:
-              print 'WARNING: Ignoring %s (%s)' % (arg, status)
 
       command html #:
         Create .html files for the specified metafile(s) and their basefiles.
@@ -27996,6 +28175,85 @@ scope:
                   /# Create HTML files for the baselang files generated.
                   pass
       end command html;
+
+      command index #:
+        Print out the index of namespaces/classes/methods.
+      scope:
+        flag min @ m : int = 0 #:
+          Do not print out constructs with level less than this.
+        flag max @ M : int = 100000 #:
+          Do not print out constructs with level greater than this.
+        flag kind : str = 'org1' #:
+          Selects amongst a variety of named formats and delimiters. If
+          form is provided explicitly, the form value specified by kind
+          is overridden, but the delim of kind is maintained.
+          TODO(wmh): Should be of type enum<num|org1|org2>, but
+          need to provide user-level access to Meta enum types to support this.
+        flag form : str = '' #:
+          The 'form' value to pass to Construct.writeIndex. Usually easier
+          to use --kind unless the options don't match needs.
+        flag suffix : str = '' #:
+          The 'suffix' value to pass to Construct.writeIndex
+        flag adj : int = 0 #:
+          How much to adjust level by when computing indent value.
+        flag filter : str = '' #:
+          If present, only summary lines matching this regexp are shown.
+
+        named block ::
+          baselang = self.baselang()
+          fs = self.fs()
+          flags = self.cli()
+
+          kinds = {
+            /# Line number at left margin, then indented kind and id
+            'num': {},
+            /# Indentation, then '- ', then kind, id and [line]
+            'org1': {
+              'form': '%(indent)s%(sep)s %(kind)s %(id)s [%(line)d]',
+              'delim': ' ',
+              'sep': '-',
+              'adj': -1,
+            },
+            /# Indentation using '*', then kind, id and [line]
+            'org2': {
+              'form': '%(indent)s %(kind)s %(id)s [%(line)d]',
+              'delim': '*',
+            },
+          }
+
+          kwds = {
+            'sep': ' ',
+            'minlevel': flags.min,
+            'maxlevel': flags.max,
+            'adj': flags.adj,
+          }
+
+          if flags.kind:
+            more = kinds.get(flags.kind, None)
+            if more is not None:
+              kwds.update(more)
+            else:
+              print 'WARNING: --kind %s is unknown (ignored)' % flags.kind
+          if flags.form:
+            kwds['form'] = flags.form
+          if flags.suffix:
+            kwds['suffix'] = flags.suffix
+          if flags.filter:
+            try:
+              kwds['filter'] = re.compile(flags.filter)
+            except sre_constants.error as e:
+              print 'ERROR: regexp "%s" is invalid (ignored)' % flags.filter
+
+          argmap = self._parseArgs(flags.rest, resolve=True)
+
+          for arg, status, construct in argmap['triples']:
+            if construct:
+              lines = construct.writeIndex(**kwds)
+              for line in lines:
+                print line
+            else:
+              print 'WARNING: Ignoring %s (%s)' % (arg, status)
+      end command index;
 
       command mirror #:
         Mirror a meta-generate python hierarchy to another directory.
@@ -28307,7 +28565,7 @@ scope:
         block ::
           /# As a convenience, if all are .meta2 files or fqns, we assume the
           /# action is a combination of 'compile' and 'test.
-          allargs = flags.rest
+          allargs = cli.rest
           if allargs:
             command = allargs[0]
             argmap = self._parseArgs(allargs, implicit=True)
@@ -28533,11 +28791,9 @@ scope:
       self.complex = metax.c.ComplexBlock(
         construct, 'scope:', [], line=14, col=2)
 
-      mf = self.metafileFor('"this is a test"\n')
-      eprs = metax.c.ExprParser(mf)
-      eprs.set(row=0, col=0)
+      expr = metax.c.Expr('str', '"this is a test"', '"this is a test"')
       self.expr = metax.c.ExprAttribute(
-        construct, 'value', eprs.parse(), line=10, col=50)
+        construct, 'value', expr, line=10, col=50)
 
       self.type = metax.c.TypeAttribute(
         construct, 'type', metax.c.Type.Instance('vec<str>'), line=20, col=42)
@@ -28825,13 +29081,13 @@ scope:
           'secondaries': [
             (':', MetaType('int')),
             /# ('=', metax.c.ExprParser(self.metafileFor('1\n')).parse())
-            ('=', '1'),
+            ('=', metax.c.Expr('int', '1', 1)),
           ]},
          {'var': 'c',
           'secondaries': [
             (':', MetaType('bool')),
             /# ('=', metax.c.ExprParser(self.metafileFor('1\n')).parse())
-            ('=', 'false'),
+            ('=', metax.c.Expr('var', 'false', 'false')),
           ]},
         ],
         context)

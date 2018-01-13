@@ -516,7 +516,7 @@ config:
       The metatype of the field.
 
     secondary
-    Attribute default : word = <empty> aliases <=> #:
+    Attribute default : expr = <empty> aliases <=> #:
       The default value of the field.  If not provided, a type-specific
       default is used:
         int     0
@@ -739,7 +739,10 @@ config:
         location 'meta', but in Meta that puts the method in the metaclass instead
         of being an @classmethod method.  Python does not treat @classmethods
         entirely as methods on the metaclass, which breaks things, hence the need
-        for this special case.
+        for this special case.  This value should be considered an implementation
+        detail and NOT used in user-level code, as it does not have a correlate in
+        most other baselangs. It is used internally by Meta when @classmethods
+        are needed to implement some higher-level meta concept.
       FeatureValue closure #:
         A function that has access to the variables in the scope within which
         it is lexically defined.
@@ -940,7 +943,13 @@ config:
       The initializer block.
 
     secondary
-    Attribute finalize: : simple = <empty> aliases <::> #:
+    Attribute clinit: : simplex = <empty> #:
+      A static field initialization block. Invoked exactly once for each class,
+      unlike the metaclass initializer, which is invoked N+1 times if the class
+      has N descendent classes.
+
+    secondary
+    Attribute finalize: : simplex = <empty> aliases <::> #:
       A finalizer block for cleaning up the object before garbage
       collection.
 
@@ -1222,7 +1231,7 @@ config:
       The metatype of the flag.
 
     secondary
-    Attribute default : word = <special> aliases <=> #:
+    Attribute default : expr = <special> aliases <=> #:
       The default value of the flag.
       TODO(wmh): This should have type 'expr', not 'word'.
     end Attribute default;
@@ -1315,7 +1324,7 @@ config:
       The metatype of the var.
 
     secondary
-    Attribute default : word = <special> aliases <=> #:
+    Attribute default : expr = <special> aliases <=> #:
       The default value of the var.  When the var is in a params: block,
       a default value means the param is optional.  When defined in an
       executable block, it provides an explicit value to initialize the

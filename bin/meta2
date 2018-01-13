@@ -1,18 +1,14 @@
 #!/usr/bin/python
-import copy
 import cStringIO
 import importlib
 import os
-import re
-import shutil
-import subprocess
 import sys
 import traceback
 
 import metastrap
 # metastrap.AutoCompile()
 
-def Main():
+def main():
   compiler_class, command, cli = metastrap.ImportMeta()
   if not cli:
     print 'ERROR: Exiting due to errors.'
@@ -30,29 +26,29 @@ def Main():
 
   # Initialize the compiler class.
   compiler_class.Initialize()
+  
+  argv = ['main'] + cli.args
 
   # Invoke the compiler
   try:
     # CODETANGLE(meta2_entry_main): First arg must be 'main'
-    argv = ['main'] + cli.args
     compiler_class.Entry(argv, parent=command)
   except Exception as e:
     # Perform base-to-meta line remapping on the exception string.
-    print '****** EXCEPTION: %s' % type(e)
+    print 'WARNING: Error occurred while attempting to create Compiler'
     err = traceback.format_exc()
     metac = compiler_class.Current()
     if metac is None:
       # TODO(wmh): This means the attempt to instantiate the specified
       # version of the compiler failed.  We attempt to instantiate an
       # older version instead.
-      print 'NOTE: metac is None'
       version = metastrap.Version
-      new_version = None
+      older_version = None
       if version == 'beta':
-        new_version = 'current'
+        older_version = 'current'
       elif version == 'current':
-        new_version = 'stable'
-      if new_version:
+        older_version = 'stable'
+      if older_version:
         # TODO(wmh): We have identified a new version of metax.c.  The question is,
         # how do we load this new version into python, given that metax.c already
         # exists?
@@ -63,14 +59,14 @@ def Main():
         #    modules is someplace other than sys.modules).
         #  - modifying metax.c.__file__ and/or metax.c.__path__ does not appear to
         #    work either.
-        #  - we make a symlink from new_path to new_path + '_' + new_version,
+        #  - we make a symlink from older_path to older_path + '_' + older_version,
         #    and import that module instead (after modifying sys.path to ensure
-        #    that new_path appears first in path).
-        new_path = metastrap.VersionPath(new_version)
-        print 'In meta2 with version %s path %s' % (new_version, new_path)
+        #    that older_path appears first in path).
+        older_path = metastrap.VersionPath(older_version)
+        # print 'In meta2 with version %s path %s' % (older_version, older_path)
 
         # Adjust sys.path so that the new path appears first in the list.
-        sys.path.insert(0, new_path)
+        sys.path.insert(0, older_path)
 
         if False:
           # The 'reload' method just looks at the pre-existing source files
@@ -83,14 +79,14 @@ def Main():
         elif False:
           # Modifying metax.c.__file__ first does not work
           print 'SRC BEFORE: %s' % metax.c.__file__
-          metax.c.__file__ = new_path + '/__init__.pyc'          
+          metax.c.__file__ = older_path + '/__init__.pyc'          
           reload(metax.c)
           print 'SRC AFTER: %s' % metax.c.__file__          
 
         elif False:
           # Modifying metax.c.__path__ first does not work
           print 'SRC BEFORE: %s' % metax.c.__file__
-          metax.c.__path__ = [new_path]
+          metax.c.__path__ = [older_path]
           reload(metax.c)
           print 'SRC AFTER: %s' % metax.c.__file__          
 
@@ -105,19 +101,38 @@ def Main():
           import metax.c
 
         elif True:
-          new_metaxname = 'metax_' + new_version
-          metax_src = os.path.join(new_path, 'metax')
-          metax_dst = os.path.join(new_path, new_metaxname)
+          older_metaxname = 'metax_' + older_version
+          metax_src = os.path.join(older_path, 'metax')
+          metax_dst = os.path.join(older_path, older_metaxname)
           if not os.path.lexists(metax_dst):
             print '  symlinked %s to %s' % (metax_src, metax_dst)
             os.symlink(metax_src, metax_dst)
-          metax_c = importlib.import_module(new_metaxname + '.c')
-          metax_cli = importlib.import_module(new_metaxname + '.cli')
-          print metax_c.Compiler
-          print metax_cli.Command
+          metax_c = importlib.import_module(older_metaxname + '.c')
+          metax_cli = importlib.import_module(older_metaxname + '.cli')
+          metax_root = importlib.import_module(older_metaxname + '.root')
+          top_command, cli = metastrap.ParseArgv(
+            argv, metax_cli, root_module=metax_root)
+          # TODO(wmh): Currently (2018-01-07), it is possible for certain
+          # changes to break all versions of the compiler (for example, certain
+          # modifications to schema files). The snapshot process is copying
+          # schema files, and when using an older version of Meta we should use
+          # the associated schema files instead of the 'live' schema files.
+          try:
+            older_metac = metax_c.Compiler(
+              metal=cli.metalang, basel=cli.baselang)
+          except Exception:
+            # The attempt to create a Compiler based on an older version of
+            # Meta has also failed.
+            print (
+              'WARNING: Failed to create alternate compiler based on version '
+              + older_version)
+          else:
+            print (
+              'NOTE: Successfully created alternate compiler based on version '
+              + older_version)
+            metac = older_metac
 
         # Create the new instance of Compiler with appropriate flags.
-        print 'Here'
         print err
     if metac:
       ifp = cStringIO.StringIO(err)
@@ -125,4 +140,4 @@ def Main():
 
 
 if __name__ == '__main__':
-  Main()
+  main()

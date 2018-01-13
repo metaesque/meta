@@ -784,7 +784,7 @@ scope:
       Create a directory
     params:
       var thedir : str;
-      var mode : int = 0755;
+      var mode : int = 493;
     scope:
       /# print 'MKDIR: %s' % thedir
       os.mkdir(thedir, mode)
@@ -794,7 +794,7 @@ scope:
       Create a directory, including missing parents.
     params:
       var thedir : str;
-      var mode : int = 0755;
+      var mode : int = 493;
     scope:
       os.makedirs(thedir, mode)
     end method makedirs;
@@ -953,7 +953,7 @@ scope:
     params:
       var path : str;
       var contents : str = '';
-      var perms : int = 0644;
+      var perms : int = 420;
       var inode : int = null;
     scope:
       if self.kind() != 'emulate':
@@ -971,7 +971,7 @@ scope:
       Add a new directory to our fake filesystem
     params:
       var path : str;
-      var perms : int = 0755;
+      var perms : int = 493;
       var inode : int = null;
     scope:
       if self.kind() != 'emulate':
