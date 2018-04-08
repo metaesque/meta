@@ -460,6 +460,28 @@ scope:
         fs.splitall('/some/dir/base.suff'))
     end method splitall;
 
+    method expandvars : str #:
+      Expand env.vars. in a string.
+    params:
+      var value : str #:
+        The value to expand vars within.
+    scope:
+      return os.path.expandvars(value)
+    test:
+    end method expandvars;
+
+    method touch #:
+      Modify timestamp of file to current time. Creates file if it doesn't
+      exist.
+    params:
+      var path : str #:
+        Path to file to create.
+    scope:
+      with open(path, 'a') as fp:
+        pass
+    test:
+    end method touch;
+
     method emulateIO #:
       Make this instance use memory instead of disk.
     params:

@@ -159,9 +159,9 @@
 ; (defconst metastory2-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
 (defconst metastory2-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
-(defconst metastory2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "character" "event" "story" "thread" "view"))
-(defconst metastory2-attribute-keys '("#" "<" "=" "abbrev" "age" "aliases" "autokey" "check" "children" "collaborators" "comment" "config" "default" "delim" "dob" "father" "from" "gender" "in" "key" "kind" "metrics" "model" "mother" "name" "owners" "parent" "presence" "replacer" "scope" "start" "suffixes" "summary" "title" "toplevel" "type" "value" "when" "where" "with"))
-(defconst metastory2-feature-values '("abstract" "aliaskey" "concrete" "feature" "female" "male" "nokey" "nongendered" "noval" "primary" "secondary" "showkey" "showval" "trans" "undef" "userval"))
+(defconst metastory2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "character" "event" "section" "story" "thread" "view"))
+(defconst metastory2-attribute-keys '("#" "%" "<" "=" "@" "abbrev" "age" "aliases" "autokey" "check" "children" "collaborators" "color" "comment" "config" "day" "default" "delim" "dob" "father" "from" "gender" "in" "key" "kind" "metrics" "model" "mother" "name" "owners" "parent" "presence" "replacer" "scope" "start" "suffixes" "summary" "title" "toplevel" "type" "value" "what" "when" "where" "who" "with"))
+(defconst metastory2-feature-values '("abstract" "aliaskey" "any" "concrete" "feature" "female" "fri" "male" "mon" "nokey" "nongendered" "noval" "primary" "sat" "secondary" "showkey" "showval" "sun" "thu" "trans" "tue" "undef" "userval" "wed"))
 (defconst metastory2-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
 (defconst metastory2-basewords      '())
 
@@ -188,15 +188,17 @@
 (puthash 'metastory2-Template-line (concat (gethash 'metastory2-Template-kv RE) "\\(Template\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-character-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("female" "gender" "male" "nongendered" "trans")) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-character-line (concat (gethash 'metastory2-character-kv RE) "\\(character\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metastory2-event-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metastory2-event-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("any" "day" "fri" "mon" "sat" "sun" "thu" "tue" "wed")) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-event-line (concat (gethash 'metastory2-event-kv RE) "\\(event\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metastory2-section-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metastory2-section-line (concat (gethash 'metastory2-section-kv RE) "\\(section\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-story-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-story-line (concat (gethash 'metastory2-story-kv RE) "\\(story\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-thread-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-thread-line (concat (gethash 'metastory2-thread-kv RE) "\\(thread\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-view-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-view-line (concat (gethash 'metastory2-view-kv RE) "\\(view\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metastory2-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "aliaskey" "concrete" "feature" "female" "gender" "key" "kind" "male" "nokey" "nongendered" "noval" "presence" "primary" "secondary" "showkey" "showval" "trans" "undef" "userval" "value")) "\[ \t\]\\)*") RE)
+(puthash 'metastory2-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "aliaskey" "any" "concrete" "day" "feature" "female" "fri" "gender" "key" "kind" "male" "mon" "nokey" "nongendered" "noval" "presence" "primary" "sat" "secondary" "showkey" "showval" "sun" "thu" "trans" "tue" "undef" "userval" "value" "wed")) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-construct-line (concat (gethash 'metastory2-all-kv RE) "\\(" metastory2-constructs-re "\\)[ \t]+\\([^ \t]+\\)") RE)
 
 (defconst metastory2-comment-start-re "\\(?:comment\\|#\\):\n")
@@ -204,6 +206,8 @@
 
 ; Various methods set these variables
 (setq metastory2-current-construct-kind nil)
+(if (not (boundp 'metastory2-meta-binary))
+  (setq metastory2-meta-binary "meta2"))
 
 (defun metastory2-goto-construct-line (&optional target-dent)
   ;; Find the line defining the construct within which the current line
@@ -1269,3 +1273,104 @@ we need its actual indentation to be reported)."
             (setq font-lock-beg found-point))))))
 
 (provide 'metastory2-mode)
+
+;; The following is based on
+;;    https://emacs.stackexchange.com/questions/519/key-bindings-specific-to-a-buffer
+;; as a means of providing an "index" for meta files.
+
+(defvar metastory2-minor-mode-map (make-sparse-keymap)
+  "Keymap while metastory2-minor-mode is active.")
+
+(define-minor-mode metastory2-minor-mode
+  "A temporary minor mode to be activated."
+  nil
+  :lighter " MetaMinor"
+  metastory2-minor-mode-map)
+
+(defun metastory2-index-to-line ()
+  "Provides an index to file mapping features.
+
+  This is to be used in a buffer that displays a mapping from meta construct
+  to line number, as produced by 'meta2 hier' or 'meta2 hier --org'. One can
+  navigate to a desired line and press return to invoke this method, which
+  does the following:
+   - finds the line number specified on the current line
+   - obtains the buffer the current index file is associated with (top line)
+   - switches point to the window containing the named buffer and moves to
+     the desired line number.
+  "
+  (interactive)
+  (let ((p (point))
+        (line (thing-at-point 'line t))
+        lnum tmp buffer window)
+    (message line)
+    (cond
+      ((string-match "^ *\\([0-9]+\\)\\|\\[\\([0-9]+\\)\\]\n" line)
+         (setq lnum 
+          (string-to-number (or (match-string 1 line) (match-string 2 line))))
+         (message (format "found lnum %d" lnum))
+         (goto-char (point-min))
+         (setq tmp (thing-at-point 'line t))
+         (goto-char p)
+         (message (format "here with first line '%s'" tmp))
+         (cond
+            ((string-match "^buffer: \\(.*\\)" tmp)
+               (setq tmp (match-string 1 tmp))
+               (message (format "here with %s:%d" tmp lnum))
+               (setq buffer (get-buffer tmp))
+               (setq window (get-buffer-window buffer))
+               (select-window window)
+               (goto-line lnum)
+            )
+            (t (message "ERROR: Failed to find path in first line")))
+      )
+      (t (message "failed")))
+  )
+)
+(define-key metastory2-minor-mode-map (kbd "RET") 'metastory2-index-to-line)
+
+(defun metastory2-create-index (&optional prefix)
+  (interactive "P")
+  (metastory2-create-index-private nil prefix)
+)
+
+(defun metastory2-create-filtered-index (&optional prefix filter)
+  (interactive "PsRegexp: ")
+  (metastory2-create-index-private filter prefix)
+)
+
+(defun metastory2-create-index-private (filter usenum)
+  "Create an index.
+   
+   Args:
+     filter: str
+       A regexp to filter summary lines by
+     usenum: bool
+       If true, use --kind=num
+  "
+  (let ((command
+         (concat
+          metastory2-meta-binary 
+          " index "
+          (if usenum
+              "--kind=num --min=1 --adj=-1 "
+              "--kind=org1 --min=1 ")
+          (if filter
+            (format " --filter '%s' " filter)
+            "")
+          (buffer-file-name)))
+        (bufname (buffer-name (current-buffer))))
+    (switch-to-buffer-other-window "*Meta Index*")
+    (erase-buffer)
+    (insert (format "buffer: %s\n" bufname))
+    ; (message (format "here with '%s'" command))
+    (insert (shell-command-to-string command))
+    (metastory2-mode)
+    (orgstruct-mode)
+    (metastory2-minor-mode 1)
+    (goto-char (point-min))
+    (next-line 1)
+  )
+)
+
+(provide 'metastory2-minor-mode)

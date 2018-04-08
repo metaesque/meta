@@ -70,18 +70,11 @@ config:
       Lines to insert before any imports within a namespace.  Used to provide
       path modification in python, etc.
 
-    secondary
-    Attribute testpreports: : simple = <empty> #:
-      Lines to insert before any imports within a test namespace.  Used to provide
-      path modification in python, etc.
-
     Attribute comment:;
     Attribute config:;
     Attribute scope: children <class|behavior|native>;
 
     Template python scope:
-      >|WARNING: THIS TEMPLATE NOT CURRENTLY USED
-      >|# -*- coding: utf-8 -*-
       >|${comment}
       >|${preports}
       >|${imports}
@@ -90,8 +83,6 @@ config:
     end Template python;
 
     Template python_test scope:
-      >|WARNING: THIS TEMPLATE NOT CURRENTLY USED
-      >|# -*- coding: utf-8 -*-
       >|${comment}
       >|${preports}
       >|${imports}
@@ -203,7 +194,7 @@ config:
     secondary
     Attribute associations: : complex = <empty> aliases <assocs:> #:
       The collection of assoc and resource instances needed by this class.
-    children <assoc|resource|remark>;
+    children <assoc|resource>;
 
     Attribute comment:;
     Attribute config:;
@@ -455,21 +446,6 @@ config:
     end Attribute select;
 
     feature
-    Attribute visibility : <tmppublic|tmpprivate> = tmpprivate #:
-      The visibility of the field.
-
-      TODO(wmh): This attribute is temporary. It is subsumed by the 
-      multi-valued version of 'select', and code should start migrating
-      away from the use of this field.  Hence the 'tmp' prefix on
-      legal values.
-    config:
-      FeatureValue tmppublic #:
-        The field itself (as opposed to its accessors) is public.
-      FeatureValue tmpprivate #:
-        The field itself (as opposed to its accessors) is private.
-    end Attribute visibility;
-
-    feature
     Attribute status : <required|optional> = required #:
       Whether this field is optional.
     config:
@@ -520,7 +496,7 @@ config:
       The metatype of the field.
 
     secondary
-    Attribute default : expr = <empty> aliases <=> #:
+    Attribute default : word = <empty> aliases <=> #:
       The default value of the field.  If not provided, a type-specific
       default is used:
         int     0
@@ -743,10 +719,7 @@ config:
         location 'meta', but in Meta that puts the method in the metaclass instead
         of being an @classmethod method.  Python does not treat @classmethods
         entirely as methods on the metaclass, which breaks things, hence the need
-        for this special case.  This value should be considered an implementation
-        detail and NOT used in user-level code, as it does not have a correlate in
-        most other baselangs. It is used internally by Meta when @classmethods
-        are needed to implement some higher-level meta concept.
+        for this special case.
       FeatureValue closure #:
         A function that has access to the variables in the scope within which
         it is lexically defined.
@@ -947,30 +920,24 @@ config:
       The initializer block.
 
     secondary
-    Attribute clinit: : simplex = <empty> #:
-      A static field initialization block. Invoked exactly once for each class,
-      unlike the metaclass initializer, which is invoked N+1 times if the class
-      has N descendent classes.
-
-    secondary
-    Attribute finalize: : simplex = <empty> aliases <::> #:
+    Attribute finalize: : simple = <empty> aliases <::> #:
       A finalizer block for cleaning up the object before garbage
       collection.
 
     secondary
-    Attribute setup: : simplex = <empty> #:
+    Attribute setup: : simple = <empty> #:
       A request to generate a baselang-specific setup unittest method.
 
     secondary
-    Attribute setupcase: : simplex = <empty> #:
+    Attribute setupcase: : simple = <empty> #:
       A request to generate a baselang-specific setup testcase method.
 
     secondary
-    Attribute teardown: : simplex = <empty> #:
+    Attribute teardown: : simple = <empty> #:
       A request to generate a baselang-specific teardown unittest method.
 
     secondary
-    Attribute teardowncase: : simplex = <empty> #:
+    Attribute teardowncase: : simple = <empty> #:
       A request to generate a baselang-specific teardown testcase method.
 
   end Construct lifecycle;
@@ -1107,7 +1074,7 @@ config:
       The name of the native.
 
     Attribute comment:;
-    Attribute scope: : simplex children <_statement_>;
+    Attribute scope: : simple children <_statement_>;
 
   end Construct native;
 
@@ -1153,7 +1120,7 @@ config:
   end Construct assoc;
 
   Construct testx < _oopl_ #:
-    The testx construct.
+    Defines an individual test within a 'tests:' block.
 
     It would be better if this was called 'test', but we are already using
     'test' as a feature value and a secondary key, and we cannot have a
@@ -1235,7 +1202,7 @@ config:
       The metatype of the flag.
 
     secondary
-    Attribute default : expr = <special> aliases <=> #:
+    Attribute default : word = <special> aliases <=> #:
       The default value of the flag.
       TODO(wmh): This should have type 'expr', not 'word'.
     end Attribute default;
@@ -1252,7 +1219,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: : simplex children <_statement_> ;
+    Attribute scope: children <_statement_> ;
 
   end Construct _statement_;
 
@@ -1294,13 +1261,14 @@ config:
         for both instance and virtual blocks is preferred.
     end Attribute kind;
 
+
     primary
     Attribute block : id = <auto> #:
       The name of the block.
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: : simplex children <_statement_> ;
+    Attribute scope: : simple children <_statement_> ;
 
   end Construct block;
 
@@ -1328,7 +1296,7 @@ config:
       The metatype of the var.
 
     secondary
-    Attribute default : expr = <special> aliases <=> #:
+    Attribute default : word = <special> aliases <=> #:
       The default value of the var.  When the var is in a params: block,
       a default value means the param is optional.  When defined in an
       executable block, it provides an explicit value to initialize the
@@ -1352,7 +1320,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: : simplex children <_statement_>;
+    Attribute scope: children <_statement_>;
 
   end Construct loop;
 

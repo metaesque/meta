@@ -1,4 +1,4 @@
-MetaLanguage Story name Story parent Meta toplevel <story> #:
+MetaLanguage story name Story parent meta toplevel <story> #:
   The constructs in Meta(Story).
 config:
 
@@ -45,18 +45,18 @@ config:
       The start date of the story.
 
     secondary
-    Attribute owners : word = <required> #:
+    Attribute owners : str = <required> #:
       The comma-separated list of owners (google account email addresses).
       TODO(wmh): Make this a word-list instead of word.
 
     secondary
-    Attribute collaborators : word = <required> #:
+    Attribute collaborators : str = <required> #:
       The comma-separated list of collaborators (google account email addresses).
       TODO(wmh): Make this a word-list instead of word.
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <event|thread|character>;
+    Attribute scope: children <event|thread|character|section>;
 
   end Construct story;
 
@@ -158,7 +158,7 @@ config:
       See comment in 'summary' for a shorthand.
 
     secondary
-    Attribute in : word = <empty> #:
+    Attribute in : str = <empty> #:
       Used to establish which chapter this event is in. Used when loading a
       pre-existing story from a Meta(Story) file. Normally, only the first event
       in a chapter specifies the chapter, and all subsequent event instances are
@@ -175,7 +175,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: : simple;
+    Attribute scope: : complex;
 
   end Construct event;
 
@@ -184,6 +184,7 @@ config:
     primary
     Attribute view = <auto> : word #:
       The cname of the character whose view this is.
+      TODO(wmh): use replacer semantics here to map id to 'from'.
 
     secondary
     Attribute from : id = <required> #:
@@ -192,6 +193,11 @@ config:
     secondary
     Attribute with : word = <empty> #:
       A comma-separated list of character ids that participate in this view.
+      TODO(wmh): Determine if this is actually needed. It is NOT being stored in
+      the View model, but is a convenient means of implicitly forming the 'who'
+      list for the parent Event. Should we require that each Event enumerate who
+      is participating (either implicitly via $id references in 'what', or via
+      listing in 'who'?). Or do we continue to support this 'with' attribute?
 
     Attribute comment:;
     Attribute config:;
@@ -211,4 +217,30 @@ config:
 
   end Construct thread;
 
-end MetaLanguage Story;
+  Construct section < _storyroot_ #:
+    Represents a named (and titled) group of events of a particular kind.
+    Can be used to represent books, parts, chapters, sections, subsections,
+    etc.
+  config:
+
+    primary
+    Attribute section = <required> : word #:
+      The id of the section
+
+    secondary
+    Attribute kind : word = chapter aliases <:> #:
+      The kind of the section.  Can be basically anything, but common values
+      include book, part, chapter, section, subsection.
+
+    secondary
+    Attribute title : str = <empty> aliases <=> #:
+      The kind of the section.  Can be basically anything, but common values
+      include book, part, chapter, section, subsection.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: : simple;
+
+  end Construct section;
+
+end MetaLanguage story;

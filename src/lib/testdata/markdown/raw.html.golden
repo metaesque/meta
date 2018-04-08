@@ -45,10 +45,10 @@ line break here.</p>
   <p>Apple</p>
   <ol>
     <li>
-    <p>way out</p>
+    way out
     </li>
     <li>
-    <p>last thing</p>
+    last thing
     </li>
   </ol>
   </li>
@@ -56,10 +56,10 @@ line break here.</p>
   <p>Banana</p>
   <ol>
     <li>
-    <p>not fair</p>
+    not fair
     </li>
     <li>
-    <p>having a life</p>
+    having a life
     </li>
   </ol>
   </li>
@@ -67,12 +67,12 @@ line break here.</p>
   <p>Cantelope</p>
   <ul>
     <li>
-    <p>nested bullet with multiple lines
-    to see how it works</p>
+    nested bullet with multiple lines
+    to see how it works
     </li>
     <li>
-    <p>another nested bullet with indented
-    second line.</p>
+    another nested bullet with indented
+    second line.
     </li>
   </ul>
   </li>

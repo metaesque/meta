@@ -1708,9 +1708,13 @@ scope:
       var suffix : str;
       var strval : str;
     scope<py>:
-      self.assertTrue(
-        strval.endswith(suffix),
-        'String\n  "%s"\ndoes not end with\n  "%s"' % (strval, suffix))
+      if strval is None:
+        self.fail(
+          'String is null when expecting non-null ending with\n  "%s"' % suffix)
+      else:
+        self.assertTrue(
+          strval.endswith(suffix),
+          'String\n  "%s"\ndoes not end with\n  "%s"' % (strval, suffix))
     scope<js>:
       assertTrue(
         'String\n  \"' + strval + '\"\ndoes not end with\n  \"' + suffix + '\"',

@@ -48,17 +48,32 @@ def Config(verbose=Verbose):
     # <<src_root/src/kernel/parser.meta2.
     vre = re.compile(r'var\s+(?P<var>\S+)\s+=\s+(?P<val>\S+)')
     # TODO(wmh): Add a --config flag to metameta2.py!
-    configpath = os.path.join(os.getenv('HOME'), '.config', 'metaxy', 'config.meta')
+    configpath = os.getenv('META_CONFIG')
+    if not configpath:
+      home = os.getenv('HOME')
+      if not home:
+        # Special hack to handle GAE.
+        configpath = './data/config.gae'
+        if not os.path.exists(configpath):
+          raise Exception('Failed to find env.var HOME')
+      else:
+        meta_config_dir = os.path.join(home, '.config', 'metaxy')
+        configpath = os.path.join(meta_config_dir, 'config.meta')
+    exists = os.path.exists(configpath)
     if verbose:
       print 'NOTE: Reading %s' % configpath
     result = {}
     _Config = result
-    if os.path.exists(configpath):
+    if exists:
       with open(configpath, 'r') as fp:
         for line in fp:
           m = vre.match(line)
           if m:
             result[m.group('var')] = os.path.expandvars(m.group('val'))
+    else:
+      print 'WARNING: %s does not exist' % configpath
+      print 'PWD: %s' % os.getcwd()
+      print 'DIR: %s' % str(os.listdir(os.getcwd()))
   return result
 
 
@@ -74,6 +89,9 @@ def ConfigureVersion(verbose=Verbose):
    0. the version
    1. the path from which the metax.c module should be obtained.
   """
+  # TODO(wmh): Pass in argv, setting to sys.argv by default.
+  # TODO(wmh): Modify argv, not sys.argv (so that if a non sys.argv argv is
+  # is passed in, it is modified instead of sys.argv).
   config = Config()
 
   # The list of paths to add, in reverse order, to the beginning of sys.path.
@@ -174,8 +192,13 @@ def RegisterPath(path, verbose=False):
     env['PYTHONPATH'] = pypath
   
 
-def ImportMeta():
+def ImportMeta(argv=None):
   """Configure sys.path to import the proper version of Meta, and import.
+
+  Args:
+    argv: vec<str>
+      The command line args.  If null, sys.argv is used.
+      Note that this vector is modified in place.
 
   Returns: tuple<class,metax.cli.Command,metax.cli.Values>
    1. The metax.c.Compiler class to use for interacting with Meta.
@@ -184,6 +207,8 @@ def ImportMeta():
       (note that the wrapped command in (3) is usually NOT the same as (2) ...
       it will usually be a sub-command of (2)).
   """
+  if argv is None:
+    argv = sys.argv
   # Issues this method addresses:
   #  - in order to create a metax.c.Compiler instance, we must first
   #    establish which version of the meta2 code is desired.
@@ -195,7 +220,7 @@ def ImportMeta():
   #    sys.path to use the user-specified version of the meta compiler
 
   # ConfigureVersion
-  #   - modifies sys.argv by removing --meta_version
+  #   - modifies argv by removing --meta_version
   #   - modifies sys.path by adding <<repository_path>>/oopl/python and, if
   #     a version other than 'beta' was specified, another path BEFORE
   #     the above path, which provides access to metax.
@@ -212,7 +237,7 @@ def ImportMeta():
   import metax.root
   import metax.cli
 
-  command, cli = ParseArgv(sys.argv, metax.cli, root_module=metax.root)
+  command, cli = ParseArgv(argv, metax.cli, root_module=metax.root)
   
   return metax.c.Compiler, command, cli
 
@@ -291,7 +316,7 @@ def ParseArgv(argv, cli_module, root_module=None):
 
   # Instantiate the command line args against the above Command, putting all
   # unknown args/flags into 'args'.
-  instantiated = command.instantiate(sys.argv)
+  instantiated = command.instantiate(argv)
   if instantiated:
     cli = instantiated.asValues()
     if cli.verbose and cli.verbosity == 0:
@@ -346,7 +371,7 @@ class MetaImporter(object):
     # as fast as possible here).
     # TODO(wmh): Decide how to control the version used here.  Should we always
     # use beta, or usually use current, or base it on some envvar?
-    Metastrap(version='beta', verbose=False)
+    # Metastrap(version='beta', verbose=False)
     import metaboot.parser
     flags, args = ParseFlags(sys.argv)
     compiler_class = metaboot.parser.Compiler

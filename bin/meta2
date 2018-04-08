@@ -14,7 +14,7 @@ def main():
     print 'ERROR: Exiting due to errors.'
     sys.exit(1)
 
-  cli = command.instantiate(sys.argv).asValues()
+  #cli = command.instantiate(sys.argv).asValues()
 
   # Although we don't need metax.c within this script (we already
   # have compiler_class from above), other modules will be

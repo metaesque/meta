@@ -933,6 +933,63 @@ scope:
       test.iseqtext(simple, test.out())
       /#section.show(aspect='html')
 
+      /# Now we test a collection of paragraphs without a section start.
+      parent = metax.lib.markdown.BlockGroup(None)
+      misc = md.parseLines("""
+       >|this is a test to see
+       >|how a collection of paragraphs
+       >|without header works.
+       >|
+       >|Here is paragraph 2.
+       >|
+       >|Here is paragraph 3 on two
+       >|lines.
+       >|
+       >|1. one
+       >|2. two
+       >|3. three
+       >|
+       >|* apple
+       >|* banana
+       >|* cantelope
+       >|""".split('\n'), parent=parent)
+      misc.show(aspect='html', parser=md, fp=test.fp())
+      test.iseqtext("""
+        >|<p>this is a test to see
+        >|how a collection of paragraphs
+        >|without header works.</p>
+        >|
+        >|<p>Here is paragraph 2.</p>
+        >|
+        >|<p>Here is paragraph 3 on two
+        >|lines.</p>
+        >|
+        >|<ol>
+        >|  <li>
+        >|  one
+        >|  </li>
+        >|  <li>
+        >|  two
+        >|  </li>
+        >|  <li>
+        >|  three
+        >|  </li>
+        >|</ol>
+        >|
+        >|<ul>
+        >|  <li>
+        >|  apple
+        >|  </li>
+        >|  <li>
+        >|  banana
+        >|  </li>
+        >|  <li>
+        >|  cantelope
+        >|  </li>
+        >|</ul>
+        >|""",
+        test.out())
+
     end method parseLines;
 
     method parseList : List #:
@@ -947,12 +1004,6 @@ scope:
     scope:
       ordered = False
       result = List(parent, ordered)
-
-      /# TODO(wmh): Continue here ... need to parse the lines making up the
-      /# lists.
-
-      /# pprint.pprint(lines)
-
       /# We first identify all of the items at top level within lines.
       /# We will then be able to parse each item as a BlockGroup to support
       /# all of markdown within each item.
@@ -1336,6 +1387,8 @@ scope:
           titles: show only titles (indented by level)
           markdown: recreate the markdown text
           ...
+      var parser : Parser = null #:
+        The parser instance to use.
     end method show;
 
   end class Block;
@@ -1404,11 +1457,13 @@ scope:
         What to show. Valid values are:
           titles: show only titles (indented by level)
           markdown: recreate the markdown text
+      var parser : Parser = null #:
+        The parser instance to use.
     scope:
       /# TODO(wmh): We may need to provide some support for a prefix before
       /# the first block.
       for block in self.blocks():
-        block.show(fp=fp, indent=indent, aspect=aspect)
+        block.show(fp=fp, indent=indent, aspect=aspect, parser=parser)
     test:
       fp = test.newStr()
       test.group.show(fp=fp)
@@ -2023,6 +2078,8 @@ scope:
         A special param only defined on Paragraph. If true, and aspect is ascii,
         do not insert 'indent' before the first line of output (but do so for
         all others).
+      var parser : Parser = null #:
+        The parser instance to use.
     scope:
       implicit = self.implicit()
       prelines = self.prelines()
@@ -2037,8 +2094,10 @@ scope:
         else:
           fp.write(self.text() + '\n')
       elif aspect == 'html':
+        if parser is None:
+          parser = self.parent().parser()          
         text = self.__class__.TextToHtml(
-          self.text(), parser=self.parent().parser(), indent=indent)
+          self.text(), parser=parser, indent=indent)
         sep = '\n' + indent
         if prelines:
           fp.write('\n' * prelines)
@@ -2125,6 +2184,8 @@ scope:
         What to show. Valid values are:
           titles: show only titles (indented by level)
           markdown: recreate the markdown text
+      var parser : Parser = null #:
+        The parser instance to use.
     scope:
       prelines = self.prelines()
       if aspect == 'ascii':
@@ -2272,6 +2333,8 @@ scope:
         What to show. Valid values are:
           titles: show only titles (indented by level)
           markdown: recreate the markdown text
+      var parser : Parser = null #:
+        The parser instance to use.
     scope:
       /# How much spacing before the list item indicator? In the past I've
       /# usually done one space, but I'm looking into using 0 spaces.
@@ -2343,13 +2406,13 @@ scope:
       test.iseqtext(
         >|"""<ul>
         >|  <li>
-        >|  <p>Apple</p>
+        >|  Apple
         >|  </li>
         >|  <li>
-        >|  <p>Banana</p>
+        >|  Banana
         >|  </li>
         >|  <li>
-        >|  <p>Cantelope</p>
+        >|  Cantelope
         >|  </li>
         >|</ul>
         >|""",
@@ -2393,6 +2456,8 @@ scope:
         subsequent lines/blocks within the listitem.
 
         Currently only relevant for aspect 'ascii'.
+      var parser : Parser = null #:
+        The parser instance to use.
     scope:
       parent = self.parent()
 
@@ -2429,8 +2494,16 @@ scope:
 
       elif aspect == 'html':
         fp.write('%s<li>\n' % indent)
-        for block in self.blocks():
-          block.show(fp=fp, indent=indent, aspect=aspect)
+        blocks = self.blocks()
+        if len(blocks) == 1:
+          block = blocks[0]
+          if block.prelines() == 0:
+            block.implicitIs(True)
+          kwds = {'fp': fp, 'indent': indent, 'aspect': aspect}
+          block.show(**kwds)          
+        else:
+          for block in blocks:
+            block.show(fp=fp, indent=indent, aspect=aspect)
         fp.write('%s</li>\n' % indent)
 
       elif aspect == 'markdown':
@@ -2447,7 +2520,7 @@ scope:
 
       fp = test.newStr()
       test.item3.show(fp=fp, aspect='html')
-      test.iseqtext('<li>\n<p>Cantelope</p>\n</li>\n', fp.getvalue())
+      test.iseqtext('<li>\nCantelope\n</li>\n', fp.getvalue())
     end method show;
 
     method parser : Parser #:
@@ -2512,6 +2585,8 @@ scope:
         What to show. Valid values are:
           titles: show only titles (indented by level)
           markdown: recreate the markdown text
+      var parser : Parser = null #:
+        The parser instance to use.
     scope:
       prelines = self.prelines()
       lines = self.lines()
@@ -2634,6 +2709,8 @@ scope:
         What to show. Valid values are:
           titles: show only titles (indented by level)
           markdown: recreate the markdown text
+      var parser : Parser = null #:
+        The parser instance to use.
     scope:
       prelines = self.prelines()
       if aspect == 'html':
@@ -2709,6 +2786,8 @@ scope:
         What to show. Valid values are:
           titles: show only titles (indented by level)
           markdown: recreate the markdown text
+      var parser : Parser = null #:
+        The parser instance to use.
     scope:
       prelines = self.prelines()
       lines = self.lines()
@@ -3012,10 +3091,13 @@ scope:
         What to show. Valid values are:
           titles: show only titles (indented by level)
           markdown: recreate the markdown text
+      var parser : Parser = null #:
+        The parser instance to use.
     scope:
       title = self.title()
-      parent = self.parent()
-      parser = parent.parser() if parent else None
+      if parser is None:
+        parent = self.parent()
+        parser = parent.parser() if parent else None
       prelines = self.prelines()
 
       def FormatRow(row, aligns, widths):
@@ -3596,6 +3678,8 @@ scope:
       var postamble : str = null #:
         What to insert after the generated text.
         When aspect is HTML, this is inserted just before </body>.
+      var parser : Parser = null #:
+        The parser instance to use.
     scope:
       d = self.depth()
       prelines = self.prelines()
@@ -3617,7 +3701,9 @@ scope:
           /# Now handle children
           if depth != 0:
             for child in self.children():
-              child.show(fp=fp, indent=indent, aspect=aspect, depth=depth-1)
+              child.show(
+                fp=fp, indent=indent, aspect=aspect, depth=depth-1,
+                parser=parser)
 
       elif aspect == 'ascii':
         if d:
@@ -3625,11 +3711,13 @@ scope:
             fp.write('\n' * prelines)
           fp.write('%s%s %s\n' % (indent, '#' * d, self.title()))
         for block in self.blocks():
-          block.show(fp=fp, indent=indent, aspect=aspect)
+          block.show(fp=fp, indent=indent, aspect=aspect, parser=parser)
         /# Now handle children
         if depth != 0:
           for child in self.children():
-            child.show(fp=fp, indent=indent, aspect=aspect, depth=depth-1)
+            child.show(
+              fp=fp, indent=indent, aspect=aspect, depth=depth-1,
+              parser=parser)
 
       elif aspect == 'html':
         d = self.depth()
@@ -3671,12 +3759,13 @@ scope:
 
         /# Print out any block objects.
         for block in self.blocks():
-          block.show(fp=fp, aspect=aspect)
+          block.show(fp=fp, aspect=aspect, parser=parser)
 
         /# Now handle children
         if depth != 0:
           for child in self.children():
-            child.show(fp=fp, indent=indent, aspect=aspect, depth=depth-1)
+            child.show(
+              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser)
 
         /# Perform any wrap-up needed.
         if d == 0 and not nohead:
@@ -3757,12 +3846,13 @@ scope:
 
         /# Print out any block objects.
         for block in self.blocks():
-          block.show(fp=fp, aspect=aspect)
+          block.show(fp=fp, aspect=aspect, parser=parser)
 
         /# Now handle children
         if depth != 0:
           for child in self.children():
-            child.show(fp=fp, indent=indent, aspect=aspect, depth=depth-1)
+            child.show(
+              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser)
 
         /# Perform any wrap-up needed.
         if d == 0:
