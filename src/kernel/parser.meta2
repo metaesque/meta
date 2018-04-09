@@ -23547,7 +23547,7 @@ scope:
       if metadata:
         cls.METADATA.update(metadata)
 
-      config = metax.root.MetaObject.Config()
+      config, configpath = metax.root.MetaObject.Config()
       cls.CONFIG = config
 
       /# TODO(wmh): Get this working via Filesystem!
@@ -27667,7 +27667,7 @@ scope:
       /#    links around brings in a massive amount of additional unnecessary files.
       /#  - we'll need to loosen this up a bit in the future, but better safe than
       /#    broken.
-      config = meta.Config()
+      config, _ = meta.Config()
       kerneldir = fs.join(config['src_root'], 'src', 'kernel')
       for path in (
         fs.join(kerneldir, 'testdata', '.meta2'),
@@ -28829,7 +28829,7 @@ scope:
       self._invoked_fixenv = False
 
       if metax.c.Compiler.CONFIG is None:
-        metax.c.Compiler.CONFIG = metax.root.MetaObject.Config()
+        metax.c.Compiler.CONFIG = metax.root.MetaObject.Config()[0]
 
     teardown:
       self.unfixenv()

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/Users/wmh/src/wmh/src/homebrew/bin/python2
 import cStringIO
 import importlib
 import os

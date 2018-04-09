@@ -101,6 +101,10 @@ scope:
     /#   per subclass, when the object should be shared amongst all classes 
     /#   and objects.
     _Config = None
+
+    /# _ConfigPath: str
+    /#   The path of the file storing the data in _Config.
+    _ConfigPath = None
   end;
 
   class Object #:
@@ -159,19 +163,22 @@ scope:
     end method CLI;
 
     meta
-    method Config : map #:
+    method Config : tuple<map,str> #:
       Provides access to the info in ~/.config/metameta.
     scope:
       global _Config
+      global _ConfigPath
       result = _Config
+      configpath = _ConfigPath
       if result is None:
         /# TODO(wmh): Get this working in bazel!  Need to add to assocs
         /# and define a BUILD target ... in oopl.tgz?
         import metastrap
         /# print 'NOTE: Initializing metax.root.Config!'
-        result = metastrap.Config()
+        result, configpath = metastrap.Config()
         _Config = result
-      return result
+        _ConfigPath = configpath
+      return result, configpath
     end method Config;
 
     meta
@@ -225,23 +232,31 @@ scope:
       namespace_fqn, clsname = fqn.rsplit('.', 1)
       subparts = namespace_fqn.split('.')
 
+      /# TODO(wmh): Get this working in bazel!  Need to add to assocs
+      /# and define a BUILD target ... in oopl.tgz?
+      import metastrap
+      version = metastrap.Version
+      
       /# Convert the fqn to a relative path.
       if os.getenv('TEST_SRCDIR', None) or os.getenv('IN_UNITTEST'):
         /# We are in bazel running a test.  All such tests are invoked from
         /# the directory containing WORKSPACE.
         parts = [os.getcwd()] + subparts
       else:
-        config = cls.Config()
-        if config:
-          metarep = config['repository_path']
-        else:
-          metarep = os.getenv('METAREP')
-          if metarep is None:
-            metarep = '/Users/wmh/src/wmh/lib/meta2'
-            print 'WARNING: Temporarily using hardcoded repopath %s' % metarep
+        config, configpath = cls.Config()
+        if version == 'beta':
+          if config:
+            metarep = config['repository_path']
           else:
-            metarep += '2'  # NEWSUFFIX
-        parts = [metarep, 'oopl', 'python']
+            metarep = os.getenv('METAREP')
+            if metarep is None:
+              metarep = '/Users/wmh/src/wmh/lib/meta2'
+              print 'WARNING: Temporarily using hardcoded repopath %s' % metarep
+            else:
+              metarep += '2'  # NEWSUFFIX
+          parts = [metarep, 'oopl', 'python']
+        else:
+          parts = [config['src_root'], 'lib', 'versions', version, 'lib']
         parts.extend(subparts)
       /# CODETANGLE(resource_dir): In metax.c (parser.meta).
       parts.append('resources')

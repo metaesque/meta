@@ -14,6 +14,11 @@ meta-mode-template.el:
   A template for generating metalang-specific major-modes in emacs. See 'meta2
   emacs' and metax.Compiler.generateMajorMode().
 
+metaxy/
+  A directory to be copied to ~/.config/metaxy.  Used to configure Meta.
+  The files within this directory are to be edited by the user to customize
+  Meta for their environment.
+
 oopl/
   The entire directory hierarchy within oopl/ represents the initial structure
   of $METAREP/oopl. All invocations of 'metac -L oopl' will write additional

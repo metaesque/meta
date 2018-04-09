@@ -19,9 +19,13 @@ Verbose = False
 #   to optimize Config().
 _Config = None
 
+# _ConfigPath: str
+#   The path of the file from which _Config is initialized.
+_ConfigPath = None
+
 # Version: str
 #   The version of Meta being used, as established by ConfigureVersion().
-Version = None
+Version = False
 
 def Config(verbose=Verbose):
   """Parse the meta config file.
@@ -31,7 +35,7 @@ def Config(verbose=Verbose):
   metax.root.ObjectMeta imports metastrap and uses it to initialize its
   Config() field.
 
-  Returns: dict
+  Returns: tuple<dict,str>
   """
   # TODO(wmh): The return value should be available everywhere from within
   # all baselangs. There is a plan afoot to introduce the symbol Meta into
@@ -42,7 +46,9 @@ def Config(verbose=Verbose):
   # Meta.Config() returns the same thing as metameta2.Config().
 
   global _Config
+  global _ConfigPath
   result = _Config
+  configpath = _ConfigPath
   if result is None:
     # CODETANGLE(parse_config): Similar code exists in
     # <<src_root/src/kernel/parser.meta2.
@@ -64,6 +70,7 @@ def Config(verbose=Verbose):
       print 'NOTE: Reading %s' % configpath
     result = {}
     _Config = result
+    _ConfigPath = configpath
     if exists:
       with open(configpath, 'r') as fp:
         for line in fp:
@@ -74,7 +81,7 @@ def Config(verbose=Verbose):
       print 'WARNING: %s does not exist' % configpath
       print 'PWD: %s' % os.getcwd()
       print 'DIR: %s' % str(os.listdir(os.getcwd()))
-  return result
+  return result, configpath
 
 
 def ConfigureVersion(verbose=Verbose):
@@ -92,7 +99,7 @@ def ConfigureVersion(verbose=Verbose):
   # TODO(wmh): Pass in argv, setting to sys.argv by default.
   # TODO(wmh): Modify argv, not sys.argv (so that if a non sys.argv argv is
   # is passed in, it is modified instead of sys.argv).
-  config = Config()
+  config, configpath = Config()
 
   # The list of paths to add, in reverse order, to the beginning of sys.path.
   updates = []
@@ -163,11 +170,11 @@ def VersionPath(version):
     version: str
       A subdir of <<src_root>>/lib/versions.
   """
-  config = Config()  
+  config, configpath = Config()  
   result = os.path.join(config['src_root'], 'lib', 'versions', version, 'lib')
   if not os.path.exists(result):
     raise Exception(
-      '%s does not exist (%s is an invalid version)' % result)
+      '%s does not exist (%s is an invalid version)' % (result, version))
   return result
 
 
@@ -348,7 +355,8 @@ class MetaImporter(object):
 
   @classmethod
   def Initialize(cls):
-    path = Config()['repository_path']
+    config, configpath = Config()
+    path = config['repository_path']
     cls.METAREP = path
     cls.PATH_RE = re.compile('^%s/' % re.escape(path))
 

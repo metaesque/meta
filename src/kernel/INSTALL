@@ -1,0 +1,47 @@
+Setting up Meta v2 on a new MacOS 10.13.3 (High Sierra) laptop (2018/04/08)
+
+ - Install bazel:
+    % brew install bazel
+    - If you encounter the error:
+        bazel: Java 1.8 is required to install this formula.
+      either install Java yourself (I used Managed Software Center) or use
+        brew cask install caskroom/versions/java8
+      (untested by me).
+
+ - Establish the directory that Meta will reside within. Below, this dir is
+   referred to as $METAROOT. You can define an environment variable to
+   represent this directory, but Meta itself does not require one to be set
+   (it uses a config file instead of environment variables).
+
+ - Install Meta v2
+    - From git
+       % cd $(dirname $METAROOT)
+       % git clone https://github.com/metaesque/meta.git $(basename $METAROOT)
+    - From tar
+       - TODO(wmh): Add this
+
+ - Configure config.meta
+    % mkdir -p ~/.config
+    % cp -r $METAROOT/src/templates/metaxy ~/.config/metaxy
+    % cd ~/.config/metaxy
+    % $EDITOR config.meta
+    - Update the values of the variables to reflect your platform-specific
+      values and preferences.
+    - To establish what to set the value of 'bazel' to, execute 'which bazel'
+    - The value of src_root should be the value of $METAROOT (NOT the string
+      "$METAROOT", but rather the path that $METAROOT reprsents).
+    - The repository_path is a directory within which all Meta-compiled code
+      will be placed. The directory must be writable by whomeever will be
+      invoking metac, etc.
+    - The cpp_compiler indicates which compiler is desired when compiling C++
+    TODO(wmh): Provide an interactive means of creating/modifying config.meta
+    via 'metac config', so that the details can be abstracted away.
+
+ - Configure PATH
+    - Add $METAROOT/bin to your PATH env var.
+
+ - Compile Meta into python.
+    % cd src/
+
+    
+    

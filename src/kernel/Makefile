@@ -70,3 +70,12 @@ cards2-%: fullmeta-py
 #   Generate the HTML files for a metafile and its basefiles.
 html-%: fullmeta-py
 	cd testdata; meta2 -b $* html cards1.meta2
+
+# target setup:
+#   Perform an initial setup of code needed to get Meta working.
+setup: .FORCE
+	meta2 --meta_version current root.meta2 test.meta2 fs.meta2 logs.meta2 shell.meta2
+	meta2 --meta_version current parser.meta2 shell.meta2 cli.meta2
+	cd ../lib; meta2 --meta_version current markdown.meta2 shell.meta2
+
+.FORCE:

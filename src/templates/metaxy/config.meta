@@ -1,0 +1,24 @@
+var bazel = /Users/wmh/src/wmh/bin/bazel #:
+  The path to the bazel executable.
+
+var src_root = $HOME/src/meta2 #:
+  The path to where Meta has been installed on this computer.
+
+var version = current #:
+  Which version of the Meta source code to use.  This can be
+  one of 'beta', 'current', 'stable', or an explicit version
+  like 0.083
+
+var repository_path = $WMH/lib/meta2 #:
+  The default directory wherein all Meta-generated code is written.
+
+var default_metalang = oopl #:
+  The default metalang (when -L aka --metalang is not specified)
+
+var default_baselang = python #:
+  The default baselang (when -b aka --baselang is not specified).
+  Note that this is only used when metalang matches default_metalang.
+
+var cpp_compiler = /usr/local/wmh/gcc-7.2/bin/g++ #:
+  The compiler to use for C++.
+
