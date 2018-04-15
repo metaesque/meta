@@ -4402,21 +4402,28 @@ scope:
           j = i - 1
           break
       if j is None:
-        j = len(mapping) - 1
-      base_start = mapping[j][0]
-      meta_start = mapping[j][1]
-      if meta_start == -1:
         meta_line = None
       else:
-        diff = basenum - base_start
-        /# print 'diff=%d (%d - %d for meta_start %d)' % (diff, basenum, base_start, meta_start)
-        if diff < 0:
-          /#print metapath
-          /#print self.path()
-          /#pprint.pprint(mapping)
-          /#raise InternalError('Should not be possible for diff to be %d' % diff)
-          print 'ERROR: Should not be possible for diff to be %d' % diff
-        meta_line = meta_start + diff
+        smap = mapping[j]
+        if len(smap) < 1:
+          import pprint
+          print 'Here with %s, %s and j=%d' % (self.path(), self.metapath(), j)
+          pprint.pprint(smap)
+
+        base_start = smap[0]
+        meta_start = smap[1]
+        if meta_start == -1:
+          meta_line = None
+        else:
+          diff = basenum - base_start
+          /# print 'diff=%d (%d - %d for meta_start %d)' % (diff, basenum, base_start, meta_start)
+          if diff < 0:
+            /#print metapath
+            /#print self.path()
+            /#pprint.pprint(mapping)
+            /#raise InternalError('Should not be possible for diff to be %d' % diff)
+            print 'ERROR: Should not be possible for diff to be %d' % diff
+          meta_line = meta_start + diff
 
       return metapath, meta_line
     end method baseToMeta;
@@ -9064,9 +9071,9 @@ scope:
         The meta type of the expression.  None if no type could be established.
     params:
       var expr : any #:
-        The expr to compile. If it is an Expr, expr.data() should return
-        the already-parsed dict.  If it is a dict, that dict is the pre-parsed
-        data.
+        The expr to compile. If it is an Expr, expr.value() is the data. If it
+        is a dict, that dict is the pre-parsed data. 
+        TODO(wmh): Can this ever be a dict in this new code?
       var metafile : MetaFile #:
         The meta file being parsed/compiled.
       var lines : vec<str>;
@@ -9181,23 +9188,29 @@ scope:
           {'lhs': lhs_code, 'op': opname, 'rhs': rhs_code})
 
       elif kind == 'call':
-        /# A call site. The 'data' dict looks like:
-        /#   expr: dict
-        /#     rec: receiver of call
-        /#     subcalls: list of dict
-        /#       name: name of method or field to invoke on current receiver.
-        /#       field: boolean true means field access (if not present, method call)
-        /#       args: list of dict
-        /#         same structure as 'data' itself
-        /#   kind: 'call'
-        /#   str: the verbatim meta-level syntax for the call.
-        expr = data['expr']
-        rec = expr['rec']
-        subcalls = expr['subcalls']
+        /# A call site. The value() dict is:
+        /#   rec: receiver of call
+        /#   subcalls: list of dict
+        /#     name: name of method or field to invoke on current receiver.
+        /#     field: boolean true means field access (if not present, method call)
+        /#     args: list of dict
+        /#       same structure as 'data' itself
+        val = expr.value()
+        rec = val['rec']
+        subcalls = val['subcalls']
         subcall_index = 0
 
         /# Establish the baselang receiver and its type.
         recstr, metatype = self.analyzeVariable(rec, executable=executable)
+
+        /# TODO(wmh): This code is currently broken ... fix it!
+        print 'HERE with recstr=%s metatype=%s' % (recstr, metatype)
+        print '#' * 70
+        print metafile.path()
+        print expr
+        print executable.kindfqn()
+        print executable.primary().line()
+        print '#' * 70
 
         if metatype:
           rec = recstr
@@ -9824,6 +9837,8 @@ scope:
         /#     - must be careful not to replace things that aren't receivers!
         /#     - to do a truly safe job, will need to parse the baselang,
         /#       but for now we use a heuristic.
+        /#  - replace __metafile__ with the absolute path of the .meta file
+        /#    that the __metafile__ is found within.
         /#  - IMPORTANT: The replacement of '^ *>|' with '' does NOT occur
         /#    here
         parent = simple.parent()
@@ -9852,8 +9867,14 @@ scope:
           while e > 0 and not lines[e-1].strip():
             e -= 1
 
+        /#metac = metafile.compiler()
+        /#fs = metac.fs()
+        metafile = simple.parent().metafile()
+        metafile_str = "'" + metafile.path() + "'"
+
         for i in range(s, e):
           line = lines[i]
+          line = line.replace('__meta' + 'file__', metafile_str)
           m = comre.match(line)
           if m:
             line = m.group(1) + rem + ('' if strip_comments else m.group(2)) + m.group(3)
@@ -12281,6 +12302,7 @@ scope:
       info = deps[fqn]
       kind = info['kind']
       target = info['target']
+      reason = info['reason']
 
       if kind == 'cls':
         /# Note that 'target' will be class-specific, but Python does not
@@ -12297,12 +12319,12 @@ scope:
           metafile.error('Invalid class type "%s"' % fqn)
           import_str = None
         else:
-          import_str = 'import %s  # target=%s' % (fqn[:idx], target)
+          import_str = 'import %s  # target=%s reason=%s' % (fqn[:idx], target, reason)
 
       elif kind == 'lib':
         /# The target identifies a namespace, so we do not need to
         /# modify it.
-        import_str = 'import %s  # target=%s' % (fqn, target)
+        import_str = 'import %s  # target=%s reason=%s' % (fqn, target, reason)
 
       elif kind == 'std':
         import_str = 'import ' + fqn
@@ -15687,6 +15709,10 @@ scope:
           One of 'std', 'cls', 'lib', etc.
         target: str
           The bazel target to use for the dependency.
+        fqn: str
+           The fully qualified name of the dependency
+        reason: str
+           Why the dependency exists.
 
     field initializer : MethodConstruct #:
       The initializer associated with this ClassConstruct.
@@ -16399,7 +16425,9 @@ scope:
         if assocs_attr:
           test_assocs = testclass.attr('associations:') if testclass else None
           meta_assocs = metaclass.attr('associations:') if metaclass else None
-          for dep in assocs:
+          /# NOTE(wmh): Important to iterate over list(assocs) because we may
+          /# modify 'assocs' by moving constructs to test_assocs or meta_assocs.
+          for dep in list(assocs):
             /# Each dep is either 'assoc' or 'resource'. Both constructs
             /# have a 'location' field that indicates where the construct
             /# belongs. The 'assoc' location is special in that 'usertest'
@@ -16409,6 +16437,7 @@ scope:
             akind = dep.kind()
             if akind == 'remark': continue
             aloc = dep.attrval('location')
+
             if aloc == 'user':
               /# Things are fine just as they are.
               pass
@@ -16583,6 +16612,8 @@ scope:
         /# Invoke expandMeta() on child constructs.
         /#  - we make a copy of children so that we do NOT expand the implicit
         /#    children added to children by calls to child.expandMeta().
+        if children is None:
+          children = []
         for child in list(children):
           child.myclassIs(self)
           child.expandMeta()
@@ -17202,6 +17233,7 @@ scope:
       metaclass = self.metaclass()
       namespace = self.namespace()
       assocs = self.attrval('associations:', default=metax.c.EMPTY)
+      istest = self.isTest()
 
       /# Parent imports
       parent_classes = self.parentclasses()
@@ -17222,11 +17254,18 @@ scope:
           aid = dep.id()
           aloc = dep.attrval('location', default=metax.c.LOOKUP)
           akind = dep.attrval('kind', default=metax.c.LOOKUP)
+
+          if istest and 'test' not in aloc:
+            continue
+          elif 'user' not in aloc:
+            continue
+
           if akind == 'std':
             fqn = aid
           else:
             fqn = ClassConstruct.CanonicalizeClassName(
               aid, namespace=namespace)
+
           atarget = dep.attrval('target', default=None)
           if atarget is None:
             /# TODO(wmh): If akind is 'std' we could set atarget to null, but we
@@ -24815,7 +24854,7 @@ scope:
           /# raise Error(
           /#   'metafile %s has state %s' % (result.path(), result.state()))
           pass
-        if debug or True:
+        if debug:
           print 'Used cached %s' % path
       return result
     test:
