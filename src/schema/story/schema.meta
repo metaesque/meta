@@ -124,6 +124,19 @@ config:
           cycle <duration>=<ovulation>[!<conception>+<birth>]
       TODO(wmh): Should this be made a complex block with defined subconstructs?
 
+    secondary
+    Attribute images: : complex = <empty> #:
+      A collection of image constructs.
+
+    secondary
+    Attribute logs: : simple = <empty> #:
+      Each line specifies
+        <uid> <start> <end> 
+      where
+        <uid> is a metarotica2.logs.models.DayLog uid
+        <start> is a start time (HHMMSS)
+        <end> is an end time (HHMMSS)
+
     Attribute comment:;
     Attribute config:;
 
@@ -172,6 +185,15 @@ config:
         day <mon|tue|wed|thu|fri|sat|sun>
         week <1|2|3|4|5>
         month <jan|feb|mar|...>
+
+    secondary
+    Attribute logs: : simple = <empty> #:
+      Each line specifies
+        <uid> <start> <end> 
+      where
+        <uid> is a metarotica2.logs.models.DayLog uid
+        <start> is a start time (HHMMSS)
+        <end> is an end time (HHMMSS)
 
     Attribute comment:;
     Attribute config:;
@@ -237,10 +259,41 @@ config:
       The kind of the section.  Can be basically anything, but common values
       include book, part, chapter, section, subsection.
 
+    secondary
+    Attribute logs: : simple = <empty> #:
+      Each line specifies
+        <uid> <start> <end> 
+      where
+        <uid> is a metarotica2.logs.models.DayLog uid
+        <start> is a start time (HHMMSS)
+        <end> is an end time (HHMMSS)
+
     Attribute comment:;
     Attribute config:;
     Attribute scope: : simple;
 
   end Construct section;
+
+  Construct image < _storyroot_ #:
+    An image
+  config:
+
+    primary
+    Attribute image = <required> : word #:
+      The id of the image.
+
+    secondary
+    Attribute size = <empty> : word #:
+      The size, as <int>x<int>
+
+    secondary
+    Attribute title : str = <empty> aliases <=> #:
+      A summary of the image.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: : simple #:
+      Each line in the scope is a url.
+  end Construct image;
 
 end MetaLanguage story;

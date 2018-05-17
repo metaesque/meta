@@ -877,13 +877,7 @@ scope:
     end;
 
     new specific
-    method metaTestPath : str params:
-      var metafile : str #:
-        The path of the meta file defining the test.
-      multi var subpaths : vec #:
-        The path within the directory containing the
-        metafile.
-    comment:
+    method metaTestPath : str #:
       Obtain the path of a testdata file within the
       same directory as a specified .meta file.
 
@@ -896,6 +890,12 @@ scope:
           result += '/' + subpaths[i];
         }
         return result;
+    params:
+      var metafile : str #:
+        The path of the meta file defining the test.
+      multi var subpaths : vec #:
+        The path within the directory containing the
+        metafile.
     scope<py>:
       return os.path.join(os.path.dirname(metafile), *subpaths)
     end method metaTestPath;

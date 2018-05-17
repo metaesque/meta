@@ -85,6 +85,10 @@ def Config(verbose=Verbose):
 
 
 def ConfigureVersion(verbose=Verbose):
+  return Setup(verbose=verbose)
+
+
+def Setup(verbose=Verbose):
   """Configure sys.path to support a meta version specified in sys.argv.
 
   SideEffect:
