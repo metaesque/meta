@@ -78,4 +78,14 @@ setup: .FORCE
 	meta2 --meta_version current parser.meta2 shell.meta2 cli.meta2
 	cd ../lib; meta2 --meta_version current markdown.meta2 shell.meta2
 
+# target snapshot:
+#   Create a snapshot (e.g. v0.7.0.12, with no .tgz files)
+snapshot: .FORCE
+	meta2 snapshot
+
+# target release:
+#   Create a release (e.g. v0.7.1, with .tgz files)
+release: .FORCE
+	meta2 snapshot --release
+
 .FORCE:

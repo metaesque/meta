@@ -1114,7 +1114,7 @@ scope:
       test.iseq(1, len(book.children()))
     end method loadBook;
 
-    command main scope:
+    command wmd scope:
 
       flag destdir : str = '' #:
         Where to write output files.
@@ -1127,15 +1127,6 @@ scope:
         Consider changing the type, or provide some other mechanism for being
         able to specify an enum type like:
           enum<title|title*|ascii|text|canonical|html>
-
-      flag arg_files : vec<str> = '' #:
-        The files to process.
-        TODO(wmh): This should be
-          arg files : vec<str> = null;
-        but we need to fix some things in Meta:
-         - currently aliases for primary constructs aren't working for some
-           reason, so the 'arg' alias for 'flag' isn't being recognized.
-         - we need to handle 'null' for vec<str>.
 
       flag debug : bool = false #:
         If true, print out a summary of each parsed file.
@@ -1157,16 +1148,16 @@ scope:
               others.append(path)
           return mds, others
 
-        mds, others = FilterFiles(flags.files)
-        aspect = flags.aspect
+        mds, others = FilterFiles(cli.rest)
+        aspect = cli.aspect
         suffix = '.html' if aspect == 'html' else '.txt'
         parser = metax.lib.markdown.Parser()
         for spec in mds:
-          mdfile = parser.parseFile(spec['path'], debug=flags.debug)
-          if flags.debug:
+          mdfile = parser.parseFile(spec['path'], debug=cli.debug)
+          if cli.debug:
             mdfile.show(aspect='title*')
           base = spec['base']
-          mddir = flags.destdir or spec['dir']
+          mddir = cli.destdir or spec['dir']
           outpath = os.path.join(mddir, spec['base'] + suffix)
           with open(outpath, 'w') as fp:
             mdfile.show(aspect=aspect, fp=fp)

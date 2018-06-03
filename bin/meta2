@@ -32,7 +32,7 @@ def main():
   # Invoke the compiler
   try:
     # CODETANGLE(meta2_entry_main): First arg must be 'main'
-    compiler_class.Entry(argv, parent=command)
+    compiler_class.Entry(argv, meta__parent=command)
   except Exception as e:
     # Perform base-to-meta line remapping on the exception string.
     print 'WARNING: Error occurred while attempting to create Compiler'

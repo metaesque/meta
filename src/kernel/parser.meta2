@@ -17860,7 +17860,7 @@ scope:
         if result:
           result += '_'
         result += 'command'
-        return result
+        return '_' + result
 
       /# Establish the level of command construct.
       clist = []
@@ -17920,7 +17920,9 @@ scope:
             /# This is the first subcommand ... insert an initial block that
             /# never gets executed (avoids special case code latter).
             command_body.append('')
-            command_body.append("%sif cli.rest and cli.rest[0] in ('help', 'helpful', 'helpfull'):" % indent)
+            command_body.append(
+              "%sif cli.rest and cli.rest[0] in "
+              "('meta', 'metaful', 'metafull'):" % indent)
             command_body.append("%s  command.help(full='ful' in cli.rest[0])" % indent)
           elif default_encountered:
             /# We previously encountered the special default command, which
@@ -18048,29 +18050,30 @@ scope:
         command_init.append('')
         command_init.append('# Parse the command line args')
         command_init.append(
-          'selected_command = %s.instantiate(args, start=True)' %
+          'meta__command = %s.instantiate(meta__args, start=True)' %
           command_fullname)
-        command_init.append('if selected_command is None:')
+        command_init.append('if meta__command is None:')
         command_init.append('  return')
-        command_init.append('meta__names = selected_command.names()')
-        command_init.append('cli = selected_command.asValues()')
+        command_init.append('meta__names = meta__command.names()')
+        command_init.append('cli = meta__command.asValues()')
 
         /# We create the entry method.
         method_name = 'Entry'
         body = command_init + command_body
         params = ExecutableConstruct.CreateParams(
-          [{'var': 'args',
+          [{'var': 'meta__args',
             'secondaries': [
               (':', Type.Instance('&vec<str>')),
               ('#:', ['The list of command line args (including executable)']),
             ]},
-           {'var': 'parent',
+           {'var': 'meta__parent',
             'secondaries': [
               (':', Type.Instance('metax.root.Command')),
               ('#:', ['A parent command. Usually null.']),
               ('=', Expr('var', 'null', 'null')),
             ]},
-           {'var': 'kwds', 'features': [('multiplicity', 'multi')],
+           /# TODO(wmh): meta__kwds is currently unused ... delete it?
+           {'var': 'meta__kwds', 'features': [('multiplicity', 'multi')],
             'secondaries': [
               (':', Type.Instance('map')),
               ('#:', ['Catchall arg for special-casing.']),
@@ -18136,7 +18139,7 @@ scope:
       output.append("%s%s = %s(" % (indent, command_var, creation_cmd))
       output.append("%s  '%s'," % (indent, self.id()))
       if toplevel:
-        output.append('%s  parent=parent,' % indent)
+        output.append('%s  parent=meta__parent,' % indent)
       if aliases:
         /# the 'aliases' attribute of 'command' is of type 'str' so it is
         /# an Expr with kind 'str'.
@@ -28016,14 +28019,14 @@ scope:
         /#    variable is assumed to have the name of the main construct
         /#
         /# CODETANGLE(meta2_entry_main): First arg must be 'main'
-        assert args[0] == 'main'
+        assert meta__args[0] == 'main'
         while meta__names[0] != 'main':
           meta__names.pop(0)
           meta__names.append(False)
 
         /# We update MetaObject's idea of instantiated command.
         assert metax.root.MetaObject.CLI() is not None
-        metax.root.MetaObject.CLI()._command_Is(selected_command)
+        metax.root.MetaObject.CLI()._command_Is(meta__command)
 
         /# Create the Compiler instance.
         metac = metax.c.Compiler(metal=cli.metalang, basel=cli.baselang)
@@ -28895,7 +28898,7 @@ scope:
               /# .meta2 files then invoke the blaze test targets associated with
               /# each fqn.
               self.argmapIs(argmap)
-              if self.compile_command():
+              if self._compile_command():
                 if argmap['fqns']:
                   self.test_command()
             else:
