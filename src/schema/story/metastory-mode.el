@@ -160,7 +160,7 @@
 (defconst metastory2-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
 (defconst metastory2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "character" "event" "image" "section" "story" "thread" "view"))
-(defconst metastory2-attribute-keys '("#" "%" "<" "=" "@" "abbrev" "age" "aliases" "autokey" "check" "children" "collaborators" "color" "comment" "config" "day" "default" "delim" "dob" "father" "from" "gender" "images" "in" "key" "kind" "logs" "metrics" "model" "mother" "name" "owners" "parent" "presence" "replacer" "scope" "size" "start" "suffixes" "summary" "title" "toplevel" "type" "value" "what" "when" "where" "who" "with"))
+(defconst metastory2-attribute-keys '("#" "%" "<" "=" "@" "abbrev" "age" "alias" "aliases" "autokey" "check" "children" "collaborators" "color" "comment" "config" "day" "default" "delim" "dob" "father" "from" "gender" "images" "in" "key" "kind" "logs" "metrics" "model" "mother" "name" "owners" "parent" "presence" "replacer" "scope" "size" "start" "suffixes" "summary" "title" "toplevel" "type" "value" "what" "when" "where" "who" "with"))
 (defconst metastory2-feature-values '("abstract" "aliaskey" "any" "concrete" "feature" "female" "fri" "male" "mon" "nokey" "nongendered" "noval" "primary" "sat" "secondary" "showkey" "showval" "sun" "thu" "trans" "tue" "undef" "userval" "wed"))
 (defconst metastory2-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
 (defconst metastory2-basewords      '())

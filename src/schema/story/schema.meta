@@ -74,6 +74,11 @@ config:
       The full name of this person.  If not specified, obtained from id.
 
     secondary 
+    Attribute alias : str = <empty> #:
+      When $name is seen anywhere, it is replaced by this if present, or by
+      'name' if present or by capitalized id otherwise.
+
+    secondary 
     Attribute abbrev : word = <empty> #:
       A one-or-two-char abbrev for this person.
 
@@ -169,6 +174,11 @@ config:
     Attribute who : str = <empty> aliases <:> #:
       Comma-separated list of character baseids.
       See comment in 'summary' for a shorthand.
+
+    secondary
+    Attribute tags : str = <empty> #:
+      Comma-separated list of tags to associate with this event.
+      The semantics of the tags are dictated by the user, not by Meta.
 
     secondary
     Attribute in : str = <empty> #:

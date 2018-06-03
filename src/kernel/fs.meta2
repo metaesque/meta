@@ -584,8 +584,16 @@ scope:
         if not self.exists(dirpath):
           print 'NOTE: Creating %s' % dirpath
           self.makedirs(dirpath, mode=0755)
-        with self.open(fullpath, 'w') as fp:
-          fp.write(basefile.contents())
+        link = basefile.link()
+        if link:
+          print '*** HERE symlinking %s to %s' % (fullpath, link)
+          self.symlink(link, fullpath)
+        else:
+          with self.open(fullpath, 'w') as fp:
+            fp.write(basefile.contents())
+          /# TODO(wmh): Should mode be disabled if link is provided in BaseFile(), since we
+          /# are ignoring it here?
+          self.chmod(fullpath, basefile.mode())
         result = [fullpath]
 
         /# Write the mapfile associated with the file to disk if it exists.
@@ -720,6 +728,17 @@ scope:
       return os.path.lexists(path)
     end method lexists;
 
+    method chmod #:
+      Change the mode of the file.
+    params:
+      var path : str #:
+        The path to check for existence.
+      var mode : int #:
+        The mode (e.g. 0640, 0755, etc.)
+    scope:
+      os.chmod(path, mode)
+    end method chmod;
+
     method basename : str #:
       The basename of a path
     params:
@@ -835,6 +854,8 @@ scope:
       var realpath : str;
       var linkpath : str;
     scope:
+      if os.path.exists(linkpath):
+        os.unlink(linkpath)
       os.symlink(realpath, linkpath)
     end method symlink;
 
