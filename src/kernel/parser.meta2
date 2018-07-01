@@ -27762,8 +27762,11 @@ scope:
       metac = metafile.compiler()
       config = metac.__class__.CONFIG
       fs = metac.fs()
-      dotpath = fs.join(config['src_root'], 'src', 'kernel', 'tmp.dot')
-      metac.generateUmlDiagram([metafile], dotpath, config={})
+
+      /# TODO(wmh): Decide where to generate temporary files.
+      if False:
+        dotpath = fs.join(config['src_root'], 'src', 'kernel', 'tmp.dot')
+        metac.generateUmlDiagram([metafile], dotpath, config={})
     end method generateUmlDiagram;
 
     meta
