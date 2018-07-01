@@ -160,8 +160,8 @@
 (defconst metastory2-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
 (defconst metastory2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "character" "event" "image" "section" "story" "thread" "view"))
-(defconst metastory2-attribute-keys '("#" "%" "<" "=" "@" "abbrev" "age" "alias" "aliases" "autokey" "check" "children" "collaborators" "color" "comment" "config" "day" "default" "delim" "dob" "father" "from" "gender" "images" "in" "key" "kind" "logs" "metrics" "model" "mother" "name" "owners" "parent" "presence" "replacer" "scope" "size" "start" "suffixes" "summary" "title" "toplevel" "type" "value" "what" "when" "where" "who" "with"))
-(defconst metastory2-feature-values '("abstract" "aliaskey" "any" "concrete" "feature" "female" "fri" "male" "mon" "nokey" "nongendered" "noval" "primary" "sat" "secondary" "showkey" "showval" "sun" "thu" "trans" "tue" "undef" "userval" "wed"))
+(defconst metastory2-attribute-keys '("#" "%" "<" "=" "@" "abbrev" "age" "alias" "aliases" "autokey" "check" "children" "collaborators" "color" "comment" "config" "day" "default" "delim" "dob" "father" "from" "gender" "images" "in" "key" "kind" "level" "logs" "metrics" "model" "mother" "name" "owners" "parent" "presence" "replacer" "scope" "size" "start" "suffixes" "summary" "synopsis" "tags" "title" "toplevel" "type" "value" "what" "when" "where" "who" "with"))
+(defconst metastory2-feature-values '("abstract" "aliaskey" "any" "concrete" "feature" "female" "fri" "male" "mon" "nokey" "nongendered" "noval" "primary" "sat" "secondary" "showkey" "showval" "sun" "tertiary" "thu" "trans" "tue" "undef" "userval" "wed"))
 (defconst metastory2-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
 (defconst metastory2-basewords      '())
 
@@ -186,7 +186,7 @@
 (puthash 'metastory2-MetaLanguage-line (concat (gethash 'metastory2-MetaLanguage-kv RE) "\\(MetaLanguage\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-Template-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-Template-line (concat (gethash 'metastory2-Template-kv RE) "\\(Template\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metastory2-character-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("female" "gender" "male" "nongendered" "trans")) "\[ \t\]\\)*") RE)
+(puthash 'metastory2-character-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("female" "gender" "level" "male" "nongendered" "primary" "secondary" "tertiary" "trans")) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-character-line (concat (gethash 'metastory2-character-kv RE) "\\(character\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-event-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("any" "day" "fri" "mon" "sat" "sun" "thu" "tue" "wed")) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-event-line (concat (gethash 'metastory2-event-kv RE) "\\(event\\)[ \t]+\\([^ \t]+\\)") RE)
@@ -200,7 +200,7 @@
 (puthash 'metastory2-thread-line (concat (gethash 'metastory2-thread-kv RE) "\\(thread\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-view-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-view-line (concat (gethash 'metastory2-view-kv RE) "\\(view\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metastory2-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "aliaskey" "any" "concrete" "day" "feature" "female" "fri" "gender" "key" "kind" "male" "mon" "nokey" "nongendered" "noval" "presence" "primary" "sat" "secondary" "showkey" "showval" "sun" "thu" "trans" "tue" "undef" "userval" "value" "wed")) "\[ \t\]\\)*") RE)
+(puthash 'metastory2-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "aliaskey" "any" "concrete" "day" "feature" "female" "fri" "gender" "key" "kind" "level" "male" "mon" "nokey" "nongendered" "noval" "presence" "primary" "sat" "secondary" "showkey" "showval" "sun" "tertiary" "thu" "trans" "tue" "undef" "userval" "value" "wed")) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-construct-line (concat (gethash 'metastory2-all-kv RE) "\\(" metastory2-constructs-re "\\)[ \t]+\\([^ \t]+\\)") RE)
 
 (defconst metastory2-comment-start-re "\\(?:comment\\|#\\):\n")

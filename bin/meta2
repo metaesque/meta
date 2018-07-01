@@ -10,6 +10,7 @@ import metastrap
 
 def main():
   compiler_class, command, cli = metastrap.ImportMeta()
+  
   if not cli:
     print 'ERROR: Exiting due to errors.'
     sys.exit(1)

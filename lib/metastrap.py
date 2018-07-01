@@ -25,7 +25,7 @@ _ConfigPath = None
 
 # Version: str
 #   The version of Meta being used, as established by ConfigureVersion().
-Version = False
+Version = None
 
 def Config(verbose=Verbose):
   """Parse the meta config file.

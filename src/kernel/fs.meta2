@@ -586,7 +586,6 @@ scope:
           self.makedirs(dirpath, mode=0755)
         link = basefile.link()
         if link:
-          print '*** HERE symlinking %s to %s' % (fullpath, link)
           self.symlink(link, fullpath)
         else:
           with self.open(fullpath, 'w') as fp:

@@ -17923,7 +17923,7 @@ scope:
             command_body.append(
               "%sif cli.rest and cli.rest[0] in "
               "('meta', 'metaful', 'metafull'):" % indent)
-            command_body.append("%s  command.help(full='ful' in cli.rest[0])" % indent)
+            command_body.append("%s  meta__command.help(full='ful' in cli.rest[0])" % indent)
           elif default_encountered:
             /# We previously encountered the special default command, which
             /# must occur after all other commands, so the current one is
@@ -28839,9 +28839,12 @@ scope:
       scope:
         named block scope:
           argmap = self.argmap()
-          targets = argmap['fqns']
-          flags = self.cli()
-          self.runUnitTests(targets, verbose=flags.verbose)
+          if argmap:
+            targets = argmap['fqns']
+            flags = self.cli()
+            self.runUnitTests(targets, verbose=flags.verbose)
+          else:
+            print 'ERROR: no argmap'
       end command test;
 
       command uml #:
@@ -28900,7 +28903,7 @@ scope:
               self.argmapIs(argmap)
               if self._compile_command():
                 if argmap['fqns']:
-                  self.test_command()
+                  self._test_command()
             else:
               print 'ERROR : Unknown command "%s"' % command
       end command __default__;

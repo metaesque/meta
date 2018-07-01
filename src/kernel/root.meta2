@@ -130,6 +130,8 @@ scope:
   parent<js> ^Object
   parent<cc> void
   metaparent metax.root.ObjectMetaRoot
+  assocs<py>:
+    std assoc logging;
   assocs<cc>:
     cls assoc metax.root.ObjectMetaRoot;
   scope:
@@ -236,6 +238,10 @@ scope:
       /# and define a BUILD target ... in oopl.tgz?
       import metastrap
       version = metastrap.Version
+      if version is None:
+        logging.warning('Implicitly invoking metastrap.Setup()')
+        metastrap.Setup()
+        version = metastrap.Version
       
       /# Convert the fqn to a relative path.
       if os.getenv('TEST_SRCDIR', None) or os.getenv('IN_UNITTEST'):
