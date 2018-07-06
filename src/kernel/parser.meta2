@@ -12279,7 +12279,8 @@ scope:
       targets = set()
       imports = []
       for fqn in deps:
-        import_str, target_str = self.formatDependency(class_construct, fqn)
+        import_str, target_str = self.formatDependency(
+          class_construct, fqn)
         if import_str:
           imports.append(import_str)
         if target_str:
@@ -12313,6 +12314,8 @@ scope:
       kind = info['kind']
       target = info['target']
       reason = info['reason']
+      alias = info.get('alias', None)
+      alias_str = ' as %s' % alias if alias else ''
 
       if kind == 'cls':
         /# Note that 'target' will be class-specific, but Python does not
@@ -12329,15 +12332,17 @@ scope:
           metafile.error('Invalid class type "%s"' % fqn)
           import_str = None
         else:
-          import_str = 'import %s  # target=%s reason=%s' % (fqn[:idx], target, reason)
+          import_str = 'import %s%s  # target=%s reason=%s' % (
+            fqn[:idx], alias_str, target, reason)
 
       elif kind == 'lib':
         /# The target identifies a namespace, so we do not need to
         /# modify it.
-        import_str = 'import %s  # target=%s reason=%s' % (fqn, target, reason)
+        import_str = 'import %s%s  # target=%s reason=%s' % (
+          fqn, alias_str, target, reason)
 
       elif kind == 'std':
-        import_str = 'import ' + fqn
+        import_str = 'import %s%s' % (fqn, alias_str)
       else:
         raise Error('Unknown kind "%s"' % kind)
 
@@ -15155,7 +15160,9 @@ scope:
 
       /# TODO(wmh): Move elsewhere
       impre = re.compile(
-        r'import\s+(?P<import>\S+)(?:\s*#\s*target=(?P<target>\S+))?')
+        r'import\s+(?P<import>\S+)'
+        r'(?: as (?P<alias>\S+))?'
+        r'(?:\s*#\s*target=(?P<target>\S+))?')
 
       /# TODO(wmh): Make these less fragile. Any changes to the 'End Imports'
       /# or 'Start Harness' lines in templates will raise an Error.
@@ -15217,6 +15224,9 @@ scope:
           m = impre.match(line)
           if m:
             impline = 'import %s' % m.group('import')
+            alias = m.group('alias')
+            if alias:
+              impline += ' as ' + alias
             if impline not in imports:
               imports.append(impline)
             target = m.group('target')
@@ -15724,9 +15734,11 @@ scope:
         target: str
           The bazel target to use for the dependency.
         fqn: str
-           The fully qualified name of the dependency
+          The fully qualified name of the dependency
         reason: str
-           Why the dependency exists.
+          Why the dependency exists.
+        abbrev: str (optional)
+          The name by which the import is known locally.
 
     field initializer : MethodConstruct #:
       The initializer associated with this ClassConstruct.
@@ -15835,6 +15847,8 @@ scope:
         The bazel target associated with the dependency. If it is null,
         no target is generated.  If it is '<auto>', the standard target
         associated with fqn is used.
+      var alias : str = null #:
+        The name by which the dependency is to be referenced locally.
     scope:
       if target == '<auto>':
         if kind == 'std':
@@ -15851,9 +15865,12 @@ scope:
         if info['target'] != target:
           print '**** WARNING: for %s dep %s has target %s vs %s' % (
             self.kindfqn(), fqn, target, info['target'])
+        /# TODO(wmh): Do we need to validate alias?
       else:
-        deps[fqn] = {
-          'fqn': fqn, 'kind': kind, 'target': target, 'reason': reason}
+        dep = {'fqn': fqn, 'kind': kind, 'target': target, 'reason': reason}
+        if alias:
+          dep['alias'] = alias
+        deps[fqn] = dep
         metafile = self.metafile()
         if target:
           metafile.registerDependentClass(fqn)
@@ -15874,8 +15891,10 @@ scope:
       fp.write('%s dependencies\n' % self.kindfqn())
       for fqn in sorted(deps):
         info = deps[fqn]
-        fp.write('  %-40s : %-10s = %-40s [%s]\n' % (
-          fqn, info['kind'], info['target'], info['reason']))
+        alias = info.get('alias', None)
+        alias_str = '(%s) ' % alias if alias else ''
+        fp.write('  %-40s : %-10s = %-40s %s[%s]\n' % (
+          fqn, info['kind'], info['target'], alias_str, info['reason']))
     test:
     end method showDependencies;
 
@@ -17268,6 +17287,7 @@ scope:
           aid = dep.id()
           aloc = dep.attrval('location', default=metax.c.LOOKUP)
           akind = dep.attrval('kind', default=metax.c.LOOKUP)
+          alias = dep.attrval('alias', default=metax.c.LOOKUP)
 
           if self.variant() == 'testuser':
             /# We do not filter out any assocs if we are in an explicit test
@@ -17293,7 +17313,7 @@ scope:
           else:
             atarget = atarget.asStr(unquote=True)
           if atarget:
-            self.addDependency(fqn, akind, 'in assocs')
+            self.addDependency(fqn, akind, 'in assocs', alias=alias)
 
       /# Implicit imports
       if metaclass is not None:
@@ -17893,7 +17913,8 @@ scope:
           'metax.cli.Command', 'cls', 'needed for entry point')
 
         /# Now create the executable binary that calls into this entry point.
-        self.createExecutableBinary()
+        compilation = self.attrval('compilation')
+        self.createExecutableBinary(auto=compilation == 'implicit')
 
       command_init = streams.stream('command_init')
       command_body = streams.stream('command_body')
@@ -18165,6 +18186,9 @@ scope:
     method createExecutableBinary : any #:
       Create the simple executable stub that calls into a class-specific entry
       point. Generated by top-level 'command' constructs.
+    params:
+      var auto : bool = false #:
+        If true, invocations of the binary should auto-compile meta code.
     scope:
       metafile = self.metafile()
       klass = self.ancestor('class')
@@ -18178,7 +18202,7 @@ scope:
         /# TODO(wmh): Use some template that is user-customizable
         '#!%s   # -*- mode: python -*-' % python_binary,
         'import metastrap',
-        'metastrap.Setup()',
+        'metastrap.Setup(%s)' % ('auto=True' if auto else ''),
         /# TODO(wmh): How to allow for binary-specific imports?
         /# Most scripts do not need metagae, but those that interact with
         /# WAE may. And metagae is a wmh-ism, not a meta-ism!
@@ -25390,7 +25414,8 @@ scope:
         'src', 'schema', metaid, 'meta%s-mode.el' % metaid)
 
       fp.write(
-        'Creating major mode %s for %s (%s)\n' % (out_file, metaid, MetaLang))
+        'Creating major mode %s for %s (%s) from %s\n' % (
+          out_file, metaid, MetaLang, in_file))
 
       featkeys = {}
       featvals = {}
@@ -27986,7 +28011,78 @@ scope:
           print 'NOTE: Created ' + tarpath
     end method MakeSnapshot;
 
-    command main #:
+    method maybeRecompileMeta : bool #:
+      For a given python file, check if its meta source needs compiling.
+
+      Returns:
+        True if compilation succeeded (or didn't happen), False if errors occurred.
+    params:
+      var pyfile : str #:
+        The python file to potentially update.
+    scope:
+      fs = self.fs()
+      result = True
+      metafile_path = self.basePathToMeta(pyfile)
+      if metafile_path:
+        if fs.exists(metafile_path):
+          metamodtime = fs.mtime(metafile_path)
+          basemodtime = fs.mtime(pyfile)
+          if metamodtime > basemodtime:
+            print 'NOTE: compiling %s (%d seconds newer than %s)' % (
+              fs.relpath(metafile_path),
+              metamodtime - basemodtime,
+              fs.relpath(pyfile))
+
+            /# TODO(wmh): We are NOT invoking a subprocess as we want this to be
+            /# as efficient as possible. We may be able to significantly improve
+            /# implicit compilation performance by using getMeta() instead of
+            /# processMeta(), so that code needed by one metafile that has been
+            /# compiled earlier can be reused instead of having to reparse from
+            /# scratch. Only relevant if we expect many files to have changed,
+            /# which should be rare.
+            try:
+              metafile, errors, warnings = self.processMeta(metafile_path)
+            except Exception as e:
+              text = traceback.format_exc()
+              if False:
+                print '#' * 70
+                print text
+                print '=' * 70
+              ifp = cStringIO.StringIO(text)
+              /# Note that the baselang being compiled is NOT what is important
+              /# when performing baseling-to-metaline conversions ... it is the
+              /# baselang being used to compile the code that is important!
+              /# This parser.meta code is currently assuming a python implementation,
+              /# so that is the baselang we use.
+              baselang = self.metalang().baselangNamed('python')
+              self.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)
+              sys.exit(1)
+            else:
+              if errors:
+                print 'ERROR: Failed to compile %s' % metafile_path
+                sys.exit(1)
+              else:
+                /# If there were no changes between the python file on disk and
+                /# the version created via compilation, the file is not
+                /# rewritten and thus the modified timestamp is not changed
+                /# either. This means that if metac is invoked again, the same
+                /# file will look stale and in need of recompilation. For now,
+                /# we touch the file to avoid this problem. I'd like to verify
+                /# though that the only way this happens is when a cosmetic
+                /# change is made to a meta file (a change that doesn't affect
+                /# the underlying python code that gets generated).
+                with open(pyfile, 'a'):
+                  fs.touch(pyfile, None)
+                self.writeSummary([metafile])
+        else:
+          print 'WARNING: metafile %s is missing' % metafile_path
+      else:
+        if not pyfile.endswith('__init__.py'):
+          print 'WARNING: Failed to find metafile for %s' % pyfile
+      return result
+    end method maybeRecompileMeta;
+
+    command metacnew #:
       The public interface to the Meta compiler.
 
       Note that this assumes that the 'meta2' script does the following:
@@ -28499,6 +28595,7 @@ scope:
           argmap = self._parseArgs(flags.rest, resolve=True)
 
           for details in argmap['details']:
+            construct = details['construct']
             if construct:
               lines = construct.writeIndex(**kwds)
               for line in lines:
@@ -28911,7 +29008,7 @@ scope:
               print 'ERROR : Unknown command "%s"' % command
       end command __default__;
 
-    end command main;
+    end command metacnew;
 
   end class Compiler;
 

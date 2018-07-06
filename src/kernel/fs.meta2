@@ -476,9 +476,14 @@ scope:
     params:
       var path : str #:
         Path to file to create.
+      var atime : float = null #:
+        If provided, atime is set to this value
+      var mtime : float = null #:
+        If provied, mtime is set to this value
     scope:
       with open(path, 'a') as fp:
-        pass
+        if atime or mtime:
+          os.path.utime(path, (atime, mtime))
     test:
     end method touch;
 
@@ -621,11 +626,15 @@ scope:
       /# Obtain the absolute real path of the file on disk.
       metadir = self.metadir()
       mroot = self.join(self.rootdir(), metadir)
-      if not self.exists(mroot):
-        raise Error('Failed to find "%s"' % mroot)
-      /# TODO(wmh): Need to use self.flags.metadir
-      fullpath = self.realpath(self.join(mroot, basefile.subpath()))
-      /# print 'metadir=%s mroot=%s subpath=%s fullpath=%s' % (metadir, mroot, basefile.subpath(), fullpath)
+      if self.exists(mroot):
+        /# TODO(wmh): Need to use self.flags.metadir
+        fullpath = self.realpath(self.join(mroot, basefile.subpath()))
+        /# print 'metadir=%s mroot=%s subpath=%s fullpath=%s' % (metadir, mroot, basefile.subpath(), fullpath)
+      else:
+        metafile = basefile.metafile()
+        metac = metafile.compiler()
+        mroot = metac.repositoryPath()
+        fullpath = self.join(mroot, basefile.subpath())
       return fullpath, mroot
     end method basefilePath;
 
@@ -881,6 +890,14 @@ scope:
     scope:
       return os.path.islink(path)
     end method islink;
+
+    method mtime : float #:
+      Obtain the last modified time of a file, in seconds since unix epoch.
+    params:
+      var path : str;
+    scope:
+      return os.path.getmtime(path)
+    end method mtime;
 
     method readlink : str #:
       Obtain the file that a symlink is linked to

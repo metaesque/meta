@@ -1335,7 +1335,7 @@ we need its actual indentation to be reported)."
     (switch-to-buffer-other-window "*Meta Index*")
     (erase-buffer)
     (insert (format "buffer: %s\n" bufname))
-    ; (message (format "here with '%s'" command))
+    (message (format "COMMAND: %s" command))
     (insert (shell-command-to-string command))
     (metalang2-mode)
     (orgstruct-mode)

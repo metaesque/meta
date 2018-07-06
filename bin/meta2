@@ -5,6 +5,9 @@ import os
 import sys
 import traceback
 
+#import pprint
+#pprint.pprint(sys.path)
+
 import metastrap
 # metastrap.AutoCompile()
 

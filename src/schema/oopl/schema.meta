@@ -1142,6 +1142,11 @@ config:
       in that case).
 
     secondary
+    Attribute alias : word = <empty> #:
+      The alias by which this dependency is to be known within the baselang
+      source file.
+
+    secondary
     Attribute target : str = <empty> #:
       The BUILD target to use for this assoc. If not specified, a default is
       computed based on the assoc and kind.  Use the explicit empty string
@@ -1198,6 +1203,22 @@ config:
   Construct command < _oopl_ #:
     The command construct.
   config:
+
+    feature
+    Attribute compilation : <implicit|explicit> = explicit #:
+      Whether invoking the binary implicitly compiles dependent meta code,
+      or whether code needs to be explicitly compiled.
+    config:
+      FeatureValue implicit #:
+        If the command in question has an associated binary (e.g. it is a
+        toplevel command), invoking the binary will result in all Meta-level
+        software needed by the binary being implicitly recompiled if its
+        meta file is newer than its baselang source file.
+      FeatureValue explicit #:
+        If the command in question has an associated binary (e.g. it is a
+        toplevel command), invoking the binary will NOT result in all Meta-level
+        software needed by the binary being implicitly recompiled. One must
+        recompile the code explicitly.
 
     primary
     Attribute command : id = <required> #:

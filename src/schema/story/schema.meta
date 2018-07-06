@@ -52,6 +52,11 @@ config:
       The start date of the story.
 
     secondary
+    Attribute mohs : num = 0 #:
+      A scale of story hardness. 0 means unrated. 1 means soft. 9 means very
+      hard.
+
+    secondary
     Attribute owners : str = <required> #:
       The comma-separated list of owners (google account email addresses).
       TODO(wmh): Make this a word-list instead of word.
@@ -100,11 +105,9 @@ config:
       Can also be a <ymd> specification relative to start date of story.
 
     secondary 
-    Attribute age : num = <required> #:
-      The age (in years) of the character at the start of the story.
-      Although redundant relative to dob, it provides a more immediate sense
-      of the character's age relative to other characters than dob does, and
-      offers a basic sanity check between age and dob.
+    Attribute age : word = <required> #:
+      The age (in ymd format) of the character at the start of the story.
+      Provides a more convenient/intuitive way of specifying dob implicitly.
 
     secondary 
     Attribute mother : word = <empty> #:

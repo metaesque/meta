@@ -269,11 +269,13 @@ scope:
       /# CODETANGLE(resource_name): In metax.c (parser.meta).
       parts.append('%s_%s' % (clsname, resource_id))
       path = '/'.join(parts)
-      /# We avoid accessing the filesystem (to verify it exists) and instead
-      /# allow the caller to deal with issues. On the other hand, it would
-      /# be useful to return the realpath instead of the symlinked path.
+      /# NOTE: Although I used to return the non-realpath version, allowing
+      /# the caller to decide how to proceed, there was never a time where I
+      /# wanted the non-realpath version, so I've decided to always convert.
+      /# This does introduce an inconsistency though, because paths that do not
+      /# exist will stay in non-realpath format. 
       /# TODO(wmh): How to avoid using baselang I/O commands here??
-      return path
+      return os.path.realpath(path)
     scope<cc>:
     scope<js>:
       return null;
