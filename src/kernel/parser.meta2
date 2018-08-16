@@ -8045,7 +8045,7 @@ scope:
           output.append(summary)
 
       if scope:
-        if self.kind() in ('File', 'namespace', 'class', 'behavior'):
+        if self.kind() in ('File', 'namespace', 'class', 'behavior', 'command'):
           sublevel = level + 1
 
           currdex = len(output)
@@ -13950,6 +13950,8 @@ scope:
       Where to append lines of baselang code representing the super-call.
     var width : int = 80 #:
       Maximum width that lines can take on.
+    var return_var : str = null #:
+      If present, assign the result of the super call to the given var.
   scope:
     abstract receiver BaseLanguageOopl;
 
@@ -13958,7 +13960,10 @@ scope:
       myclass = method.myclass()
       class_name = myclass.id()
       method_name = method.id()
-      super_method = 'super(%s, %s).%s' % (class_name, recstr, method_name)
+      super_method = ''
+      if return_var:
+        super_method += '%s = ' % return_var
+      super_method += 'super(%s, %s).%s' % (class_name, recstr, method_name)
       metafile = method.metafile()
 
       /# TODO(wmh): Should we do LOOKUP here? If we don't always do it
@@ -17929,12 +17934,17 @@ scope:
       subcmds = []
       args = []
       default_encountered = False
+      has_optargs = False
       for child in command_scope:
         kind = child.kind()
 
         if kind == 'flag':
           /# Generate flag code in command_init.
           child.generatePython(command_fullname, command_init)
+          if child.isArg():
+            cdef = child.attr('default', default=None)
+            if cdef is not None:
+              has_optargs = True
 
         elif kind == 'command':
           if len(subcmds) == 0:
@@ -18035,7 +18045,7 @@ scope:
 
         else:
           raise Error(
-            'Unexpected child %s of %s' % (child.kindid(), construct.kindfqn()))
+            'Unexpected child %s of %s' % (child.kindid(), self.kindfqn()))
 
       if subcmds:
         if default_encountered:
@@ -18050,10 +18060,10 @@ scope:
           command_body.append(
             indent + "  print 'ERROR: Unrecognized command \"%s\"' % " + sub_var )
 
-
-      if not subcmds or toplevel:
-        /# There were no subcommands (or, alternatively, this is the top-level
-        /# command. In either case, we want to add a 'catch-all' arg.
+      if (not subcmds or toplevel) and not has_optargs:
+        /# There were no subcommands or optional args (or, alternatively, this 
+        /# is the top-level command). In either case, we want to add a
+        /# 'catch-all' arg.
         /#  - for non-toplevel commands, if there were any 'arg' constructs
         /#    specified within this command, they are assumed to constitute all
         /#    desired args.
@@ -18209,7 +18219,20 @@ scope:
         'import metagae',
         'import sys',
         'import %s' % nmsp.fqn(),
-        '%s.Entry(sys.argv)' % klass.fqn(),
+        'try:'
+        '  %s.Entry(sys.argv)' % klass.fqn(),
+        'except Exception:',
+        '  import cStringIO',
+        '  import traceback',
+        '  compiler_class, command, cli = metastrap.ImportMeta()',
+        '  import metax.c',
+        '  metax.c.Compiler.Initialize()',
+        "  metac = metax.c.Compiler(metal='oopl', basel='python')",
+        '  metax.c.Compiler.CurrentIs(metac)',
+        '  text = traceback.format_exc()',
+        '  ifp = cStringIO.StringIO(text)',
+        "  baselang = metac.metalang().baselangNamed('python')",
+        '  metac.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)',
       ]
 
       /# Create the file:
@@ -18288,6 +18311,15 @@ scope:
     test:
     end method translateMeta;
 
+    method isArg : bool #:
+      True if this instance is a positional arg
+    scope:
+      /# TODO(wmh): When construct aliases are working properly we can check
+      /# whether the kind is 'arg'.
+      return self.id().startswith('arg_')
+    test:
+    end method isArg;
+
     method generatePython #:
       Generate python code that will create a metax.cli.Flag
       instances representing this flag construct.
@@ -18317,7 +18349,11 @@ scope:
       name = self.id()
       isarg = False
       if name.startswith('arg_'):
+        /# TODO(wmh): This 'if' portion can be removed when aliases for
+        /# primary constructs are working.
         name = name[4:]
+        isarg = True
+      elif self.isArg():
         isarg = True
 
       /# Clean up type issues
@@ -18805,7 +18841,7 @@ scope:
     field returntype : Type #:
       The return type of this Executable. Represents a cached version of
       the 'returns' or 'returns:' attributes.
-      TODO(wmh): This is not yet implemented!!!
+      NOTE: Initialized in translateMeta(), not available before then.
 
     field params : *map #:
       A parsed representation of the 'params:' attribute.  Contains:
@@ -19057,6 +19093,7 @@ scope:
       presence = self.attrval('presence')
       optimization = self.attrval('optimization')
       returntype = self.attrval('returns')
+      self.returntypeIs(returntype)
 
       /# modifiers : vec<str>
       /#   The modifiers to add before the class
@@ -19068,7 +19105,9 @@ scope:
       /#   The lines of baselang text to insert within scope before user code.
       /# postamble : vec<str>
       /#   The lines of baselang text to insert within scope after user code.
-      scope_attr, scope_lines, preamble, postamble, comment, params_str = (
+      /# retamble : str or null
+      /#   The line to add to the very end of the method (return).
+      scope_attr, scope_lines, preamble, postamble, retamble, comment, params_str = (
         self.methodInfo())
 
       /# postmethod : vec<str>
@@ -19169,6 +19208,14 @@ scope:
         streams = metafile.streams()
         consinfo = self.context().consinfo(self.kind())
 
+        /# Add a return line if one has been identified.
+        if retamble:
+          /# It is critical that these line be the very last in postamble.
+          /# TODO(wmh): If the user-provided content unambiguously invokes
+          /# a return statement before end-of-method, we do NOT need to
+          /# insert these implicit lines.
+          postamble.extend(retamble)
+
         /# The normal action is to write the method to 'defn'
         /#  - the only time we do not do this is if the baselang has a
         /#    separation between decl and defn and the method is inlined
@@ -19196,8 +19243,8 @@ scope:
           varset.addVar('inline', inline)
 
           dummy = []
-          params_str = baselang.formatParams(self, dummy, decl=True)
-          varset.setValue('params', params_str)
+          params_str_decl = baselang.formatParams(self, dummy, decl=True)
+          varset.setValue('params', params_str_decl)
 
           segment.instantiate(template, varset, self.kind(), self.fqn())
           streams.addSegment('decl', segment)
@@ -19223,6 +19270,8 @@ scope:
             The baselang lines in the scope before user content.
        3) postamble: vec<str>
             The baselang lines in the scope after user content.
+       4) retamble: vec<str>
+            The return line for the method.
        4) comment: vec<str>
             The baselang comment associated with the method.
        5) params: str
@@ -19288,11 +19337,14 @@ scope:
         comment = None
         preamble = None
         postamble = None
+        retamble = None
       else:
         preamble = []
         postamble = []
+        retamble = None
         attrkind = self.attrval('kind')
         inheritance = self.attrval('inheritance')
+        calls_super = False
 
         /# Handle inheritance (prex and postx).
         if attrkind == 'initializer':
@@ -19308,6 +19360,7 @@ scope:
           /# construct has defined 'Attribute inheritance = postx', but
           /# the '= postx' does not appear to be overriding the '= new'
           /# defined up in _executable_.
+          calls_super = True
           if inheritance == 'superx':
             /# This is a request to NOT generate the super code ... it is
             /# up to the user to perform the call themselves.
@@ -19318,10 +19371,41 @@ scope:
             /# formatParams() first, as it may add code to 'preamble' to define
             /# a new receiver variable (one that is used in initCode()).
         else:
+          /# TODO(wmh): Check whether the super method has a void return
+          /# value (in which case return_var should be null).
+          /# TODO(wmh): If return_var is not null, we should add a return
+          /# statement to the end of the method (either as guaranteed last line
+          /# of postamble or a special retamble value).
+          /# TODO(wmh): Define a OoplBaseLanguage.returnCode() method for
+          /# generating return code given a particular variable or expression.
+          returntype = self.returntype()
+          if returntype is None:
+            raise InternalError('returntype is uninitialized')
+          return_var = None if returntype.isVoid() else 'meta__super'
           if inheritance == 'postx':
-            baselang.superCode(self, preamble)
+            baselang.superCode(self, preamble, return_var=return_var)
+            calls_super = True
           elif inheritance == 'prex':
-            baselang.superCode(self, postamble)
+            baselang.superCode(self, postamble, return_var=return_var)
+            calls_super = True
+          elif inheritance == 'superx':
+            calls_super = True
+          if calls_super and return_var:
+            /# TODO(wmh): How to guarantee that this is always the last
+            /# line of output?
+            if retamble:
+              metafile.error(
+                'Found multiple return statements',
+                line=self.primary().line())
+            else:
+              /# TODO(wmh): This needs to be made baselang-specific (define a
+              /# OoplBaseLanguage.returnCode() behavior).
+              /# TODO(wmh): If the user-provided code provides a 'return'
+              /# statement that is guaranteed to be executed by end-of-method,
+              /# we do NOT need to insert this line.
+              /# TODO(wmh): Consider making this a list of lines instead of
+              /# a single line.
+              retamble = ['return ' + return_var]
 
           if len(scope_lines) == 0:
             scope_lines = baselang.emptyBlockCode(self)
@@ -19363,7 +19447,7 @@ scope:
             /#    killing it.
             myclass.registerInitializer(None)
 
-      return scope_attr, scope_lines, preamble, postamble, comment, params
+      return scope_attr, scope_lines, preamble, postamble, retamble, comment, params
     end method methodInfo;
 
     method isTestCase : bool #:
@@ -21267,7 +21351,9 @@ scope:
           /# We have encountered an error ... we were unable to find
           /# a feature value or primary token.  For now, we skip forward
           /# to the end of the block containing the construct being parsed.
-          self.error('Unrecognized feature/primary token', line=line.num()-1)
+          self.error(
+            'Unrecognized feature/primary token %s' % str(atuple),
+            line=line.num()-1)
           self.skipToIndent(indent-1)
           return None
         else:
@@ -28974,6 +29060,7 @@ scope:
               metafile = self.getMeta(path)
               if not metafile.hasErrors(show=True):
                 metafiles.append(metafile)
+            print metafiles
             self.generateUmlDiagram(
               metafiles, dotpath, config=config, display=cli.display,
               show_user=cli.showuser, show_meta=cli.showmeta,

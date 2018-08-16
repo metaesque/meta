@@ -1,0 +1,128 @@
+MetaLanguage family name Family parent meta toplevel <family> #:
+  The constructs in Meta(Story).
+config:
+
+  abstract
+  Construct _familyroot_ #:
+    All constructs in Meta(Family) inherit from this abstract construct,
+    so the Attribute definitions here are available in subconstructs.
+    However, note that the existence of an Attribute here does NOT mean it
+    is automatically included in the subconstruct ... the subconstruct
+    must specify the primary attribute (and any customization of other
+    values).
+  config:
+    
+    secondary
+    Attribute comment: : simple = <empty> aliases <#:> #:
+      An arbitrary multi-line comment used to describe the purpose of the
+      construct.
+
+    secondary
+    Attribute config: : complex = <empty> children <Construct> #:
+      The complex block within which Construct/Attribute instances can be
+      modified.
+
+    secondary
+    Attribute scope: : complex = <empty> aliases <::> #:
+      The collection of subconstructs.
+
+  end Construct _familyroot_;
+
+  Construct family < _familyroot_ #:
+    Each family is defined by a family construct.
+  config:
+
+    primary
+    Attribute family : word = <required> #:
+      A unique identifier for the family
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: children <person>;
+
+  end Construct family;
+
+  Construct person < _familyroot_ config:
+
+    feature
+    Attribute gender : <female|male|trans|nongendered> = nongendered #:
+      The gender of the character.
+
+    primary
+    Attribute person : word = <required> #:
+      The name of the person, with given and surname separated by '@' and
+      any spaces replaced with '_'.
+
+    secondary 
+    Attribute alias : str = <empty> #:
+      When $name is seen anywhere, it is replaced by this if present, or by
+      'name' if present or by capitalized id otherwise.
+
+    secondary 
+    Attribute abbrev : word = <empty> #:
+      A one-or-two-char abbrev for this person.
+
+    secondary 
+    Attribute dob : word = <required> #:
+      Date of birth in YYYY-mm-dd format (with optional THH:MM:SS allowed).
+      Can also be a <ymd> specification relative to start date of story.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: children <person|event|link>;
+
+  end Construct person;
+
+  Construct event < _familyroot_ config:
+
+    feature
+    Attribute kind : <marriage|divorce|death|unknown> = unknown #:
+      What kind of event this is.
+
+    primary
+    Attribute event : word = <auto>;
+
+    secondary
+    Attribute when : word = <empty>  aliases <@> #:
+      A date (YYYY-mm-dd or YYYY-mm-ddTHH:MM:SS) or a <cname>:<ymd>.
+
+    secondary
+    Attribute where : str = <empty> aliases <%> #:
+      A string describing where the event takes place.
+
+    secondary
+    Attribute who : word = <empty> aliases <:> #:
+      Comma-separated list of character baseids.
+      See comment in 'summary' for a shorthand.
+
+    Attribute comment:;
+    Attribute config:;
+
+  end Construct event;
+
+  Construct link < _familyroot_ #:
+    A link between a person and some other person
+  config:
+
+    primary
+    Attribute link = <auto> : id #:
+      The id of the link (often auto-assigned)
+
+    secondary
+    Attribute to = <required> : word #:
+      The id of the person being linked to.
+
+    secondary
+    Attribute color : word = <empty> #:
+      The color of the link
+
+    secondary
+    Attribute text : str = <empty> #:
+      Text to assign to the link.
+
+    Attribute comment:;
+    Attribute config:;
+
+  end Construct link;
+
+end MetaLanguage family;

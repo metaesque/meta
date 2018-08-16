@@ -870,7 +870,7 @@ such newline-indentation is provided.")
 
 ;; Establish which tokens get highlighted, and with which font.
 (defun metalang2-compute-font-lock-keywords ()
-  (let ((executable-constructs '("method" "initializer" "finalizer" "function" "lifecycle" "behavior" "receiver"))
+  (let ((executable-constructs '("method" "initializer" "finalizer" "function" "lifecycle" "behavior" "receiver" "command"))
      )
     (list
       ;; Color multi-line comment blocks

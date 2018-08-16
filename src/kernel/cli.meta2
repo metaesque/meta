@@ -141,6 +141,8 @@ scope:
           result = value
         elif re.match(r'^\d*\.\d+$', value):
           result = float(value)
+        elif re.match(r'^\d+$', value):
+          result = float(value)
       
       elif mytype.startswith('enum'):
         enumtype = self.enumtype()
@@ -926,6 +928,7 @@ scope:
         allflags = result.allParts()
         for flagname in sorted(allflags):
           flag = allflags[flagname]
+          if flag.isArg(): continue
           if flag.value() is None:
             /# A required flag without a value
             errors.append(

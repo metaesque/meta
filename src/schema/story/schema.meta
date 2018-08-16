@@ -80,7 +80,7 @@ config:
       The gender of the character.
 
     feature
-    Attribute level : <primary|secondary|tertiary> = primary #:
+    Attribute level : <primary|secondary|tertiary|nolevel> = nolevel #:
       The gender of the character.
 
     primary

@@ -142,6 +142,98 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
       # The above will tromp on testdata/repo, recreating subdirs for all
       # baselangs supported so far. This may (or may not) break unit tests.
 
+## Defining a non-language schema and using it in Python code.
+
+- First, create the schema file by going to $METAROOT/src/schema and creating
+  a subdirectory named 'xyz' if you are defining Meta(Xyz).
+  - Copy a schema.meta file from a sibling directory into 'xyz' and modify
+    it to define all desired constructs.
+
+- In python code:
+  - Define a root construct:
+
+      class XyzRootConstruct < metax.c.Construct #:
+        Abstract superclass of all Meta(Xyz) constructs.
+      scope:
+
+        meta
+        lifecycle scope:
+          config, config_path = metax.root.Object.Config()
+          meta_root = config['src_root']
+          cls.MetaData = {
+            /###############
+            /# Meta(Xyz) #
+            /###############
+            'xyz': {
+              'schema': os.path.join(
+                meta_root, 'src', 'schema', 'xyz', 'schema.meta'),
+              'name': 'Xyz',
+              'parent': 'meta',
+              'toplevel': ['fixme'],
+              'constructs': {
+                /# FIX THESE!
+                'cons1': Cons1Construct,
+                'cons2': Cons2Construct,
+                'consn': ConsnConstruct,
+              },
+              'baselangs': {},
+              'basesels': [],
+            }
+          }
+        end lifecycle;
+
+        ...
+      end;
+
+  - Define subclasses of XyzRootConstruct for each construct defined in
+    the schema/xyz/schema.meta file
+
+      class FamilyConstruct < XyzRootConstruct #:
+        The 'person' construct.
+      scope:
+
+        ... add fields as appropriate ...
+
+        method kind : str scope:
+          return 'family'
+
+        method expandMeta scope:
+          /# This should parse the construct and initialize construct-specific
+          /# fields
+        end;
+
+        method translateMeta scope:
+          /# For non-language schemas, what happens in expandMeta() and what
+          /# happens in translateMeta() is rather fuzzily defined ... up to you.
+        end;
+
+      end;
+
+      class PersonConstruct < XyzRootConstruct #:
+        The 'person' construct.
+      scope:
+
+        method kind : str scope:
+          return 'person'
+
+        ...
+      end;
+
+  - To setup a compiler for input written in Meta(Xyz):
+
+      import metastrap
+      sys.argv = ['faux', '-L', 'xyz', '-A', '0']
+      Compiler, command, metacli = metastrap.ImportMeta()
+      Compiler.Initialize(metadata=XyzRootConstruct.MetaData)
+      metac = Compiler(metal=metacli.metalang, basel=None)
+
+  - To parse a .meta file in Meta(Xyz) format:
+      metafile, errors, warnings = metac.processMeta(path)
+      if not metafile.hasErrors(show=True):
+        scope = metafile.construct().attrval('scope:')
+        top = scope[0]
+        top.write()
+
 ## Implementing semantics of types without a prefix
 
 - For primitive types, it makes sense that the implicit prefix should be '@'
@@ -1245,7 +1337,7 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
   code will break something in python's control flow.
   
 - The Emacs major-mode has various weaknesses:
-  - Within Meta comment blocks, inserting the character " immediately kills
+  - Within Meta comment blocks, inserting the character \" immediately kills
     all syntax highligting
     
   - When in a comment block, if the current line has a '(' without matching

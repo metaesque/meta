@@ -1,0 +1,13 @@
+
+----------------------------------------------------------------------
+FILE LISTING:
+
+README:
+  Describes each file.
+
+metafamily-mode.el:
+  The emacs major-mode code for Meta(Family).  Generated from
+  $META/src/templates/meta-mode-templates.el by 'meta2 --metalang=family emacs'
+
+schema.meta:
+  The schema for Meta(Family).

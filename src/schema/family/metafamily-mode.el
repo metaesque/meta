@@ -20,7 +20,7 @@
 ;;;   'MetaLang' and 'metalang', then you are currently looking at an
 ;;;   instantiation of the template, not the template itself!
  ;;
- ;;      This is the file for Meta(Oopl) with suffix .metaoopl
+ ;;      This is the file for Meta(Family) with suffix .metafamily
  ;;
 ;;; Due to the structure of Meta, a basic major-mode is very easy to create,
 ;;; having few rules:
@@ -59,14 +59,14 @@
 ;;;   which block-valued attribute the current line is contained
 ;;;   within, and only perform the above indentation of that attribute
 ;;;   value is complex.  If simple, each line should be indented at
-;;;   least metaoopl2-indent-offset more than the start-of-block line, but
+;;;   least metafamily2-indent-offset more than the start-of-block line, but
 ;;;   if the line already has more indentation than that, it should be
 ;;;   left as-is.
 ;;;
 ;;; With respect to coloring, a simple set of rules is:
-;;;   1) All construct names are colored with font-lock-metaoopl2-construct-face
-;;;   2) All attribute keys are colored with font-lock-metaoopl2-attribute-key-face
-;;;   3) All feature values are colored with font-lock-metaoopl2-feature-value-face
+;;;   1) All construct names are colored with font-lock-metafamily2-construct-face
+;;;   2) All attribute keys are colored with font-lock-metafamily2-attribute-key-face
+;;;   3) All feature values are colored with font-lock-metafamily2-feature-value-face
 ;;;
 ;;;   However, this must be extended significantly.
 ;;;
@@ -156,86 +156,56 @@
 ;;;   - The values of these variables differ for each particular Meta language
 ;;;     (but not each Meta sub-language)
 
-; (defconst metaoopl2-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
-(defconst metaoopl2-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
+; (defconst metafamily2-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
+(defconst metafamily2-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
-(defconst metaoopl2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "accessor" "assoc" "behavior" "block" "category" "class" "command" "field" "flag" "lifecycle" "loop" "method" "namespace" "native" "receiver" "remark" "resource" "testx" "var"))
-(defconst metaoopl2-attribute-keys '("#" "->" "->" "<" "<<" "<<<" "=" "@" "alias" "aliases" "associations" "assocs" "autogen" "autokey" "children" "clinit" "color" "comment" "compilation" "config" "default" "delim" "dispatch" "extensibility" "finalize" "flags" "inheritance" "init" "key" "kind" "lazy" "location" "metaparent" "multiplicity" "mutability" "name" "optimization" "pack" "params" "parent" "path" "placement" "position" "posts" "preports" "pres" "presence" "provides" "replacer" "returns" "returns" "scope" "select" "setup" "setupcase" "span" "status" "suffixes" "super" "target" "teardown" "teardowncase" "test" "testparent" "testpreports" "tests" "toplevel" "type" "value" "visibility"))
-(defconst metaoopl2-feature-values '("<concrete" "abstract" "aliaskey" "autodispatch" "closure" "cls" "concrete" "const" "decl" "defn" "explicit" "extendable" "feature" "final" "finalizer" "general" "immutable" "implicit" "initializer" "inline" "instance" "lib" "meta" "multi" "mutable" "named" "new" "nokey" "nometa" "nometanotest" "nonvirtual" "normal" "notest" "noval" "optional" "outline" "override" "package" "packed" "post" "postx" "pre" "prex" "primary" "private" "protected" "public" "raw" "required" "ro" "rw" "rwx" "scoped" "secondary" "showkey" "showval" "specific" "static" "std" "superx" "test" "tmpprivate" "tmppublic" "undef" "unpacked" "user" "usertest" "userval" "virtual"))
-(defconst metaoopl2-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
-(defconst metaoopl2-basewords      '("alignas" "alignof" "and" "and_eq" "as" "asm" "assert" "auto" "bitand" "bitor" "bool" "break" "case" "catch" "char" "char16_t" "char32_t" "class" "compl" "const" "const_cast" "constexpr" "continue" "debugger" "decltype" "def" "default" "del" "delete" "do" "double" "dynamic_cast" "elif" "else" "enum" "except" "exec" "explicit" "export" "extends" "extern" "false" "finally" "float" "for" "friend" "from" "function" "global" "goto" "if" "implements" "import" "in" "inline" "instanceof" "int" "interface" "is" "lambda" "let" "long" "mutable" "namespace" "new" "noexcept" "not" "not_eq" "nullptr" "operator" "or" "or_eq" "package" "pass" "print" "private" "protected" "public" "raise" "register" "reinterpret_cast" "return" "short" "signed" "sizeof" "static" "static_assert" "static_cast" "struct" "super" "switch" "template" "this" "thread_local" "throw" "true" "try" "typedef" "typeid" "typename" "typeof" "union" "unsigned" "using" "var" "virtual" "void" "volatile" "wchar_t" "while" "with" "xor" "xor_eq" "yield"))
+(defconst metafamily2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "event" "family" "link" "person"))
+(defconst metafamily2-attribute-keys '("#" "%" "<" "=" "@" "abbrev" "alias" "aliases" "autokey" "children" "color" "comment" "config" "default" "delim" "dob" "gender" "key" "kind" "name" "parent" "presence" "replacer" "scope" "suffixes" "text" "to" "toplevel" "type" "value" "when" "where" "who"))
+(defconst metafamily2-feature-values '("abstract" "aliaskey" "concrete" "death" "divorce" "feature" "female" "male" "marriage" "nokey" "nongendered" "noval" "primary" "secondary" "showkey" "showval" "trans" "undef" "unknown" "userval"))
+(defconst metafamily2-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
+(defconst metafamily2-basewords      '())
 
-(defconst metaoopl2-constructs-re     (regexp-opt metaoopl2-constructs t))
-(defconst metaoopl2-attribute-keys-re (regexp-opt metaoopl2-attribute-keys t))
-(defconst metaoopl2-feature-values-re (regexp-opt metaoopl2-feature-values t))
-(defconst metaoopl2-keywords-re       (regexp-opt metaoopl2-keywords t))
-(defconst metaoopl2-basewords-re      (regexp-opt metaoopl2-basewords t))
+(defconst metafamily2-constructs-re     (regexp-opt metafamily2-constructs t))
+(defconst metafamily2-attribute-keys-re (regexp-opt metafamily2-attribute-keys t))
+(defconst metafamily2-feature-values-re (regexp-opt metafamily2-feature-values t))
+(defconst metafamily2-keywords-re       (regexp-opt metafamily2-keywords t))
+(defconst metafamily2-basewords-re      (regexp-opt metafamily2-basewords t))
 
 (setq RE (make-hash-table))
-(puthash 'metaoopl2-Attribute-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("aliaskey" "feature" "key" "kind" "nokey" "noval" "primary" "secondary" "showkey" "showval" "undef" "userval" "value")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-Attribute-line (concat (gethash 'metaoopl2-Attribute-kv RE) "\\(Attribute\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-BaseLanguage-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-BaseLanguage-line (concat (gethash 'metaoopl2-BaseLanguage-kv RE) "\\(BaseLanguage\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-Construct-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "concrete" "presence")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-Construct-line (concat (gethash 'metaoopl2-Construct-kv RE) "\\(Construct\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-FeatureValue-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-FeatureValue-line (concat (gethash 'metaoopl2-FeatureValue-kv RE) "\\(FeatureValue\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-File-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-File-line (concat (gethash 'metaoopl2-File-kv RE) "\\(File\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-MetaLanguage-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-MetaLanguage-line (concat (gethash 'metaoopl2-MetaLanguage-kv RE) "\\(MetaLanguage\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-Template-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-Template-line (concat (gethash 'metaoopl2-Template-kv RE) "\\(Template\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-accessor-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-accessor-line (concat (gethash 'metaoopl2-accessor-kv RE) "\\(accessor\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-assoc-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("cls" "kind" "lib" "location" "meta" "std" "test" "user" "usertest")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-assoc-line (concat (gethash 'metaoopl2-assoc-kv RE) "\\(assoc\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-behavior-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "autodispatch" "autogen" "closure" "cls" "concrete" "const" "dispatch" "extendable" "extensibility" "final" "finalizer" "general" "immutable" "inheritance" "initializer" "inline" "instance" "kind" "location" "meta" "mutability" "mutable" "new" "nonvirtual" "notest" "optimization" "outline" "override" "package" "postx" "presence" "prex" "private" "protected" "public" "span" "specific" "static" "std" "superx" "test" "user" "usertest" "virtual" "visibility")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-behavior-line (concat (gethash 'metaoopl2-behavior-kv RE) "\\(behavior\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-block-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("kind" "named" "scoped" "virtual")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-block-line (concat (gethash 'metaoopl2-block-kv RE) "\\(block\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-category-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-category-line (concat (gethash 'metaoopl2-category-kv RE) "\\(category\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-class-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "autogen" "concrete" "general" "location" "meta" "nometa" "nometanotest" "notest" "presence" "private" "public" "span" "specific" "std" "test" "user" "usertest" "visibility")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-class-line (concat (gethash 'metaoopl2-class-kv RE) "\\(class\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-command-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("compilation" "explicit" "implicit")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-command-line (concat (gethash 'metaoopl2-command-kv RE) "\\(command\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-field-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("inheritance" "instance" "kind" "location" "meta" "new" "optional" "override" "pack" "packed" "raw" "required" "ro" "rw" "rwx" "select" "static" "status" "test" "tmpprivate" "tmppublic" "unpacked" "user" "usertest" "visibility")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-field-line (concat (gethash 'metaoopl2-field-kv RE) "\\(field\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-flag-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("optional" "required" "status")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-flag-line (concat (gethash 'metaoopl2-flag-kv RE) "\\(flag\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-lifecycle-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "autodispatch" "autogen" "closure" "cls" "concrete" "const" "dispatch" "extendable" "extensibility" "final" "finalizer" "general" "immutable" "inheritance" "initializer" "instance" "kind" "location" "meta" "mutability" "mutable" "new" "nonvirtual" "notest" "override" "package" "postx" "presence" "prex" "private" "protected" "public" "span" "specific" "static" "std" "superx" "test" "user" "usertest" "virtual" "visibility")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-lifecycle-line (concat (gethash 'metaoopl2-lifecycle-kv RE) "\\(lifecycle\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-loop-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-loop-line (concat (gethash 'metaoopl2-loop-kv RE) "\\(loop\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-method-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "autodispatch" "autogen" "closure" "cls" "concrete" "const" "dispatch" "extendable" "extensibility" "final" "finalizer" "general" "immutable" "inheritance" "initializer" "inline" "instance" "kind" "location" "meta" "mutability" "mutable" "new" "nonvirtual" "notest" "optimization" "outline" "override" "package" "postx" "presence" "prex" "private" "protected" "public" "span" "specific" "static" "std" "superx" "test" "user" "usertest" "virtual" "visibility")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-method-line (concat (gethash 'metaoopl2-method-kv RE) "\\(method\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-namespace-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-namespace-line (concat (gethash 'metaoopl2-namespace-kv RE) "\\(namespace\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-native-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("decl" "defn" "location" "meta" "placement" "position" "post" "pre" "test" "user" "usertest")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-native-line (concat (gethash 'metaoopl2-native-kv RE) "\\(native\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-receiver-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("<concrete" "abstract" "presence")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-receiver-line (concat (gethash 'metaoopl2-receiver-kv RE) "\\(receiver\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-remark-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-remark-line (concat (gethash 'metaoopl2-remark-kv RE) "\\(remark\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-resource-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("location" "meta" "test" "user" "usertest")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-resource-line (concat (gethash 'metaoopl2-resource-kv RE) "\\(resource\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-testx-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-testx-line (concat (gethash 'metaoopl2-testx-kv RE) "\\(testx\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-var-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("multi" "multiplicity" "normal")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-var-line (concat (gethash 'metaoopl2-var-kv RE) "\\(var\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl2-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("<concrete" "abstract" "aliaskey" "autodispatch" "autogen" "closure" "cls" "compilation" "concrete" "const" "decl" "defn" "dispatch" "explicit" "extendable" "extensibility" "feature" "final" "finalizer" "general" "immutable" "implicit" "inheritance" "initializer" "inline" "instance" "key" "kind" "lib" "location" "meta" "multi" "multiplicity" "mutability" "mutable" "named" "new" "nokey" "nometa" "nometanotest" "nonvirtual" "normal" "notest" "noval" "optimization" "optional" "outline" "override" "pack" "package" "packed" "placement" "position" "post" "postx" "pre" "presence" "prex" "primary" "private" "protected" "public" "raw" "required" "ro" "rw" "rwx" "scoped" "secondary" "select" "showkey" "showval" "span" "specific" "static" "status" "std" "superx" "test" "tmpprivate" "tmppublic" "undef" "unpacked" "user" "usertest" "userval" "value" "virtual" "visibility")) "\[ \t\]\\)*") RE)
-(puthash 'metaoopl2-construct-line (concat (gethash 'metaoopl2-all-kv RE) "\\(" metaoopl2-constructs-re "\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-Attribute-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("aliaskey" "feature" "key" "kind" "nokey" "noval" "primary" "secondary" "showkey" "showval" "undef" "userval" "value")) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-Attribute-line (concat (gethash 'metafamily2-Attribute-kv RE) "\\(Attribute\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-BaseLanguage-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-BaseLanguage-line (concat (gethash 'metafamily2-BaseLanguage-kv RE) "\\(BaseLanguage\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-Construct-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "concrete" "presence")) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-Construct-line (concat (gethash 'metafamily2-Construct-kv RE) "\\(Construct\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-FeatureValue-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-FeatureValue-line (concat (gethash 'metafamily2-FeatureValue-kv RE) "\\(FeatureValue\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-File-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-File-line (concat (gethash 'metafamily2-File-kv RE) "\\(File\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-MetaLanguage-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-MetaLanguage-line (concat (gethash 'metafamily2-MetaLanguage-kv RE) "\\(MetaLanguage\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-Template-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-Template-line (concat (gethash 'metafamily2-Template-kv RE) "\\(Template\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-event-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("death" "divorce" "kind" "marriage" "unknown")) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-event-line (concat (gethash 'metafamily2-event-kv RE) "\\(event\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-family-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-family-line (concat (gethash 'metafamily2-family-kv RE) "\\(family\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-link-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-link-line (concat (gethash 'metafamily2-link-kv RE) "\\(link\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-person-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("female" "gender" "male" "nongendered" "trans")) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-person-line (concat (gethash 'metafamily2-person-kv RE) "\\(person\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metafamily2-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "aliaskey" "concrete" "death" "divorce" "feature" "female" "gender" "key" "kind" "male" "marriage" "nokey" "nongendered" "noval" "presence" "primary" "secondary" "showkey" "showval" "trans" "undef" "unknown" "userval" "value")) "\[ \t\]\\)*") RE)
+(puthash 'metafamily2-construct-line (concat (gethash 'metafamily2-all-kv RE) "\\(" metafamily2-constructs-re "\\)[ \t]+\\([^ \t]+\\)") RE)
 
-(defconst metaoopl2-comment-start-re "\\(?:comment\\|#\\):\n")
-(defconst metaoopl2-comment-re "\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\)*\\)")
+(defconst metafamily2-comment-start-re "\\(?:comment\\|#\\):\n")
+(defconst metafamily2-comment-re "\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\)*\\)")
 
 ; Various methods set these variables
-(setq metaoopl2-current-construct-kind nil)
-(if (not (boundp 'metaoopl2-meta-binary))
-  (setq metaoopl2-meta-binary "meta2"))
+(setq metafamily2-current-construct-kind nil)
+(if (not (boundp 'metafamily2-meta-binary))
+  (setq metafamily2-meta-binary "meta2"))
 
-(defun metaoopl2-goto-construct-line (&optional target-dent)
+(defun metafamily2-goto-construct-line (&optional target-dent)
   ;; Find the line defining the construct within which the current line
   ;; resides.  If not currently within a construct (e.g. between constructs),
   ;; find the nearest start-of-construct above point).
@@ -264,7 +234,7 @@
   (let* ((p (point))
          ; we skip the initial newline of our construct re since we will be
          ; doing per-line matching.
-         (cons-re (substring (gethash 'metaoopl2-construct-line RE) 1))
+         (cons-re (substring (gethash 'metafamily2-construct-line RE) 1))
          ; we ignore lines whose indentation is greater than the smallest
          ; indentation we've seen.
          (min-dent (if (null target-dent) (meta-current-indentation) target-dent))
@@ -302,14 +272,14 @@
            ((looking-at cons-re) (setq done t) (if debug (message "found cons-re")))
          )))
     )
-    (setq metaoopl2-current-construct-kind (match-string 3))
-    (message "Construct %s" metaoopl2-current-construct-kind)
+    (setq metafamily2-current-construct-kind (match-string 3))
+    (message "Construct %s" metafamily2-current-construct-kind)
     (forward-char dent)
     (point)
   )
 )
 
-(defun metaoopl2-current-block ()
+(defun metafamily2-current-block ()
   ;; Establish bounds of current block.
   ;; Returns (start . end) cons cell.
   (let* ((p (point))
@@ -319,13 +289,13 @@
          (orig-dent (meta-current-indentation))
          ; we find the construct line for the current line, which establishes
          ; the indentation we want.
-         (cons-start (metaoopl2-goto-construct-line))
+         (cons-start (metafamily2-goto-construct-line))
          ; we record the line number of the construct line
          (cons-line (line-number-at-pos cons-start))
          ; we record the indentation of the construct line (NOT for line of p)
          (dent (meta-current-indentation))
          ; we need to match against lines representing constructs.
-         (cons-re (substring (gethash 'metaoopl2-construct-line RE) 1))
+         (cons-re (substring (gethash 'metafamily2-construct-line RE) 1))
          ; debugging
          (debug t)
          ; an indication that there is no block at the current position
@@ -428,7 +398,7 @@
   )
 )
 
-(defun metaoopl2-toggle-block (region &optional force)
+(defun metafamily2-toggle-block (region &optional force)
   ;; If specified region is hidden, reveal it, else hide it.
   ;;
   ;; Args:
@@ -477,7 +447,7 @@
       (overlay-put result 'invisible t)
       result))))
 
-(defun metaoopl2-hide-blocks (key-pattern &optional lang-pattern)
+(defun metafamily2-hide-blocks (key-pattern &optional lang-pattern)
   ;; Hide all blocks in file whose secondary key matches pattern.
   ;;   key-pattern: re
   ;;     The secondary key to match
@@ -489,9 +459,9 @@
       ;(message "Here with '%s'" re)
       (goto-char (point-min))
       (while (re-search-forward re nil t)
-        (metaoopl2-toggle-current-block)))))
+        (metafamily2-toggle-current-block)))))
 
-(defun metaoopl2-hide-blocks-old (key-pattern &optional lang-pattern)
+(defun metafamily2-hide-blocks-old (key-pattern &optional lang-pattern)
   ;; Hide all blocks in file whose secondary key matches pattern.
   ;;   key-pattern: re
   ;;     The secondary key to match
@@ -504,9 +474,9 @@
       (goto-char (point-min))
       (while (re-search-forward re nil t)
         (forward-line)
-        (metaoopl2-toggle-current-block)))))
+        (metafamily2-toggle-current-block)))))
 
-(defun metaoopl2-hide-blocks-except (key-pattern lang-pattern)
+(defun metafamily2-hide-blocks-except (key-pattern lang-pattern)
   ;; Hide all blocks that match key-pattern that do NOT match lang-pattern.
   (save-excursion
     (goto-char (point-min))
@@ -522,7 +492,7 @@
             ; advance into the block and hide it
             (message "hidding block for %s<%s>" key-pattern lang)
             (forward-line)
-            (metaoopl2-toggle-current-block)))))))
+            (metafamily2-toggle-current-block)))))))
 
 (defun blank-line-p ()
   ;; t if current line consists solely of whitespace.
@@ -533,24 +503,24 @@
 ;; ----------------------------------------------------------------------
 ;; Interactive command
 
-(defun metaoopl2-toggle-current-block (&optional force)
+(defun metafamily2-toggle-current-block (&optional force)
   ;; If current block is hidden, reveal it, else hide it.
   ;; If force is t, always hide, do not toggle.
   (interactive)
-  (metaoopl2-toggle-block (metaoopl2-current-block) force))
+  (metafamily2-toggle-block (metafamily2-current-block) force))
 
-(defun metaoopl2-show-current-block ()
+(defun metafamily2-show-current-block ()
   (interactive)
   ; Establish bound of current block. If invoked on a line that ends with
   ; the block start char (':') and starts with $indent whitespace, it scans
   ; down for lines with MORE than $indent whitespace.  Mark is set to the
   ; end of the region (last character of last line with more $indent), and
   ; point is set to the newline after the ':' on the original line.
-  (let ((region (metaoopl2-current-block)))
+  (let ((region (metafamily2-current-block)))
     (goto-char (car region))
     (push-mark (cdr region) nil t)))
 
-(defun metaoopl2-remove-overlays ()
+(defun metafamily2-remove-overlays ()
   (interactive)
   (let ((overlays (overlays-in (point-min) (point-max))))
     (while overlays
@@ -558,11 +528,11 @@
         (delete-overlay overlay))
       (setq overlays (cdr overlays)))))
 
-(defun metaoopl2-next-construct (kind &optional backward)
+(defun metafamily2-next-construct (kind &optional backward)
   ;; Find the start/end of the next construct of give kind
   (if (null kind) (setq kind "construct"))
   (let* ((p (point))
-         (re (gethash (intern (concat "metaoopl2-" kind "-line")) RE))
+         (re (gethash (intern (concat "metafamily2-" kind "-line")) RE))
          (s (if backward (re-search-backward re nil t) (re-search-forward re nil t)))
          se)
     (cond
@@ -602,7 +572,7 @@
                 "\n"
                 indent
                 "\\([^ \t\n].*\\)?"
-                metaoopl2-constructs-re
+                metafamily2-constructs-re
                 " ")
                nil t))
         (cond
@@ -654,7 +624,7 @@
   )
 )
 
-(defun metaoopl2-narrow-to-current-construct (&optional kind)
+(defun metafamily2-narrow-to-current-construct (&optional kind)
   (interactive)
   (cond
    (kind
@@ -662,7 +632,7 @@
       ; line of a construct of kind 'kind', we will narrow this
       ; construct, not the previous one.
       (next-line 1)
-      (let ((data (metaoopl2-next-construct kind 'backward)))
+      (let ((data (metafamily2-next-construct kind 'backward)))
         (widen)
         (narrow-to-region
          (assoc-default 'start data) 
@@ -671,10 +641,10 @@
      ))
    (t
     ; kind is nil, so we narrow to whatever the current construct is.
-    (setq metaoopl2-current-construct-kind nil)
-    (metaoopl2-goto-construct-line)
-    (if metaoopl2-current-construct-kind
-        (metaoopl2-narrow-to-current-construct metaoopl2-current-construct-kind)))
+    (setq metafamily2-current-construct-kind nil)
+    (metafamily2-goto-construct-line)
+    (if metafamily2-current-construct-kind
+        (metafamily2-narrow-to-current-construct metafamily2-current-construct-kind)))
   )
 )
 
@@ -746,11 +716,11 @@
 
 (defun metaoopl2-python-only ()
   (interactive)
-  (metaoopl2-hide-blocks-except "scope" "py\\|python"))
+  (metafamily2-hide-blocks-except "scope" "py\\|python"))
 
 (defun metaoopl2-cpp-only ()
   (interactive)
-  (metaoopl2-hide-blocks-except "scope" "cpp\\|c\\+\\+"))
+  (metafamily2-hide-blocks-except "scope" "cpp\\|c\\+\\+"))
 
 ;; Miscellaneous metaoopl2-specific
 (defun metaoopl2-hide-tests ()
@@ -806,7 +776,7 @@
 
 ;;; **************************************************************
 ;; Service routines
-(defun metaoopl2-set-face (face foreground background font)
+(defun metafamily2-set-face (face foreground background font)
   (interactive "sFace: \nsForeground: \nsBackground: \n Font: ")
 
   (let ( (res (facep face)) )
@@ -825,33 +795,33 @@
 ;;; **************************************************************
 ;;; User customization:
 
-;; Users can call 'metaoopl2-set-face' to customize the colors
+;; Users can call 'metafamily2-set-face' to customize the colors
 ;; used for Meta programs. See http://raebear.net/comp/emacscolors.html
 ;; for a useful way to view background and foreground colors together.
-(metaoopl2-set-face 'font-lock-metaoopl2-class-face          "red"             nil  metaoopl2-default-font)
-(metaoopl2-set-face 'font-lock-metaoopl2-behavior-face       "red"             nil  metaoopl2-default-font)
-(metaoopl2-set-face 'font-lock-metaoopl2-method-face         "orange"          nil  metaoopl2-default-font)
-(metaoopl2-set-face 'font-lock-metaoopl2-field-face          "orange"          nil  metaoopl2-default-font)
-(metaoopl2-set-face 'font-lock-metaoopl2-construct-face      "darkgreen"       nil  metaoopl2-default-font)
-(metaoopl2-set-face 'font-lock-metaoopl2-attribute-key-face  "darkolivegreen"  nil  metaoopl2-default-font)
-(metaoopl2-set-face 'font-lock-metaoopl2-feature-value-face  "hotpink4"        nil  metaoopl2-default-font)
-(metaoopl2-set-face 'font-lock-metaoopl2-keyword-face        "deep pink"       nil  metaoopl2-default-font)
-(metaoopl2-set-face 'font-lock-metaoopl2-baseword-face       "purple"          nil  metaoopl2-default-font)
-(metaoopl2-set-face 'font-lock-metaoopl2-end-face            "ivory4"          nil  metaoopl2-default-font)
+(metafamily2-set-face 'font-lock-metaoopl2-class-face          "red"             nil  metafamily2-default-font)
+(metafamily2-set-face 'font-lock-metaoopl2-behavior-face       "red"             nil  metafamily2-default-font)
+(metafamily2-set-face 'font-lock-metaoopl2-method-face         "orange"          nil  metafamily2-default-font)
+(metafamily2-set-face 'font-lock-metaoopl2-field-face          "orange"          nil  metafamily2-default-font)
+(metafamily2-set-face 'font-lock-metafamily2-construct-face      "darkgreen"       nil  metafamily2-default-font)
+(metafamily2-set-face 'font-lock-metafamily2-attribute-key-face  "darkolivegreen"  nil  metafamily2-default-font)
+(metafamily2-set-face 'font-lock-metafamily2-feature-value-face  "hotpink4"        nil  metafamily2-default-font)
+(metafamily2-set-face 'font-lock-metafamily2-keyword-face        "deep pink"       nil  metafamily2-default-font)
+(metafamily2-set-face 'font-lock-metafamily2-baseword-face       "purple"          nil  metafamily2-default-font)
+(metafamily2-set-face 'font-lock-metafamily2-end-face            "ivory4"          nil  metafamily2-default-font)
 
-;; Users can define 'metaoopl2-mode-hook' to get special functionality
+;; Users can define 'metafamily2-mode-hook' to get special functionality
 ;; when this mode is invoked.
-(defvar metaoopl2-mode-hook nil
+(defvar metafamily2-mode-hook nil
   ""
 )
 
 ;; Users can specify the indentation at each level
-(defvar metaoopl2-indent-offset 2
+(defvar metafamily2-indent-offset 2
   "The amount of indentation to add to lines within a scope block.  It
 is also currently used for indentation within '(' ')' lists but this
 will be generalized later.")
 
-(defvar metaoopl2-wrap-collapsed-block-ends t
+(defvar metafamily2-wrap-collapsed-block-ends t
   "When a block attribute value is collapsed, the attribute that
 appears next will by default appear on the same line, which makes for
 very long single lines for fully collapsed constructs.  To address this,
@@ -860,21 +830,21 @@ indication string so that the next attribute appears to reside on the
 next line at the proper indentation level.  If this variable is true,
 such newline-indentation is provided.")
 ;:TEMP
-(setq metaoopl2-wrap-collapsed-block-ends t)
+(setq metafamily2-wrap-collapsed-block-ends t)
 ;:ENDTEMP
 
-(defun metaoopl2-make-map ()
-  (let ((metaoopl2-mode-map (make-keymap))
+(defun metafamily2-make-map ()
+  (let ((metafamily2-mode-map (make-keymap))
         (space-map (make-sparse-keymap))
         )
     ;; Add key bindings here
-    (define-key metaoopl2-mode-map "\C-j" 'newline-and-indent)
+    (define-key metafamily2-mode-map "\C-j" 'newline-and-indent)
 
     ;; Iniital bindings for \C-@
     ;;   some emacs versions don't bind \C-@ to Ctrl space, so we
     ;;   do both
-    (define-key metaoopl2-mode-map [?\C-\ ] space-map)
-    (define-key metaoopl2-mode-map "\C-@" space-map)
+    (define-key metafamily2-mode-map [?\C-\ ] space-map)
+    (define-key metafamily2-mode-map "\C-@" space-map)
     (define-key space-map [?\C-\ ] 'set-mark-command)
     (define-key space-map "\C-@" 'set-mark-command)
 
@@ -886,8 +856,8 @@ such newline-indentation is provided.")
     ;(define-key space-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
     ;(define-key space-map [(control \>)] 'meta-toggle-next-overlay-visibility)
     ;(define-key space-map "ro" 'meta-remove-all-overlays)
-    ;(define-key space-map "vm" (lambda () (interactive) (find-file (concat (getenv "METAROOT") "/root/lib/emacs/metaoopl2-mode.el"))))
-    ;(define-key space-map "lm" (lambda () (interactive) (load-file (concat (getenv "METAROOT") "/root/lib/emacs/metaoopl2-mode.el"))))
+    ;(define-key space-map "vm" (lambda () (interactive) (find-file (concat (getenv "METAROOT") "/root/lib/emacs/metafamily2-mode.el"))))
+    ;(define-key space-map "lm" (lambda () (interactive) (load-file (concat (getenv "METAROOT") "/root/lib/emacs/metafamily2-mode.el"))))
 
     ; construct-related macros
     ;(define-key space-map "cm" 'metaoopl2-complete-construct)  ; intentional metaoopl
@@ -896,10 +866,10 @@ such newline-indentation is provided.")
     ;(define-key space-map "c<" 'meta-construct-beginning)
     ;(define-key space-map "c>" 'meta-construct-end)
     ;(define-key space-map "c." 'meta-collapse-construct)
-    ;(define-key metaoopl2-mode-map [(control \,)] 'meta-toggle-prev-overlay-color)
-    ;(define-key metaoopl2-mode-map [(control \.)] 'meta-toggle-next-overlay-color)
-    ;(define-key metaoopl2-mode-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
-    ;(define-key metaoopl2-mode-map [(control \>)] 'meta-toggle-next-overlay-visibility)
+    ;(define-key metafamily2-mode-map [(control \,)] 'meta-toggle-prev-overlay-color)
+    ;(define-key metafamily2-mode-map [(control \.)] 'meta-toggle-next-overlay-color)
+    ;(define-key metafamily2-mode-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
+    ;(define-key metafamily2-mode-map [(control \>)] 'meta-toggle-next-overlay-visibility)
 
     ; Paragraph modifying functions
     ;(define-key space-map "pa" '(lambda (prefix) (interactive "p") (let ((s (region-beginning)) (e (region-end)) d) (goto-char s) (insert "[++===") (setq d (- (point) 3)) (goto-char (+ e 6)) (insert "--]") (goto-char d))))
@@ -907,30 +877,30 @@ such newline-indentation is provided.")
     ;(define-key space-map "pu" '(lambda () (interactive) (let (p) (re-search-forward "\\[\\+\\+" nil) (forward-char -3) (setq p (point)) (re-search-forward "===" nil)  (delete-region p (point)) (re-search-forward "--\\]") (delete-region (- (point) 3) (point)))))
 
     ; return the map!
-    metaoopl2-mode-map
+    metafamily2-mode-map
   )
 )
 
 ;; We establish the map
-(setq metaoopl2-mode-map
-;;(defvar metaoopl2-mode-map
-   (metaoopl2-make-map)
+(setq metafamily2-mode-map
+;;(defvar metafamily2-mode-map
+   (metafamily2-make-map)
    ;;"Keymap for Meta major mode"
 )
 
 ;; Establish a file-suffix to mode mapping
-(add-to-list 'auto-mode-alist '("\\.metaoopl" . metaoopl2-mode))
+(add-to-list 'auto-mode-alist '("\\.metafamily" . metafamily2-mode))
 (add-to-list 'auto-mode-alist '("\\.metaschema" . metaoopl2-mode))
 
 ;; Establish which tokens get highlighted, and with which font.
-(defun metaoopl2-compute-font-lock-keywords ()
+(defun metafamily2-compute-font-lock-keywords ()
   (let ((executable-constructs '("method" "initializer" "finalizer" "function" "lifecycle" "behavior" "receiver" "command"))
      )
     (list
       ;; Color multi-line comment blocks
       '("\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\|\n\\)*\\)" 2 font-lock-comment-face)
       ;; Color the "end" token.
-      '("end\\( [^;\n]*\\)?;" . font-lock-metaoopl2-end-face)
+      '("end\\( [^;\n]*\\)?;" . font-lock-metafamily2-end-face)
       ;; Color literal strings.
       (cons "'[^'\n]*'" font-lock-string-face)
       ;'("#:\n\\([ \t]*.*\\)" 1 font-lock-comment-face)
@@ -943,21 +913,21 @@ such newline-indentation is provided.")
       (cons "\\<field\\>" font-lock-metaoopl2-field-face)
       ;; End Meta(Oopl) code.
 
-      (cons (concat "\\<" metaoopl2-constructs-re     "\\>") font-lock-metaoopl2-construct-face)
-      (cons (concat "\\<" metaoopl2-attribute-keys-re "\\>") font-lock-metaoopl2-attribute-key-face)
-      (cons (concat "\\<" metaoopl2-feature-values-re "\\>") font-lock-metaoopl2-feature-value-face)
-      ;; metaoopl2-level keywords
-      (cons (concat "\\<" metaoopl2-keywords-re "\\>") font-lock-metaoopl2-keyword-face)
+      (cons (concat "\\<" metafamily2-constructs-re     "\\>") font-lock-metafamily2-construct-face)
+      (cons (concat "\\<" metafamily2-attribute-keys-re "\\>") font-lock-metafamily2-attribute-key-face)
+      (cons (concat "\\<" metafamily2-feature-values-re "\\>") font-lock-metafamily2-feature-value-face)
+      ;; metafamily2-level keywords
+      (cons (concat "\\<" metafamily2-keywords-re "\\>") font-lock-metafamily2-keyword-face)
       ;; baselang-level keywords
-      (cons (concat "\\<" metaoopl2-basewords-re "\\>") font-lock-metaoopl2-baseword-face)
+      (cons (concat "\\<" metafamily2-basewords-re "\\>") font-lock-metafamily2-baseword-face)
       ;; construct ids (for now, only certain constructs).
       '("\\(class\\|method\\|function\\|closure\\|field\\|receiver\\|var\\|behavior\\)[ \t]+\\([a-zA-Z_]+[a-zA-Z0-9_]*\\)"
         2 font-lock-function-name-face)
     )))
 
-(defvar metaoopl2-font-lock-keywords (metaoopl2-compute-font-lock-keywords))
+(defvar metafamily2-font-lock-keywords (metafamily2-compute-font-lock-keywords))
 ; TEMP - force changes to font info into the var
-(setq metaoopl2-font-lock-keywords (metaoopl2-compute-font-lock-keywords))
+(setq metafamily2-font-lock-keywords (metafamily2-compute-font-lock-keywords))
 ; ENDTEMP.
 
 
@@ -973,20 +943,20 @@ such newline-indentation is provided.")
 ;;  - meta has a 'comment' secondary attribute defined on most constructs
 ;;    that is a simple block of comments ... text indented to at least the
 ;;    same level as the first line in the comment should be marked as a comment.
-(setq metaoopl2-mode-syntax-table
-  (let ((metaoopl2-mode-syntax-table (make-syntax-table)))
+(setq metafamily2-mode-syntax-table
+  (let ((metafamily2-mode-syntax-table (make-syntax-table)))
 
-    (modify-syntax-entry ?- "w" metaoopl2-mode-syntax-table)
-    (modify-syntax-entry ?_ "w" metaoopl2-mode-syntax-table)
-    (modify-syntax-entry ?. "w" metaoopl2-mode-syntax-table)
+    (modify-syntax-entry ?- "w" metafamily2-mode-syntax-table)
+    (modify-syntax-entry ?_ "w" metafamily2-mode-syntax-table)
+    (modify-syntax-entry ?. "w" metafamily2-mode-syntax-table)
 
     ;; This gives C++-style comments (/* ... */ and //)
     ;; Do not yet know how to treat COMMENT { ... } as a comment
-    ;;;;;(modify-syntax-entry ?/  ". 124b" metaoopl2-mode-syntax-table)
-    ;;;;;(modify-syntax-entry ?*  ". 23" metaoopl2-mode-syntax-table)
-    ;;;;;(modify-syntax-entry ?\n "> b" metaoopl2-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?/  ". 124b" metafamily2-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?*  ". 23" metafamily2-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?\n "> b" metafamily2-mode-syntax-table)
     ;; This gives perl-style comments ('#').
-    ;;;;;(modify-syntax-entry ?#  "< b" metaoopl2-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?#  "< b" metafamily2-mode-syntax-table)
     ;; We need to extend this to provide meta-style comments ('/#')
     ;; but I do not yet know how to do this while still providing
     ;; perl-style comments.
@@ -997,28 +967,28 @@ such newline-indentation is provided.")
 
       )
      (t
-      (modify-syntax-entry ?/  ". 14" metaoopl2-mode-syntax-table)
-      (modify-syntax-entry ?#  ". 2b" metaoopl2-mode-syntax-table)
-      ;(modify-syntax-entry ?\n "> a" metaoopl2-mode-syntax-table)
-      (modify-syntax-entry ?\n "> b" metaoopl2-mode-syntax-table)
+      (modify-syntax-entry ?/  ". 14" metafamily2-mode-syntax-table)
+      (modify-syntax-entry ?#  ". 2b" metafamily2-mode-syntax-table)
+      ;(modify-syntax-entry ?\n "> a" metafamily2-mode-syntax-table)
+      (modify-syntax-entry ?\n "> b" metafamily2-mode-syntax-table)
 
       ;; Both single quote and double quote are string delimiters, but
       ;; we cannot use the syntax table to fontify them due to how comments
       ;; are defined.
-      ;;;;(modify-syntax-entry ?\' "\"" metaoopl2-mode-syntax-table)
-      ;;;;(modify-syntax-entry ?\" "\"" metaoopl2-mode-syntax-table)
+      ;;;;(modify-syntax-entry ?\' "\"" metafamily2-mode-syntax-table)
+      ;;;;(modify-syntax-entry ?\" "\"" metafamily2-mode-syntax-table)
 
       ;; This adds in C-style multiline comments --> /* ... */
-      ;; (modify-syntax-entry ?*  ". 23" metaoopl2-mode-syntax-table)
+      ;; (modify-syntax-entry ?*  ". 23" metafamily2-mode-syntax-table)
       )
      )
-    metaoopl2-mode-syntax-table
+    metafamily2-mode-syntax-table
   )
-  ;;"Syntax table for metaoopl2-mode"
+  ;;"Syntax table for metafamily2-mode"
 )
 
 ;; This method indents the current line as Meta code
-(defun metaoopl2-indent-line ()
+(defun metafamily2-indent-line ()
    "Indent current line as Meta code"
    (interactive)
    (beginning-of-line)
@@ -1070,7 +1040,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*{[ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metaoopl2-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metafamily2-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1082,7 +1052,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*([ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metaoopl2-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metafamily2-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1094,7 +1064,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*([ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metaoopl2-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metafamily2-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1118,19 +1088,19 @@ such newline-indentation is provided.")
                 ;; Check for rule 3
                 ((looking-at ".*{[ \t]*$")
                  (message "Rule 3")
-                 (setq cur-indent (+ (meta-current-indentation) metaoopl2-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metafamily2-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 3b
                 ((looking-at ".*([ \t]*$")
                  (message "Rule 3b")
-                 (setq cur-indent (+ (meta-current-indentation) metaoopl2-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metafamily2-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 3c
                 ((and (looking-at ".*:[ \t]*$") (not (looking-at "^[ \t]*\/\#")))
                  (message "Rule 3c")
-                 (setq cur-indent (+ (meta-current-indentation) metaoopl2-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metafamily2-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 4
@@ -1200,7 +1170,7 @@ such newline-indentation is provided.")
     (if (null list)
        (let ())
        (insert (car list))
-       (metaoopl2-indent-line)
+       (metafamily2-indent-line)
        (end-of-line)
        (insert "\n")
        (insert-lines-indented (cdr list))
@@ -1213,17 +1183,17 @@ such newline-indentation is provided.")
    (let ((str (if (null id) "" (concat " " id))))
 
      ;; Insert construct start at correct indentation
-     (metaoopl2-indent-line)
+     (metafamily2-indent-line)
      (insert (concat ctype str " {\n"))
 
      ;; Insert (empty) one line within the SCOPE
-     (metaoopl2-indent-line)
+     (metafamily2-indent-line)
      (insert "\n")
 
      ;; Insert the end-of-construct line
      (insert (concat "} " (downcase ctype) str ";\n"))
      (next-line -1)
-     (metaoopl2-indent-line)
+     (metafamily2-indent-line)
 
      ;; Move back up to original line and position cursor
      ;; after the construct primary key/value.
@@ -1234,21 +1204,21 @@ such newline-indentation is provided.")
 )
 
 ;; The mode method
-(defun metaoopl2-mode ()
-  "Major mode for editing Meta(Oopl) language files"
+(defun metafamily2-mode ()
+  "Major mode for editing Meta(Family) language files"
   (interactive)
   (kill-all-local-variables)
-  (set-syntax-table metaoopl2-mode-syntax-table)
+  (set-syntax-table metafamily2-mode-syntax-table)
 
   ;; We explicitly set the map here so that each time the mode
   ;; entry function is called we recompute - this is temporary
   ;; until the meta modes are stable (after which the setq
   ;; line can be removed for efficiency)
-  (setq metaoopl2-mode-map (metaoopl2-make-map))
-  (use-local-map metaoopl2-mode-map)
+  (setq metafamily2-mode-map (metafamily2-make-map))
+  (use-local-map metafamily2-mode-map)
 
-  (set (make-local-variable 'font-lock-defaults) '(metaoopl2-font-lock-keywords))
-  (set (make-local-variable 'indent-line-function) 'metaoopl2-indent-line)
+  (set (make-local-variable 'font-lock-defaults) '(metafamily2-font-lock-keywords))
+  (set (make-local-variable 'indent-line-function) 'metafamily2-indent-line)
   (set (make-local-variable 'parse-sexp-ignore-comments) t)
 
   ;; This ensures that multi-line fontification (e.g. comment blocks) are
@@ -1258,15 +1228,15 @@ such newline-indentation is provided.")
   ;; TODO(wmh): explore modifying the code so that every 1000 invocations we use
   ;; a longer min/max value.
   (make-local-variable 'font-lock-extend-region-functions)
-  (add-hook 'font-lock-extend-region-functions 'metaoopl2-font-lock-extend-region)
+  (add-hook 'font-lock-extend-region-functions 'metafamily2-font-lock-extend-region)
   
   ;; This sets up comment info
   (set (make-local-variable 'comment-start) "/#")
   (set (make-local-variable 'comment-style) 'multi-line)
 
-  (setq major-mode 'metaoopl2-mode)
-  (setq mode-name "Meta(Oopl)")
-  (run-hooks 'metaoopl2-mode-hook)
+  (setq major-mode 'metafamily2-mode)
+  (setq mode-name "Meta(Family)")
+  (run-hooks 'metafamily2-mode-hook)
 )
 
 (defun meta-current-indentation ()
@@ -1284,36 +1254,36 @@ we need its actual indentation to be reported)."
 ;;   https://www.gnu.org/software/emacs/manual/html_node/elisp/Multiline-Font-Lock.html
 ;; and 
 ;;   https://www.emacswiki.org/emacs/MultilineFontLock
-(defun metaoopl2-font-lock-extend-region ()
-  ; (message "Here in metaoopl2-font-lock-extend-region")
+(defun metafamily2-font-lock-extend-region ()
+  ; (message "Here in metafamily2-font-lock-extend-region")
   (save-excursion
     (goto-char font-lock-beg)
     (let* ((back-limit (- font-lock-beg 2000))
            (future-limit (+ font-lock-beg 2000))
-           (found-point (re-search-backward metaoopl2-comment-start-re back-limit t)))
+           (found-point (re-search-backward metafamily2-comment-start-re back-limit t)))
       (if found-point
-          (let ((last-point (re-search-forward metaoopl2-comment-re future-limit t)))
+          (let ((last-point (re-search-forward metafamily2-comment-re future-limit t)))
             (if (and last-point (> last-point font-lock-end))
                 (progn
                   (setq font-lock-end last-point)))
             (setq font-lock-beg found-point))))))
 
-(provide 'metaoopl2-mode)
+(provide 'metafamily2-mode)
 
 ;; The following is based on
 ;;    https://emacs.stackexchange.com/questions/519/key-bindings-specific-to-a-buffer
 ;; as a means of providing an "index" for meta files.
 
-(defvar metaoopl2-minor-mode-map (make-sparse-keymap)
-  "Keymap while metaoopl2-minor-mode is active.")
+(defvar metafamily2-minor-mode-map (make-sparse-keymap)
+  "Keymap while metafamily2-minor-mode is active.")
 
-(define-minor-mode metaoopl2-minor-mode
+(define-minor-mode metafamily2-minor-mode
   "A temporary minor mode to be activated."
   nil
   :lighter " MetaMinor"
-  metaoopl2-minor-mode-map)
+  metafamily2-minor-mode-map)
 
-(defun metaoopl2-index-to-line ()
+(defun metafamily2-index-to-line ()
   "Provides an index to file mapping features.
 
   This is to be used in a buffer that displays a mapping from meta construct
@@ -1353,19 +1323,19 @@ we need its actual indentation to be reported)."
       (t (message "failed")))
   )
 )
-(define-key metaoopl2-minor-mode-map (kbd "RET") 'metaoopl2-index-to-line)
+(define-key metafamily2-minor-mode-map (kbd "RET") 'metafamily2-index-to-line)
 
-(defun metaoopl2-create-index (&optional prefix)
+(defun metafamily2-create-index (&optional prefix)
   (interactive "P")
-  (metaoopl2-create-index-private nil prefix)
+  (metafamily2-create-index-private nil prefix)
 )
 
-(defun metaoopl2-create-filtered-index (&optional prefix filter)
+(defun metafamily2-create-filtered-index (&optional prefix filter)
   (interactive "PsRegexp: ")
-  (metaoopl2-create-index-private filter prefix)
+  (metafamily2-create-index-private filter prefix)
 )
 
-(defun metaoopl2-create-index-private (filter usenum)
+(defun metafamily2-create-index-private (filter usenum)
   "Create an index.
    
    Args:
@@ -1376,7 +1346,7 @@ we need its actual indentation to be reported)."
   "
   (let ((command
          (concat
-          metaoopl2-meta-binary 
+          metafamily2-meta-binary 
           " index "
           (if usenum
               "--kind=num --min=1 --adj=-1 "
@@ -1391,12 +1361,12 @@ we need its actual indentation to be reported)."
     (insert (format "buffer: %s\n" bufname))
     (message (format "COMMAND: %s" command))
     (insert (shell-command-to-string command))
-    (metaoopl2-mode)
+    (metafamily2-mode)
     (orgstruct-mode)
-    (metaoopl2-minor-mode 1)
+    (metafamily2-minor-mode 1)
     (goto-char (point-min))
     (next-line 1)
   )
 )
 
-(provide 'metaoopl2-minor-mode)
+(provide 'metafamily2-minor-mode)
