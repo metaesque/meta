@@ -159,9 +159,9 @@
 ; (defconst metastory2-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
 (defconst metastory2-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
-(defconst metastory2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "character" "event" "image" "section" "story" "thread" "view"))
-(defconst metastory2-attribute-keys '("#" "%" "<" "=" "@" "abbrev" "age" "alias" "aliases" "autokey" "check" "children" "collaborators" "color" "comment" "config" "day" "default" "delim" "dob" "father" "from" "gender" "images" "in" "key" "kind" "level" "logs" "metrics" "model" "mother" "name" "owners" "parent" "presence" "replacer" "scope" "size" "start" "suffixes" "summary" "synopsis" "tags" "title" "toplevel" "type" "value" "what" "when" "where" "who" "with"))
-(defconst metastory2-feature-values '("abstract" "aliaskey" "any" "concrete" "feature" "female" "fri" "male" "mon" "nokey" "nongendered" "noval" "primary" "sat" "secondary" "showkey" "showval" "sun" "tertiary" "thu" "trans" "tue" "undef" "userval" "wed"))
+(defconst metastory2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "character" "event" "image" "question" "section" "story" "thread" "view"))
+(defconst metastory2-attribute-keys '("#" "%" "<" "=" "@" "abbrev" "age" "alias" "aliases" "autokey" "check" "children" "collaborators" "color" "comment" "config" "day" "default" "delim" "dob" "father" "from" "gender" "images" "in" "key" "kind" "level" "logs" "metrics" "model" "mohs" "mother" "name" "owners" "parent" "presence" "replacer" "scope" "size" "start" "suffixes" "summary" "synopsis" "tags" "title" "toplevel" "type" "value" "what" "when" "where" "who" "with"))
+(defconst metastory2-feature-values '("abstract" "aliaskey" "any" "concrete" "feature" "female" "fri" "male" "mon" "nokey" "nolevel" "nongendered" "noval" "primary" "sat" "secondary" "showkey" "showval" "sun" "tertiary" "thu" "trans" "tue" "undef" "userval" "wed"))
 (defconst metastory2-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
 (defconst metastory2-basewords      '())
 
@@ -186,12 +186,14 @@
 (puthash 'metastory2-MetaLanguage-line (concat (gethash 'metastory2-MetaLanguage-kv RE) "\\(MetaLanguage\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-Template-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-Template-line (concat (gethash 'metastory2-Template-kv RE) "\\(Template\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metastory2-character-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("female" "gender" "level" "male" "nongendered" "primary" "secondary" "tertiary" "trans")) "\[ \t\]\\)*") RE)
+(puthash 'metastory2-character-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("female" "gender" "level" "male" "nolevel" "nongendered" "primary" "secondary" "tertiary" "trans")) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-character-line (concat (gethash 'metastory2-character-kv RE) "\\(character\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-event-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("any" "day" "fri" "mon" "sat" "sun" "thu" "tue" "wed")) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-event-line (concat (gethash 'metastory2-event-kv RE) "\\(event\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-image-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-image-line (concat (gethash 'metastory2-image-kv RE) "\\(image\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metastory2-question-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metastory2-question-line (concat (gethash 'metastory2-question-kv RE) "\\(question\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-section-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-section-line (concat (gethash 'metastory2-section-kv RE) "\\(section\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-story-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
@@ -200,7 +202,7 @@
 (puthash 'metastory2-thread-line (concat (gethash 'metastory2-thread-kv RE) "\\(thread\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metastory2-view-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-view-line (concat (gethash 'metastory2-view-kv RE) "\\(view\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metastory2-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "aliaskey" "any" "concrete" "day" "feature" "female" "fri" "gender" "key" "kind" "level" "male" "mon" "nokey" "nongendered" "noval" "presence" "primary" "sat" "secondary" "showkey" "showval" "sun" "tertiary" "thu" "trans" "tue" "undef" "userval" "value" "wed")) "\[ \t\]\\)*") RE)
+(puthash 'metastory2-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "aliaskey" "any" "concrete" "day" "feature" "female" "fri" "gender" "key" "kind" "level" "male" "mon" "nokey" "nolevel" "nongendered" "noval" "presence" "primary" "sat" "secondary" "showkey" "showval" "sun" "tertiary" "thu" "trans" "tue" "undef" "userval" "value" "wed")) "\[ \t\]\\)*") RE)
 (puthash 'metastory2-construct-line (concat (gethash 'metastory2-all-kv RE) "\\(" metastory2-constructs-re "\\)[ \t]+\\([^ \t]+\\)") RE)
 
 (defconst metastory2-comment-start-re "\\(?:comment\\|#\\):\n")
@@ -900,7 +902,7 @@ such newline-indentation is provided.")
 
 ;; Establish which tokens get highlighted, and with which font.
 (defun metastory2-compute-font-lock-keywords ()
-  (let ((executable-constructs '("method" "initializer" "finalizer" "function" "lifecycle" "behavior" "receiver"))
+  (let ((executable-constructs '("method" "initializer" "finalizer" "function" "lifecycle" "behavior" "receiver" "command"))
      )
     (list
       ;; Color multi-line comment blocks
@@ -1365,7 +1367,7 @@ we need its actual indentation to be reported)."
     (switch-to-buffer-other-window "*Meta Index*")
     (erase-buffer)
     (insert (format "buffer: %s\n" bufname))
-    ; (message (format "here with '%s'" command))
+    (message (format "COMMAND: %s" command))
     (insert (shell-command-to-string command))
     (metastory2-mode)
     (orgstruct-mode)

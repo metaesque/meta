@@ -596,6 +596,9 @@ scope:
         'float': {},
         'double': {},
         /# complex
+        /# TODO(wmh): This should probably be moved to 'native' ... we cannot
+        /# actually provide a primitive implementation of complex numbers in
+        /# all baselangs.
         'complex': {},
       }
       cls.NATIVE = {
@@ -640,7 +643,7 @@ scope:
         /#      - ??
         /#  - to represent a time within a day without the date
         /#    - if hour, minute, second stored explicitly
-        /#      - ?
+        /#      - hms
         /#    - if only store number of seconds relative to 00:00:00
         /#      - should this be related to the concept of Duration?
         /#
@@ -652,6 +655,9 @@ scope:
         /#  - very space efficient
         /#  - very time efficient
         /#  - can perform relative date manipulation
+        'ymd': {},   # date without time of day
+        'hms': {},   # time of day without date
+        'date': {},  # this is a date plus time of day
 
         'regexp': {},
 
@@ -1648,14 +1654,16 @@ scope:
     Parses expressions of the following forms:
      - num        : [-+0-9]
      - id         : [a-zA-Z_]
-     - plist      : '('
+     - plist      : '(' ... ')'
      - str        : ' or \"
      - list       : '['
      - hash       : '{'
      - call       : '@'
+     - unit       : '<' ... '>'
   assocs:
     std assoc re;
     std test assoc pprint;
+    lib assoc metax.units;
   scope:
 
     meta
@@ -1665,6 +1673,7 @@ scope:
       cls.CharMap = cmap
       cmap['@'] = cls._parseCall
       cmap['('] = cls._parsePList
+      cmap['<'] = cls._parseUnit
       cmap['{'] = cls._parseHash
       cmap['['] = cls._parseList
       cmap['\"'] = cls._parseStr
@@ -2510,6 +2519,45 @@ scope:
         '        ] expr=[<kind=num str=1 expr=1>, <kind=var str=apple expr=apple>, <kind=str str="hello" expr="hello">]>',
         str(eprs.parse()))
     end method _parseList;
+
+    protected
+    method _parseUnit : metax.units.Quantity #:
+      Parse a unit literal.
+
+      Current position must be a '<'.
+    scope:
+      line, i = self.current()
+      n = len(line)
+      j = i + 1
+      end = None
+      while j < n:
+        if line[j] == '>':
+          end = j
+          break
+        j += 1
+      if end is None:
+        self.error('Failed to parse literal unit')
+        quantity = None
+      else:
+        qstr = line[i+1:end]
+        tmp = metax.units.Quantity.New(qstr)
+        /# We downcast if powers are known.
+        units = tmp.units()
+        quantity = tmp.subclone()
+        if quantity is None:
+          /# This means the quantity does not have a subclass ... do we use
+          /# tmp, or report an error?
+          quantity = tmp
+        self.colIs(end+1)
+      return quantity
+    test:
+      /# A simple single-line hash expression
+      eprs = metax.c.ExprParser(test.metafileFor('<1.87m>\n'))
+      res = eprs._parseUnit()
+      test.iseq(' 1.87000 m', res.asStr())
+      line, i = eprs.current()
+      test.iseq('>', line[i-1])
+    end method _parseUnit;
 
     protected
     method _parseHash : map #:
@@ -5636,6 +5684,12 @@ scope:
           bout.setdefault('all', []).append(htmlid)
           bout.setdefault(self.key(), []).append(htmlid)
           basel = self.basel()
+          if basel is None:
+            /# TODO(wmh): If the block has not explicitly specified a
+            /# baselanguage, we assume that it applies to whatever baselang
+            /# we're compiling into.
+            basel = self.parent().baselang().suffix()[1:]
+
           if basel:
             lout = out.setdefault('lang', {}).setdefault(basel, {})
             lout.setdefault('all', []).append(htmlid)
@@ -6648,8 +6702,13 @@ scope:
     receiver Attribute scope:
       /# This is a sensible default that can be used by various subclasses,
       /# but certain subclasses will need to override.
-      val = str(self.value())
-      fp.write(val)
+      if Context.IsAutoId(self.value()):
+        /# We do not write out auto-assigned ids.
+        /# TODO(wmh): Add support to 'mode' for allowing these to be printed.
+        val = ''
+      else:
+        val = str(self.value())
+        fp.write(val)
       return len(val)
     test:
       test.defineAttributes()
@@ -6779,12 +6838,26 @@ scope:
         out)
 
     receiver ComplexBlock scope:
-      parent = self.parent()
-      blockdent = parent.context().token('blockdent') if parent else 2
+      construct = self.parent()
+      blockdent = construct.context().token('blockdent') if construct else 2
       subdent = indent + (' ' * blockdent)
+      form = mode.get('form', 'code')
+      ishtml = form == 'html'
 
       /# The value of a complex block (for now) always starts on a new line.
       fp.write('\n')
+
+      /# If this is html, we insert a special control line at start and end.
+      if ishtml:
+        basel = self.basel() or '?'
+        attrkey = self.key()
+        block_uid = self.htmlId()
+        control_line = (
+          ' complex %s %s %s %s ' %
+          (construct.kind(), block_uid, self.key(), basel))
+        fp.write(control_line + 'start\n')
+
+      /# Print each construct.
       for construct in self.value():
         construct.write(fp=fp, indent=subdent, mode=mode)
 
@@ -6792,6 +6865,9 @@ scope:
       /# in the block.
       for i in range(0, self.postcount()):
         fp.write('\n')
+
+      if ishtml:
+        fp.write(control_line + 'end\n')
 
       return -1
     test:
@@ -7854,7 +7930,7 @@ scope:
               user: show user version (which may mean not showing)
               show: show canonical key
               alias: show first alias if present else canonical
-            If any value ends with '+' it is a request o
+            If any value ends with '+' it is a request to ...??
           [fps]val: str
             controls how feature (f), primary (p) and secondary (s) attribute
             values are rendered. Values:
@@ -8595,10 +8671,10 @@ scope:
       teardown : map
         same as setup but represents the method used to cleanup after a test
         method has been run.
-      setupcase : map
+      clsetup : map
         same as setup but represents the method used to initialize an entire
         TestCase instance before invoking the tests on it.
-      teardowncase : map
+      clteardown : map
         same as setup but represents the method used to cleanup an entire
         TestCase instance after invoking all tests on it.
   scope:
@@ -8619,6 +8695,7 @@ scope:
         'in': Type.Instance('meta.istream'),
         /# TODO(wmh): What is the type of null in Meta??
         'null': Type.Instance('meta.Null'),
+        'nan': float,
         'self': SELF,
         'test': SELF,
         'this': SELF,
@@ -10171,8 +10248,8 @@ scope:
 
         'setup': {'name': 'setUp'},  # https://docs.python.org/2/library/unittest.html#test-cases
         'teardown': {'name': 'tearDown'},
-        'setupcase': {'name': 'setUpClass', 'level': 'meta'},
-        'teardowncase': {'name': 'tearDownClass', 'level': 'meta'},
+        'clsetup': {'name': 'setUpClass', 'level': 'meta'},
+        'clteardown': {'name': 'tearDownClass', 'level': 'meta'},
       })
 
       self.pseudovarsIs({
@@ -10180,6 +10257,7 @@ scope:
         'true': 'True',
         'false': 'False',
         'null': 'None',
+        'nan': 'metax.root.NaN',
         /# TODO(wmh): Accumulate the values used across various baselangs and
         /# decide what should be used for stdin, stdout and stderr. Using
         /# 'in' and 'out', 'err' may be too ambiguous ... might be more
@@ -10311,9 +10389,9 @@ scope:
         'stmtend': ';',
 
         'setup': {'name': 'setUp', 'level': 'instance'},  # $CLOSURE_ROOT/library/closure/goog-orig/testing/testcase.js
-        'setupcase': {'name': 'setUpPage', 'level': 'instance'},
+        'clsetup': {'name': 'setUpPage', 'level': 'instance'},
         'teardown': {'name': 'tearDown', 'level': 'instance'},
-        'teardowncase': {'name': 'tearDownPage', 'level': 'instance'},
+        'clteardown': {'name': 'tearDownPage', 'level': 'instance'},
 
         /# specific to this baselang.
         'use_es2015': True,
@@ -10491,9 +10569,9 @@ scope:
 
         /# https://github.com/google/googletest/blob/master/googletest/docs/Primer.md
         'setup': {'name': 'SetUp', 'dispatch': 'virtual'},
-        'setupcase': {'name': 'SetUpTestCase', 'level': 'static'},
+        'clsetup': {'name': 'SetUpTestCase', 'level': 'static'},
         'teardown': {'name': 'TearDown', 'dispatch': 'virtual'},
-        'teardowncase': {'name': 'TearDownTestCase', 'level': 'static'},
+        'clteardown': {'name': 'TearDownTestCase', 'level': 'static'},
       })
 
       self.pseudovarsIs({
@@ -13419,7 +13497,7 @@ scope:
       /#   [----------] Global test environment set-up.
       /#   <env_setup_output>
       /#   [----------] <M> tests from FrenchDeckTest
-      /#   <setupcase_output>
+      /#   <clsetup_output>
       /#   [ RUN      ] <class>Test.test_<method>
       /#   <initializer_output>
       /#   <setup_output>
@@ -13436,7 +13514,7 @@ scope:
       /#   ...
       /#   [       OK ] <class>Test.test_<method3> (<ms3> ms)
       /#   ...
-      /#   <teardowncase_output>
+      /#   <clteardown_output>
       /#   [----------] <M> tests from <class>Test (<class_ms> ms total)
       /#
       /#   [----------] Global test environment tear-down
@@ -13455,7 +13533,7 @@ scope:
       /#     (usually not provided unless we make it a namespace-wide option).
       /#   <env_setup_output>
       /#     output from Environment::SetUp()
-      /#   <setupcase_output>
+      /#   <clsetup_output>
       /#     output from <class>Test::SetUpTestCase()
       /#   <initializer_output>
       /#     output from <class>Test::<class>Test
@@ -13467,7 +13545,7 @@ scope:
       /#     output from <class>Test::TearDown()
       /#   <finalizer_output>
       /#     output from <class>Test::~<class>Test
-      /#   <teardowncase_output>
+      /#   <clteardown_output>
       /#     output from <class>Test::TearDownTestCase()
       /#   <env_teardown_output>
       /#     output from Environment::TearDown()
@@ -17845,9 +17923,14 @@ scope:
 
       Create a meta method on the class within which the entry is found
       representing the code to execute for this entry point. This involves
-      compiling all 'flag', 'block' and 'command' subconstructs within
-      the entry 'scope' into a collection of lines that represent the
-      body of the to-be-added meta method.
+      compiling all 'flag', 'arg' and 'command' subconstructs of the
+      'interface:' attribute, and the code in scope:, into a collection of lines
+      that represent the body of the to-be-added meta method.
+
+      TODO(wmh): This code is invoked on every command defined in any
+      transitively included meta source file, which is unnecessary (we only
+      need to generate the entry method for metafiles that have specificly
+      been requested to be compiled.
     params:
       var output : vec<Construct> = null #:
         Where to write constructs created during expansion.  Does NOT
@@ -17875,6 +17958,11 @@ scope:
         comment_lines = [
           'Auto-generated entry point for %s' % klass.fqn()]
       command_scope = self.attrval('scope:', default=metax.c.REQUIRED)
+      interface_scope = self.attrval('interface:', default=None)
+      if interface_scope:
+        print '***** Added %d children from interface' % len(interface_scope)
+        command_scope = interface_scope + command_scope
+      command_code = []
 
       special_default_command = '__default__'
 
@@ -17929,6 +18017,75 @@ scope:
       /# We need to add code to command_init to create a new
       /# metax.cli.Command instance.
       self.generatePython(command_fullname, parent_fullname, command_init)
+
+      /# Find the 'block'
+      block = None
+      for child in command_scope:
+        kind = child.kind()
+        if kind == 'block':
+          if block is None:
+            block = child
+          else:
+            raise Error('Found multiple blocks: %s vs %s' % (block.kindfqn(), child.kindfqn()))
+      if block:
+        child = block
+        clines = child.attrval('comment:', default=None)
+        if clines is None:
+          /# If there are multiple named blocks defined in this 'command'
+          /# without comments, they will all share the command-level
+          /# comment.  Not really a problem.
+          /# TODO(wmh): As a side question, should we enforce only one
+          /# block for leaf commands?
+          clines = self.attrval('comment:', default=None)
+          if clines is None:
+            clines = []
+
+        blines = child.attrval('scope:', default=metax.c.REQUIRED)
+        block_kind = child.attrval('kind')
+
+        if block_kind == 'named':
+          /# We create a method to implement this block.
+          block = child
+          if self.id() == special_default_command:
+            metafile.error(
+              'The default command cannot be named',
+              line=block.primary().line())
+          else:
+            /# Establish the method name
+            if Context.IsAutoId(child.id()):
+              methname = command_fullname
+            else:
+              methname = block.id()
+
+            /# Generate the method call locally.
+            command_body.append('%sself.%s()' % (indent, methname))
+
+            /# Create the method that does the actual work.
+            /#  - note that although the toplevel Entry method is
+            /#    a meta method (and thus defined on the meta class),
+            /#    named blocks are generated as instance methods on
+            /#    the underlying user class.
+            method = MethodConstruct.NewFromData(
+              methname, context, parent=class_scope,
+              features=[],
+              secondaries=[
+                ('#:', clines or None),
+                ('scope:', blines),
+              ],
+              primary_line=child.primary().line())
+
+        else:
+          /# We write the contents of the block into command_code.
+          /# TODO(wmh): Should use BlockConstruct.translateMeta() if possible!
+          /# TODO(wmh): Is there a way to force a new lexical scope in
+          /# python3 within a method, so that a variable defined inside
+          /# the lexical scope does not affect its value outside that scope?
+          for line in clines:
+            /# TODO(wmh): Generalize to all baselangs.
+            command_code.append(indent + rem + ' ' + line)
+          for line in blines:
+            command_code.append(indent + line)
+          command_body.extend(command_code)
 
       /# Now parse the scope
       subcmds = []
@@ -17986,63 +18143,7 @@ scope:
           child.expandMeta()
 
         elif kind == 'block':
-          clines = child.attrval('comment:', default=None)
-          if clines is None:
-            /# If there are multiple named blocks defined in this 'command'
-            /# without comments, they will all share the command-level
-            /# comment.  Not really a problem.
-            /# TODO(wmh): As a side question, should we enforce only one
-            /# block for leaf commands?
-            clines = self.attrval('comment:', default=None)
-            if clines is None:
-              clines = []
-
-          blines = child.attrval('scope:', default=metax.c.REQUIRED)
-          block_kind = child.attrval('kind')
-
-          if block_kind == 'named':
-            /# We create a method to implement this block.
-
-            if self.id() == special_default_command:
-              metafile.error(
-                'The default command cannot be named',
-                line=block.primary().line())
-            else:
-              /# Establish the method name
-              if Context.IsAutoId(child.id()):
-                methname = command_fullname
-              else:
-                methname = block.id()
-
-              /# Generate the method call locally.
-              command_body.append('%sself.%s()' % (indent, methname))
-
-              /# Create the method that does the actual work.
-              /#  - note that although the toplevel Entry method is
-              /#    a meta method (and thus defined on the meta class),
-              /#    named blocks are generated as instance methods on
-              /#    the underlying user class.
-              method = MethodConstruct.NewFromData(
-                methname, context, parent=class_scope,
-                features=[],
-                secondaries=[
-                  ('#:', clines or None),
-                  ('scope:', blines),
-                ],
-                primary_line=child.primary().line())
-
-          else:
-            /# We write the contents of the block into command_body.
-            /# TODO(wmh): Should use BlockConstruct.translateMeta() if possible!
-            /# TODO(wmh): Is there a way to force a new lexical scope in
-            /# python3 within a method, so that a variable defined inside
-            /# the lexical scope does not affect its value outside that scope?
-            for line in clines:
-              /# TODO(wmh): Generalize to all baselangs.
-              command_body.append(indent + rem + ' ' + line)
-            for line in blines:
-              command_body.append(indent + line)
-
+          pass
         else:
           raise Error(
             'Unexpected child %s of %s' % (child.kindid(), self.kindfqn()))
@@ -18087,6 +18188,7 @@ scope:
         command_init.append('  return')
         command_init.append('meta__names = meta__command.names()')
         command_init.append('cli = meta__command.asValues()')
+        /#command_init.extend(command_code)
 
         /# We create the entry method.
         method_name = 'Entry'
@@ -19733,38 +19835,34 @@ scope:
         /# can thus be found in every class.
         /#  - when used within a test class that inherits from
         /#    metax.test.TestCase, the 'setup:' and 'teardown:' block attributes
-        /#    correspond to the baselang-specific and location-secific setUp and
-        /#    tearDown methods.
+        /#    correspond to the baselang-specific and location-specific
+        /#    setUp and tearDown methods.
         /#  - the setup*/teardown* attributes do not make sense for user-defined
         /#    classes (at normal or meta level, even if they are service test
         /#    classes)
         /#  - the setup/teardown attributes do make sense (and are common) for
-        /#    lifecycles with location 'test' (either explicitly within a class
-        /#    'scope:', or implicitly by appearing in the 'tests' block of a
-        /#    user-level class). They are also common in lifecycles appearing in
-        /#    user-defined test classes (i.e. classes with location 'test' in
-        /#    namespace 'scope:' or appearing in the 'tests:' block of a
-        /#    namespace), but only if the test class inherits from
-        /#    metax.test.TestCase, not if it is a service test class that
-        /#    doesn't inherit from metax.test.TestCase.
+        /#    lifecycles with location 'test'. They are also common in
+        /#    lifecycles appearing in user-defined test classes, but only if the
+        /#    test class inherits from metax.test.TestCase, not if it is a
+        /#    service test class that doesn't inherit from metax.test.TestCase.
         /#  - setup is invoked before each test method is executed, teardown is
         /#    invoked after each test method is executed.
-        /#  - setupcase is invoked once before any of the test methods within a
-        /#    testcase are invoked, and teardowncase is invoked once after all
+        /#  - clsetup is invoked once before any of the test methods within a
+        /#    testcase are invoked, and clteardown is invoked once after all
         /#    of the testmethods within a testcase have been invoked.
         /#
         /# Some reminder notes about Meta and unittests (and how lifecycles
         /# interact)
         /#  - Most baselangs that support xUnit testing will have a root
         /#    TestCase class with setup-each, teardown-each, setup-once and
-        /#    teardown-once methods (exactly names depend on baselang) and a
+        /#    teardown-once methods (exact names depend on baselang) and a
         /#    constructor that accepts a string representing the name of the
         /#    method to test.
-        /#  - Meta defines meta.testing.TestCase which inherits from this
+        /#  - Meta defines metax.test.TestCase which inherits from this
         /#    baselang-specific root TestClass, and whose initializer has a
         /#    method-name arg passed to the parent.
         /#  - For user-defined class <C>, we implicitly create <C>Test which is
-        /#    a subclass of meta.testing.TestCase, whose initializer accepts a
+        /#    a subclass of metax.test.TestCase, whose initializer accepts a
         /#    method name that is passed to its parent.
         variant = myclass.variant()
         baselang = self.baselang()
@@ -19826,7 +19924,6 @@ scope:
         /# TODO(wmh): Create a finalizer method if there is a 'finalize'
         /# attribute in this lifecycle.
 
-
         /# Handle the 'clinit' block.
         clinit_attr, clinit_lines = self.attrpair('clinit:', default=None)
         if clinit_attr is not None:
@@ -19846,9 +19943,11 @@ scope:
               line=clinit_attr.line())
 
         /# Create baselang-specific setup/teardown methods depending on
-        /# which of 'setup', 'setupcase', 'teardown' and 'teardowncase' exists
+        /# which of 'setup', 'clsetup', 'teardown' and 'clteardown' exists
         /# as attributes on this lifecycle.
-        for attr in ('setup', 'setupcase', 'teardown', 'teardowncase'):
+        test_attrs = {}
+        test_attr_list = ('setup', 'clsetup', 'teardown', 'clteardown')
+        for attr in test_attr_list:
           block = self.attr(attr + ':', default=None)
           if block:
             if (
@@ -19880,9 +19979,23 @@ scope:
               tmethod.myclassIs(myclass)
               tmethod.expandMeta()
             else:
-              metafile.warning(
-                'Attribute "%s" does not apply to %s %s' %
-                (attr, variant, myclass.kindfqn()))
+              test_attrs[attr] = block
+              /#metafile.warning(
+              /#  'Attribute "%s" does not apply to %s %s' %
+              /#  (attr, variant, myclass.kindfqn()))
+        if test_attrs:
+          /# We create a location=test lifecycle construct (verifying one
+          /# doesn't already exist) and recursively expand it.
+          test_lifecycle = LifecycleConstruct.NewFromData(
+            context.autoId(), context, parent=scope,
+            features=[('location', 'test')])
+          for attrbase in test_attr_list:
+            attr = test_attrs.get(attrbase)
+            if attr:
+              attr.changeParent(test_lifecycle)
+          /# test_lifecycle.write()
+          /# TODO(wmh): Should we pass output into this call?
+          test_lifecycle.expandMeta()
       D.expand.end()
     end method expandMeta;
 
@@ -23308,7 +23421,6 @@ scope:
     Each Compiler instance is specific to a particular Meta Language. A
     specific BaseLanguage is active at any given time, but can be switched
     during the lifetime of the Compiler instance.
-
   assocs:
     std assoc collections;
     std assoc copy;
@@ -23477,9 +23589,10 @@ scope:
       cls.HTML_HEAD = (
         >|"""    <style>
         >|    .metafile {
-        >|        font-size: 80%;
-        >|        margin: 0px 0px 0px 250px;
-        >|        width: 100ch;
+        >|        font-size: %(fontsize)s;
+        >|        margin: 0px 0px 0px %(margin)dpx;
+        >|        padding: 0px;
+        >|        width: %(width)dch;
         >|        background-color: black;
         >|        color: #c5c8c6;
         >|        /* http://crafted-software.blogspot.com/2010/07/css-for-tag-list-of-best-monospaced.html */
@@ -23492,7 +23605,14 @@ scope:
         >|        color: black;
         >|        position: fixed;
         >|        top: 9px;
-        >|        left: 5px;
+        >|        left: 0px;
+        >|    }
+        >|    // For the 'S', 'H' and 'T' letters associated with 'all' in metadex.
+        >|    .ctrl1 {
+        >|       color: red;
+        >|    }
+        >|    // For the 'S', 'H' and 'T' letters NOT associated with 'all' in metadex.
+        >|    .ctrl2 {
         >|    }
         >|    code {
         >|      font-family: /* Pragmata,*/ Menlo, 'DejaVu LGC Sans Mono', 'DejaVu Sans Mono', Consolas, 'Everson Mono', 'Lucida Console', 'Andale Mono', 'Nimbus Mono L', 'Liberation Mono', FreeMono, 'Osaka Monospaced', Courier, 'New Courier', monospace;
@@ -23500,17 +23620,16 @@ scope:
         >|    }
         >|    /* https://developer.mozilla.org/en-US/docs/Web/CSS/color_value */
         >|    /* /usr/X11/share/X11/rgb.txt */
-        >|    .face-primary   { color: purple; }
-        >|    .face-primary2  { color: rgb(0, 100, 0); /* darkgreen */ }
-        >|    .face-feature   { color: rgb(85, 107, 47);  /* darkolivegreen */ }
-        >|    .face-secondary { color: rgb(85, 107, 47);  /* darkolivegreen */ }
-        >|    .face-featval   { color: rgb(139, 58, 98); /* hotpink4 */ }
-        >|    .face-keyword   { color: rgb(255, 20, 147); /* deep pink */ }
-        >|    .face-end       { color: rgb(139, 139, 131); /* ivory4 */ }
-        >|    .face-name      { color: rgb(0, 0, 255); /* blue1 */ }
-        >|    .face-comment   { color: rgb(0, 139, 139); /* cyan4 */ }
-        >|
-        >|    .ellipsis { color: black; }
+        >|    .face-primary   { color: %(primary)s; }
+        >|    .face-primary2  { color: %(primary2)s; /* darkgreen */ }
+        >|    .face-feature   { color: %(feature)s;  /* darkolivegreen */ }
+        >|    .face-secondary { color: %(secondary)s;  /* darkolivegreen */ }
+        >|    .face-featval   { color: %(featval)s; /* hotpink4 */ }
+        >|    .face-keyword   { color: %(keyword)s; /* deep pink */ }
+        >|    .face-end       { color: %(end)s; /* ivory4 */ }
+        >|    .face-name      { color: %(name)s; /* blue1 */ }
+        >|    .face-comment   { color: %(comment)s; /* cyan4 */ }
+        >|    .ellipsis       { color: black; }
         >|
         >|    /**
         >|     * Each line of code in a .meta program is specified by:
@@ -23657,7 +23776,7 @@ scope:
         >|
         >|    <script type="text/javascript">
         >|
-        >|      var allids = ${#allids#};
+        >|      var allids = %(allids)s;
         >|
         >|      function highlightCode() {
         >|        console.log('starting!');
@@ -23746,6 +23865,19 @@ scope:
         'field': 'orange',
         'lifecycle': 'orange',
       }
+      cls.MetaConstructColorMap = {
+        'primary':   'purple',
+        'primary2':  'rgb(0, 100, 0)',      # darkgreen
+        'feature':   'rgb(85, 107, 47)',    # darkolivegreen
+        'secondary': 'rgb(85, 107, 47)',    # darkolivegreen
+        'featval':   'rgb(139, 58, 98)',    # hotpink4
+        'keyword':   'rgb(255, 20, 147)',   # deep pink
+        'end':       'rgb(139, 139, 131)',  # ivory4
+        'name':      'rgb(0, 0, 255)',      # blue1
+        'comment':   'rgb(0, 139, 139)',    # cyan4
+        'ellipsis':  'black',               # scope collapses (hidden)
+        'ellipsis2': 'red',                 # scope collapses (visible)
+      }
 
       /# Initialized in Initialize(). Replaces all envars with a single
       /# file containing all configuration options.
@@ -23787,10 +23919,10 @@ scope:
       config, configpath = metax.root.MetaObject.Config()
       cls.CONFIG = config
 
+      errors = []
+
       /# TODO(wmh): Get this working via Filesystem!
       import os
-
-      errors = []
       if 'bazel' not in config:
         errors.append("Must specify 'bazel' (path to bazel executable)")
       elif not os.path.exists(config['bazel']):
@@ -23885,17 +24017,28 @@ scope:
       var repodir : str = null #:
         The directory containing the repository. If null, obtained from the
         global config.
+      var resources : map = null #:
+        Explicit resources (maps fully qualified resource names to explicit
+        paths). Used to override the default resource resolution strategy
+        of Object.Resource().
     scope:
       cls = self.__class__
       flags = metax.root.MetaObject.CLI()
+      import logging
+      logging.info('Here with flags %s', str(flags))
       if flags:
         optimize_level = flags.optimize_level
-        metadir = flags.metadir
+        if metadir is None:
+          metadir = flags.metadir
         inmemory = flags.inmemory
       else:
         optimize_level = 'high'
-        metadir = '.meta2'
+        if metadir is None:
+          metadir = '.meta2'
         inmemory = False
+
+      if resources:
+        metax.root.MetaObject.Initialize(resources=resources)
 
       levels = {
         'warn': 'max',
@@ -23923,6 +24066,8 @@ scope:
           metadir = '.meta' + metax.c.NEWSUFFIX
       if kind is None:
         kind = 'memory' if inmemory else 'disk'
+      if kind == 'memory':
+        logging.warning('Meta compiler is inmemory (no changes will be saved to disk)')
       fs = metax.fs.Filesystem(kind=kind, metadir=metadir, rootdir=rootdir)
       self.filesystemIs(fs)
 
@@ -23938,7 +24083,6 @@ scope:
 
       self.metalangIs(metalang)
       self.levelsIs(levels)
-
 
       /# The baselang doesn't need to be set upon creation, but will be
       /# needed for actions involving expansion and compilation.
@@ -25761,10 +25905,14 @@ scope:
                 print 'ERROR: name %s is not a valid target' % namespace_name
                 continue
 
-              rawcom['namespace'] = '%s.%s' % (
-                nmsp_prefix.replace('/', '.'), nmsp_suffix)
+              if nmsp_prefix:
+                nmsp_dot = nmsp_prefix.replace('/', '.')
+                rawcom['namespace'] = '%s.%s' % (nmsp_dot, nmsp_suffix)
+              else:
+                rawcom['namespace'] = nmsp_suffix
+              nmsp_special = (nmsp_prefix + '/') if nmsp_prefix else ''
               rawcom['args'] = [
-                'python', '%s/%s_test/__init__.py' % (nmsp_prefix, nmsp_suffix)]
+                'python', '%s%s_test/__init__.py' % (nmsp_special, nmsp_suffix)]
               rawcom['env'] = {
                 'PYTHONPATH': '.:%s' % (fs.getenv('PYTHONPATH'))
               }
@@ -25942,7 +26090,6 @@ scope:
                 self.formatBazelOutput(tests, showout=showout, showerr=showerr)
 
                 if flags.unfilt:
-                  print '****** HERE!'
                   print 'Command: cd ' + cwd
                   print 'Command: %s 2>&1 | metafilt %s' % (
                     ' '.join(args), ' '.join(filt_args[1:]))
@@ -27789,12 +27936,15 @@ scope:
               /# Remeber the parent
               missing.append(fqparent)
               pklass = allclasses.get(fqparent, None)
-              ppcs = pklass.parentclasses()
-              pc = ppcs[0] if ppcs else None
-              ppc = pc['fqn'] if pc else None
-              /# print ' *** MISSING %s = %s' % (fqparent, ppc)
-              classes[fqparent] = {
-                'name': fqparent, 'fqn': fqparent, 'parent': ppc}
+              if pklass:
+                ppcs = pklass.parentclasses()
+                pc = ppcs[0] if ppcs else None
+                ppc = pc['fqn'] if pc else None
+                /# print ' *** MISSING %s = %s' % (fqparent, ppc)
+                classes[fqparent] = {
+                  'name': fqparent, 'fqn': fqparent, 'parent': ppc}
+              else:
+                print 'WARNING: Failed to kind parent "%s" for "%s"' % (fqparent, fqn)
 
         /# Create an 'external' subgraph and add all missing classes to it.
         fp.write('  subgraph cluster_external {\n')
@@ -28168,6 +28318,224 @@ scope:
       return result
     end method maybeRecompileMeta;
 
+    method generateHtml #:
+      Generate a self-contained html file for a 
+    params:
+      var paths : vec<str> = null #:
+        The list of paths to parse.  If not specified, the command line is
+        analyzed instead.
+      var width : int = 100 #:
+        The number of characters to display horizontally.  Note that 5
+        characters are needed along the left margin for line numbers, and
+        should be accounted for in this value.
+      var showbox : bool = false #:
+        If true, show the show/hide/toggle control box in top left corner.
+      var htmldir : str = null #:
+        Where to write html files. If not present, the default is to use
+        $repository_path/meta/<namespace_subpath>.
+      var hide : bool = false #:
+        If true, hide all blocks initially.
+      var fontsize : str = '80%' #:
+        The font size of the generated code.
+    scope:
+      /# Some useful vars
+      cls = self.__class__
+      fs = self.fs()
+      verbose = True
+      flags = self.cli()
+      metalang = self.metalang()
+      context = metalang.context()
+      errors = 0
+      suffix = '.meta2'
+      chatty = True
+
+      print 'Here with width=%s showbox=%s htmldir=%s' % (width, showbox, htmldir)
+
+      /# Establish the rootdir for .html files.
+      /#  - one possibility is to write hidden .html files adjacent to
+      /#    each .meta file
+      /#  - another possibility is to write into
+      /#       <<repository_path>>/<metalang>/meta/<namespace>
+      /#    for each namespace in the .meta files.
+      /# Although there are pros and cons of both, there is utility in
+      /# putting as much generated data as possible into the repository,
+      /# so that we can do post-analysis, display via the shell, etc.
+      metadir = fs.join(
+        self.repositoryPath(), metalang.id(), 'meta')
+
+      /# Parse the specified paths.
+      for path in paths:
+        /# Parse the file.
+        metafile = self.parseMeta(
+          path, debuglevel=flags.debug, context=context)
+
+        if not metafile.hasErrors(show=True):
+          /# Generate the HTML file BEFORE we expand the metafile!
+          filecons = metafile.construct()
+          for namespace in filecons.attr('scope:').value():
+            outlines = []
+
+            /# Obtain the htmlish contents.
+            fp = cStringIO.StringIO()
+            mode = {'form': 'html', 'out': {}}
+            namespace.write(fp=fp, mode=mode)
+            lines = fp.getvalue().split('\n')
+            lines.pop()
+
+            out = mode['out']
+            allids_json = json.dumps(out)
+            import pprint
+            /# pprint.pprint(out)
+
+            if showbox:
+              outlines.append('<div class="metadex">')
+              outlines.append('  <center><b>%s</b></center>' % namespace.id())
+              outlines.append('  <table>')
+              bout = out['block']
+              for i, bkey in enumerate(sorted(bout)):
+                argstr = "allids.block['%s']" % bkey
+                /# TODO(wmh): Why aren't classes working on the following <td>
+                /# elements? I want to have the color of the first S H T to be
+                /# red, and planned to use two classes to control the diff, but
+                /# this is not working.
+                css = 'ctrl1' if i == 0 else 'ctrl2'
+                tdhack = ' style="color: red;"' if i == 0 else ''
+                outlines.append(
+                  '    <tr>'
+                  '<td>%s</td>'
+                  '<td></td>'
+                  '<td>%s</td>'
+                  '<td onclick="slist(%s)" title="Show %s blocks" class="%s"%s>S</td>'
+                  '<td onclick="ulist(%s)" title="Hide %s blocks" class="%s"%s>H</td>'
+                  '<td onclick="tlist(%s)" title="Toggle %s blocks" class="%s"%s>T</td>'
+                  '</tr>' %
+                  ('block' if i == 0 else '',
+                   bkey,
+                   argstr, bkey, css, tdhack,
+                   argstr, bkey, css, tdhack,
+                   argstr, bkey, css, tdhack))
+              lout = out['lang']
+              css = 'ctrl2'
+              for i, lkey in enumerate(sorted(lout)):
+                baseout = lout[lkey]
+                for j, bkey in enumerate(sorted(baseout)):
+                  argstr = "allids.lang.%s['%s']" % (lkey, bkey)
+                  outlines.append(
+                    '    <tr>'
+                    '<td>%s</td>'
+                    '<td>%s</td>'
+                    '<td>%s</td>'
+                    '<td onclick="slist(%s)" title="Show %s %s blocks" class="%s">S</td>'
+                    '<td onclick="ulist(%s)" title="Hide %s %s blocks" class="%s">H</td>'
+                    '<td onclick="tlist(%s)" title="Toggle %s %s blocks" class="%s">T</td>'
+                    '</tr>' %
+                    ('baselang' if (i == 0 and j == 0) else '',
+                     lkey if j == 0 else '',
+                     bkey,
+                     argstr, bkey, lkey, css,
+                     argstr, bkey, lkey, css,
+                     argstr, bkey, lkey, css))
+              /# cout = out['construct']
+              outlines.append('  </table>')
+              outlines.append('</div>')
+
+            /# Now wrap the htmlized lines into an overarching structure
+            /# that shows line numbers, indents blocks, allows blocks to
+            /# be opened and closed, etc.
+            outlines.append('<div class="metafile">')
+            dentlevel = 0
+            linenum = 0
+            for line in lines:
+              indent = '  ' * (dentlevel + 1)
+              if line and line[0] == '':
+                /# Escape sequence indicating block start/end.
+                _, block_kind, conskind, block_uid, attrkey, basel, se = line.split(' ')
+                if se == 'start':
+                  /# print 'starting %s %s' % (consfqn, attrkey)
+                  dentlevel += 1
+                  classes = []
+                  is_code = 'scope' in attrkey or 'test' in attrkey
+                  if block_kind == 'simple' and is_code:
+                    classes.append('baselang')
+                    classes.append(basel)
+                  if attrkey in ('comment:', '#:'):
+                    classes.append('face-comment')
+                  outlines.append(
+                    indent + '<div id="%s" class="%s">' % (
+                      block_uid, ' '.join(classes)))
+                else:
+                  /# print 'ending   %s %s' % (consfqn, attrkey)
+                  dentlevel -= 1
+                  outlines.append(indent[2:] + '</div>')
+              else:
+                /# We first remove the indentation from the beginning of the
+                /# line.
+                idx = dentlevel * 2
+                prefix = line[:idx]
+                line = line[idx:]
+
+                linenum += 1
+                if chatty:
+                  subindent = indent + '  '
+                  outlines.append(indent + '<div>')
+                  outlines.append(
+                    subindent + '<span class="linenum">%d</span>' % linenum)
+                  outlines.append(
+                    subindent + '<span class="indent%d"></span>' % dentlevel)
+                  outlines.append(
+                    subindent + '<span class="linetext"><code>%s</code></span>' % line)
+                  outlines.append(indent + '</div>')
+                else:
+                  outlines.append(
+                    '%s<div>'
+                    '<span class="linenum">%d</span>'
+                    '<span class="indent%d"></span>'
+                    '<span class="linetext"><code>%s</code></span>'
+                    '</div>' %
+                    (indent, linenum, dentlevel, line))
+
+            /# Write the result to the dest file.
+            parts = namespace.id().split('.')
+            if htmldir is None:
+              htmldir = fs.join(metadir, *parts)
+            if not fs.exists(htmldir):
+              fs.makedirs(htmldir, 0755)
+            htmlbase = fs.basename(metafile.path())
+            assert htmlbase.endswith('.meta2')
+            htmlbase = htmlbase.replace('.meta2', '.html')
+            htmlpath = fs.join(htmldir, htmlbase)
+            with fs.open(htmlpath, 'w') as fp:
+              html_params =  {
+                'fontsize': fontsize,
+                'allids': str(allids_json),
+                'width': width,
+                'margin': 210 if showbox else 0
+              }
+              html_params.update(Compiler.MetaConstructColorMap)
+              html_head = cls.HTML_HEAD % html_params
+              fp.write(
+                '<html>\n  <head>\n%s\n  </head>\n' % html_head)
+              fp.write('  <body>\n')
+              for line in outlines:
+                fp.write(line)
+                fp.write('\n')
+              if hide:
+                fp.write("  <script>ulist(allids.block['all']);</script>\n");
+              fp.write('  </body>\n')
+              fp.write('</html>\n')
+              if verbose:
+                print 'Wrote ' + htmlpath
+
+          /# Now expand and translate.
+          filecons.expandMeta()
+          if not metafile.hasErrors(show=True):
+            filecons.translateMeta()
+            if not metafile.hasErrors(show=True):
+              /# Create HTML files for the baselang files generated.
+              pass
+    test:
+    end method generateHtml;
+
     command metacnew #:
       The public interface to the Meta compiler.
 
@@ -28183,49 +28551,15 @@ scope:
          inherit from it to obtain access to the meta2-level flags.
        - if the first arg passed in is NOT one of the commands recognized here,
          we hack up a special catch-all
-    scope:
+    interface:
 
-      block preamble #:
-        This initial block creates a Command instance and performs some
-        initial sanity checks.
+      command emacs #:
+        Generate an emacs major mode for the current meta language.
       scope:
-        /# IMPORTANT: This entry point is somewhat non-standard, because the
-        /# 'meta2' script creates a Command instance, parses some flags, then
-        /# invokes this entry method, which creates another Command and various
-        /# subCommands.
-        /#  - passing the right argv, and the right 'parent' to the
-        /#    constructors and 'instantiate' method is critically important.
-        /#    - the argv passed by the 'meta2' script into the Entry method
-        /#      ensures that the first arg is 'main' so that when we
-        /#      instantiate the top-level construct within the auto-generated
-        /#      code-base, the right values are analyzed.
-        /#  - the auto-generated code uses a special meta__names variable
-        /#    to compare values in the nested command structure, and this
-        /#    variable is assumed to have the name of the main construct
-        /#
-        /# CODETANGLE(meta2_entry_main): First arg must be 'main'
-        assert meta__args[0] == 'main'
-        while meta__names[0] != 'main':
-          meta__names.pop(0)
-          meta__names.append(False)
 
-        /# We update MetaObject's idea of instantiated command.
-        assert metax.root.MetaObject.CLI() is not None
-        metax.root.MetaObject.CLI()._command_Is(meta__command)
-
-        /# Create the Compiler instance.
-        metac = metax.c.Compiler(metal=cli.metalang, basel=cli.baselang)
-        metax.c.Compiler.CurrentIs(metac)
-        /# Ensure that the repository directory exists.
-        if not metac.verifyDirectory(metadir='.meta2'):
-          sys.exit(1)
-
-        /# The Entry method is meta-level, so 'self' isn't defined.  We
-        /# have self refer to the newly created Compiler instance. This will
-        /# make it easy to flip between virtual and function implementations
-        /# of the code.
-        self = metac
-      end block preamble;
+        named block ::
+          self.generateMajorMode()
+      end command emacs;
 
       command verify_bazel #:
         Test parsing of bazel logs relative to non-bazel test invocations.
@@ -28363,14 +28697,6 @@ scope:
               print '%-20s = %s' % (var, config.get(var, '<INVALID>'))
       end command config;
 
-      command emacs #:
-        Generate an emacs major mode for the current meta language.
-      scope:
-
-        named block ::
-          self.generateMajorMode()
-      end command emacs;
-
       command expand #:
         Expand a specified .meta file.  Consider using 'get' instead.
       scope:
@@ -28430,14 +28756,27 @@ scope:
       command html #:
         Create .html files for the specified metafile(s) and their basefiles.
       scope:
-        named block ::
-          cls = self.__class__
-          fs = self.fs()
-          verbose = True
+        flag htmldir : str = '' #:
+          Where to write generated html files.
+        flag htmlwidth : int = 80 #:
+          How many chars to reserve for each line. Note that 5 will be added
+          to account for line numbers on left side.
+        flag unbox : bool = false #:
+          If true, do not show the show/hide/toggle control box.
+        flag htmlhide : bool = false #:
+          If true, hide all blocks initially.
+        flag fontsize : str = '80%' #:
+          The fontsize of the generated code.
+
+        block ::
+          /# IMPORTANT: Not specifying this as a named block because it means
+          /# we lose access to htmldir. Not naming the block may pose problems
+          /# in other arenas though ... may need to find a difference solution.
 
           /# We create a local compiler so that we can limit scope to the
           /# files and namespaces specified on the command, rather than all
           /# files parsed in this shell.
+          fs = self.fs()
           metac = metax.c.Compiler(
             metal=self.metalang().id(),
             basel=self.baselang().id(),
@@ -28445,169 +28784,17 @@ scope:
             metadir=fs.metadir(),
             kind=fs.kind(),
             repodir=self.repodir())
-
-          /# Some useful vars
-          flags = metac.cli()
-          argmap = metac._parseArgs(flags.rest)
-          metafile_paths = argmap['metafiles']
-          metalang = metac.metalang()
-          context = metalang.context()
-          errors = 0
-          suffix = '.meta2'
-          chatty = True
-
-          /# Establish the rootdir for .html files.
-          /#  - one possibility is to write hidden .html files adjacent to
-          /#    each .meta file
-          /#  - another possibility is to write into
-          /#       <<repository_path>>/<metalang>/meta/<namespace>
-          /#    for each namespace in the .meta files.
-          /# Although there are pros and cons of both, there is utility in
-          /# putting as much generated data as possible into the repository,
-          /# so that we can do post-analysis, display via the shell, etc.
-          metadir = fs.join(
-            self.repositoryPath(), metalang.id(), 'meta')
-
-          /# Parse the specified paths.
-          for path in metafile_paths:
-            /# Parse the file.
-            metafile = metac.parseMeta(
-              path, debuglevel=flags.debug, context=context)
-
-            if not metafile.hasErrors(show=True):
-              /# Generate the HTML file BEFORE we expand the metafile!
-              filecons = metafile.construct()
-              for namespace in filecons.attr('scope:').value():
-                outlines = []
-
-                /# Obtain the htmlish contents.
-                fp = cStringIO.StringIO()
-                mode = {'form': 'html', 'out': {}}
-                namespace.write(fp=fp, mode=mode)
-                lines = fp.getvalue().split('\n')
-                out = mode['out']
-                allids_json = json.dumps(out)
-                import pprint
-                /# pprint.pprint(out)
-                outlines.append('<div class="metadex">')
-                outlines.append('  <center><b>%s</b></center>' % namespace.id())
-                outlines.append('  <table>')
-                bout = out['block']
-                for i, bkey in enumerate(sorted(bout)):
-                  argstr = "allids.block['%s']" % bkey
-                  outlines.append(
-                    '    <tr>'
-                    '<td>%s</td>'
-                    '<td></td>'
-                    '<td>%s</td>'
-                    '<td onclick="slist(%s)">S</td>'
-                    '<td onclick="ulist(%s)">U</td>'
-                    '<td onclick="tlist(%s)">T</td>'
-                    '</tr>' %
-                    ('block' if i == 0 else '',
-                     bkey, argstr, argstr, argstr))
-                lout = out['lang']
-                for i, lkey in enumerate(sorted(lout)):
-                  baseout = lout[lkey]
-                  for j, bkey in enumerate(sorted(baseout)):
-                    argstr = "allids.lang.%s['%s']" % (lkey, bkey)
-                    outlines.append(
-                      '    <tr>'
-                      '<td>%s</td>'
-                      '<td>%s</td>'
-                      '<td>%s</td>'
-                      '<td onclick="slist(%s)">S</td>'
-                      '<td onclick="ulist(%s)">U</td>'
-                      '<td onclick="tlist(%s)">T</td>'
-                      '</tr>' %
-                      ('baselang' if (i == 0 and j == 0) else '',
-                       lkey if j == 0 else '',
-                       bkey, argstr, argstr, argstr))
-                cout = out['construct']
-                outlines.append('  </table>')
-                outlines.append('</div>')
-
-                /# Now wrap the htmlized lines into an overarching structure
-                /# that shows line numbers, indents blocks, allows blocks to
-                /# be opened and closed, etc.
-                outlines.append('<div class="metafile">')
-                dentlevel = 0
-                linenum = 0
-                for line in lines:
-                  indent = '  ' * (dentlevel + 1)
-                  if line and line[0] == '':
-                    /# Escape sequence indicating block start/end.
-                    _, block_kind, conskind, block_uid, attrkey, basel, se = line.split(' ')
-                    if se == 'start':
-                      /# print 'starting %s %s' % (consfqn, attrkey)
-                      dentlevel += 1
-                      classes = []
-                      is_code = 'scope' in attrkey or 'test' in attrkey
-                      if block_kind == 'simple' and is_code:
-                        classes.append('baselang')
-                        classes.append(basel)
-                      if attrkey in ('comment:', '#:'):
-                        classes.append('face-comment')
-                      outlines.append(
-                        indent + '<div id="%s" class="%s">' % (
-                          block_uid, ' '.join(classes)))
-                    else:
-                      /# print 'ending   %s %s' % (consfqn, attrkey)
-                      dentlevel -= 1
-                      outlines.append(indent[2:] + '</div>')
-                  else:
-                    /# We first remove the indentation from the beginning of the
-                    /# line.
-                    idx = dentlevel * 2
-                    prefix = line[:idx]
-                    line = line[idx:]
-
-                    linenum += 1
-                    if chatty:
-                      subindent = indent + '  '
-                      outlines.append(indent + '<div>')
-                      outlines.append(
-                        subindent + '<span class="linenum">%d</span>' % linenum)
-                      outlines.append(
-                        subindent + '<span class="indent%d"></span>' % dentlevel)
-                      outlines.append(
-                        subindent + '<span class="linetext"><code>%s</code></span>' % line)
-                      outlines.append(indent + '</div>')
-                    else:
-                      outlines.append(
-                        '%s<div>'
-                        '<span class="linenum">%d</span>'
-                        '<span class="indent%d"></span>'
-                        '<span class="linetext"><code>%s</code></span>'
-                        '</div>' %
-                        (indent, linenum, dentlevel, line))
-
-                /# Write the result to the dest file.
-                parts = namespace.id().split('.')
-                htmldir = fs.join(metadir, *parts)
-                if not fs.exists(htmldir):
-                  fs.makedirs(htmldir, 0755)
-                htmlpath = fs.join(htmldir, 'index.html')
-                with fs.open(htmlpath, 'w') as fp:
-                  html_head = cls.HTML_HEAD.replace('${#allids#}', allids_json)
-                  fp.write(
-                    '<html>\n  <head>\n%s\n  </head>\n' % html_head)
-                  fp.write('  <body>\n')
-                  for line in outlines:
-                    fp.write(line)
-                    fp.write('\n')
-                  fp.write('  </body>\n')
-                  fp.write('</html>\n')
-                  if verbose:
-                    print 'Wrote ' + htmlpath
-
-              /# Now expand and translate.
-              filecons.expandMeta()
-              if not metafile.hasErrors(show=True):
-                filecons.translateMeta()
-                if not metafile.hasErrors(show=True):
-                  /# Create HTML files for the baselang files generated.
-                  pass
+          flags = self.cli()
+          argmap = self._parseArgs(flags.rest)
+          paths = argmap['metafiles']
+          metac.generateHtml(
+            paths,
+            width=flags.htmlwidth + 5,
+            showbox=not flags.unbox,
+            htmldir=flags.htmldir or None,
+            hide=flags.htmlhide,
+            fontsize=flags.fontsize,
+          )
       end command html;
 
       command index #:
@@ -28801,8 +28988,6 @@ scope:
       scope:
         named block ::
           self.baselang().repl()
-        block ::
-          print '*** HELLO!'
       end command repl;
 
       command reverse #:
@@ -29035,7 +29220,7 @@ scope:
 
       command uml #:
         Generate a UML diagram of all classes in all specified metafiles.
-      scope:
+      interface:
         flag display @ d : bool #:
           Display the UML diagram after generating it.
           By default, the image file is produced but not displayed.
@@ -29045,15 +29230,15 @@ scope:
           Display testclasses.
         flag showmeta : bool = false #:
           Display metaclasses.
-
+      scope:
         named block ::
           cli = self.cli()
+          fs = self.fs()
 
           argmap = self._parseArgs(cli.rest)
           errors = False
           paths = argmap['metafiles']
           if paths:
-            dotpath = 'out.dot'
             config = {}
             metafiles = []
             for path in paths:
@@ -29061,6 +29246,9 @@ scope:
               if not metafile.hasErrors(show=True):
                 metafiles.append(metafile)
             print metafiles
+            first = metafiles[0]
+            assert first.path().endswith('.meta2')
+            dotpath = fs.basename(first.path()).replace('.meta2', '.dot')
             self.generateUmlDiagram(
               metafiles, dotpath, config=config, display=cli.display,
               show_user=cli.showuser, show_meta=cli.showmeta,
@@ -29093,7 +29281,56 @@ scope:
                   self._test_command()
             else:
               print 'ERROR : Unknown command "%s"' % command
+            fs = self.fs()
+            if fs.kind() == 'memory':
+              fp = sys.stdout
+              fp.write('Meta filesystem is inmemory:\n')
+              fs.summarize(fp=fp)
       end command __default__;
+      
+    scope:
+
+      block preamble #:
+        This initial block creates a Command instance and performs some
+        initial sanity checks.
+      scope:
+        /# IMPORTANT: This entry point is somewhat non-standard, because the
+        /# 'meta2' script creates a Command instance, parses some flags, then
+        /# invokes this entry method, which creates another Command and various
+        /# subCommands.
+        /#  - passing the right argv, and the right 'parent' to the
+        /#    constructors and 'instantiate' method is critically important.
+        /#    - the argv passed by the 'meta2' script into the Entry method
+        /#      ensures that the first arg is 'main' so that when we
+        /#      instantiate the top-level construct within the auto-generated
+        /#      code-base, the right values are analyzed.
+        /#  - the auto-generated code uses a special meta__names variable
+        /#    to compare values in the nested command structure, and this
+        /#    variable is assumed to have the name of the main construct
+        /#
+        /# CODETANGLE(meta2_entry_main): First arg must be 'main'
+        assert meta__args[0] == 'main'
+        while meta__names[0] != 'main':
+          meta__names.pop(0)
+          meta__names.append(False)
+
+        /# We update MetaObject's idea of instantiated command.
+        assert metax.root.MetaObject.CLI() is not None
+        metax.root.MetaObject.CLI()._command_Is(meta__command)
+
+        /# Create the Compiler instance.
+        metac = metax.c.Compiler(metal=cli.metalang, basel=cli.baselang)
+        metax.c.Compiler.CurrentIs(metac)
+        /# Ensure that the repository directory exists.
+        if not metac.verifyDirectory(metadir='.meta2'):
+          sys.exit(1)
+
+        /# The Entry method is meta-level, so 'self' isn't defined.  We
+        /# have self refer to the newly created Compiler instance. This will
+        /# make it easy to flip between virtual and function implementations
+        /# of the code.
+        self = metac
+      end block preamble;
 
     end command metacnew;
 

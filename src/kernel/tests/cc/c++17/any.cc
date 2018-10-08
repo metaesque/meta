@@ -1,11 +1,14 @@
 #include <iostream>
 #include <string>
+#include <vector>
 #include <any>
 
 int main() {
   std::any val1 = 1;
   std::any val2 = 'a';
   std::any val3 = std::string("hello world");
+
+  std::vector<std::any> vals = {val1, val2, val3};
 
   std::cout << "hello" << std::endl;
   std::cout << "val1 = " << std::any_cast<int>(val1) << std::endl;

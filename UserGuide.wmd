@@ -788,7 +788,7 @@ between two completely different customized views).
 
 #### The Meta Type System
 
-The type system of a language is one of it's most critical aspects.
+The type system of a language is one of its most critical aspects.
 But Meta isn't trying to define a new type system so much as find a way
 to unify all the type systems already existing across the various
 object-oriented languages. The extent to which this is possible is still
@@ -799,15 +799,17 @@ under exploration, but here's where we are so far.
 Types in Meta have the following bnf grammar:
 
     <type>      ::- [<prefix>] <base> [ '<' <params> '>' ]
-    <prefix>    ::- ( [ ['#'] '*' ]... | '&' | '@' ) ['#']
+    <prefix>    ::- '@' | ( [ ['#'] '*' ]... | '&' ) ['#']
     <base>      ::- <primitive> | <native> | <extended-identifier>
-    <primitive> ::- <base-prim> | <num-prim>
+    <primitive> ::- <base-prim> | <int-prim> | <real-prim>
     <base-prim> ::- 'bool' | 'boolean' | 'trilean' | 'byte' | 'char'
-    <num-prim>  ::- ( 'int' | 'uint' | 'real' ) [ '<' <num> '>' ]
-    <num>       ::- 1 | 2 | ... | 127 | 128
-    <native>    ::- 'str' | 'string' | 'vec' | 'tuple' | 'map' | 'imap' |
-                    'omap' | 'set' | 'class'
-                    '!regexp' | '!ostream' | '!istream' | '!sstream'
+    <real-prim> ::- 'real<32>' | 'float' | 'real<64>' | 'double'
+    <int-prim>  ::- ( 'int' | 'uint' ) [ '<' <num> '>' ]
+    <inum>       ::- 1 | 2 | ... | 127 | 128
+    <native>    ::- 'str' | 'string' | 'vec' | 'tuple' | 'map' | 'set' |
+                    'class' | 'method' | 'function' | 'void' | 'nulltype' |
+                    'regexp' | 'ostream' | 'istream' | 'sstream' |
+                    'date' | 'ymd' | 'hms'
 
 ##### Native Types
 

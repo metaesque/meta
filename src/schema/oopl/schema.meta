@@ -959,19 +959,26 @@ config:
 
     secondary
     Attribute setup: : simplex = <empty> #:
-      A request to generate a baselang-specific setup unittest method.
+      This may appear in an instance-level lifecycle or a test-level
+      lifecycle. In both cases, it defines a setup method for the test
+      class.
 
     secondary
-    Attribute setupcase: : simplex = <empty> #:
-      A request to generate a baselang-specific setup testcase method.
+    Attribute clsetup: : simplex = <empty> #:
+      This may appear in an instance-level lifecycle or a test-level lifecycle.
+      In both cases, it defines a class-level setup method for the test class.
 
     secondary
     Attribute teardown: : simplex = <empty> #:
-      A request to generate a baselang-specific teardown unittest method.
+      This may appear in an instance-level lifecycle or a test-level
+      lifecycle. In both cases, it defines a teardown method for the test
+      class.
 
     secondary
-    Attribute teardowncase: : simplex = <empty> #:
-      A request to generate a baselang-specific teardown testcase method.
+    Attribute clteardown: : simplex = <empty> #:
+      This may appear in an instance-level lifecycle or a test-level lifecycle.
+      In both cases, it defines a class-level teardown method for the test
+      class.
 
   end Construct lifecycle;
 
@@ -1228,6 +1235,10 @@ config:
     Attribute aliases : str = <empty> aliases <@> #:
       A comma-separated list of aliases for the command.
 
+    secondary
+    Attribute interface: : complex = <empty> children <command|flag|arg> #:
+      A comma-separated list of aliases for the command.
+    
     Attribute comment:;
     Attribute scope: children <command|flag|arg|block>;
 

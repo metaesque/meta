@@ -69,7 +69,7 @@ config:
     Attribute comment:;
     Attribute synopsis:;
     Attribute config:;
-    Attribute scope: children <event|thread|character|section>;
+    Attribute scope: : complex children <event|thread|character|section>;
 
   end Construct story;
 
@@ -160,7 +160,8 @@ config:
     Attribute comment:;
     Attribute synopsis:;
     Attribute config:;
-
+    Attribute scope: : complex children <question>;
+    
   end Construct character;
 
   Construct event < _storyroot_ config:
@@ -225,7 +226,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: : complex;
+    Attribute scope: : complex children <view|question>;
 
   end Construct event;
 
@@ -298,7 +299,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: : simple;
+    Attribute scope: : complex children <question>;
 
   end Construct section;
 
@@ -324,4 +325,19 @@ config:
       Each line in the scope is a url.
   end Construct image;
 
+  Construct question < _storyroot_ #:
+    A question can be associated with a story, character, section, event, or
+    view, within a 'questions' complex block.
+  config:
+
+    primary
+    Attribute question : word = <auto> #:
+      A unique identifier for the question (within the current scope).
+
+    Attribute comment:;
+    Attribute synopsis: aliases <=:>;
+    Attribute config:;
+
+  end Construct question;
+  
 end MetaLanguage story;

@@ -1,4 +1,4 @@
-CC = /usr/local/wmh/gcc-7.2/bin/g++
+CC = /usr/local/wmh/gcc-8.2/bin/g++
 
 # For clang:
 #

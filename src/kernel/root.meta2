@@ -95,6 +95,12 @@ scope:
     /#     all classes and objects.
     _CLI = None
 
+    /# _ResourceMap: map
+    /#   Maps fully qualified resource names to explicit paths. The
+    /#   Object.Resource() method looks in this map before performing its
+    /#   default logic. Initialized by Object.Initialize().
+    _ResourceMap = None
+
     /# _Config: map
     /#   Initialized when ObjectMeta.Config() is first invoked. Intentionally
     /#   NOT a meta field of Object because that would produce one instance
@@ -105,6 +111,10 @@ scope:
     /# _ConfigPath: str
     /#   The path of the file storing the data in _Config.
     _ConfigPath = None
+
+    /# NaN: float
+    /#   The not-a-number value.
+    NaN = float('nan')
   end;
 
   class Object #:
@@ -138,7 +148,7 @@ scope:
 
     meta
     lifecycle #:
-      Do NOT add anything here ... it is executed for every subclass.
+      Do NOT add anything here! It is executed for every subclass.
       Do NOT add any meta-level fields either, as they implicitly get added
       here.
     scope:
@@ -149,12 +159,18 @@ scope:
       A means of initializing information that should be accessible from
       every meta-generated class.
     params:
-      var cli : any #:
+      var cli : any = null #:
         A metax.cli.Values instance obtained from instantiating a command
         line.
+      var resources : map = null #:
+        An explicit mapping for resources.
     scope:
       global _CLI
-      _CLI = cli
+      if cli is not None:
+        _CLI = cli
+      global _ResourceMap
+      if resources is not None:
+        _ResourceMap = resources
     end method Initialize;
 
     meta
@@ -163,6 +179,13 @@ scope:
     scope:
       return _CLI
     end method CLI;
+
+    meta
+    method ResourceMap : map #:
+      An explicit mapping from fully qualified resource name to path.
+    scope:
+      return _ResourceMap
+    end method ResourceMap;
 
     meta
     method Config : tuple<map,str> #:
@@ -234,48 +257,60 @@ scope:
       namespace_fqn, clsname = fqn.rsplit('.', 1)
       subparts = namespace_fqn.split('.')
 
-      /# TODO(wmh): Get this working in bazel!  Need to add to assocs
-      /# and define a BUILD target ... in oopl.tgz?
-      import metastrap
-      version = metastrap.Version
-      if version is None:
-        logging.warning('Implicitly invoking metastrap.Setup()')
-        metastrap.Setup()
-        version = metastrap.Version
-      
-      /# Convert the fqn to a relative path.
-      if os.getenv('TEST_SRCDIR', None) or os.getenv('IN_UNITTEST'):
-        /# We are in bazel running a test.  All such tests are invoked from
-        /# the directory containing WORKSPACE.
-        parts = [os.getcwd()] + subparts
+      fqrn = fqn + '.' + resource_id
+
+      result = None
+      resmap = cls.ResourceMap()
+      if resmap:
+        result = resmap.get(fqrn, None)
+      if result:
+        /# We've found an explicit match for the named resource in the
+        /# resources mapping, so we use it.
+        logging.info('Found explicit "%s" for %s', result, fqrn)
       else:
-        config, configpath = cls.Config()
-        if version == 'beta':
-          if config:
-            metarep = config['repository_path']
-          else:
-            metarep = os.getenv('METAREP')
-            if metarep is None:
-              metarep = '/Users/wmh/src/wmh/lib/meta2'
-              print 'WARNING: Temporarily using hardcoded repopath %s' % metarep
-            else:
-              metarep += '2'  # NEWSUFFIX
-          parts = [metarep, 'oopl', 'python']
+        /# TODO(wmh): Get this working in bazel!  Need to add to assocs
+        /# and define a BUILD target ... in oopl.tgz?
+        import metastrap
+        version = metastrap.Version
+        if version is None:
+          logging.warning('Implicitly invoking metastrap.Setup()')
+          metastrap.Setup()
+          version = metastrap.Version
+      
+        /# Convert the fqn to a relative path.
+        if os.getenv('TEST_SRCDIR', None) or os.getenv('IN_UNITTEST'):
+          /# We are in bazel running a test.  All such tests are invoked from
+          /# the directory containing WORKSPACE.
+          parts = [os.getcwd()] + subparts
         else:
-          parts = [config['src_root'], 'lib', 'versions', version, 'lib']
-        parts.extend(subparts)
-      /# CODETANGLE(resource_dir): In metax.c (parser.meta).
-      parts.append('resources')
-      /# CODETANGLE(resource_name): In metax.c (parser.meta).
-      parts.append('%s_%s' % (clsname, resource_id))
-      path = '/'.join(parts)
-      /# NOTE: Although I used to return the non-realpath version, allowing
-      /# the caller to decide how to proceed, there was never a time where I
-      /# wanted the non-realpath version, so I've decided to always convert.
-      /# This does introduce an inconsistency though, because paths that do not
-      /# exist will stay in non-realpath format. 
-      /# TODO(wmh): How to avoid using baselang I/O commands here??
-      return os.path.realpath(path)
+          config, configpath = cls.Config()
+          if version == 'beta':
+            if config:
+              metarep = config['repository_path']
+            else:
+              metarep = os.getenv('METAREP')
+              if metarep is None:
+                metarep = '/Users/wmh/src/wmh/lib/meta2'
+                print 'WARNING: Temporarily using hardcoded repopath %s' % metarep
+              else:
+                metarep += '2'  # NEWSUFFIX
+            parts = [metarep, 'oopl', 'python']
+          else:
+            parts = [config['src_root'], 'lib', 'versions', version, 'lib']
+          parts.extend(subparts)
+        /# CODETANGLE(resource_dir): In metax.c (parser.meta).
+        parts.append('resources')
+        /# CODETANGLE(resource_name): In metax.c (parser.meta).
+        parts.append('%s_%s' % (clsname, resource_id))
+        path = '/'.join(parts)
+        /# NOTE: Although I used to return the non-realpath version, allowing
+        /# the caller to decide how to proceed, there was never a time where I
+        /# wanted the non-realpath version, so I've decided to always convert.
+        /# This does introduce an inconsistency though, because paths that do not
+        /# exist will stay in non-realpath format. 
+        /# TODO(wmh): How to avoid using baselang I/O commands here??
+        result = os.path.realpath(path)
+      return result
     scope<cc>:
     scope<js>:
       return null;

@@ -137,8 +137,8 @@ scope:
           result = int(value)
 
       elif mytype in ('real', 'float', 'double'):
-        if isinstance(value, float):
-          result = value
+        if isinstance(value, (int, float)):
+          result = float(value)
         elif re.match(r'^\d*\.\d+$', value):
           result = float(value)
         elif re.match(r'^\d+$', value):

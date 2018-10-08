@@ -616,14 +616,14 @@ scope:
     setup<cc>:
       this->deblog(
         "Invoking " + this->name() + " setUp for " + this->methname());
-    setupcase<py>:
+    clsetup<py>:
       if meta.Debug():
         print 'Invoking %s SetUp' % meta.__name__
-    setupcase<js>:
+    clsetup<js>:
       if (/* metax.test.*/ MetaTestCase.Debug()) {
         console.log('Invoking ' + this.constructor.name + ' SetUp');
       }
-    setupcase<cc>:
+    clsetup<cc>:
       if (MetaTestCase->Debug()) {
         std::cout << "Invoking " << MetaTestCase->metaname() << " SetUp" << std::endl;
       }
@@ -681,14 +681,14 @@ scope:
       auto& strstreams = this->strstreamsRef();
       /# More here!
 
-    teardowncase<py>:
+    clteardown<py>:
       if meta.Debug():
         print 'Invoking %s TearDown' % cls.__name__
-    teardowncase<js>:
+    clteardown<js>:
       if (MetaTestCase.Debug()) {
         console.log('Invoking ' + this.constructor.name + ' TearDown');
       }
-    teardowncase<cc>:
+    clteardown<cc>:
       if (MetaTestCase->Debug()) {
         std::cerr << "Invoking " << MetaTestCase->metaname() << " TearDown" << std::endl;
       }

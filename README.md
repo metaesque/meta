@@ -48,8 +48,8 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
  - Meta avoids using environment variables where possible, instead preferring
    to store user-specific customizations in $HOME/.config/meta
    
- - When Meta compiles .meta source files into baselang source code, it
-   by default writes the baselang source code into a repository shared by
+ - When Meta compiles .meta source files into baselang source code,
+   by default it writes the baselang source code into a repository shared by
    all Meta source code across all base languages and all meta languages.
    The structure of that repository is:
 
@@ -244,14 +244,14 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
        cleaned up).
      - could mean "guaranteed not to be null and will be automatically gced".
      - consider how move semantics in C++ changes things
-     - ... more contemplated needed...
+     - ... more contemplation needed...
 - For class types:
    - We define "pass-by-reference" to mean "pass-by-pointer and guaranteed
      to not be null".
    - Most languages other than C++ do not have a distinction between
      pass-by-value, pass-by-reference and pass-by-pointer.
-     - they mostly pass-by-pointer but use '.' to access
-   - We can have the default by '*' or '&' or '&#'
+     - they are mostly pass-by-pointer but use '.' to access
+   - We can have the default be '*' or '&' or '&#'
       - pros of '*'
         - matches intuitions of most people
       - cons of '*'
@@ -283,7 +283,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
   - if all native types are class types in baselangs, it makes sense that 
     native types would use the same default as for class types, but I'm not
     sure all native types will be baselang class types.
-     - more contemplated needed.
+     - more contemplation needed.
 
 ## Implementing the 'str' type
 
@@ -300,7 +300,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
     - *str : can be null
     - &str : cannot be null
     - @str : storage space
-    - str: same as *str
+    - str: same as &#str?
 
 - In languages like Perl and Python, which have good support for text
   manipulation, strings are immutable and conditionally interned.
@@ -312,7 +312,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
         are interned, but my experiments show that
           'foo!' is 'foo!'
         returns True, and it appears that ALL literal strings
-        are returned (even a string of 1025 'o's is interned)
+        are interned (even a string of 1025 'o's is interned)
         
    - the conditional internment allows for O(1) equality testing between strings
      if both are interned (falling back to the O(N) algorithm if either isn't
@@ -341,7 +341,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
       - creating string_vew from string shares state: O(1)
       
    - implementing 'str' using 'const char*'
-      - no length, not convenient methods for various things.
+      - no length, no convenient methods for various things.
       - not viable
       
    - implementing 'str' using 'const std::string'
@@ -1478,7 +1478,7 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
    - 'auto' type
 
 - NamespaceConstruct.expandMeta() needs updating so that each namespace has an
-  'id' with not dots in it. The code in
+  'id' with no dots in it. The code in
      NamespaceConstruct.createImplicitParents()
   was designed for use in the namespace initializer, but similar code can be
   crafter for expandMeta. 
@@ -1592,6 +1592,9 @@ Define metax.error, a namespace consisting solely of exception classes.
   because Meta can find the parent definition to determine that param
   'a' has type int (and can insert parent comment block, etc.) 
 
+  NOTE: may need to make 'super' a secondary attribute, not feature attribute,
+  in order to specify position within super() call.
+
 - Provide a syntax on 'var' within 'params:' to indicate that the
   default value should be "whatever the default of the parent invocation is"
   for use in super calls.
@@ -1603,16 +1606,16 @@ Define metax.error, a namespace consisting solely of exception classes.
           super var b : int = 3;
           super var c : int = super;
      this would be equivalent to
-        super (a, b=b)
+        super (a, b=3)
      (the c arg is marked as 'use default from super' so we don't
       pass it to the super call).
 
 - Support literal syntax for bases other than 10.
-     723R8
-     010001100010100R2
-     ab8373aR16
-     1234R10
-   or
+     723@8
+     010001100010100@2
+     ab8373a@16
+     1234@10
+   or (not as flexible, cannot handle @7, @23, etc.)
      0o723
      0b010001100010100
      0xab8373a
