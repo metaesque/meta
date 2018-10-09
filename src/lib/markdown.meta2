@@ -1114,11 +1114,9 @@ scope:
       test.iseq(1, len(book.children()))
     end method loadBook;
 
-    command wmd scope:
-
+    command wmd interface:
       flag destdir : str = '' #:
         Where to write output files.
-
       flag aspect @ a : str = 'html' #:
         How to format the input.
         TODO(wmh): The metax.root.flags.Flag class understands enum types,
@@ -1127,13 +1125,10 @@ scope:
         Consider changing the type, or provide some other mechanism for being
         able to specify an enum type like:
           enum<title|title*|ascii|text|canonical|html>
-
       flag debug : bool = false #:
         If true, print out a summary of each parsed file.
-
-      block #:
-        Initial setup.
-      scope:
+    scope:
+      if True:
         def FilterFiles(filelist):
           mds = []
           others = []

@@ -757,6 +757,7 @@ scope:
 
       if debug:
         print 'DEBUG: Starting instantiate with %s and %s' % (self.names(), argv)
+        self.show()
 
       if parent is None:
         /# For the top-level Command instance, we set the name to the
@@ -782,6 +783,8 @@ scope:
       while index < argc:
         item = argv[index]
         nextitem = argv[index+1] if index < nm1 else None
+        if debug:
+          print 'Working on index=%d item="%s" next="%s"' % (index, item, nextitem)
         if item[0] == '-':
           /# We are parsing a flag.
           m = fre.match(item)
@@ -863,6 +866,7 @@ scope:
                 (result.name(), flagname))
               break
         else:
+          /# This item is either a subcommand or a positional arg.
           command = result.findCommand(item)
           if command:
             /# We are parsing a subcommand.
@@ -874,6 +878,8 @@ scope:
             index = argc
             break
           else:
+            /# This must be an argument. We see if one is defined for arg
+            /# index 'current_arg_index'.
             arg = result.findArg(current_arg_index)
             if arg:
               if debug:
@@ -890,6 +896,9 @@ scope:
                     print 'DEBUG: item "%s" is arg "%s"' % (item, arg.name())
                 if start:
                   arg.startIs(arg.value())
+
+                /# Advance current_arg_index
+                current_arg_index += 1
 
                 /# How many values were consumed.
                 diff = next_index - index
@@ -945,82 +954,101 @@ scope:
           efp.write('  ' + error + '\n')
         result = None
 
+      if debug:
+        self.show()
+
       return result              
-    test:
-      command = test.faux
-      test.iseq('faux', command.fqn())
-      command.show(fp=test.fp())
-      before = test.out()
+    tests:
+      testx t1 scope:
+        command = test.faux
+        test.iseq('faux', command.fqn())
+        command.show(fp=test.fp())
+        before = test.out()
 
-      res = command.instantiate(
-        ['./person', '--name', 'Alice', '--gender=female', '--deps', '1',
-         '-h', '1.63', 'image', '300'],
-        start=True)
-      res.show(fp=test.fp())
-      after = test.out()
-      test.iseqvec(['./person', 'image'], res.names())
+        res = command.instantiate(
+          ['./person', '--name', 'Alice', '--gender=female', '--deps', '1',
+           '-h', '1.63', 'image', '300'],
+          start=True)
+        res.show(fp=test.fp())
+        after = test.out()
+        test.iseqvec(['./person', 'image'], res.names())
 
-      test.iseqtext(
-        >|"""faux: A command with a flag and arg of each type.
-        >|  --deps                 0                              None       =         
-        >|  --gender               undef                          None       =         
-        >|  --height               1.87                           None       =         
-        >|  --name                 Bob                            None       =         
-        >|""",
-        before)
+        test.iseqtext(
+          >|"""faux: A command with a flag and arg of each type.
+          >|  --deps                 0                              None       =         
+          >|  --gender               undef                          None       =         
+          >|  --height               1.87                           None       =         
+          >|  --name                 Bob                            None       =         
+          >|""",
+          before)
 
-      test.iseqtext(
-        >|"""image: Image processing.
-        >|  --deps                 1                              =          0         
-        >|  --gender               female                         =          undef     
-        >|  --height               1.63                           =          1.87      
-        >|  --name                 Alice                          =          Bob       
-        >|  width                  300                            =          None      
-        >|  length                 600                            None       =         
-        >|  color                  red                            None       =         
-        >|""",
-        after)
+        test.iseqtext(
+          >|"""image: Image processing.
+          >|  --deps                 1                              =          0         
+          >|  --gender               female                         =          undef     
+          >|  --height               1.63                           =          1.87      
+          >|  --name                 Alice                          =          Bob       
+          >|  width                  300                            =          None      
+          >|  length                 600                            None       =         
+          >|  color                  red                            None       =         
+          >|""",
+          after)
 
-      res = command.instantiate(['./person', 'list', 'a', 'b', 'c'], debug=False)
-      res.show(fp=test.fp())
+        res = command.instantiate(['./person', 'list', 'a', 'b', 'c'], debug=False)
+        res.show(fp=test.fp())
 
-      test.iseqtext(
-        >|"""list: Image listing
-        >|  --deps                 1                              =          0         
-        >|  --gender               female                         =          undef     
-        >|  --height               1.63                           =          1.87      
-        >|  --name                 Alice                          =          Bob       
-        >|  files                  ['a', 'b', 'c']                None       []        
-        >|""",
-        test.out())
+        test.iseqtext(
+          >|"""list: Image listing
+          >|  --deps                 1                              =          0         
+          >|  --gender               female                         =          undef     
+          >|  --height               1.63                           =          1.87      
+          >|  --name                 Alice                          =          Bob       
+          >|  files                  ['a', 'b', 'c']                None       []        
+          >|""",
+          test.out())
 
-      /# Verify that command aliases work.
-      res2 = command.instantiate(['./person', 'dir', 'a', 'b', 'c'], debug=False)
-      test.iseq('list', res2.name())
+        /# Verify that command aliases work.
+        res2 = command.instantiate(['./person', 'dir', 'a', 'b', 'c'], debug=False)
+        test.iseq('list', res2.name())
 
-      /# The following code sets of a similar situation to what is used in
-      /# actual code between the 'meta2' executable front-end and the
-      /# metax.c.Compiler.Entry() entry point.
-      /#  - we create a Command instance in 'meta2' to parse some initial flags
-      /#  - then we call metax.c.Compiler.Entry which creates another Command
-      /#    instance (linked to the command created in 'meta2' so its flags
-      /#    can be seen) and various child Command instances.
-      /#  - then we instantiate the top-level command created within
-      /#    metax.c.Compiler.Entry WITHOUT passing 'parent' in (which means
-      /#    the name field will be tromped, and was hiding an error in logic).
-      top_command = metax.cli.Command('meta2')
-      command = metax.cli.Command(
-        'main', parent=top_command, 
-        summary='The public interface to the Meta compiler.')
-      hierarchy_command = command.newCommand(
-        'hierarchy', aliases='hier', summary='Print hierarchy')
-      hierarchy_command.newArg(
-        'rest', multi=True, summary='Leftover args.')
-      res = command.instantiate(
-        ['dummy', 'hierarchy', 'a.b'], start=True, debug=False)
-      test.iseq('hierarchy', res.name())
-      test.iseq(['a.b'], res.findPart('rest').value())
+        /# The following code sets of a similar situation to what is used in
+        /# actual code between the 'meta2' executable front-end and the
+        /# metax.c.Compiler.Entry() entry point.
+        /#  - we create a Command instance in 'meta2' to parse some initial flags
+        /#  - then we call metax.c.Compiler.Entry which creates another Command
+        /#    instance (linked to the command created in 'meta2' so its flags
+        /#    can be seen) and various child Command instances.
+        /#  - then we instantiate the top-level command created within
+        /#    metax.c.Compiler.Entry WITHOUT passing 'parent' in (which means
+        /#    the name field will be tromped, and was hiding an error in logic).
+        top_command = metax.cli.Command('meta2')
+        command = metax.cli.Command(
+          'main', parent=top_command, 
+          summary='The public interface to the Meta compiler.')
+        hierarchy_command = command.newCommand(
+          'hierarchy', aliases='hier', summary='Print hierarchy')
+        hierarchy_command.newArg(
+          'rest', multi=True, summary='Leftover args.')
+        res = command.instantiate(
+          ['dummy', 'hierarchy', 'a.b'], start=True, debug=False)
+        test.iseq('hierarchy', res.name())
+        test.iseq(['a.b'], res.findPart('rest').value())
 
+      testx t2 scope:
+        command = metax.cli.Command('demo', parent=None, summary='', desc='')
+        command.newFlag(
+          'name', mytype='str', default='Bob', aliases='n',
+          summary='The name of the person.')
+        command.newArg('height', mytype='float', default=None)
+        command.newArg('weight', mytype='float', default=None)
+        command.newArg('rest', multi=True, summary='Leftover args.')
+
+        res = command.instantiate(
+          ['demo', '1.87', '190', 'extra', 'args'], start=True, debug=False)
+        values = res.asValues()
+        test.iseq('Bob', values.name)
+        test.isapprox(1.87, values.height)
+        test.isapprox(190, values.weight)
     end method instantiate;
 
     method findValue : any #:
@@ -1077,7 +1105,7 @@ scope:
         str
         bool
         int
-        real or float or double
+        real<n> or float or double
         enum<val1,val2,...>
         list<T> for T above.
 
@@ -1264,6 +1292,7 @@ scope:
     scope:
 
       if self.ismulti():
+        /# This is a multi-valued arg (i.e. type 'list<...>')
         value_list = values[index:]
         realval = self.typecheck(value_list)
         if realval is None:
@@ -1276,6 +1305,7 @@ scope:
           result = len(values)
           self.valueIs(realval)
       else:
+        /# This is a single-valued arg.
         value = values[index]
         realval = self.typecheck(value)
         if realval is None:
@@ -1465,7 +1495,11 @@ scope:
   class Values #:
     A wrapper around a Command instance providing accessing to flags and args.
   scope:
-    field _command_ : Command;
+
+    field _command_ : Command #:
+      TODO(wmh): Change this to metax__command and have the rule that programmers
+      should never use 'metax__' or 'Metax__' as a prefix in any attribute
+      value (maybe even enforce that rule).
 
     lifecycle params:
       var command -> _command_;

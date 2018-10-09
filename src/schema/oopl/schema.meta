@@ -1227,6 +1227,28 @@ config:
         software needed by the binary being implicitly recompiled. One must
         recompile the code explicitly.
 
+    feature
+    Attribute kind : <inline|named> = inline #:
+      Allows us to indicate if a command should generate a method or not.
+    config:
+      FeatureValue inline #:
+        The compiled code does not introduce a lexical scope, so the lines
+        in the block flow from previous lines without change.
+      FeatureValue named #:
+        An instance-level method is defined to implement the block. The method
+        is defined on the class within which the 'command' construct was found,
+        and accepts one argument of type metax.root.flags.Values representing
+        the instantiated flags (and associated Command). Note that only commands
+        of kind 'instance' can be invoked outside of the method implementing the
+        command construct (blocks of kind 'virtual' or 'scoped' are local to the
+        top-level command).
+
+        TODO(wmh): Provide support for returning values.  Although one
+        can use 'return' in such blocks, if the block is changed to
+        virtual, it will return from the entire surrounding function,
+        which isn't usually what is desired. A safer mechanism that works
+        for both instance and virtual blocks is preferred.
+
     primary
     Attribute command : id = <required> #:
       The name of the command.
@@ -1240,7 +1262,7 @@ config:
       A comma-separated list of aliases for the command.
     
     Attribute comment:;
-    Attribute scope: children <command|flag|arg|block>;
+    Attribute scope: : simple;
 
   end Construct command;
 
@@ -1293,7 +1315,7 @@ config:
   config:
 
     feature
-    Attribute kind : <virtual|scoped|named> = inline #:
+    Attribute kind : <virtual|scoped|named> = virtual #:
       Identifies one of a variety of mutually exclusive kinds of methods.
 
       TODO(wmh): The fact that executables have a feature attribute named kind',

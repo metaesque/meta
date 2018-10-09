@@ -1111,10 +1111,9 @@ scope:
     command wunits #:
       Wade's units.
     scope:
-      block ::
-        for line in cli.rest:
-          q = Quantity.New(line)
-          print '%-40s = %s' % (line, q.asStr())
+      for line in cli.rest:
+        q = Quantity.New(line)
+        print '%-40s = %s' % (line, q.asStr())
     end command wunits;
 
     test

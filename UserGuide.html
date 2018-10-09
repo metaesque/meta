@@ -15,10 +15,10 @@
 
 <ul>
   <li>
-  <p>this variable should be an absolute path to a directory</p>
+  this variable should be an absolute path to a directory
   </li>
   <li>
-  <p>this directory indicates where Meta is installed on the local machine</p>
+  this directory indicates where Meta is installed on the local machine
   </li>
 </ul>
 
@@ -240,18 +240,18 @@ Attributes comes in three flavors: <ol></p>
   <p><b>feature attributes</b>:</p>
   <ul>
     <li>
-    <p>Keys are always optional</p>
+    Keys are always optional
     </li>
     <li>
-    <p>Values come from a pre-defined fixed set of words</p>
+    Values come from a pre-defined fixed set of words
     </li>
     <li>
-    <p>These attributes always appear <em>before</em> the primary attribute</p>
+    These attributes always appear <em>before</em> the primary attribute
     </li>
     <li>
-    <p>Example: the {visibility} attribute is defined on various
+    Example: the {visibility} attribute is defined on various
     Meta constructs, with values limitied to (for example),
-    {public}, {protected} and {private}.</p>
+    {public}, {protected} and {private}.
     </li>
   </ul>
   </li>
@@ -259,22 +259,22 @@ Attributes comes in three flavors: <ol></p>
   <p><b>primary attribute</b>:</p>
   <ul>
     <li>
-    <p>The primary attribute key is the name of a construct, and is always
+    The primary attribute key is the name of a construct, and is always
     present (it or an alias), as it defines what other attributes are legal
-    within the construct.</p>
+    within the construct.
     </li>
     <li>
-    <p>The primary attribute value is a unique identifier for this construct
+    The primary attribute value is a unique identifier for this construct
     (unique only amongst all over constructs at the same <em>block
     level</em>). Some constructs have optional primary values
-    (if not provided, Meta auto-assigns a unique id). </p>
+    (if not provided, Meta auto-assigns a unique id). 
     </li>
     <li>
-    <p>Each construct has exactly one primary attribute. </p>
+    Each construct has exactly one primary attribute. 
     </li>
     <li>
-    <p>Examples include
-    {class} {Person}, {field} {weight}, and {method} {BMI}. </p>
+    Examples include
+    {class} {Person}, {field} {weight}, and {method} {BMI}. 
     </li>
   </ul>
   </li>
@@ -282,32 +282,32 @@ Attributes comes in three flavors: <ol></p>
   <p><b>secondary attributes</b>:</p>
   <ul>
     <li>
-    <p>Keys are usually required but sometimes optional.</p>
+    Keys are usually required but sometimes optional.
     </li>
     <li>
-    <p>Values can vary from a simple identifier to a complex block
-    containing arbitrarily nested sub-constructs).</p>
+    Values can vary from a simple identifier to a complex block
+    containing arbitrarily nested sub-constructs).
     </li>
     <li>
-    <p>Secondary attributes always appear <em>after</em> the primary attribute.</p>
+    Secondary attributes always appear <em>after</em> the primary attribute.
     </li>
     <li>
-    <p>A simple example is the {returns} secondary attribute of the
+    A simple example is the {returns} secondary attribute of the
     {method} construct, whose value is a Meta type (more on types in
-    Meta later).</p>
+    Meta later).
     </li>
     <li>
-    <p>A more complex example is the {scope} secondary attribute, whose
+    A more complex example is the {scope} secondary attribute, whose
     value is a block of zero or more constructs. The type of this
     attribute is referred to as a <em>complex-block</em> to distinguish it
     from something like the {comment} secondary attribute whose value
     is a block of zero or more lines of arbitrary text, referred to
-    as a _simple-block_.</p>
+    as a _simple-block_.
     </li>
     <li>
-    <p>Meta provides various secondary attribute value types, ranging
+    Meta provides various secondary attribute value types, ranging
     from ids to words to strings to lists of ids to simple-blocks
-    and complex-blocks.</p>
+    and complex-blocks.
     </li>
   </ul>
   </li>
@@ -357,17 +357,17 @@ efficiently is sometimes another matter).</p>
 <p>Meta is:</p>
 <ul>
   <li>
-  <p>a high-level source-based programming environment for augmenting
-  and unifying families of languages.</p>
+  a high-level source-based programming environment for augmenting
+  and unifying families of languages.
   </li>
   <li>
-  <p>a flexible, unified, general-purpose syntax for describing data and
-  code.</p>
+  a flexible, unified, general-purpose syntax for describing data and
+  code.
   </li>
   <li>
-  <p>a collection of meta-languages, each of which represents a
+  a collection of meta-languages, each of which represents a
   hierarchy of languages for capturing the similiarites between
-  members of a family of related languages.</p>
+  members of a family of related languages.
   </li>
 </ul>
 
@@ -376,22 +376,22 @@ that provides:</p>
 
 <ul>
   <li>
-  <p>Increased expressivity (do more by typing less)</p>
+  Increased expressivity (do more by typing less)
   </li>
   <li>
-  <p>Augmentation</p>
+  Augmentation
   </li>
   <li>
-  <p>Unification</p>
+  Unification
   </li>
   <li>
-  <p>Readability</p>
+  Readability
   </li>
   <li>
-  <p>Writability</p>
+  Writability
   </li>
   <li>
-  <p>Adjacency (related code is adjacent instead of separated)</p>
+  Adjacency (related code is adjacent instead of separated)
   </li>
 </ul>
 
@@ -560,16 +560,16 @@ Meta(Oopl).</p>
 <p>Meta(Oopl)\* introduces statement-level constructs:</p>
 <ul>
   <li>
-  <p>{var}: declare a local variable (also used in parameters)</p>
+  {var}: declare a local variable (also used in parameters)
   </li>
   <li>
-  <p>{call}: invoke a method (or access a field)</p>
+  {call}: invoke a method (or access a field)
   </li>
   <li>
-  <p>{loop}: loop (over, while/until, from/to/step)</p>
+  {loop}: loop (over, while/until, from/to/step)
   </li>
   <li>
-  <p>{cond}: conditional code (if/elif/else, switch, etc.)</p>
+  {cond}: conditional code (if/elif/else, switch, etc.)
   </li>
 </ul>
 
@@ -577,28 +577,28 @@ Meta(Oopl).</p>
 following forms:</p>
 <ul>
   <li>
-  <p>literal number</p>
+  literal number
   </li>
   <li>
-  <p>literal string</p>
+  literal string
   </li>
   <li>
-  <p>literal hash</p>
+  literal hash
   </li>
   <li>
-  <p>literal list</p>
+  literal list
   </li>
   <li>
-  <p>literal parameter list</p>
+  literal parameter list
   </li>
   <li>
-  <p>variable</p>
+  variable
   </li>
   <li>
-  <p>callsite</p>
+  callsite
   </li>
   <li>
-  <p>binary operator</p>
+  binary operator
   </li>
 </ul>
 
@@ -616,17 +616,17 @@ secondary attributes:</p>
 
 <ul>
   <li>
-  <p>{on}, which specifies the receiver of the message.</p>
+  {on}, which specifies the receiver of the message.
   </li>
   <li>
-  <p>{message}, which specifies the name of the method being invoked.</p>
+  {message}, which specifies the name of the method being invoked.
   </li>
   <li>
-  <p>{arglist}, which specifies the args to the list.</p>
+  {arglist}, which specifies the args to the list.
   </li>
   <li>
-  <p>... various other attributes to handle more complex calls, for example
-  when an argument is another method invocation, etc.</p>
+  ... various other attributes to handle more complex calls, for example
+  when an argument is another method invocation, etc.
   </li>
 </ul>
 
@@ -635,29 +635,29 @@ the first line can be improved:</p>
 
 <ul>
   <li>
-  <p>By providing the abbrev {@} for {call}, we can indicate the {call}
-  construct with a single character.</p>
+  By providing the abbrev {@} for {call}, we can indicate the {call}
+  construct with a single character.
   </li>
   <li>
-  <p>By making the attribute value of {call} be optional (auto-assigned
+  By making the attribute value of {call} be optional (auto-assigned
   to a unique id by the meta compiler), we can avoid having to name
   every callsite, while still allowing one to do so when it is useful
-  (for aspect oriented programming, for example).</p>
+  (for aspect oriented programming, for example).
   </li>
   <li>
-  <p>By providing the abbrev {.} for {message}, we get to use
-  syntax familiar to users of most OO languages.</p>
+  By providing the abbrev {.} for {message}, we get to use
+  syntax familiar to users of most OO languages.
   </li>
   <li>
-  <p>By providing the abbrev {(} for {arglist}, we
+  By providing the abbrev {(} for {arglist}, we
   get what looks like a simple parethesized list while still abiding
-  by our everything-is-a-construct syntax.</p>
+  by our everything-is-a-construct syntax.
   </li>
   <li>
-  <p>By providing a special secondary attribute {endarglist} with abbrev
+  By providing a special secondary attribute {endarglist} with abbrev
   {)} and optional value, we can finish the parethensized list started
   above. This is admittedly rather "esoteric", but allows us to get
-  close to the syntax used in most programming languages).</p>
+  close to the syntax used in most programming languages).
   </li>
 </ul>
 
@@ -665,17 +665,17 @@ the first line can be improved:</p>
 
 <ul>
   <li>
-  <p>By allowing for optional attribute keys, Meta can support
-  situations where the {on} attribute key is not present.</p>
+  By allowing for optional attribute keys, Meta can support
+  situations where the {on} attribute key is not present.
   </li>
   <li>
-  <p>By not requiring whitespace between tokens when they can be
+  By not requiring whitespace between tokens when they can be
   uniquely identified without whitespace, we manage to get syntax
   that is only one character more verbose than exists in most
   languages. However, this only applies for trivial method
   invocations. For more complex invocations where the receiver or
   args are themselves method calls or expressions, Meta(Oopl)\*
-  syntax is inevitable more cumbersome than base-language syntax.</p>
+  syntax is inevitable more cumbersome than base-language syntax.
   </li>
 </ul>
 
@@ -767,21 +767,21 @@ meta-language consists of:</p>
 
 <ul>
   <li>
-  <p>a collection of zero or more related and similar pre-existing
-  languages (<em>base languages</em>).</p>
+  a collection of zero or more related and similar pre-existing
+  languages (<em>base languages</em>).
   </li>
   <li>
-  <p>a schema for describing Meta-level constructs relevant to the
-  Meta-Language being defined.</p>
+  a schema for describing Meta-level constructs relevant to the
+  Meta-Language being defined.
   </li>
   <li>
-  <p>a set of rules for transforming the MetaLanguage syntax into
-  lower-level syntax.</p>
+  a set of rules for transforming the MetaLanguage syntax into
+  lower-level syntax.
   </li>
   <li>
-  <p>a collection of features guaranteed to be available in the Meta
+  a collection of features guaranteed to be available in the Meta
   language, even if one or more of those features are not intrinsically
-  available in the base language itself.</p>
+  available in the base language itself.
   </li>
 </ul>
 
@@ -789,28 +789,28 @@ meta-language consists of:</p>
 
 <ul>
   <li>
-  <p><b>Oopl</b>: the family of object-oriented programming languages. Base
-  languages include: C++, Java, Python, Perl, etc.</p>
+  <b>Oopl</b>: the family of object-oriented programming languages. Base
+  languages include: C++, Java, Python, Perl, etc.
   </li>
   <li>
-  <p><b>Func</b>: the family of functional programming languages. Base
-  languages include: Lisp, Haskel, Erlang, Scheme, etc.</p>
+  <b>Func</b>: the family of functional programming languages. Base
+  languages include: Lisp, Haskel, Erlang, Scheme, etc.
   </li>
   <li>
-  <p><b>Proc</b>: the family of procedural programming languages. Base
-  languages include: C, Pascal, Fortran, Cobol, etc.</p>
+  <b>Proc</b>: the family of procedural programming languages. Base
+  languages include: C, Pascal, Fortran, Cobol, etc.
   </li>
   <li>
-  <p><b>Doc</b>: the family of type-setting languages. Base languages include:
-  LaTeX, HTML, Markdown, Wiki markup, etc.</p>
+  <b>Doc</b>: the family of type-setting languages. Base languages include:
+  LaTeX, HTML, Markdown, Wiki markup, etc.
   </li>
   <li>
-  <p><b>Story</b>: a use-case not involving the augmentation of pre-existing
+  <b>Story</b>: a use-case not involving the augmentation of pre-existing
   languages, but rather using the Meta syntax to capture syntactic
   structure (defining constructs like chapters, events, persons, etc.)
   and a means of converting this syntax into something else (e.g. html,
   latex, etc.). In some ways this is similar to Meta(Doc), but specialized
-  to the writing of a story.</p>
+  to the writing of a story.
   </li>
 </ul>
 
@@ -822,13 +822,13 @@ meta-language consists of:</p>
   <p>Augment existing languages</p>
   <ul>
     <li>
-    <p>Make it possible to say more with less (caveat: some simple things
+    Make it possible to say more with less (caveat: some simple things
     are more concise in baselangs in Meta, but as those simple things
-    turn into more complex things, Meta syntax is often more concise)</p>
+    turn into more complex things, Meta syntax is often more concise)
     </li>
     <li>
-    <p>Ensure that a core set of features exists in Meta<L> regardless of
-    whether it exists explicitly in L.</p>
+    Ensure that a core set of features exists in Meta<L> regardless of
+    whether it exists explicitly in L.
     </li>
   </ul>
   </li>
@@ -836,13 +836,13 @@ meta-language consists of:</p>
   <p>Unify existing languages</p>
   <ul>
     <li>
-    <p>Make it easy to implement code in one language and then incrementally
-    migrate that code to a different language</p>
+    Make it easy to implement code in one language and then incrementally
+    migrate that code to a different language
     </li>
     <li>
-    <p>Make it easy to keep code and native code together and provide the
+    Make it easy to keep code and native code together and provide the
     glue for linking said code together (e.g. Java JNI, Python extensions,
-    Perl XSUBs.</p>
+    Perl XSUBs.
     </li>
   </ul>
   </li>
@@ -850,20 +850,20 @@ meta-language consists of:</p>
   <p>General</p>
   <ul>
     <li>
-    <p>Accessing fields directly breaks encapsulation ... always use accessors</p>
+    Accessing fields directly breaks encapsulation ... always use accessors
     </li>
     <li>
-    <p>Accessors without visibility scoping allows encapsulation to be broken,
-    so visibility scoping is crucial</p>
+    Accessors without visibility scoping allows encapsulation to be broken,
+    so visibility scoping is crucial
     </li>
     <li>
     <p>If you always do something, Meta should automatically do it for you:</p>
     <ul>
       <li>
-      <p>print out this object</p>
+      print out this object
       </li>
       <li>
-      <p>how big is this object?</p>
+      how big is this object?
       </li>
     </ul>
     </li>
@@ -872,41 +872,41 @@ meta-language consists of:</p>
     amount of auto-generation to occur:</p>
     <ul>
       <li>
-      <p>UML diagrams</p>
+      UML diagrams
       </li>
       <li>
-      <p>object print and serialize/deserialize</p>
+      object print and serialize/deserialize
       </li>
       <li>
-      <p>object size</p>
+      object size
       </li>
     </ul>
     </li>
     <li>
-    <p>Anything worth doing for L is many times more worth doing for Meta<L>
-    as it leads to having it done in Meta* and thus for all Meta<L></p>
+    Anything worth doing for L is many times more worth doing for Meta<L>
+    as it leads to having it done in Meta* and thus for all Meta<L>
     </li>
     <li>
     <p>Psychology plays an important role in how a program is written: </p>
     <ul>
       <li>
-      <p>the easier it is to do something, the more likely it is to be used</p>
+      the easier it is to do something, the more likely it is to be used
       </li>
       <li>
-      <p>the more difficult it is to do something, the less likely it is to
-      be used.</p>
+      the more difficult it is to do something, the less likely it is to
+      be used.
       </li>
       <li>
-      <p>turing complete does not mean turing easy ... things possible in
+      turing complete does not mean turing easy ... things possible in
       baselangs are often never done because of how much work would be
       needed to do it ... Meta hides away much of the tedium to make such
-      things much easier.</p>
+      things much easier.
       </li>
       <li>
       <p>Examples:</p>
       <ul>
         <li>
-        <p>functions and classes within methods, functions, etc.</p>
+        functions and classes within methods, functions, etc.
         </li>
       </ul>
       </li>
@@ -927,16 +927,16 @@ subsections below. Here is a quick summary:</p>
 
 <ul>
   <li>
-  <p>Documentation as a first-class citizen</p>
+  Documentation as a first-class citizen
   </li>
   <li>
   <p>Source Code Customization/Canonicalization </p>
   <ul>
     <li>
-    <p>Customization</p>
+    Customization
     </li>
     <li>
-    <p>Canonicalization</p>
+    Canonicalization
     </li>
   </ul>
   </li>
@@ -944,16 +944,16 @@ subsections below. Here is a quick summary:</p>
   <p>The Meta Type System </p>
   <ul>
     <li>
-    <p>Type Syntax</p>
+    Type Syntax
     </li>
     <li>
-    <p>Native Types</p>
+    Native Types
     </li>
     <li>
-    <p>Primitive Types</p>
+    Primitive Types
     </li>
     <li>
-    <p>Static vs Dynamic Typing</p>
+    Static vs Dynamic Typing
     </li>
   </ul>
   </li>
@@ -961,27 +961,27 @@ subsections below. Here is a quick summary:</p>
   <p>The Meta Library </p>
   <ul>
     <li>
-    <p>Units of Measurement</p>
+    Units of Measurement
     </li>
   </ul>
   </li>
   <li>
-  <p>Meta Schemas: Meta in Meta </p>
+  Meta Schemas: Meta in Meta 
   </li>
   <li>
-  <p>Native Methods </p>
+  Native Methods 
   </li>
   <li>
-  <p>Unit Tests</p>
+  Unit Tests
   </li>
   <li>
   <p>Overloading</p>
   <ul>
     <li>
-    <p>Operators</p>
+    Operators
     </li>
     <li>
-    <p>Methods</p>
+    Methods
     </li>
   </ul>
   </li>
@@ -989,16 +989,16 @@ subsections below. Here is a quick summary:</p>
   <p>First-class objects</p>
   <ul>
     <li>
-    <p>namespaces</p>
+    namespaces
     </li>
     <li>
-    <p>classes</p>
+    classes
     </li>
     <li>
-    <p>methods/functions</p>
+    methods/functions
     </li>
     <li>
-    <p>enums</p>
+    enums
     </li>
   </ul>
   </li>
@@ -1006,7 +1006,7 @@ subsections below. Here is a quick summary:</p>
   <p>Reflection In Meta</p>
   <ul>
     <li>
-    <p>Meta Classes</p>
+    Meta Classes
     </li>
   </ul>
   </li>
@@ -1014,10 +1014,10 @@ subsections below. Here is a quick summary:</p>
   <p>Inheritance</p>
   <ul>
     <li>
-    <p>One class, many interfaces</p>
+    One class, many interfaces
     </li>
     <li>
-    <p>Multiple-class inheritance</p>
+    Multiple-class inheritance
     </li>
   </ul>
   </li>
@@ -1025,39 +1025,39 @@ subsections below. Here is a quick summary:</p>
   <p>Higher-Level Syntax</p>
   <ul>
     <li>
-    <p>Lifecycle</p>
+    Lifecycle
     </li>
     <li>
-    <p>Behaviors: multi-method dispatch</p>
+    Behaviors: multi-method dispatch
     </li>
     <li>
-    <p>pre and post attributes</p>
+    pre and post attributes
     </li>
   </ul>
   </li>
   <li>
-  <p>Access Control</p>
+  Access Control
   </li>
   <li>
-  <p>Regular Expressions</p>
+  Regular Expressions
   </li>
   <li>
-  <p>Multithreading</p>
+  Multithreading
   </li>
   <li>
   <p>The Power Of Fields</p>
   <ul>
     <li>
-    <p>Serialization (protobufs)</p>
+    Serialization (protobufs)
     </li>
     <li>
-    <p>Size analysis</p>
+    Size analysis
     </li>
     <li>
-    <p>Copying and Moving</p>
+    Copying and Moving
     </li>
     <li>
-    <p>UML diagram generation</p>
+    UML diagram generation
     </li>
   </ul>
   </li>
@@ -1065,10 +1065,10 @@ subsections below. Here is a quick summary:</p>
   <p>The Power of Parameters</p>
   <ul>
     <li>
-    <p>Initializer parameters and fields</p>
+    Initializer parameters and fields
     </li>
     <li>
-    <p>Positional and keyword arguments</p>
+    Positional and keyword arguments
     </li>
   </ul>
   </li>
@@ -1076,19 +1076,19 @@ subsections below. Here is a quick summary:</p>
   <p>Consistency Across Base-Languages</p>
   <ul>
     <li>
-    <p>How to compile source code</p>
+    How to compile source code
     </li>
     <li>
-    <p>How to run unittests </p>
+    How to run unittests 
     </li>
     <li>
-    <p>How to invoke a REPL</p>
+    How to invoke a REPL
     </li>
     <li>
-    <p>How to perform profiling</p>
+    How to perform profiling
     </li>
     <li>
-    <p>How to perform coverage analysis</p>
+    How to perform coverage analysis
     </li>
   </ul>
   </li>
@@ -1142,7 +1142,7 @@ between two completely different customized views).</p>
 
 <h4>The Meta Type System</h4>
 
-<p>The type system of a language is one of it's most critical aspects.
+<p>The type system of a language is one of its most critical aspects.
 But Meta isn't trying to define a new type system so much as find a way
 to unify all the type systems already existing across the various
 object-oriented languages. The extent to which this is possible is still
@@ -1154,15 +1154,17 @@ under exploration, but here's where we are so far.</p>
 <p>Types in Meta have the following bnf grammar:</p>
 
 <pre><code>&lt;type&gt;      ::- [&lt;prefix&gt;] &lt;base&gt; [ '&lt;' &lt;params&gt; '&gt;' ]
-&lt;prefix&gt;    ::- ( [ ['#'] '*' ]... | '&amp;' | '@' ) ['#']
+&lt;prefix&gt;    ::- '@' | ( [ ['#'] '*' ]... | '&amp;' ) ['#']
 &lt;base&gt;      ::- &lt;primitive&gt; | &lt;native&gt; | &lt;extended-identifier&gt;
-&lt;primitive&gt; ::- &lt;base-prim&gt; | &lt;num-prim&gt;
+&lt;primitive&gt; ::- &lt;base-prim&gt; | &lt;int-prim&gt; | &lt;real-prim&gt;
 &lt;base-prim&gt; ::- 'bool' | 'boolean' | 'trilean' | 'byte' | 'char'
-&lt;num-prim&gt;  ::- ( 'int' | 'uint' | 'real' ) [ '&lt;' &lt;num&gt; '&gt;' ]
-&lt;num&gt;       ::- 1 | 2 | ... | 127 | 128
-&lt;native&gt;    ::- 'str' | 'string' | 'vec' | 'tuple' | 'map' | 'imap' |
-                'omap' | 'set' | 'class'
-                '!regexp' | '!ostream' | '!istream' | '!sstream'
+&lt;real-prim&gt; ::- 'real&lt;32&gt;' | 'float' | 'real&lt;64&gt;' | 'double'
+&lt;int-prim&gt;  ::- ( 'int' | 'uint' ) [ '&lt;' &lt;num&gt; '&gt;' ]
+&lt;inum&gt;       ::- 1 | 2 | ... | 127 | 128
+&lt;native&gt;    ::- 'str' | 'string' | 'vec' | 'tuple' | 'map' | 'set' |
+                'class' | 'method' | 'function' | 'void' | 'nulltype' |
+                'regexp' | 'ostream' | 'istream' | 'sstream' |
+                'date' | 'ymd' | 'hms'
 </code></pre>
 
 
@@ -1175,14 +1177,14 @@ such types, and provides the following for each such type:</p>
 
 <ul>
   <li>
-  <p>a meta-level name by which to refer to the type</p>
+  a meta-level name by which to refer to the type
   </li>
   <li>
-  <p>an implementation of the type in the Meta-Library</p>
+  an implementation of the type in the Meta-Library
   </li>
   <li>
-  <p>a mapping from base language to semantically equivalent type within
-  that base language, for the meta-level type under consideration.</p>
+  a mapping from base language to semantically equivalent type within
+  that base language, for the meta-level type under consideration.
   </li>
 </ul>
 
@@ -1227,7 +1229,7 @@ those types. Here are the list of native types recognized by Meta
 
 <ul>
   <li>
-  <p>amoritized time</p>
+  amoritized time
   </li>
 </ul>
 
@@ -1335,25 +1337,25 @@ the type meta.units.mass, not meta.units.length.</p>
   <p>the overall syntactic structure: </p>
   <ul>
     <li>
-    <p>everything is a construct</p>
+    everything is a construct
     </li>
     <li>
-    <p>constructs consist of zero or more feature attributes, a required primary attribute,
-    and zero or more secondary attributes.</p>
+    constructs consist of zero or more feature attributes, a required primary attribute,
+    and zero or more secondary attributes.
     </li>
     <li>
-    <p>each attribute consists of an attribute key (sometimes optional) and an
-    attribute value (sometimes optional)</p>
+    each attribute consists of an attribute key (sometimes optional) and an
+    attribute value (sometimes optional)
     </li>
     <li>
-    <p>constructs can be terminated with <code>;</code>, <code>end;</code>, <code>end <construct>;</code> or
-    `end <construct> <name>;`</p>
+    constructs can be terminated with <code>;</code>, <code>end;</code>, <code>end <construct>;</code> or
+    `end <construct> <name>;`
     </li>
   </ul>
   </li>
   <li>
-  <p>the set of legal constructs (and, within a construct, the set of legal attributes)
-  that can appear in a particular complex block.</p>
+  the set of legal constructs (and, within a construct, the set of legal attributes)
+  that can appear in a particular complex block.
   </li>
 </ol>
 
@@ -1385,15 +1387,15 @@ of advantages over base languages:</p>
 
 <ul>
   <li>
-  <p>the testing code is adjacent to the code it is testing, making it
+  the testing code is adjacent to the code it is testing, making it
   easier to understand the code from the tests perspective and
-  vice-versa.</p>
+  vice-versa.
   </li>
   <li>
-  <p>the boiler-plate tedium of creating a separate file to contain tests,
+  the boiler-plate tedium of creating a separate file to contain tests,
   a test class to contain the tests within the class, and the per-method
   test signatures are completely removed from the user. You can just
-  write testing code and rely on Meta to auto-generate all the glue.</p>
+  write testing code and rely on Meta to auto-generate all the glue.
   </li>
 </ul>
 
@@ -1472,22 +1474,22 @@ reading (meta.testing.TestCase). The structure is as follows:</p>
   <p>Given a user-defined class <C> within namespace <N> (in meta syntax):</p>
   <ul>
     <li>
-    <p>A namespace <N>\_test is implicitly defined by Meta</p>
+    A namespace <N>\_test is implicitly defined by Meta
     </li>
     <li>
-    <p>A class <C>Test within <N>\_test is implicitly defined by Meta</p>
+    A class <C>Test within <N>\_test is implicitly defined by Meta
     </li>
     <li>
     <p>For every user-defined method <M> defined within <C></p>
     <ul>
       <li>
-      <p>If there is a {test} attribute defined on <M>, its
+      If there is a {test} attribute defined on <M>, its
       content represents a test method for testing <M>, and
       Meta defines the method test\_<M> within <C>Test with the
-      contents of this {test} attribute.</p>
+      contents of this {test} attribute.
       </li>
       <li>
-      <p>Alternatively, if there is a {tests} attribute defined
+      Alternatively, if there is a {tests} attribute defined
       on <M>, it is a complex block accepting all the normal
       constructs that can appear within a class (method,
       field, etc.), and these constructs are inserted
@@ -1497,7 +1499,7 @@ reading (meta.testing.TestCase). The structure is as follows:</p>
       some aspect of <M>. If a {testx} construct has primary
       value <id>, then Meta creates test\_<M><id> in <C>Test
       and adds the code within the {testx} scope as the body of
-      this method.</p>
+      this method.
       </li>
     </ul>
     </li>
@@ -1508,14 +1510,14 @@ reading (meta.testing.TestCase). The structure is as follows:</p>
 
     <ol>
       <li>
-      <p>fixture initialization code via
+      fixture initialization code via
        setUp:
        tearDown:
        SetUp (meta)
-       TearDown (meta)</p>
+       TearDown (meta)
       </li>
       <li>
-      <p>assertions
+      assertions
         iseq
         iseqvec
         iseqtup
@@ -1534,14 +1536,14 @@ reading (meta.testing.TestCase). The structure is as follows:</p>
         isinstance
         isin
         isfalse
-        istrue</p>
+        istrue
       </li>
       <li>
       <p>unittests</p>
       <ul>
         <li>
-        <p>each instance of TestCase represents a single unittest, usually
-        a test method associated with a user-defined class.</p>
+        each instance of TestCase represents a single unittest, usually
+        a test method associated with a user-defined class.
         </li>
       </ul>
       </li>
@@ -1599,16 +1601,16 @@ design will have tried using this idiom.</p>
 they define a first-class object as one that:</p>
 <ul>
   <li>
-  <p>may be named by variables.</p>
+  may be named by variables.
   </li>
   <li>
-  <p>may be passed as arguments to procedures.</p>
+  may be passed as arguments to procedures.
   </li>
   <li>
-  <p>may be returned as the results of procedures.</p>
+  may be returned as the results of procedures.
   </li>
   <li>
-  <p>may be included in data structures.</p>
+  may be included in data structures.
   </li>
 </ul>
 
@@ -1695,21 +1697,21 @@ relevants methods in each class: </p>
 
 <ol>
   <li>
-  <p>The exact same signature (and documentation) gets repeated in all
+  The exact same signature (and documentation) gets repeated in all
   of the classes, and changes to anything in the signature requires
-  changes in all classes.</p>
+  changes in all classes.
   </li>
   <li>
-  <p>The implementations for a particular method are scattered across the
+  The implementations for a particular method are scattered across the
   code base, when adjacency could facilitate better understanding of
-  the differeing implementations.</p>
+  the differeing implementations.
   </li>
   <li>
-  <p>Traditional object-oriented programs allow one to perform dispatch
+  Traditional object-oriented programs allow one to perform dispatch
   based on the dynamic type of a single receiver object, but sometimes
   a more expressive and intuitive implementation can be produced when
   the code to execute depends on the dynamic type of multiple receiver
-  objects.</p>
+  objects.
   </li>
 </ol>
 
@@ -1857,27 +1859,27 @@ things.</p>
 
 <ul>
   <li>
-  <p>legacy code becomes less of an issue, as a program written in Meta<old>
+  legacy code becomes less of an issue, as a program written in Meta<old>
   is implicitly partially implemented in Meta<new>, with a clear incremental
-  path available toward complete implementation.</p>
+  path available toward complete implementation.
   </li>
   <li>
-  <p>language interoperability: meta can define classes in different languages
+  language interoperability: meta can define classes in different languages
   in the same file, and within a class written in language L can specify
-  "native" methods implmented in language K.</p>
+  "native" methods implmented in language K.
   </li>
   <li>
   <p>the benefits of having a consistent and universal mechanism for associating
   a comment with every construct cannot be overstated:</p>
   <ul>
     <li>
-    <p>variables are often initialized in code without any explanation of what
+    variables are often initialized in code without any explanation of what
     they are for, because comments are second-class citizens in most 
-    languages that break up the flow of the code.</p>
+    languages that break up the flow of the code.
     </li>
     <li>
-    <p>comment attributes can be conditionally hidden from view, allowing
-    clutter to be removed, but available when needed.</p>
+    comment attributes can be conditionally hidden from view, allowing
+    clutter to be removed, but available when needed.
     </li>
   </ul>
   </li>
@@ -1885,19 +1887,19 @@ things.</p>
   <p>every language is extended (more expressive than original)</p>
   <ul>
     <li>
-    <p>optional typing</p>
+    optional typing
     </li>
     <li>
-    <p>behaviors</p>
+    behaviors
     </li>
     <li>
-    <p>categories</p>
+    categories
     </li>
     <li>
-    <p>formalized comments</p>
+    formalized comments
     </li>
     <li>
-    <p>... many bullets in this "benefits" section represent languages extensions.</p>
+    ... many bullets in this "benefits" section represent languages extensions.
     </li>
   </ul>
   </li>
@@ -1905,8 +1907,8 @@ things.</p>
   <p>Inlining of field accessors</p>
   <ul>
     <li>
-    <p>Meta knows what the definition of field accessors is (both natively and
-    inherited) and can thus determine when a field accessor can be inlined</p>
+    Meta knows what the definition of field accessors is (both natively and
+    inherited) and can thus determine when a field accessor can be inlined
     </li>
     <li>
     <p>Caveat: </p>
@@ -1915,17 +1917,17 @@ things.</p>
       <p>Suppose</p>
       <ul>
         <li>
-        <p>class nmsp2.B (defined in B.meta) inherits from class nmsp1.A
-        (defined in A.meta).</p>
+        class nmsp2.B (defined in B.meta) inherits from class nmsp1.A
+        (defined in A.meta).
         </li>
         <li>
-        <p>A defines a field 'f' with no specialized accessors.</p>
+        A defines a field 'f' with no specialized accessors.
         </li>
         <li>
-        <p>B specifies obj.fIs(10)</p>
+        B specifies obj.fIs(10)
         </li>
         <li>
-        <p>compiler inlines the field accessor at the callsite</p>
+        compiler inlines the field accessor at the callsite
         </li>
       </ul>
       </li>
@@ -1934,16 +1936,16 @@ things.</p>
       have a special setter implementation.</p>
       <ul>
         <li>
-        <p>We would need to recompile nmsp2.B (NOT in the inheritance
+        We would need to recompile nmsp2.B (NOT in the inheritance
         path of nmsp1.A, but rather a child thereof) to ensure
-        correctness.</p>
+        correctness.
         </li>
         <li>
-        <p>Meta can record, for every class, its list of ancestors.
+        Meta can record, for every class, its list of ancestors.
         From there, it can identify the set of all descendents of a
         given class, and recompile all metafiles containing
         descendents when necessary.  HOWEVER, detecting when a field
-        accessor has been added is not so obvious ... PROBLEM!!!</p>
+        accessor has been added is not so obvious ... PROBLEM!!!
         </li>
       </ul>
       </li>
@@ -1955,22 +1957,22 @@ things.</p>
   <p>WRT the Meta Library</p>
   <ul>
     <li>
-    <p>A single implementation of core classes across all languages gives an
-    opportunity to focus on making it the best possible implementation.     </p>
+    A single implementation of core classes across all languages gives an
+    opportunity to focus on making it the best possible implementation.     
     </li>
     <li>
-    <p>Effort expended once, benefits every language (current and future)</p>
+    Effort expended once, benefits every language (current and future)
     </li>
   </ul>
   </li>
   <li>
-  <p>more concise syntax where possible, more encapsulated syntax where necessary,</p>
+  more concise syntax where possible, more encapsulated syntax where necessary,
   </li>
   <li>
   <p>metaclass provide:</p>
   <ul>
     <li>
-    <p>reflection everywhere (at level of base-language AND at level of Meta code)</p>
+    reflection everywhere (at level of base-language AND at level of Meta code)
     </li>
     <li>
     <p>in base languages that have some support for metaclasses, we can improve
@@ -1983,8 +1985,8 @@ things.</p>
     the python runtime.</p>
     <ul>
       <li>
-      <p>TODO(wmh): Will we find things we cannot do within these initializers
-      that we could have done using an Initialize() method?</p>
+      TODO(wmh): Will we find things we cannot do within these initializers
+      that we could have done using an Initialize() method?
       </li>
     </ul>
     </li>
@@ -1994,17 +1996,17 @@ things.</p>
   <p>profiling</p>
   <ul>
     <li>
-    <p>When compiling code, Meta can be asked to instrument every method
+    When compiling code, Meta can be asked to instrument every method
     with code that counts invocations and the time taken to execute each
-    invocation of each method.</p>
+    invocation of each method.
     </li>
     <li>
-    <p>Provides a single environment across all baselangs for profiling
-    code execution</p>
+    Provides a single environment across all baselangs for profiling
+    code execution
     </li>
     <li>
-    <p>Allows one to see differences between languages based on changes in
-    the ordering of which methods are most expensive in each language.</p>
+    Allows one to see differences between languages based on changes in
+    the ordering of which methods are most expensive in each language.
     </li>
   </ul>
   </li>
@@ -2015,44 +2017,44 @@ things.</p>
     <p>For code written in Meta*, suppose Meta were to do the following:</p>
     <ul>
       <li>
-      <p>insert code at the beginning and end of every block within each
+      insert code at the beginning and end of every block within each
       method (including the entire method itself) counting how many
-      times that block was executed</p>
+      times that block was executed
       </li>
       <li>
-      <p>creating some global datastructure that initializes
+      creating some global datastructure that initializes
       per-method datastructures with all of the blocks within the
-      method, initializing invocation counts to 0.</p>
+      method, initializing invocation counts to 0.
       </li>
       <li>
-      <p>running test code over some set of classes/methods</p>
+      running test code over some set of classes/methods
       </li>
       <li>
-      <p>analyzing the global datastructure to identify which methods were
+      analyzing the global datastructure to identify which methods were
       and were not invoked, and when blocks within each method were and
       were not invoked, and what the values of all variables in the scope
-      of the method was at the time of invocation.</p>
+      of the method was at the time of invocation.
       </li>
       <li>
-      <p>from this, we can provide comprehensive coverage analysis in all
-      baselangs.</p>
+      from this, we can provide comprehensive coverage analysis in all
+      baselangs.
       </li>
     </ul>
     </li>
     <li>
-    <p>The big downside is that this requires Meta*, at least at the level of
-    all blocks.</p>
+    The big downside is that this requires Meta*, at least at the level of
+    all blocks.
     </li>
   </ul>
   </li>
   <li>
-  <p>more expressive syntax (fields allow auto-uml, auto serialization, etc.)</p>
+  more expressive syntax (fields allow auto-uml, auto serialization, etc.)
   </li>
   <li>
-  <p>unit tests are part of the syntax</p>
+  unit tests are part of the syntax
   </li>
   <li>
-  <p>comments are part of the syntax (no more losing comments when code moves)</p>
+  comments are part of the syntax (no more losing comments when code moves)
   </li>
   <li>
   <p>Because of the uniformity of syntax and the easy with which one can
@@ -2060,24 +2062,24 @@ things.</p>
   and things impossible in the past become possible.</p>
   <ul>
     <li>
-    <p>show all classes with public meta fields</p>
+    show all classes with public meta fields
     </li>
     <li>
-    <p>what kinds of new ideas will others come up with based on these queries?</p>
+    what kinds of new ideas will others come up with based on these queries?
     </li>
   </ul>
   </li>
   <li>
-  <p>Meta ensures that a REPL (read-execute-print loop) is available for all
-  baselangs and makes it trivial to access.</p>
+  Meta ensures that a REPL (read-execute-print loop) is available for all
+  baselangs and makes it trivial to access.
   </li>
   <li>
   <p>anything implemented to make Meta better makes implementations of all
   base languages better (bigger impact justifies more effort)</p>
   <ul>
     <li>
-    <p>most code written only benefits the language it is written in,
-    whereas code written for Meta benefits all languages it supports!</p>
+    most code written only benefits the language it is written in,
+    whereas code written for Meta benefits all languages it supports!
     </li>
   </ul>
   </li>
@@ -2085,28 +2087,28 @@ things.</p>
   <p>source code canonicalization:</p>
   <ul>
     <li>
-    <p>the source code can be translated into dramatically different
+    the source code can be translated into dramatically different
     representations based on user-level configuration of the schema (and
-    back to a canonical form again)</p>
+    back to a canonical form again)
     </li>
     <li>
-    <p>allows people to pick the syntax that works best for them, while still
+    allows people to pick the syntax that works best for them, while still
     allowing others to pick a completely different syntax (as long as
-    the version submitted to repository is canonical).</p>
+    the version submitted to repository is canonical).
     </li>
     <li>
-    <p>moves away from the psychologically limiting idea that the specific format
-    of the program is important</p>
+    moves away from the psychologically limiting idea that the specific format
+    of the program is important
     </li>
     <li>
-    <p>style-guide enforcement is automatic</p>
+    style-guide enforcement is automatic
     </li>
     <li>
     <p>allows non-english speakers to create keywords in their own languages,
     rather than having to use English.</p>
     <ul>
       <li>
-      <p>https://en.wikipedia.org/wiki/Non-English-based<em>programming</em>languages</p>
+      https://en.wikipedia.org/wiki/Non-English-based<em>programming</em>languages
       </li>
     </ul>
     </li>
@@ -2117,17 +2119,17 @@ things.</p>
   code bases.</p>
   <ul>
     <li>
-    <p>one of the problems with python is there is no safe auto-indenting.</p>
+    one of the problems with python is there is no safe auto-indenting.
     </li>
     <li>
-    <p>in meta, auto-indenters have access to the entire parsed meta tree,
+    in meta, auto-indenters have access to the entire parsed meta tree,
     with which they can do a much better job of figuring out where 
     something should be indented (probably still not perfectly safe
-    unless one never uses implicit construct termination though.</p>
+    unless one never uses implicit construct termination though.
     </li>
     <li>
-    <p>can produce construct-speecific auto-generation facilities, including
-    prompting for values, etc.</p>
+    can produce construct-speecific auto-generation facilities, including
+    prompting for values, etc.
     </li>
   </ul>
   </li>
@@ -2135,14 +2137,14 @@ things.</p>
   <p>consistency across languages makes for increased productivity</p>
   <ul>
     <li>
-    <p>same library</p>
+    same library
     </li>
     <li>
-    <p>same functionality (implement once, use everywhere)</p>
+    same functionality (implement once, use everywhere)
     </li>
     <li>
-    <p>currently, a barrier to using different languages is that the entire
-    environment can be very different and one loses time "getting up to speed"</p>
+    currently, a barrier to using different languages is that the entire
+    environment can be very different and one loses time "getting up to speed"
     </li>
   </ul>
   </li>
@@ -2153,11 +2155,11 @@ things.</p>
     <p>Example: </p>
     <ul>
       <li>
-      <p>In most languages, 'if ... elif ... else ...' has an inconsistency builtin,
-      in that when you want to reorder, you need to change syntax.</p>
+      In most languages, 'if ... elif ... else ...' has an inconsistency builtin,
+      in that when you want to reorder, you need to change syntax.
       </li>
       <li>
-      <p>In meta, move the individual blocks without having to change syntax.</p>
+      In meta, move the individual blocks without having to change syntax.
       </li>
     </ul>
     </li>
@@ -2165,12 +2167,12 @@ things.</p>
     <p>Example:</p>
     <ul>
       <li>
-      <p>In most languages, there are two places where parameters get specified,
+      In most languages, there are two places where parameters get specified,
       in the signature, and in associated documentation. Reordering a parameter
-      requires cumbersome changes in multple places.</p>
+      requires cumbersome changes in multple places.
       </li>
       <li>
-      <p>In Meta, one just moves a single 'var' block up or down.</p>
+      In Meta, one just moves a single 'var' block up or down.
       </li>
     </ul>
     </li>
@@ -2180,38 +2182,38 @@ things.</p>
   <p>language comparisons</p>
   <ul>
     <li>
-    <p>apples-to-apples comparison of language efficiency for particular problem</p>
+    apples-to-apples comparison of language efficiency for particular problem
     </li>
     <li>
-    <p>one can learn how to emulate a specific language feature from one langue within
+    one can learn how to emulate a specific language feature from one langue within
     another language by looking at how Meta compiles that feature into languages
-    not providing direct support</p>
+    not providing direct support
     </li>
   </ul>
   </li>
   <li>
-  <p>Every meta construct instance is addressable because the id of each constuct
+  Every meta construct instance is addressable because the id of each constuct
   is unique within its scope.  This means we can obtain every statement by
   name, which makes aspect-oriented programming (etc.) much simpler than in
-  languages that do not have such support.</p>
+  languages that do not have such support.
   </li>
   <li>
-  <p>Changes/evolutions in a base language (new ways to do things, etc.)
+  Changes/evolutions in a base language (new ways to do things, etc.)
   can be incorporated into Meta and automatically available to end-users
-  with a simple recompilation of meta code.</p>
+  with a simple recompilation of meta code.
   </li>
   <li>
-  <p>Every construct can be documented, and comments can be selectively shown
+  Every construct can be documented, and comments can be selectively shown
   or hidden.  How comments in base languages are associated with the entities
   they apply to are often inconsistent and informal, and it is easy during
   cut&amp;paste operations for the comments to get lost.  Furthermore, comments
   sometimes add bulk to code that decreases readability, which inhibits
   individuals from adding those comments.  Meta allows comments to be shown
-  when desired, and hidden otherwise.</p>
+  when desired, and hidden otherwise.
   </li>
   <li>
-  <p>Native code can be embedded directly into the actual source code, and the
-  glue needed to make it work can be automated.</p>
+  Native code can be embedded directly into the actual source code, and the
+  glue needed to make it work can be automated.
   </li>
   <li>
   <p>When a template method is defined in a root class, and overridden in various
@@ -2220,10 +2222,10 @@ things.</p>
   out of date).  Meta can help remove this redundancy:</p>
   <ul>
     <li>
-    <p>by providing instantiations of "see parent docstr" references</p>
+    by providing instantiations of "see parent docstr" references
     </li>
     <li>
-    <p>by implementing the concept of a 'behavior' </p>
+    by implementing the concept of a 'behavior' 
     </li>
   </ul>
   </li>
@@ -2231,13 +2233,13 @@ things.</p>
   <p>Incremental improvement everywhere.</p>
   <ul>
     <li>
-    <p>take the post-extend, pre-extend, super-extend functionality as an example.
+    take the post-extend, pre-extend, super-extend functionality as an example.
     we can provide an initiail implementation of these.  Then, later, we might
     realize that there is another variant of pre-extend that is useful, one
     in which we invoke the parent conditionally (we test some arg for certain
     values, processing those values, and delegate unknown values to a parent
     implementation).  We can easily add a fourth value to the 'inheritance'
-    feature attribute of construct 'method' to handle this.</p>
+    feature attribute of construct 'method' to handle this.
     </li>
   </ul>
   </li>
@@ -2245,9 +2247,9 @@ things.</p>
   <p>Syntactic shorthands</p>
   <ul>
     <li>
-    <p>instead of having to repeat every arg when invoking a parent definition
+    instead of having to repeat every arg when invoking a parent definition
     of a method, Meta can replace special syntax with the appropriate
-    call.  Same for printf statements, etc.</p>
+    call.  Same for printf statements, etc.
     </li>
   </ul>
   </li>
@@ -2255,49 +2257,49 @@ things.</p>
   <p>Better language syntax evolution</p>
   <ul>
     <li>
-    <p>A particular program is written against a specific version of the
+    A particular program is written against a specific version of the
     language grammar, and usually changes to the grammar will break old
-    programs.</p>
+    programs.
     </li>
     <li>
-    <p>The grammar of a Meta program is defined by the associated schema
-    (appropriately modified by user-level extensions to that schema).</p>
+    The grammar of a Meta program is defined by the associated schema
+    (appropriately modified by user-level extensions to that schema).
     </li>
     <li>
     <p>The set of changes between one version of a schema and another consists
     of:</p>
     <ul>
       <li>
-      <p>adding, renaming or deleting an attribute value associated with
-      a particular attribute key within a construct.</p>
+      adding, renaming or deleting an attribute value associated with
+      a particular attribute key within a construct.
       </li>
       <li>
-      <p>adding, renaming or deleting an attribute key from a construct</p>
+      adding, renaming or deleting an attribute key from a construct
       </li>
       <li>
-      <p>adding, renaming or deleting a construct
+      adding, renaming or deleting a construct
       All of these can be formally expressed, so that we can automate the
       process of converting a program written against version A of a schema
       into one written against version Z (by successively applying all
-      changes for A to B, B to C, ..., Y to Z.</p>
+      changes for A to B, B to C, ..., Y to Z.
       </li>
     </ul>
     </li>
     <li>
-    <p>relies on canonicalization</p>
+    relies on canonicalization
     </li>
     <li>
-    <p>The fact that we can automatically convert languages written against
+    The fact that we can automatically convert languages written against
     old schemas into newer versions means we are not inhibited from
     evolving the language rapidly (in constrast to current languages,
-    which change very slowly over time).</p>
+    which change very slowly over time).
     </li>
     <li>
-    <p>The above is can be used to hide away changes in base languages as
+    The above is can be used to hide away changes in base languages as
     well (i.e automate the conversion of old baselang code into new
     baselang code), as long as the changes occur above the level
     of method scopes (or, for methods implemented in meta, even they will
-    be auto-converted).</p>
+    be auto-converted).
     </li>
   </ul>
   </li>
@@ -2305,12 +2307,12 @@ things.</p>
   <p>Units library</p>
   <ul>
     <li>
-    <p>literal units
+    literal units
       95kg
       38C
       01:32:50
       2017:02:01
-      2017:02:01-01:32:50</p>
+      2017:02:01-01:32:50
     </li>
   </ul>
   </li>
@@ -2318,16 +2320,16 @@ things.</p>
   <p>Minimal source code bundles</p>
   <ul>
     <li>
-    <p>Meta can identify, given a seed .meta file, every other .meta file
-    in the transitive closure of dependencies.</p>
+    Meta can identify, given a seed .meta file, every other .meta file
+    in the transitive closure of dependencies.
     </li>
     <li>
-    <p>All such .meta files can be merged into a single .meta file
-    containing all the code for the project in question.</p>
+    All such .meta files can be merged into a single .meta file
+    containing all the code for the project in question.
     </li>
     <li>
-    <p>Could conceivable also do analysis of methods invoked, and
-    delete any method not referenced.</p>
+    Could conceivable also do analysis of methods invoked, and
+    delete any method not referenced.
     </li>
   </ul>
   </li>
@@ -2336,11 +2338,11 @@ things.</p>
   and comments meant to ignore certain code. </p>
   <ul>
     <li>
-    <p>It is common in code to see things like:
+    It is common in code to see things like:
       # We have previously seen the same relative type, and can use it.
       # print 'NOTE: Found previously cached wrapper %s' % wrapper.wrappedRaw()
     where the first line is an informative comment, and the second is
-    debugging code that has been commented out.</p>
+    debugging code that has been commented out.
     </li>
   </ul>
   </li>
@@ -2356,16 +2358,16 @@ differ?</p>
 
 <ul>
   <li>
-  <p>Concise and Consistent: One Syntactic Construct</p>
+  Concise and Consistent: One Syntactic Construct
   </li>
   <li>
-  <p>Expressivity: Code merging</p>
+  Expressivity: Code merging
   </li>
   <li>
-  <p>Intuitive, Readable and Writable: Source Code Customization and Canonicalization</p>
+  Intuitive, Readable and Writable: Source Code Customization and Canonicalization
   </li>
   <li>
-  <p>Self-referential: Every construct has a unique identifier</p>
+  Self-referential: Every construct has a unique identifier
   </li>
 </ul>
 
@@ -2503,28 +2505,28 @@ injection ... in Meta, this is trivial.</p>
 
 <ul>
   <li>
-  <p>Java: ability to run code associated with arbitrary class, throws in signatures</p>
+  Java: ability to run code associated with arbitrary class, throws in signatures
   </li>
   <li>
-  <p>Python: indentation-based syntax, interactive shell, keyword parameters</p>
+  Python: indentation-based syntax, interactive shell, keyword parameters
   </li>
   <li>
-  <p>C++: type system</p>
+  C++: type system
   </li>
   <li>
-  <p>Perl: regexp support</p>
+  Perl: regexp support
   </li>
   <li>
-  <p>Smalltalk: method categories, per-class metaclass</p>
+  Smalltalk: method categories, per-class metaclass
   </li>
   <li>
-  <p>Eiffel: pre and post conditions</p>
+  Eiffel: pre and post conditions
   </li>
   <li>
-  <p>Tcl: upvar, wish</p>
+  Tcl: upvar, wish
   </li>
   <li>
-  <p>Beta: sub extend, monands</p>
+  Beta: sub extend, monands
   </li>
 </ul>
 
@@ -2539,24 +2541,24 @@ and unify existing languages:</p>
 
 <ul>
   <li>
-  <p>Meta<L> is a proper superset of base language {L} (it can do
+  Meta<L> is a proper superset of base language {L} (it can do
   everything {L} can, and also guarantees various
   features/concepts/idioms regardless of whether they exist natively
-  within {L}.</p>
+  within {L}.
   </li>
   <li>
-  <p>Meta<L> can do more while writing less. This has impacts on both
-  readability and writability of code.</p>
+  Meta<L> can do more while writing less. This has impacts on both
+  readability and writability of code.
   </li>
   <li>
-  <p>A program written in Meta<L>, for some base language {L}, is also
+  A program written in Meta<L>, for some base language {L}, is also
   implicitly partially implemented in Meta<L'> (for any other base
   language {L'} supported by Meta). For example, a program written in
   Meta<Java> defines namespaces, classes, methods, fields and various
   other concepts, and it is only the statements within methods that
   use Java syntax ... everything else in the program uses Meta(Oopl)
   syntax, which is the same in Meta<C++>, Meta<Java>, Meta<Python> and
-  every other language Meta(Oopl) supports.</p>
+  every other language Meta(Oopl) supports.
   </li>
 </ul>
 
@@ -2571,21 +2573,21 @@ and implemented within BaseLanguage.getBody():</p>
 
 <ul>
   <li>
-  <p>comments (lines starting with whitespace then '/#')</p>
+  comments (lines starting with whitespace then '/#')
   </li>
   <li>
   <p>the string '<b>metafile</b>' is replaced with the absolute path of the
   .meta file being compiled</p>
   <ul>
     <li>
-    <p>this happens in </p>
+    this happens in 
     </li>
   </ul>
   </li>
   <li>
-  <p>the string 'META_SUPER()' is replaced with baselang syntax to invoke
+  the string 'META_SUPER()' is replaced with baselang syntax to invoke
   the superclass version of the same method (with args specified by
-  the 'super' parameter).</p>
+  the 'super' parameter).
   </li>
 </ul>
 
@@ -2600,20 +2602,20 @@ and implemented within BaseLanguage.getBody():</p>
   namespaces or classes is problematic.</p>
   <ul>
     <li>
-    <p>etags</p>
+    etags
     </li>
     <li>
-    <p>major-mode support</p>
+    major-mode support
     </li>
     <li>
-    <p>syntax modifications ('method' becomes 'meth@' or some such?)
-    maybe f> and m> abbrevs for construct names field> and method>?</p>
+    syntax modifications ('method' becomes 'meth@' or some such?)
+    maybe f> and m> abbrevs for construct names field> and method>?
     </li>
   </ul>
   </li>
   <li>
-  <p>the source customization features of Meta may exceed the ability of
-  editors like emacs and VIM to fully implement.</p>
+  the source customization features of Meta may exceed the ability of
+  editors like emacs and VIM to fully implement.
   </li>
 </ul>
 
