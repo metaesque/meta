@@ -319,6 +319,9 @@ def ParseArgv(argv, cli_module, root_module=None):
       'baselangs this flag disables bazel. Can yield significantly faster\n'
       'test runtimes.'))
   command.newFlag(
+    'showfs', 'bool', default='false',
+    summary='If true, print out filesystem after compilation.')
+  command.newFlag(
     'test', 'bool', default='false', aliases='t',
     summary='If true, invoke unit tests on all namespaces in all metafiles processed.')
   command.newFlag(

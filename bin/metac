@@ -1,0 +1,147 @@
+#!/Users/wmh/src/wmh/src/homebrew/bin/python2
+import cStringIO
+import importlib
+import os
+import sys
+import traceback
+
+#import pprint
+#pprint.pprint(sys.path)
+
+import metastrap
+# metastrap.AutoCompile()
+
+def main():
+  compiler_class, command, cli = metastrap.ImportMeta()
+  
+  if not cli:
+    print 'ERROR: Exiting due to errors.'
+    sys.exit(1)
+
+  #cli = command.instantiate(sys.argv).asValues()
+
+  # Although we don't need metax.c within this script (we already
+  # have compiler_class from above), other modules will be
+  # importing metax.c (and various other metax.* modules), so we
+  # perform one last sanity check to ensure that a new import of
+  # metax.c yields the same module as compiler_class is in.
+  import metax.c
+  assert metax.c is sys.modules[compiler_class.__module__]
+
+  # Initialize the compiler class.
+  compiler_class.Initialize()
+  
+  argv = ['main'] + cli.args
+
+  # Invoke the compiler
+  try:
+    # CODETANGLE(meta2_entry_main): First arg must be 'main'
+    compiler_class.Entry(argv, meta__parent=command)
+  except Exception as e:
+    # Perform base-to-meta line remapping on the exception string.
+    print 'WARNING: Error occurred while attempting to create Compiler'
+    err = traceback.format_exc()
+    metac = compiler_class.Current()
+    if metac is None:
+      # TODO(wmh): This means the attempt to instantiate the specified
+      # version of the compiler failed.  We attempt to instantiate an
+      # older version instead.
+      version = metastrap.Version
+      older_version = None
+      if version == 'beta':
+        older_version = 'current'
+      elif version == 'current':
+        older_version = 'stable'
+      if older_version:
+        # TODO(wmh): We have identified a new version of metax.c.  The question is,
+        # how do we load this new version into python, given that metax.c already
+        # exists?
+        #  - reload(metax.c) just reloads the source already identified for metax.c
+        #    without checking sys.path to see if a new path is available.
+        #  - deleting metax.c from sys.path and doing an 'import metax.c' does not
+        #    work (it finds the old version, so python's cache of already-loaded
+        #    modules is someplace other than sys.modules).
+        #  - modifying metax.c.__file__ and/or metax.c.__path__ does not appear to
+        #    work either.
+        #  - we make a symlink from older_path to older_path + '_' + older_version,
+        #    and import that module instead (after modifying sys.path to ensure
+        #    that older_path appears first in path).
+        older_path = metastrap.VersionPath(older_version)
+        # print 'In meta2 with version %s path %s' % (older_version, older_path)
+
+        # Adjust sys.path so that the new path appears first in the list.
+        sys.path.insert(0, older_path)
+
+        if False:
+          # The 'reload' method just looks at the pre-existing source files
+          # associated with metax.c when we instead want python to re-examine
+          # sys.path.
+          print 'SRC BEFORE: %s' % metax.c.__file__          
+          reload(metax.c)
+          print 'SRC AFTER: %s' % metax.c.__file__          
+
+        elif False:
+          # Modifying metax.c.__file__ first does not work
+          print 'SRC BEFORE: %s' % metax.c.__file__
+          metax.c.__file__ = older_path + '/__init__.pyc'          
+          reload(metax.c)
+          print 'SRC AFTER: %s' % metax.c.__file__          
+
+        elif False:
+          # Modifying metax.c.__path__ first does not work
+          print 'SRC BEFORE: %s' % metax.c.__file__
+          metax.c.__path__ = [older_path]
+          reload(metax.c)
+          print 'SRC AFTER: %s' % metax.c.__file__          
+
+        elif False:
+          # Deleting all symbols associated with metax.c first does not work.
+          print 'Before fix, found %d symbols in sys.modules' % len(sys.modules)
+          for nfqn in sorted(sys.modules):
+            if nfqn == 'metax.c' or nfqn.startswith('metax.c.'):
+              del sys.modules[nfqn]
+          print 'After  fix, Found %d symbols in sys.modules' % len(sys.modules)
+          # TODO(wmh): Try reload!
+          import metax.c
+
+        elif True:
+          older_metaxname = 'metax_' + older_version
+          metax_src = os.path.join(older_path, 'metax')
+          metax_dst = os.path.join(older_path, older_metaxname)
+          if not os.path.lexists(metax_dst):
+            print '  symlinked %s to %s' % (metax_src, metax_dst)
+            os.symlink(metax_src, metax_dst)
+          metax_c = importlib.import_module(older_metaxname + '.c')
+          metax_cli = importlib.import_module(older_metaxname + '.cli')
+          metax_root = importlib.import_module(older_metaxname + '.root')
+          top_command, cli = metastrap.ParseArgv(
+            argv, metax_cli, root_module=metax_root)
+          # TODO(wmh): Currently (2018-01-07), it is possible for certain
+          # changes to break all versions of the compiler (for example, certain
+          # modifications to schema files). The snapshot process is copying
+          # schema files, and when using an older version of Meta we should use
+          # the associated schema files instead of the 'live' schema files.
+          try:
+            older_metac = metax_c.Compiler(
+              metal=cli.metalang, basel=cli.baselang)
+          except Exception:
+            # The attempt to create a Compiler based on an older version of
+            # Meta has also failed.
+            print (
+              'WARNING: Failed to create alternate compiler based on version '
+              + older_version)
+          else:
+            print (
+              'NOTE: Successfully created alternate compiler based on version '
+              + older_version)
+            metac = older_metac
+
+        # Create the new instance of Compiler with appropriate flags.
+        print err
+    if metac:
+      ifp = cStringIO.StringIO(err)
+      print metac.filterMetaOutput(ifp=ifp, debug=False)
+
+
+if __name__ == '__main__':
+  main()

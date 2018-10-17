@@ -225,6 +225,15 @@ scope:
     /#     - may be legacy value '2'
     SUFFIX_RE = re.compile('(?P<base>[^.]+)\.meta2?(?P<metasuffix>\S*)$')
 
+    /# TODO(wmh): Move this someplace better!
+    def PathFromMeta(metapath, suffix):
+      """Convert a legal meta source path to some other suffixed path."""
+      m = SUFFIX_RE.match(metapath)
+      if not m:
+        raise Error('Path "%s" is not a legal meta source file.' % metapath)
+      result = m.group('base') + suffix
+      return result
+
     /# Provide a means of debugging control flow.
     D = metax.logs.SimpleLogs({
       'parse': 0,
@@ -8115,7 +8124,7 @@ scope:
           raise Error('Error: output null and level %d' % level)
         output = []
 
-      scope = self.attrval('scope:', default=None)
+      scope_attr, scope = self.attrpair('scope:', default=None)
 
       if level >= minlevel and level <= maxlevel:
         data = {
@@ -8137,7 +8146,7 @@ scope:
           output.append(summary)
 
       if scope:
-        if self.kind() in ('File', 'namespace', 'class', 'behavior', 'command'):
+        if self.kind() in ('File', 'namespace', 'class', 'behavior'):
           sublevel = level + 1
 
           currdex = len(output)
@@ -10207,6 +10216,7 @@ scope:
       self.suffixesIs(['py'])
 
       strptr = {'base': 'str', 'default': 'None'}
+      strref = {'base': 'str', 'default': "''"}
       self.metatypesIs({
         'bool': {'base': 'bool', 'default': 'False'},
         'char': {'base': 'str', 'default': "''"},
@@ -10222,7 +10232,7 @@ scope:
         /#   (see BaseLanguageOopl.{typeToBase,metabase}).
         'str': strptr,
         '*str': strptr,
-        '&str': {'base': 'str', 'default': "''"},
+        '&str': strref,
         '@str': {'base': 'str', 'default': "''"},
         'string': {'base': 'str', 'default': 'None'},
         'vec': {'base': 'list', 'default': '[]'},
@@ -10469,8 +10479,11 @@ scope:
     lifecycle scope:
       /# cls.CC_ANY = 'long long'
       cls.CC_ANY = 'void*'
-      cls.CC_STR = 'const std::string'
-      cls.CC_STR_VALUE = 'std::string'
+      /#cls.CC_STR = 'const std::string'
+      /#cls.CC_STR_VALUE = 'std::string'
+      cls.CC_STR = 'meta::str'
+      cls.CC_STRVIEW = 'meta::strview'
+      cls.CC_STR_VALUE = 'meta::str'
       cls.PTR_MAP = {
         'u': 'std::unique_ptr',
         's': 'std::shared_ptr',
@@ -10492,6 +10505,7 @@ scope:
       /# See
       /#  http://en.cppreference.com/w/cpp/language/types
       strptr = {'base': OoplCpp.CC_STR, 'default': 'nullptr'}
+      strref = {'base': OoplCpp.CC_STR, 'default': 'meta::string()'}
       self.metatypesIs({
         'bool': {'base': 'bool', 'default': 'false'},
         'char': {'base': 'char', 'default': "''"},
@@ -10525,9 +10539,8 @@ scope:
         /#   @str may be disallowed or will be same as &str.
         /#   (see BaseLanguageOopl.{typeToBase,metabase}).
         'str': strptr,
+        '&str': strref,
         '*str': strptr,
-        '&str': {
-          'base': OoplCpp.CC_STR, 'default': 'std::string("")'},
         '@str': {
           'base': OoplCpp.CC_STR_VALUE, 'default': 'std::string("")'},
         'string': {'base': 'std::string', 'default': 'std::string("")'},
@@ -10602,28 +10615,52 @@ scope:
 
     end lifecycle;
 
+    method typeToBase : str #:
+      Convert a metatype to a string representation of its base-language
+      equivalent.
+    params:
+      var metatype : Type #:
+        The metatype to convert.
+      var class_construct : ClassConstruct = null #:
+        If specified, the class within which the type is being defined.
+        Some baselangs cannot support fully-qualified references to the
+        class currently being defined, and this allows such fully-qualified
+        types to be localized.
+      var value : any = null #:
+        If present, the value being assigned to the variable of type 'metatype'.
+        Used, for example, if metatype is 'str' (rather than '&str' or '*str')
+        to heuristically decide between '&str' or '*str'.
+      var defqn : bool = false #:
+        If true, convert fully-qualified class-based types to class-name only.
+        Used to support situations where the fully-qualified name poses
+        problems in the baselang.
+    scope:
+      /# TODO(wmh): This should be a behavior.
+      if metatype.isStr():
+        result = OoplCpp.CC_STRVIEW
+      else:
+        result = super(OoplCpp, self).typeToBase(
+          metatype, class_construct=class_construct, value=value, defqn=defqn)
+      return result
+    test:
+      baselang, _, context, _ = test.cachedInfo(basel='cpp')
+      MetaType = metax.c.Type.Instance
+      cc_str = metax.c.OoplCpp.CC_STR
+      cc_strview = metax.c.OoplCpp.CC_STRVIEW
+      cc_str_value = metax.c.OoplCpp.CC_STR_VALUE
+
+      test.iseq('%s' % cc_strview, baselang.typeToBase(MetaType('str')))
+      test.iseq('%s' % cc_strview, baselang.typeToBase(MetaType('@str')))
+      test.iseq('%s' % cc_strview, baselang.typeToBase(MetaType('&str')))
+      test.iseq('%s' % cc_strview, baselang.typeToBase(MetaType('*str')))
+    end method typeToBase;
+
     test
     lifecycle setup:
       baselang, _, context, _ = self.cachedInfo(basel='cpp')
       self.baselang = baselang
       self.context = context
     end lifecycle;
-
-    test
-    method test_typeToBase #:
-      BaseLanguageOopl.typeToBase usually does not need overriding, but
-      it is still useful to have some C++-specific tests for it.
-    scope:
-      baselang, _, context, _ = test.cachedInfo(basel='cpp')
-      MetaType = metax.c.Type.Instance
-      cc_str = metax.c.OoplCpp.CC_STR
-      cc_str_value = metax.c.OoplCpp.CC_STR_VALUE
-
-      test.iseq('%s*' % cc_str, baselang.typeToBase(MetaType('str')))
-      test.iseq('%s'  % cc_str_value, baselang.typeToBase(MetaType('@str')))
-      test.iseq('%s&' % cc_str, baselang.typeToBase(MetaType('&str')))
-      test.iseq('%s*' % cc_str, baselang.typeToBase(MetaType('*str')))
-    end method test_typeToBase;
 
   end class OoplCpp;
 
@@ -10687,6 +10724,8 @@ scope:
     receiver OoplCpp scope:
       base = ftype.base() + ftype.paramStr()
       prefix = ftype.prefix()
+      strview = Type.Instance('@' + OoplCpp.CC_STRVIEW.replace('::', '.'))
+      strref = Type.Instance('&' + OoplCpp.CC_STRVIEW.replace('::', '.'))
 
       res = ''
       if acc == 'get':
@@ -10701,10 +10740,10 @@ scope:
           if ftype.isStr():
             /# We have the 'str' type. Note that 'str' is inherently const so
             /# we do NOT need to prefix the type with '#'.
-            /#  get *str returns *str
-            /#  get &str returns &str
-            /#  get @str returns &str
-            res = '*' if ftype.isPtr() else '&'
+            /#  get *str returns meta::str (there is a special meta::str instance that represents null)
+            /#  get &str returns meta::str (how do we ensure non-null not allowed?)
+            /#  get @str returns meta::str copy
+            result = strview
           elif ftype.isValue():
             /# The only possible prefixes are '@' and '@#'.
             res = '&#'
@@ -10722,8 +10761,9 @@ scope:
             res = '#*' * numast + '#'
           else:
             raise InternalError('Should never reach this')
-          result = Type.Instance(
-            res + base, namespace_function=namespace_function)
+          if result is None:
+            result = Type.Instance(
+              res + base, namespace_function=namespace_function)
 
       elif acc == 'set':
         /# We used to have setters return 'this', but with the concept of
@@ -10737,16 +10777,8 @@ scope:
         /#  - whether the arg should be const or not depends on whether we
         /#    are copying or moving ... how do we allow the user to specify
         /#    this?
-
         if ftype.isStr():
-          cc_str = OoplCpp.CC_STR
-          if cc_str == 'const std::string':
-            if ftype.isPtr():
-              result = Type.Instance('*std.string')
-            else:
-              result = Type.Instance('&#std.string')
-          else:
-            result = ftype
+          result = strview
         else:
           /# TODO(wmh): We need to add more special-casing here.
           result = ftype
@@ -10759,19 +10791,7 @@ scope:
         /# If field is *T, reffer is &*T
         result = None
         if ftype.isStr():
-          /# If a field is of type 'str', it does not mean the field cannot
-          /# be modified.  An 'int' type is conceptually interned (there is
-          /# only one 7) but a variable of type 'int' can be assigned to a
-          /# different number. So reffers are fine for strings.  The value
-          /# type depends on which class is doing the implementing:
-          /#   const std::string  --> use 'std::string&'       (special-case)
-          /#   std::string_view   --> use 'std::string_view&'  (e.g &str)
-          /#   metax::root::IStr  --> use 'metax::root::IStr&' (e.g &str)
-          p = '*' if ftype.isPtr() else ''
-          if OoplCpp.CC_STR == 'const std::string':
-            result = Type.Instance('&' + p + 'std.string')
-          else:
-            res = '&' + p
+          result = strref
         elif ftype.isBaseConst():
           raise Error('Cannot generate reffer for type "%s"' % ftype.raw())
         elif ftype.isValue():
@@ -10794,7 +10814,7 @@ scope:
       else:
         raise Error('Unhandled acc "%s"' % acc)
 
-      /# print '*** FTYPE %-5s %-20s %-20s %s' % (acc, ftype, result, self.typeToBase(result))
+      /# print '*** FTYPE %-6s %-20s %-20s %s' % (acc, ftype, result, self.typeToBase(result))
 
       return result
     test:
@@ -12659,15 +12679,13 @@ scope:
         /#    - does not need to implement '*str' as a pointer to a class
         /#    - does not need to implement '&str' as a ref to a class
         /# Prefixes
-        /#  - *str means can be null
+        /#  - *str means the string value can be null (but does not necessarily
+        /#    mean the instance of the class implementing the string has to
+        /#    be null).
         /#  - &str means cannot be null
-        /#  - @str means cannot be null
-        /#  - str  means *str (can be null)
+        /#  - @str means cannot be null and is pass-by-value
+        /#  - str means *str (can be null)
         basetype = OoplCpp.CC_STR
-        if basetype == 'const std::string':
-          basetype = 'std::string'
-        if metatype.isPtr():
-          basetype += '*'
       else:
         basetype = self.typeToBase(metatype, class_construct=myclass)
         /# print '****** %-20s %-30s = %s' % (rawfield, metatype, basetype)
@@ -12974,7 +12992,6 @@ scope:
               /# In C++, default args can be added to declaration or
               /# definition but not both.  Since the default args are part of
               /# the public interface, we assign them in decl not defn.
-              print param
               default = self.formatExpr(
                 param['default'], param['type'], executable)
               defval = self.pseudovars().get(default, default)
@@ -15031,6 +15048,9 @@ scope:
       namespace_primary = baselang.config('namespace_primary')
       for child in children:
         basefiles = child.translateMeta()
+        if len(basefiles) == 0:
+          /# We are to ignore this child.
+          continue
         assert len(basefiles) == 2
         basefile, bld = basefiles
         if child.kind() == 'class':
@@ -15188,13 +15208,14 @@ scope:
 
       else:
         /# Experimenting with the introduction of a 'Meta()' method in each
-        /# user namespace.
+        /# user namespace. TODO(wmh): Why did I introduce this???
 
         /# CODETANGLE(implicit_objectmeta)
-        all_lines.append('')
-        all_lines.append('')
-        all_lines.append('def Meta():')
-        all_lines.append('  return metax.root.MetaObject')
+        if False:
+          all_lines.append('')
+          all_lines.append('')
+          all_lines.append('def Meta():')
+          all_lines.append('  return metax.root.MetaObject')
 
       basefile = BaseFile(
         metac.basePath(fqn, suffix=basesuffix),
@@ -16079,11 +16100,18 @@ scope:
         assert metaclass is None
 
       elif variant == 'metauser':
-        assert userclass is None
         /# TODO(wmh): These may need updating
-        assert underclass is None
-        assert testclass is None
-        assert metaclass is None
+        if False:
+          for cn, c in (('user', userclass), ('under', underclass), ('test', testclass), ('meta', metaclass)):
+            if c:
+              print '%s = %s' % (cn, c.kindfqn())
+            else:
+              print '%s = %s' % (cn, c)
+        if True:
+          assert userclass is None
+          assert underclass is None
+          assert testclass is None
+          assert metaclass is None
 
     test:
     end method validate;
@@ -16919,14 +16947,14 @@ scope:
           /# For metaclasses, regardless of whether an initializer was
           /# explicitly provided or not, there should never be an explicit
           /# params: attribute. Instead, this code implicitly defines a
-          /# 'params:' attribute of a pre-determined signature, and an associatd
-          /# 'super' attribute to call up the inheritance chain. The only meta
-          /# class that does NOT get this implicit treatment is
+          /# 'params:' attribute of a pre-determined signature, and an
+          /# associated 'super' attribute to call up the inheritance chain. The
+          /# only meta class that does NOT get this implicit treatment is
           /# metax.root.ObjectMetaRoot, which is the special parent of all
-          /# meta-defined metaclasses.  If a user defines a metaclass with
-          /# a parent that is not a subclass of metax.root.ObjectMetaRoot,
-          /# it is their responsibility to have the parent initializer accept
-          /# the same signature.
+          /# meta-defined metaclasses. If a user defines a metaclass with a
+          /# parent that is not a subclass of metax.root.ObjectMetaRoot, it is
+          /# their responsibility to have the parent initializer accept the same
+          /# signature.
 
           params = initializer.attr('params:', default=None)
           if self.fqn() == 'metax.root.ObjectMetaRoot':
@@ -17439,6 +17467,8 @@ scope:
             mfqn, 'cls', 'implicit import in ClassConstruct.translateMeta()')
 
         /# Every class depends on metax.root.ObjectMeta.
+        /# TODO(wmh): Determine if this can be commented out now that the
+        /# other 'implicit_objectmeta' reference is commented out.
         self.addDependency(
           /# CODETANGLE(implicit_objectmeta)
           'metax.root.ObjectMeta', 'cls', 'every class depends on ObjectMeta')
@@ -23271,12 +23301,12 @@ scope:
       basefiles = self.basefiles()
       numlines = 0
       reallines = 0
-      bytes = 0
+      numbytes = 0
 
       for basefile in basefiles:
         contents = basefile.contents()
         if contents:
-          bytes += len(contents)
+          numbytes += len(contents)
           lines = contents.split('\n')
           assert contents and contents[-1] == '\n'
           lines.pop()
@@ -23297,16 +23327,20 @@ scope:
             if not m:
               reallines += 1
 
+      numLines = len(self.lines())
+      numBytes = len(self.text())
       result = {
-        'Lines': len(self.lines()),
-        'Bytes': len(self.text()),
+        'Lines': numLines,
+        'lines': numlines,
+        '%lines': float(numlines) / numLines,
+        'reallines': reallines,
+        'Bytes': numBytes,
+        'bytes': numbytes,
+        '%bytes': float(numbytes) / numBytes,
         /# TODO(wmh): Add a 'metareal' entry that shows the non-empty line count
         /# of the meta file. This means ignoring empty lines and lines with
         /# construct teminators ... anything else?
         'files': len(basefiles),
-        'lines': numlines,
-        'reallines': reallines,
-        'bytes': bytes,
       }
       return result
     test:
@@ -23640,6 +23674,14 @@ scope:
         >|        top: 9px;
         >|        left: 0px;
         >|    }
+        >|    .baselangbox {
+        >|        padding: 0px;
+        >|        margin: 0px;
+        >|        font-size: 12px;
+        >|    }
+        >|    .baselangcode {
+        >|        margin: -10px 0px 0px 12px;
+        >|    }
         >|    // For the 'S', 'H' and 'T' letters associated with 'all' in metadex.
         >|    .ctrl1 {
         >|       color: red;
@@ -23654,15 +23696,16 @@ scope:
         >|    /* https://developer.mozilla.org/en-US/docs/Web/CSS/color_value */
         >|    /* /usr/X11/share/X11/rgb.txt */
         >|    .face-primary   { color: %(primary)s; }
-        >|    .face-primary2  { color: %(primary2)s; /* darkgreen */ }
-        >|    .face-feature   { color: %(feature)s;  /* darkolivegreen */ }
-        >|    .face-secondary { color: %(secondary)s;  /* darkolivegreen */ }
-        >|    .face-featval   { color: %(featval)s; /* hotpink4 */ }
-        >|    .face-keyword   { color: %(keyword)s; /* deep pink */ }
-        >|    .face-end       { color: %(end)s; /* ivory4 */ }
-        >|    .face-name      { color: %(name)s; /* blue1 */ }
-        >|    .face-comment   { color: %(comment)s; /* cyan4 */ }
-        >|    .ellipsis       { color: black; }
+        >|    .face-primary2  { color: %(primary2)s; }
+        >|    .face-feature   { color: %(feature)s; }
+        >|    .face-secondary { color: %(secondary)s; }
+        >|    .face-featval   { color: %(featval)s; }
+        >|    .face-keyword   { color: %(keyword)s; }
+        >|    .face-end       { color: %(end)s; }
+        >|    .face-name      { color: %(name)s; }
+        >|    .face-comment   { color: %(comment)s; }
+        >|    .ellipsis       { color: %(ellipsis)s; }
+        >|    .ellipsis2      { color: %(ellipsis2)s; }
         >|
         >|    /**
         >|     * Each line of code in a .meta program is specified by:
@@ -23806,6 +23849,7 @@ scope:
         >|    </style>
         >|
         >|    <script src="http://cdn.jsdelivr.net/gh/highlightjs/cdn-release@9.12.0/build/highlight.min.js"></script>
+        >|    <script src="http://cdnjs.cloudflare.com/ajax/libs/highlightjs-line-numbers.js/2.4.0/highlightjs-line-numbers.min.js"></script>
         >|
         >|    <script type="text/javascript">
         >|
@@ -23820,6 +23864,14 @@ scope:
         >|          hljs.highlightBlock(div);
         >|        }
         >|        console.log('finished!');
+        >|      }
+        >|
+        >|      function highlightBaseCode(id) {
+        >|        var block = document.getElementById(id);
+        >|        if (block) {
+        >|           hljs.highlightBlock(block);
+        >|           // hljs.lineNumbersBlock(block);
+        >|        }
         >|      }
         >|
         >|      function tv(id) {
@@ -23885,25 +23937,29 @@ scope:
         >|        for (var i = 0; i < ids.length; ++i) { uv(ids[i]); }
         >|      }
         >|
-        >|      window.onload = highlightCode;
+        >|      window.onload = %(onload)s;
         >|    </script>
         >|""")
 
       /# TODO(wmh): Temporary hack. The per-construct color mapping should
       /# be obtained from the current Context and its ConsInfo instances.
       cls.ConstructColorMap = {
-        'class': 'red',  # 255, 0, 0
-        'behavior': 'red',
-        'method': 'orange',  # 255, 165, 0
-        'field': 'orange',
-        'lifecycle': 'orange',
+        /# 'class': 'red',  # 255, 0, 0
+        /# 'behavior': 'red',
+        /# 'method': 'orange',  # 255, 165, 0
+        /# 'field': 'orange',
+        /# 'lifecycle': 'orange',
       }
       cls.MetaConstructColorMap = {
         'primary':   'purple',
         'primary2':  'rgb(0, 100, 0)',      # darkgreen
         'feature':   'rgb(85, 107, 47)',    # darkolivegreen
-        'secondary': 'rgb(85, 107, 47)',    # darkolivegreen
-        'featval':   'rgb(139, 58, 98)',    # hotpink4
+        /# 'secondary': 'rgb(85, 107, 47)',    # darkolivegreen
+        /# 'secondary': 'rgb(173,216,230)',    # light blue
+        'secondary': 'rgb(41,171,135)',    # jungle green
+        /# 'featval':   'rgb(255,105,180)',    # hotpink
+        /#'featval':   'rgb(238, 106, 167)',  # hotpink2
+        'featval':   'rgb(205,96,144)',  # hotpink3
         'keyword':   'rgb(255, 20, 147)',   # deep pink
         'end':       'rgb(139, 139, 131)',  # ivory4
         'name':      'rgb(0, 0, 255)',      # blue1
@@ -25285,12 +25341,14 @@ scope:
         /# ('compile', 't:c'),
       ]
       file_titles = [
-        ('Lines', '#Lines'),
-        ('Bytes', '#Bytes'),
         ('files', '#files'),
+        ('Lines', '#Lines'),
         ('lines', '#lines'),
+        ('%lines', '%lines'),
         ('reallines', '#real'),
+        ('Bytes', '#Bytes'),
         ('bytes', '#bytes'),
+        ('%bytes', '%bytes'),
       ]
 
       /# TODO(wmh): Once wmh.table has been migrated into a meta library, we
@@ -25371,14 +25429,18 @@ scope:
           if show_files:
             filestats = metafile.computeFileStats()
             for kind, abbrev in file_titles:
-              cnt = filestats[kind]
-              totals[kind] += cnt
-              fp.write(' %7d' % cnt)
+              val = filestats[kind]
+              totals[kind] += val
+              if kind[0] == '%':
+                fp.write(' %7.2f' % val)
+              else:
+                fp.write(' %7d' % val)
           fp.write('\n')
         fp.write(sep)
 
         /# Print total row.
-        if len(metafiles) > 1:
+        nmf = len(metafiles)
+        if nmf > 1:
           fp.write('%s%-15s' % (indent, 'TOTAL'))
           if show_counts:
             for kind in order:
@@ -25387,8 +25449,12 @@ scope:
             for kind, abbrev in time_titles:
               fp.write(' %4.1f' % totals[kind])
           if show_files:
+            
             for kind, abbrev in file_titles:
-              fp.write(' %7d' % totals[kind])
+              if kind[0] == '%':
+                fp.write(' %7.2f' % (totals[kind] / nmf))
+              else:
+                fp.write(' %7d' % totals[kind])
           fp.write('\n')
           fp.write(sep)
     end method writeSummary;
@@ -25448,6 +25514,8 @@ scope:
       other = []
       details = []
 
+      all_files = fs.listdir(fs.cwd())
+
       def PathToConstruct(path):
         construct = None
         if resolve:
@@ -25459,9 +25527,18 @@ scope:
             construct = metafile.construct()
         return construct
 
+      def ImplicitMatches(base):
+        """Are there any files in the directory that implicitly match base?"""
+        result = []
+        for candidate in filter(lambda f: f.startswith(base + '.'), all_files):
+          m = metax.c.SUFFIX_RE.match(candidate)
+          if m:
+            result.append(candidate)
+        return result
+
       if not args:
         if implicit:
-          for f in fs.listdir(fs.cwd()):
+          for f in all_files:
             m = metax.c.SUFFIX_RE.match(f)
             if m:
               path = fs.abspath(f)
@@ -25469,21 +25546,29 @@ scope:
               details.append({'arg': f, 'path': path, 'kind': 'metafile'})
       else:
         for arg in args:
-          argplus = arg + '.meta2'
           suffmatch = metax.c.SUFFIX_RE.match(arg)
+
+          argmatch = None if suffmatch else ImplicitMatches(arg) 
           if suffmatch and fs.exists(arg):
             abspath = fs.abspath(arg)
             metafile_paths.append(abspath)
             construct = PathToConstruct(abspath)
             details.append(
               {'arg': abspath, 'kind': 'metafile', 'construct': construct})
-          elif fs.exists(argplus):
-            abspath = fs.abspath(argplus)
-            metafile_paths.append(abspath)
-            construct = PathToConstruct(abspath)
-            details.append(
-              {'arg': arg, 'path': abspath, 'kind': 'metafile',
-               'construct': construct})
+          elif argmatch:
+            if len(argmatch) > 1:
+              print 'WARNING: multiple matches for %s: %s' % (arg, ' '.join(argmatch))
+              details.append(
+                {'arg': arg, 'path': None, 'kind': 'badfile',
+                 'construct': None})
+            else:
+              argplus = argmatch[0]
+              abspath = fs.abspath(argplus)
+              metafile_paths.append(abspath)
+              construct = PathToConstruct(abspath)
+              details.append(
+                {'arg': arg, 'path': abspath, 'kind': 'metafile',
+                'construct': construct})
           elif suffmatch:
             if errors:
               print 'Meta file %s does not exist (ignored)' % arg
@@ -28376,9 +28461,8 @@ scope:
     method generateHtml #:
       Generate a self-contained html file for a 
     params:
-      var paths : vec<str> = null #:
-        The list of paths to parse.  If not specified, the command line is
-        analyzed instead.
+      var path : str = null #:
+        The metafile to parse.
       var width : int = 100 #:
         The number of characters to display horizontally.  Note that 5
         characters are needed along the left margin for line numbers, and
@@ -28399,12 +28483,14 @@ scope:
       verbose = True
       flags = self.cli()
       metalang = self.metalang()
+      baselang = self.baselang()
+      blsuffix = baselang.suffix()[1:]
       context = metalang.context()
       errors = 0
       suffix = '.meta2'
       chatty = True
 
-      print 'Here with width=%s showbox=%s htmldir=%s' % (width, showbox, htmldir)
+      /#print 'Here with width=%s showbox=%s htmldir=%s' % (width, showbox, htmldir)
 
       /# Establish the rootdir for .html files.
       /#  - one possibility is to write hidden .html files adjacent to
@@ -28418,58 +28504,57 @@ scope:
       metadir = fs.join(
         self.repositoryPath(), metalang.id(), 'meta')
 
-      /# Parse the specified paths.
-      for path in paths:
-        /# Parse the file.
-        metafile = self.parseMeta(
-          path, debuglevel=flags.debug, context=context)
+      /# Parse the file.
+      metafile = self.parseMeta(
+        path, debuglevel=flags.debug, context=context)
 
-        if not metafile.hasErrors(show=True):
-          /# Generate the HTML file BEFORE we expand the metafile!
-          filecons = metafile.construct()
-          for namespace in filecons.attr('scope:').value():
-            outlines = []
+      if not metafile.hasErrors(show=True):
+        /# Generate the HTML file BEFORE we expand the metafile!
+        filecons = metafile.construct()
+        for namespace in filecons.attr('scope:').value():
+          outlines = []
 
-            /# Obtain the htmlish contents.
-            fp = cStringIO.StringIO()
-            mode = {'form': 'html', 'out': {}}
-            namespace.write(fp=fp, mode=mode)
-            lines = fp.getvalue().split('\n')
-            lines.pop()
+          /# Obtain the htmlish contents.
+          fp = cStringIO.StringIO()
+          mode = {'form': 'html', 'out': {}}
+          namespace.write(fp=fp, mode=mode)
+          lines = fp.getvalue().split('\n')
+          lines.pop()
 
-            out = mode['out']
-            allids_json = json.dumps(out)
-            import pprint
-            /# pprint.pprint(out)
+          out = mode['out']
+          allids_json = json.dumps(out)
+          import pprint
+          /# pprint.pprint(out)
 
-            if showbox:
-              outlines.append('<div class="metadex">')
-              outlines.append('  <center><b>%s</b></center>' % namespace.id())
-              outlines.append('  <table>')
-              bout = out['block']
-              for i, bkey in enumerate(sorted(bout)):
-                argstr = "allids.block['%s']" % bkey
-                /# TODO(wmh): Why aren't classes working on the following <td>
-                /# elements? I want to have the color of the first S H T to be
-                /# red, and planned to use two classes to control the diff, but
-                /# this is not working.
-                css = 'ctrl1' if i == 0 else 'ctrl2'
-                tdhack = ' style="color: red;"' if i == 0 else ''
-                outlines.append(
-                  '    <tr>'
-                  '<td>%s</td>'
-                  '<td></td>'
-                  '<td>%s</td>'
-                  '<td onclick="slist(%s)" title="Show %s blocks" class="%s"%s>S</td>'
-                  '<td onclick="ulist(%s)" title="Hide %s blocks" class="%s"%s>H</td>'
-                  '<td onclick="tlist(%s)" title="Toggle %s blocks" class="%s"%s>T</td>'
-                  '</tr>' %
-                  ('block' if i == 0 else '',
-                   bkey,
-                   argstr, bkey, css, tdhack,
-                   argstr, bkey, css, tdhack,
-                   argstr, bkey, css, tdhack))
-              lout = out['lang']
+          if showbox:
+            outlines.append('<div class="metadex">')
+            outlines.append('  <center><b>%s</b></center>' % namespace.id())
+            outlines.append('  <table>')
+            bout = out['block']
+            for i, bkey in enumerate(sorted(bout)):
+              argstr = "allids.block['%s']" % bkey
+              /# TODO(wmh): Why aren't classes working on the following <td>
+              /# elements? I want to have the color of the first S H T to be
+              /# red, and planned to use two classes to control the diff, but
+              /# this is not working.
+              css = 'ctrl1' if i == 0 else 'ctrl2'
+              tdhack = ' style="color: red;"' if i == 0 else ''
+              outlines.append(
+                '    <tr>'
+                '<td>%s</td>'
+                '<td></td>'
+                '<td>%s</td>'
+                '<td onclick="ulist(%s)" title="Hide %s blocks" class="%s"%s>H</td>'
+                '<td onclick="slist(%s)" title="Show %s blocks" class="%s"%s>S</td>'
+                '<td onclick="tlist(%s)" title="Toggle %s blocks" class="%s"%s>T</td>'
+                '</tr>' %
+                ('block' if i == 0 else '',
+                 bkey,
+                 argstr, bkey, css, tdhack,
+                 argstr, bkey, css, tdhack,
+                 argstr, bkey, css, tdhack))
+            lout = out['lang']
+            if len(lout) > 1:
               css = 'ctrl2'
               for i, lkey in enumerate(sorted(lout)):
                 baseout = lout[lkey]
@@ -28480,8 +28565,8 @@ scope:
                     '<td>%s</td>'
                     '<td>%s</td>'
                     '<td>%s</td>'
-                    '<td onclick="slist(%s)" title="Show %s %s blocks" class="%s">S</td>'
                     '<td onclick="ulist(%s)" title="Hide %s %s blocks" class="%s">H</td>'
+                    '<td onclick="slist(%s)" title="Show %s %s blocks" class="%s">S</td>'
                     '<td onclick="tlist(%s)" title="Toggle %s %s blocks" class="%s">T</td>'
                     '</tr>' %
                     ('baselang' if (i == 0 and j == 0) else '',
@@ -28491,103 +28576,166 @@ scope:
                      argstr, bkey, lkey, css,
                      argstr, bkey, lkey, css))
               /# cout = out['construct']
-              outlines.append('  </table>')
-              outlines.append('</div>')
+            outlines.append('  </table>')
+            outlines.append('</div>')
 
-            /# Now wrap the htmlized lines into an overarching structure
-            /# that shows line numbers, indents blocks, allows blocks to
-            /# be opened and closed, etc.
-            outlines.append('<div class="metafile">')
-            dentlevel = 0
-            linenum = 0
-            for line in lines:
-              indent = '  ' * (dentlevel + 1)
-              if line and line[0] == '':
-                /# Escape sequence indicating block start/end.
-                _, block_kind, conskind, block_uid, attrkey, basel, se = line.split(' ')
-                if se == 'start':
-                  /# print 'starting %s %s' % (consfqn, attrkey)
-                  dentlevel += 1
-                  classes = []
-                  is_code = 'scope' in attrkey or 'test' in attrkey
-                  if block_kind == 'simple' and is_code:
-                    classes.append('baselang')
-                    classes.append(basel)
-                  if attrkey in ('comment:', '#:'):
-                    classes.append('face-comment')
-                  outlines.append(
-                    indent + '<div id="%s" class="%s">' % (
-                      block_uid, ' '.join(classes)))
-                else:
-                  /# print 'ending   %s %s' % (consfqn, attrkey)
-                  dentlevel -= 1
-                  outlines.append(indent[2:] + '</div>')
+          /# Now wrap the htmlized lines into an overarching structure
+          /# that shows line numbers, indents blocks, allows blocks to
+          /# be opened and closed, etc.
+          outlines.append('<div class="metafile">')
+          dentlevel = 0
+          linenum = 0
+          for line in lines:
+            indent = '  ' * (dentlevel + 1)
+            if line and line[0] == '':
+              /# Escape sequence indicating block start/end.
+              _, block_kind, conskind, block_uid, attrkey, basel, se = line.split(' ')
+              if se == 'start':
+                /# print 'starting %s %s' % (consfqn, attrkey)
+                dentlevel += 1
+                classes = []
+                is_code = 'scope' in attrkey or 'test' in attrkey
+                if block_kind == 'simple' and is_code:
+                  classes.append('baselang')
+                  classes.append(basel)
+                if attrkey in ('comment:', '#:'):
+                  classes.append('face-comment')
+                outlines.append(
+                  indent + '<div id="%s" class="%s">' % (
+                    block_uid, ' '.join(classes)))
               else:
-                /# We first remove the indentation from the beginning of the
-                /# line.
-                idx = dentlevel * 2
-                prefix = line[:idx]
-                line = line[idx:]
+                /# print 'ending   %s %s' % (consfqn, attrkey)
+                dentlevel -= 1
+                outlines.append(indent[2:] + '</div>')
+            else:
+              /# We first remove the indentation from the beginning of the
+              /# line.
+              idx = dentlevel * 2
+              prefix = line[:idx]
+              line = line[idx:]
 
-                linenum += 1
-                if chatty:
-                  subindent = indent + '  '
-                  outlines.append(indent + '<div>')
-                  outlines.append(
-                    subindent + '<span class="linenum">%d</span>' % linenum)
-                  outlines.append(
-                    subindent + '<span class="indent%d"></span>' % dentlevel)
-                  outlines.append(
-                    subindent + '<span class="linetext"><code>%s</code></span>' % line)
-                  outlines.append(indent + '</div>')
-                else:
-                  outlines.append(
-                    '%s<div>'
-                    '<span class="linenum">%d</span>'
-                    '<span class="indent%d"></span>'
-                    '<span class="linetext"><code>%s</code></span>'
-                    '</div>' %
-                    (indent, linenum, dentlevel, line))
+              linenum += 1
+              if chatty:
+                subindent = indent + '  '
+                outlines.append(indent + '<div>')
+                outlines.append(
+                  subindent + '<span class="linenum">%d</span>' % linenum)
+                outlines.append(
+                  subindent + '<span class="indent%d"></span>' % dentlevel)
+                outlines.append(
+                  subindent + '<span class="linetext"><code>%s</code></span>' % line)
+                outlines.append(indent + '</div>')
+              else:
+                outlines.append(
+                  '%s<div>'
+                  '<span class="linenum">%d</span>'
+                  '<span class="indent%d"></span>'
+                  '<span class="linetext"><code>%s</code></span>'
+                  '</div>' %
+                  (indent, linenum, dentlevel, line))
 
-            /# Write the result to the dest file.
-            parts = namespace.id().split('.')
-            if htmldir is None:
-              htmldir = fs.join(metadir, *parts)
-            if not fs.exists(htmldir):
-              fs.makedirs(htmldir, 0755)
-            htmlbase = fs.basename(metafile.path())
-            assert htmlbase.endswith('.meta2')
-            htmlbase = htmlbase.replace('.meta2', '.html')
-            htmlpath = fs.join(htmldir, htmlbase)
-            with fs.open(htmlpath, 'w') as fp:
-              html_params =  {
-                'fontsize': fontsize,
-                'allids': str(allids_json),
-                'width': width,
-                'margin': 210 if showbox else 0
-              }
-              html_params.update(Compiler.MetaConstructColorMap)
-              html_head = cls.HTML_HEAD % html_params
+          /# Write the result to the dest file.
+          parts = namespace.id().split('.')
+          if htmldir is None:
+            htmldir = fs.join(metadir, *parts)
+          if not fs.exists(htmldir):
+            fs.makedirs(htmldir, 0755)
+          htmlbase = metax.c.PathFromMeta(
+            fs.basename(metafile.path()), '_' + blsuffix +'.html')
+          htmlpath = fs.join(htmldir, htmlbase)
+          with fs.open(htmlpath, 'w') as fp:
+            html_params =  {
+              'fontsize': fontsize,
+              'allids': str(allids_json),
+              'width': width,
+              'margin': 210 if showbox else 0,
+              'onload': 'highlightCode',
+            }
+            html_params.update(Compiler.MetaConstructColorMap)
+            html_head = cls.HTML_HEAD % html_params
+            fp.write(
+              '<html>\n  <head>\n%s\n  </head>\n' % html_head)
+            fp.write('  <body>\n')
+            for line in outlines:
+              fp.write(line)
+              fp.write('\n')
+            if hide:
+              fp.write("  <script>ulist(allids.block['all']);</script>\n");
+            fp.write('  </body>\n')
+            fp.write('</html>\n')
+            if verbose:
+              print 'Wrote ' + htmlpath
+
+        /# Now expand and translate.
+        filecons.expandMeta()
+        if not metafile.hasErrors(show=True):
+          filecons.translateMeta()
+          if not metafile.hasErrors(show=True):
+            /# Create a single HTML file showing all generated baselang files.
+            html2base = metax.c.PathFromMeta(
+              fs.basename(metafile.path()), '_' + blsuffix + '_base.html')
+            html2path = fs.join(htmldir, html2base)
+            html_params =  {
+              'fontsize': fontsize,
+              'allids': '[]',
+              'width': width,
+              'margin': 210 if showbox else 0,
+              'onload': 'null',
+            }
+            html_params.update(Compiler.MetaConstructColorMap)
+            html_head = cls.HTML_HEAD % html_params
+
+            /# Establish how many baselang files, lines and bytes are produced.
+            counts = {'files': 0, 'lines': 0, 'bytes': 0}
+            filemap = fs.filemap()
+            for subpath in sorted(filemap):
+              subbase = fs.basename(subpath)
+              if subbase[0] == '.': continue
+              basefile = filemap[subpath]
+              contents = basefile.contents()
+              counts['files'] += 1
+              counts['lines'] += contents.count('\n')
+              counts['bytes'] += len(contents)
+
+            /# Create the baselang .html file.
+            with open(html2path, 'w') as fp:
               fp.write(
                 '<html>\n  <head>\n%s\n  </head>\n' % html_head)
               fp.write('  <body>\n')
-              for line in outlines:
-                fp.write(line)
-                fp.write('\n')
-              if hide:
-                fp.write("  <script>ulist(allids.block['all']);</script>\n");
+              fp.write(
+                '<span style="font-size: 12px;">%s in %s: %d files, %d lines, %d bytes</span><br><br>\n' %
+                (fs.basename(path), baselang.name(),
+                 counts['files'], counts['lines'], counts['bytes']))
+              subpaths = []
+              for subpath in sorted(filemap):
+                subbase = fs.basename(subpath)
+                if subbase[0] == '.': continue
+                basefile = filemap[subpath]
+                contents = basefile.contents()
+                subpath = basefile.subpath()
+                _, suffix = fs.splitext(subpath)
+                pure_suffix = suffix[1:]
+                hljs_class = blsuffix if pure_suffix in baselang.suffixes() else 'plaintext'
+                subpaths.append(subpath)
+                fp.write('\n<!-- %s\n%s\n-->\n\n' % ('*' * 70, subpath))
+                fp.write('<div class="baselangbox">\n')
+                fp.write('  <code>%s</code>\n' % subpath)
+                fp.write('  <div class="baselangcode">\n')
+                fp.write('<pre><code class="%s" id="%s">' % (hljs_class, subpath))
+                fp.write(contents)
+                fp.write('</code></pre>\n')
+                fp.write('  </div>\n')
+                fp.write('</div>\n')
+
+              fp.write('\n<!-- %s\n%s\n-->\n\n' % ('*' * 70, 'Highlight and line number'))
+              fp.write('    <script>\n')
+              for subpath in subpaths:
+                fp.write('      highlightBaseCode("%s");\n' % subpath)
+              fp.write('    </script>\n')
               fp.write('  </body>\n')
               fp.write('</html>\n')
               if verbose:
-                print 'Wrote ' + htmlpath
-
-          /# Now expand and translate.
-          filecons.expandMeta()
-          if not metafile.hasErrors(show=True):
-            filecons.translateMeta()
-            if not metafile.hasErrors(show=True):
-              /# Create HTML files for the baselang files generated.
-              pass
+                print 'Wrote ' + html2path
     test:
     end method generateHtml;
 
@@ -28631,191 +28779,178 @@ scope:
       command canonical #:
         Canonicalize the specified meta files and report diffs.
       scope:
-        if True:
-          flags = self.cli()
-          argmap = self._parseArgs(flags.rest)
-          metafile_paths = argmap['metafiles']
-          context = self.metalang().context()
-          errors = 0
+        flags = self.cli()
+        argmap = self._parseArgs(flags.rest)
+        metafile_paths = argmap['metafiles']
+        context = self.metalang().context()
+        errors = 0
 
-          for path in metafile_paths:
-            metafile = self.parseMeta(
-              path, debuglevel=flags.debug, context=context)
-            if metafile.hasErrors(show=True):
-              errors += 1
-            else:
-              if False and flags.expand:
-                metafile.construct().expandMeta()
-                if metafile.hasErrors(show=True):
-                  errors += 1
-              if errors == 0:
-                print '#' * 80
-                print path
-                for construct in metafile.construct().attr('scope:').value():
-                  construct.write()
+        for path in metafile_paths:
+          metafile = self.parseMeta(
+            path, debuglevel=flags.debug, context=context)
+          if metafile.hasErrors(show=True):
+            errors += 1
+          else:
+            if False and flags.expand:
+              metafile.construct().expandMeta()
+              if metafile.hasErrors(show=True):
+                errors += 1
+            if errors == 0:
+              print '#' * 80
+              print path
+              for construct in metafile.construct().attr('scope:').value():
+                construct.write()
       end command canonical;
 
       named
       command cd #:
         Change (conceptual) directory.
       scope:
-        if True:
-          flags = self.cli()
-          command = flags._command_()
-          command.show()
-          print 'hello!'
+        flags = self.cli()
+        command = flags._command_()
+        command.show()
+        print 'hello!'
       end command cd;
 
       named
       command checkmap #:
         Verify that a baselang map file is correct.
       scope:
-        if True:
-          print 'WARNING: Command "checkmap" is not yet implemented.'
+        print 'WARNING: Command "checkmap" is not yet implemented.'
       end command checkmap;
 
       named
       command checkrep #:
         Verify that the Meta repository is sane.
       scope:
-        if True:
-          print 'WARNING: Command "checkrep" is not yet implemented.'
+        print 'WARNING: Command "checkrep" is not yet implemented.'
       end command checkrep;
 
       named
       command clean #:
         Remove a class from the Meta repository
       scope:
-        if True:
-          print 'WARNING: Command "clean" is not yet implemented.'
+        print 'WARNING: Command "clean" is not yet implemented.'
       end command clean;
 
       named
       command compare #:
         Run normal code and experimental code and compare generated results.
       scope:
-        if True:
-          print 'WARNING: Command "compare" is not yet implemented.'
+        print 'WARNING: Command "compare" is not yet implemented.'
       end command compare;
 
       named
       command compile #:
         Compile specified .meta files.
       scope:
-        if True:
-          /# TODO(wmh): Get aliases working on primary keys so we can
-          /# implement 'arg'!
-          /# arg args : list<str>;
-          flags = self.cli()
-          argmap = self._parseArgs(flags.rest, implicit=True)
-          metafile_paths = argmap['metafiles']
-          fp = sys.stdout
-          try:
-            metafiles, errors, warnings = self.getMetas(metafile_paths, fp=fp)
-          except Exception as e:
-            text = traceback.format_exc()
-            if False:
-              print '#' * 70
-              print text
-              print '=' * 70
-            ifp = cStringIO.StringIO(text)
-            /# Note that the baselang being compiled is NOT what is important
-            /# when performing baseling-to-metaline conversions ... it is the
-            /# baselang being used to compile the code that is important!
-            /# This parser.meta code is currently assuming a python implementation,
-            /# so that is the baselang we use.
-            baselang = self.metalang().baselangNamed('python')
-            self.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)
+        /# TODO(wmh): Get aliases working on primary keys so we can
+        /# implement 'arg'!
+        /# arg args : list<str>;
+        flags = self.cli()
+        argmap = self._parseArgs(flags.rest, implicit=True)
+        metafile_paths = argmap['metafiles']
+        fp = sys.stdout
+        try:
+          metafiles, errors, warnings = self.getMetas(metafile_paths, fp=fp)
+        except Exception as e:
+          text = traceback.format_exc()
+          if False:
+            print '#' * 70
+            print text
+            print '=' * 70
+          ifp = cStringIO.StringIO(text)
+          /# Note that the baselang being compiled is NOT what is important
+          /# when performing baseling-to-metaline conversions ... it is the
+          /# baselang being used to compile the code that is important!
+          /# This parser.meta code is currently assuming a python implementation,
+          /# so that is the baselang we use.
+          baselang = self.metalang().baselangNamed('python')
+          self.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)
 
-            sys.exit(1)
-          else:
-            self.writeSummary(metafiles)
+          sys.exit(1)
+        else:
+          self.writeSummary(metafiles)
 
-          if flags.test:
-            targets = []
-            for metafile in metafiles:
-              for namespace in metafile.construct().attrval('scope:', default=EMPTY):
-                if namespace.variant() == 'user':
-                  targets.append(namespace.fqn())
-            flags.rawtests = True
-            if targets:
-              self.runUnitTests(targets, verbose=flags.verbose)
-          return errors == 0
+        if flags.test:
+          targets = []
+          for metafile in metafiles:
+            for namespace in metafile.construct().attrval('scope:', default=EMPTY):
+              if namespace.variant() == 'user':
+                targets.append(namespace.fqn())
+          flags.rawtests = True
+          if targets:
+            self.runUnitTests(targets, verbose=flags.verbose)
+        return errors == 0
       end command compile;
 
       named
       command config #:
         Print out the config values
       scope:
-        if True:
-          config = Compiler.CONFIG
-          cli = self.cli()
-          if len(cli.rest) == 1:
-            var = cli.rest[0]
-            print config.get(var, '<INVALID>')
-          else:
-            vars = cli.rest or sorted(config)
-            for var in vars:
-              print '%-20s = %s' % (var, config.get(var, '<INVALID>'))
+        config = Compiler.CONFIG
+        cli = self.cli()
+        if len(cli.rest) == 1:
+          var = cli.rest[0]
+          print config.get(var, '<INVALID>')
+        else:
+          vars = cli.rest or sorted(config)
+          for var in vars:
+            print '%-20s = %s' % (var, config.get(var, '<INVALID>'))
       end command config;
 
       named
       command expand #:
         Expand a specified .meta file.  Consider using 'get' instead.
       scope:
-        if True:
-          cli = self.cli()
-          fs = self.fs()
-          argmap = self._parseArgs(cli.rest)
-          errors = False
-          metafiles = []
-          for path in argmap['metafiles']:
-            metafile = self.getMeta(
-              path, expand=True,
-              imports=False, translate=False, compile=False)
-            if metafile.hasErrors(show=True):
-              pass
-            else:
-              newpath = path + '.exp'
-              newpath = newpath.replace('.meta2.exp', '.exp.meta2')
-              file_construct = metafile.construct()
-              with fs.open(newpath, 'w') as fp:
-                for construct in file_construct.attrval('scope:', default=None) or []:
-                  if construct.kind() != 'namespace': continue
-                  construct.write(fp=fp)
-              print 'Wrote ' + newpath
-            metafiles.append(metafile)
+        cli = self.cli()
+        fs = self.fs()
+        argmap = self._parseArgs(cli.rest)
+        errors = False
+        metafiles = []
+        for path in argmap['metafiles']:
+          metafile = self.getMeta(
+            path, expand=True,
+            imports=False, translate=False, compile=False)
+          if metafile.hasErrors(show=True):
+            pass
+          else:
+            newpath = path + '.exp'
+            newpath = newpath.replace('.meta2.exp', '.exp.meta2')
+            file_construct = metafile.construct()
+            with fs.open(newpath, 'w') as fp:
+              for construct in file_construct.attrval('scope:', default=None) or []:
+                if construct.kind() != 'namespace': continue
+                construct.write(fp=fp)
+            print 'Wrote ' + newpath
+          metafiles.append(metafile)
       end command expand;
 
       named
       command get #:
         Get a .meta file (parse, expand, import, translate and compile).
       scope:
-        if True:
-          cli = self.cli()
-          argmap = self._parseArgs(cli.rest)
-          errors = False
-          metafiles = []
-          for path in argmap['metafiles']:
-            metafile = self.getMeta(
-              path, expand=True, imports=True, translate=True, compile=True)
-            if metafile.hasErrors(show=True):
-              errors = True
-              break
-            metafiles.append(metafile)
-          if not errors:
-            self.writeSummary(metafiles)
+        cli = self.cli()
+        argmap = self._parseArgs(cli.rest)
+        errors = False
+        metafiles = []
+        for path in argmap['metafiles']:
+          metafile = self.getMeta(
+            path, expand=True, imports=True, translate=True, compile=True)
+          if metafile.hasErrors(show=True):
+            errors = True
+            break
+          metafiles.append(metafile)
+        if not errors:
+          self.writeSummary(metafiles)
       end command get;
 
       named
       command help #:
-        Implement the 'help' command.
-
-        Print out a summary of available commands
+        A summary of all commands.
       scope:
-        if True:
-          command = self.cli()._command_()
-          command.help()
+        command = self.cli()._command_().parent()
+        command.help()
       end command help;
 
       command html #:
@@ -28833,15 +28968,15 @@ scope:
         flag fontsize : str = '80%' #:
           The fontsize of the generated code.
       scope:
-        if True:
-          /# IMPORTANT: Not specifying this as a named block because it means
-          /# we lose access to htmldir. Not naming the block may pose problems
-          /# in other arenas though ... may need to find a difference solution.
+        /# IMPORTANT: Not specifying this as a named block because it means
+        /# we lose access to htmldir. Not naming the block may pose problems
+        /# in other arenas though ... may need to find a difference solution.
 
-          /# We create a local compiler so that we can limit scope to the
-          /# files and namespaces specified on the command, rather than all
-          /# files parsed in this shell.
-          fs = self.fs()
+        /# We create a local compiler so that we can limit scope to the
+        /# files and namespaces specified on the command, rather than all
+        /# files parsed in this shell.
+        fs = self.fs()
+        if False:
           metac = metax.c.Compiler(
             metal=self.metalang().id(),
             basel=self.baselang().id(),
@@ -28849,17 +28984,22 @@ scope:
             metadir=fs.metadir(),
             kind=fs.kind(),
             repodir=self.repodir())
-          flags = self.cli()
-          argmap = self._parseArgs(flags.rest)
-          paths = argmap['metafiles']
+        else:
+          metac = self
+          
+        cli = metac.cli()
+        fs = metac.fs()
+
+        argmap = metac._parseArgs(cli.rest)
+        paths = argmap['metafiles']
+        for path in paths:
           metac.generateHtml(
-            paths,
-            width=flags.htmlwidth + 5,
-            showbox=not flags.unbox,
-            htmldir=flags.htmldir or None,
-            hide=flags.htmlhide,
-            fontsize=flags.fontsize,
-          )
+            path,
+            width=cli.htmlwidth + 5,
+            showbox=not cli.unbox,
+            htmldir=cli.htmldir or None,
+            hide=cli.htmlhide,
+            fontsize=cli.fontsize)
       end command html;
 
       named
@@ -28886,63 +29026,61 @@ scope:
         flag filter : str = '' #:
           If present, only summary lines matching this regexp are shown.
       scope:
+        baselang = self.baselang()
+        fs = self.fs()
+        flags = self.cli()
 
-        if True:
-          baselang = self.baselang()
-          fs = self.fs()
-          flags = self.cli()
+        kinds = {
+          /# Line number at left margin, then indented kind and id
+          'num': {},
+          /# Indentation, then '- ', then kind, id and [line]
+          'org1': {
+            'form': '%(indent)s%(sep)s %(kind)s %(id)s [%(line)d]',
+            'delim': ' ',
+            'sep': '-',
+            'adj': -1,
+          },
+          /# Indentation using '*', then kind, id and [line]
+          'org2': {
+            'form': '%(indent)s %(kind)s %(id)s [%(line)d]',
+            'delim': '*',
+          },
+        }
 
-          kinds = {
-            /# Line number at left margin, then indented kind and id
-            'num': {},
-            /# Indentation, then '- ', then kind, id and [line]
-            'org1': {
-              'form': '%(indent)s%(sep)s %(kind)s %(id)s [%(line)d]',
-              'delim': ' ',
-              'sep': '-',
-              'adj': -1,
-            },
-            /# Indentation using '*', then kind, id and [line]
-            'org2': {
-              'form': '%(indent)s %(kind)s %(id)s [%(line)d]',
-              'delim': '*',
-            },
-          }
+        kwds = {
+          'sep': ' ',
+          'minlevel': flags.min,
+          'maxlevel': flags.max,
+          'adj': flags.adj,
+        }
 
-          kwds = {
-            'sep': ' ',
-            'minlevel': flags.min,
-            'maxlevel': flags.max,
-            'adj': flags.adj,
-          }
+        if flags.kind:
+          more = kinds.get(flags.kind, None)
+          if more is not None:
+            kwds.update(more)
+          else:
+            print 'WARNING: --kind %s is unknown (ignored)' % flags.kind
+        if flags.form:
+          kwds['form'] = flags.form
+        if flags.suffix:
+          kwds['suffix'] = flags.suffix
+        if flags.filter:
+          try:
+            kwds['filter'] = re.compile(flags.filter)
+          except sre_constants.error as e:
+            print 'ERROR: regexp "%s" is invalid (ignored)' % flags.filter
 
-          if flags.kind:
-            more = kinds.get(flags.kind, None)
-            if more is not None:
-              kwds.update(more)
-            else:
-              print 'WARNING: --kind %s is unknown (ignored)' % flags.kind
-          if flags.form:
-            kwds['form'] = flags.form
-          if flags.suffix:
-            kwds['suffix'] = flags.suffix
-          if flags.filter:
-            try:
-              kwds['filter'] = re.compile(flags.filter)
-            except sre_constants.error as e:
-              print 'ERROR: regexp "%s" is invalid (ignored)' % flags.filter
+        argmap = self._parseArgs(flags.rest, resolve=True)
 
-          argmap = self._parseArgs(flags.rest, resolve=True)
-
-          for details in argmap['details']:
-            construct = details['construct']
-            if construct:
-              lines = construct.writeIndex(**kwds)
-              for line in lines:
-                print line
-            else:
-              print 'WARNING: Ignoring %s (%s)' % (
-                details['arg'], details['kind'])
+        for details in argmap['details']:
+          construct = details['construct']
+          if construct:
+            lines = construct.writeIndex(**kwds)
+            for line in lines:
+              print line
+          else:
+            print 'WARNING: Ignoring %s (%s)' % (
+              details['arg'], details['kind'])
       end command index;
 
       named
@@ -28966,223 +29104,215 @@ scope:
           nm/sp/__init__.py to nm/sp.py unless there is also
           nm/sp/sub/__init__.py.
       scope:
+        verbose = True
+        cli = self.cli()
+        rootdir = self.workspaceDirectory()
+        fs = self.fs()
 
-        if True:
-          verbose = True
-          cli = self.cli()
-          rootdir = self.workspaceDirectory()
-          fs = self.fs()
-
-          def CopySrc2Dst(srcpath, verbose=False):
-            /# Given a baselang source path and cli, obtain the full destpath
-            assert srcpath.startswith(rootdir)
-            basedir = fs.dirname(srcpath)
-            subdir = basedir[len(rootdir)+1:]
-            subparts = subdir.split('/')
-            destdir = fs.join(cli.dir, subdir)
-            if cli.collapse:
-              basename = fs.basename(destdir)
-              destdir = fs.dirname(destdir)
-              destpath = fs.join(destdir, basename + baselang.suffix())
-              subparts.pop()
-            else:
-              destpath = fs.join(destdir, fs.basename(srcpath))
-            if not fs.exists(destdir):
-              fs.makedirs(destdir, 0700)
-              if verbose:
-                print 'Note: Created %s' % destdir
-
-            fs.copyfile(srcpath, destpath)
+        def CopySrc2Dst(srcpath, verbose=False):
+          /# Given a baselang source path and cli, obtain the full destpath
+          assert srcpath.startswith(rootdir)
+          basedir = fs.dirname(srcpath)
+          subdir = basedir[len(rootdir)+1:]
+          subparts = subdir.split('/')
+          destdir = fs.join(cli.dir, subdir)
+          if cli.collapse:
+            basename = fs.basename(destdir)
+            destdir = fs.dirname(destdir)
+            destpath = fs.join(destdir, basename + baselang.suffix())
+            subparts.pop()
+          else:
+            destpath = fs.join(destdir, fs.basename(srcpath))
+          if not fs.exists(destdir):
+            fs.makedirs(destdir, 0700)
             if verbose:
-              print 'Note: Copied %s to %s' % (srcpath, destpath)
+              print 'Note: Created %s' % destdir
 
-            if baselang.id() == 'python':
-              /# Hackery to ensure that __init__.py files exist up the chain.
-              tmpdir = destdir
-              assert tmpdir.endswith('/'.join(subparts))
-              while subparts:
-                ipath = fs.join(tmpdir, '__init__.py')
-                if not fs.exists(ipath):
-                  fs.touch(ipath)
-                  if verbose:
-                    print 'Note: Touched %s' % ipath
-                subparts.pop()
-                tmpdir = fs.dirname(tmpdir)
+          fs.copyfile(srcpath, destpath)
+          if verbose:
+            print 'Note: Copied %s to %s' % (srcpath, destpath)
 
-            return destpath
+          if baselang.id() == 'python':
+            /# Hackery to ensure that __init__.py files exist up the chain.
+            tmpdir = destdir
+            assert tmpdir.endswith('/'.join(subparts))
+            while subparts:
+              ipath = fs.join(tmpdir, '__init__.py')
+              if not fs.exists(ipath):
+                fs.touch(ipath)
+                if verbose:
+                  print 'Note: Touched %s' % ipath
+              subparts.pop()
+              tmpdir = fs.dirname(tmpdir)
 
-          argmap = self._parseArgs(cli.rest)
-          baselang = self.baselang()
-          for details in argmap['details']:
-            if details['kind'] == 'fqn':
-              basepath = details['path']
-              testpath = (
-                fs.join(
-                  fs.dirname(basepath) + '_test', fs.basename(basepath))
-                if cli.tests else None)
-              CopySrc2Dst(basepath, verbose=verbose)
-              if testpath and fs.exists(testpath):
-                CopySrc2Dst(testpath, verbose=verbose)
-            else:
-              print 'WARNING: Ignoring arg "%s"' % details['arg']
+          return destpath
+
+        argmap = self._parseArgs(cli.rest)
+        baselang = self.baselang()
+        for details in argmap['details']:
+          if details['kind'] == 'fqn':
+            basepath = details['path']
+            testpath = (
+              fs.join(
+                fs.dirname(basepath) + '_test', fs.basename(basepath))
+              if cli.tests else None)
+            CopySrc2Dst(basepath, verbose=verbose)
+            if testpath and fs.exists(testpath):
+              CopySrc2Dst(testpath, verbose=verbose)
+          else:
+            print 'WARNING: Ignoring arg "%s"' % details['arg']
       end command mirror;
 
       named
       command parents #:
         Print out the parents (and metaparents) of the specified class.
       scope:
-        if True:
-          print 'WARNING: Command "parents" is not yet implemented.'
+        print 'WARNING: Command "parents" is not yet implemented.'
       end command parents;
 
       named
       command parse #:
         Parse a specified .meta file.  Consider using 'get' instead.
       scope:
-        if True:
-          cli = self.cli()
-          argmap = self._parseArgs(cli.rest)
-          errors = False
-          metafiles = []
-          for path in argmap['metafiles']:
-            metafile = self.parseMeta(path)
-            if metafile.hasErrors(show=True):
-              errors = True
-              break
-            metafiles.append(metafile)
-          if not errors:
-            self.writeSummary(metafiles)
+        cli = self.cli()
+        argmap = self._parseArgs(cli.rest)
+        errors = False
+        metafiles = []
+        for path in argmap['metafiles']:
+          metafile = self.parseMeta(path)
+          if metafile.hasErrors(show=True):
+            errors = True
+            break
+          metafiles.append(metafile)
+        if not errors:
+          self.writeSummary(metafiles)
       end command parse;
 
       named
       command repl #:
         Invoke a baselang-specific read-execute-print loop (REPL).
       scope:
-        if True:
-          self.baselang().repl()
+        self.baselang().repl()
       end command repl;
 
       named
       command reverse #:
         Reverse compile baselang files into meta files.
       scope:
-        if True:
-          print 'WARNING: Command "reverse" is not yet implemented.'
+        print 'WARNING: Command "reverse" is not yet implemented.'
       end command reverse;
 
       named
       command run #:
         Invoke a class-specific entry point
       scope:
-        if True:
-          baselang = self.baselang()
-          fs = self.fs()
-          flags = self.cli()
-          allargs = flags.rest
-          if allargs:
-            fqcn = allargs[0]
-            path = fs.join(
-              self.repositoryPath(), self.baselang().classPath(fqcn))
-            if fs.exists(path):
-              parts = fqcn.split('.')
-              clsname = parts.pop()
-              nmsp = '.'.join(parts)
+        baselang = self.baselang()
+        fs = self.fs()
+        flags = self.cli()
+        allargs = flags.rest
+        if allargs:
+          fqcn = allargs[0]
+          path = fs.join(
+            self.repositoryPath(), self.baselang().classPath(fqcn))
+          if fs.exists(path):
+            parts = fqcn.split('.')
+            clsname = parts.pop()
+            nmsp = '.'.join(parts)
 
-              /# TODO(wmh): Create a baselang behavior for this
-              if baselang.id() == 'python':
-                /# TODO(wmh): How to get this to interact with Bazel?
-                module = importlib.import_module(nmsp)
-                cls = getattr(module, clsname, None)
-                if cls is None:
-                  /# TODO(wmh): Why didn't we detect this earlier?
-                  print 'ERROR: Unknown class ' + fqcn
-                else:
-                  entry = getattr(cls, 'Entry', None)
-                  if entry is None:
-                    print 'ERROR: %s does not have an entry point defined' % fqcn
-                  else:
-                    args = ['meta-dynamic'] + allargs[1:]
-                    entry(args)
+            /# TODO(wmh): Create a baselang behavior for this
+            if baselang.id() == 'python':
+              /# TODO(wmh): How to get this to interact with Bazel?
+              module = importlib.import_module(nmsp)
+              cls = getattr(module, clsname, None)
+              if cls is None:
+                /# TODO(wmh): Why didn't we detect this earlier?
+                print 'ERROR: Unknown class ' + fqcn
               else:
-                print 'Not yet implementing run for %s' % baselang.id()
+                entry = getattr(cls, 'Entry', None)
+                if entry is None:
+                  print 'ERROR: %s does not have an entry point defined' % fqcn
+                else:
+                  args = ['meta-dynamic'] + allargs[1:]
+                  entry(args)
             else:
-              print 'ERROR: Invalid class ' + fqcn
+              print 'Not yet implementing run for %s' % baselang.id()
           else:
-            print 'usage: meta2 run <fqcn> [arg]...'
+            print 'ERROR: Invalid class ' + fqcn
+        else:
+          print 'usage: meta2 run <fqcn> [arg]...'
       end command run;
 
       named
       command setup #:
         Perform specialized baselang-specific WORKSPACE configuration.
       scope:
-        if True:
-          debug = True
-          baselang = self.baselang()
-          wdir = self.workspaceDirectory()
-          metaroot = self.metaRoot()
-          fs = self.fs()
-          commands = []
+        debug = True
+        baselang = self.baselang()
+        wdir = self.workspaceDirectory()
+        metaroot = self.metaRoot()
+        fs = self.fs()
+        commands = []
 
+        if debug:
+          print 'baselang          %s' % baselang.id()
+          print 'workingdir        %s' % wdir
+          print 'metaroot          %s' % metaroot
+
+        /# NOTE(wmh): We currently do NOT untar the oopl.tgz file here ... it is
+        /# done at a higher level than a specific baselang. Keep it a manual
+        /# process?
+        if False:
+          oopl_tgz = fs.join(metaroot, 'src', 'templates', 'oopl.tgz')
           if debug:
-            print 'baselang          %s' % baselang.id()
-            print 'workingdir        %s' % wdir
-            print 'metaroot          %s' % metaroot
+            print 'oopl.tgz          %s' % oopl_tgz
+          if not fs.exists(oopl_tgz):
+            raise Error('Failed to find %s' % oopl_tgz)
+          repopath = self.repositoryPath()
+          commands.append({'args': ['tar', 'xzf', oopl_tgz], 'cwd': repopath})
 
-          /# NOTE(wmh): We currently do NOT untar the oopl.tgz file here ... it is
-          /# done at a higher level than a specific baselang. Keep it a manual
-          /# process?
-          if False:
-            oopl_tgz = fs.join(metaroot, 'src', 'templates', 'oopl.tgz')
-            if debug:
-              print 'oopl.tgz          %s' % oopl_tgz
-            if not fs.exists(oopl_tgz):
-              raise Error('Failed to find %s' % oopl_tgz)
-            repopath = self.repositoryPath()
-            commands.append({'args': ['tar', 'xzf', oopl_tgz], 'cwd': repopath})
+        /# (Maybe) clean the repository so we can start afresh.
+        rc, _, _ = self.executeBazelCommand(
+          ['clean', '--expunge'], cwd=wdir, dryrun=False, prompt=True)
 
-          /# (Maybe) clean the repository so we can start afresh.
-          rc, _, _ = self.executeBazelCommand(
-            ['clean', '--expunge'], cwd=wdir, dryrun=False, prompt=True)
+        /# As of 2017-12-22, we have a special setup flow for C++, because the
+        /# default C++ compiler on macos (clang) does not handle std::any, so
+        /# we use g++ instead, which does.
+        /#  - a special CROSSTOOL has been created ... we copy it into the
+        /#    default location.
+        if baselang.id() == 'cpp':
 
-          /# As of 2017-12-22, we have a special setup flow for C++, because the
-          /# default C++ compiler on macos (clang) does not handle std::any, so
-          /# we use g++ instead, which does.
-          /#  - a special CROSSTOOL has been created ... we copy it into the
-          /#    default location.
-          if baselang.id() == 'cpp':
+          /# Establish the location of the default crosstool file.
+          rc, output_base, stderr = self.executeBazelCommand(
+            ['info', 'output_base'], cwd=wdir, prompt=False, dryrun=False)
+          if rc:
+            raise Error(
+              "ERROR executing 'bazel info output_base':\n%s" % stderr)
+          default_crosstool = fs.join(
+            output_base.strip(), 'external', 'local_config_cc', 'CROSSTOOL')
+          if debug:
+            print 'default_crosstool %s' % default_crosstool
 
-            /# Establish the location of the default crosstool file.
-            rc, output_base, stderr = self.executeBazelCommand(
-              ['info', 'output_base'], cwd=wdir, prompt=False, dryrun=False)
-            if rc:
-              raise Error(
-                "ERROR executing 'bazel info output_base':\n%s" % stderr)
-            default_crosstool = fs.join(
-              output_base.strip(), 'external', 'local_config_cc', 'CROSSTOOL')
-            if debug:
-              print 'default_crosstool %s' % default_crosstool
+          /# If the default crosstool file is missing, invoke bazel to
+          /# have it auto-generated.
+          /#  - TODO(wmh): Is this even necessary if we have our own copy?
+          /#    My concern is that the autogen process does more than just
+          /#    write the CROSSTOOL file, so safer to do it then tromp.
+          if not fs.exists(default_crosstool):
+            /# This will happen if the above 'bazel clean --expunge' was
+            /# performed.
+            rc, _, _ = self.executeBazelCommand(
+              ['build', 'metastrap:__Meta__'],
+              cwd=wdir, dryrun=False, show=True)
 
-            /# If the default crosstool file is missing, invoke bazel to
-            /# have it auto-generated.
-            /#  - TODO(wmh): Is this even necessary if we have our own copy?
-            /#    My concern is that the autogen process does more than just
-            /#    write the CROSSTOOL file, so safer to do it then tromp.
-            if not fs.exists(default_crosstool):
-              /# This will happen if the above 'bazel clean --expunge' was
-              /# performed.
-              rc, _, _ = self.executeBazelCommand(
-                ['build', 'metastrap:__Meta__'],
-                cwd=wdir, dryrun=False, show=True)
-
-            /# If we have a local crosstool file, replace the default one with it.
-            system = platform.system()
-            special_crosstool = fs.join(wdir, 'CROSSTOOL.%s.g++' % system)
-            if debug:
-              print 'special_crosstool %s' % special_crosstool
-            if fs.exists(special_crosstool):
-              fs.copyfile(special_crosstool, default_crosstool)
-              print 'NOTE: Replaced\n  %s\nwith\n  %s' % (
-                default_crosstool, special_crosstool)
+          /# If we have a local crosstool file, replace the default one with it.
+          system = platform.system()
+          special_crosstool = fs.join(wdir, 'CROSSTOOL.%s.g++' % system)
+          if debug:
+            print 'special_crosstool %s' % special_crosstool
+          if fs.exists(special_crosstool):
+            fs.copyfile(special_crosstool, default_crosstool)
+            print 'NOTE: Replaced\n  %s\nwith\n  %s' % (
+              default_crosstool, special_crosstool)
       end command setup;
 
       named
@@ -29190,52 +29320,51 @@ scope:
         An interactive shell within which any meta2 command can be invoked.
       scope:
         if True:
-          if True:
-            /# New implementation based on metax.c.shell.Shell
-            shell = metax.c.shell.Shell(self)
-            shell.run()
+          /# New implementation based on metax.c.shell.Shell
+          shell = metax.c.shell.Shell(self)
+          shell.run()
 
-          else:
-            /# Old implementation ... no access to special logic
-            prompt = 'meta> '
+        else:
+          /# Old implementation ... no access to special logic
+          prompt = 'meta> '
 
-            flags = self.cli()
-            cmd = flags._command_()
-            while cmd.id() != 'main':
-              cmd = cmd.parent()
-            root = cmd
-            /#root.show()
-            /#root.show(mode='help')
-            parent = root.parent()
+          flags = self.cli()
+          cmd = flags._command_()
+          while cmd.id() != 'main':
+            cmd = cmd.parent()
+          root = cmd
+          /#root.show()
+          /#root.show(mode='help')
+          parent = root.parent()
 
-            while True:
-              line = raw_input(prompt).strip()
-              if not line: continue
-              args = line.split()  # TODO(wmh): shlex
-              command = args[0]
-              cmd = root.instantiate([root.id()] + args, parent=parent)
-              if cmd.id() == 'main':
-                /# Failed to find a valid command.
-                print 'Unknown command "%s"' % command
+          while True:
+            line = raw_input(prompt).strip()
+            if not line: continue
+            args = line.split()  # TODO(wmh): shlex
+            command = args[0]
+            cmd = root.instantiate([root.id()] + args, parent=parent)
+            if cmd.id() == 'main':
+              /# Failed to find a valid command.
+              print 'Unknown command "%s"' % command
+            else:
+              /# Command instantiation identified a command.
+
+              /# We update the global metax.cli.Values() instance with a
+              /# new Command.
+              self.updateCLI(cmd)
+
+              /# Individual commands should set this. In fact, consider
+              /# deleting this field.
+              self.argmapIs(None)
+
+              func_name = command + '_command'
+              method = getattr(self, func_name, None)
+              if method:
+                method()
+              elif command in ('quit', 'exit'):
+                break
               else:
-                /# Command instantiation identified a command.
-
-                /# We update the global metax.cli.Values() instance with a
-                /# new Command.
-                self.updateCLI(cmd)
-
-                /# Individual commands should set this. In fact, consider
-                /# deleting this field.
-                self.argmapIs(None)
-
-                func_name = command + '_command'
-                method = getattr(self, func_name, None)
-                if method:
-                  method()
-                elif command in ('quit', 'exit'):
-                  break
-                else:
-                  print 'Unknown command "%s" (ignored)' % command
+                print 'Unknown command "%s" (ignored)' % command
       end command shell;
 
       named
@@ -29245,54 +29374,58 @@ scope:
         flag release @ rel : bool = false #:
           If true, perform a release rather than a snapshot.
       scope:
-        if True:
-          cli = self.cli()
-          verbose = cli.verbose or True  # FIX ME
-          self.__class__.MakeSnapshot(
-            self.fs(), verbose=verbose, make_release=cli.release)
+        cli = self.cli()
+        verbose = cli.verbose or True  # FIX ME
+        self.__class__.MakeSnapshot(
+          self.fs(), verbose=verbose, make_release=cli.release)
       end command snapshot;
 
       named
       command summarize #:
         Print out a summary of all specified metafiles.
       scope:
-        if True:
-          metafiles = self.metafiles().values()
-          fs = self.fs()
-          for metafile in sorted(metafiles, key=lambda mf: mf.path()):
-            path = fs.realpath(metafile.path())
-            parts = path.split('/')
-            subpath = '/'.join(parts[-3:])
-            print subpath
+        metafiles = self.metafiles()
+        pprint.pprint(metafiles)
+        fs = self.fs()
+        for metapath in sorted(metafiles):
+          metafile = metafiles[metapath]
+          if not isinstance(metafile, metax.c.MetaFile):
+            /# TOOD(wmh): Why are 'schema' and 'schema_2' keys (with same
+            /# values) in this mapping?
+            continue
+          path = fs.realpath(metapath)
+          parts = path.split('/')
+          subpath = '/'.join(parts[-3:])
+          print subpath
 
-            filecons = metafile.construct()
-            for construct in filecons.attrval('scope:'):
-              fkind = construct.kind()
-              if fkind == 'namespace':
-                print '  %s scope:' % construct.kindfqn()
-                for ncons in construct.attrval('scope:'):
-                  print '    ' + ncons.kindid()
-                  if ncons.kind() == 'class':
-                    for econs in ncons.attrval('scope:'):
-                      print '      ' + econs.kindid()
-              elif fkind == 'MetaLanguage':
-                print '  %s config:' % construct.kindfqn()
-                for mcons in construct.attrval('config:'):
-                  print '    ' + mcons.kindid()
+          filecons = metafile.construct()
+          for construct in filecons.attrval('scope:'):
+            fkind = construct.kind()
+            if fkind == 'namespace':
+              print '  %s scope:' % construct.kindfqn()
+              for ncons in construct.attrval('scope:'):
+                print '    ' + ncons.kindid()
+                if ncons.kind() == 'class':
+                  for econs in ncons.attrval('scope:'):
+                    print '      ' + econs.kindid()
+            elif fkind == 'MetaLanguage':
+              print '  %s config:' % construct.kindfqn()
+              for mcons in construct.attrval('config:'):
+                print '    ' + mcons.kindid()
       end command summarize;
 
       named
       command test #:
         Test specified namespaces/classes/methods.
       scope:
-        if True:
-          argmap = self.argmap()
-          if argmap:
-            targets = argmap['fqns']
-            flags = self.cli()
-            self.runUnitTests(targets, verbose=flags.verbose)
-          else:
-            print 'ERROR: no argmap'
+        cli = self.cli()
+        argmap = self._parseArgs(cli.rest, implicit=True)
+        if argmap:
+          targets = argmap['fqns']
+          flags = self.cli()
+          self.runUnitTests(targets, verbose=flags.verbose)
+        else:
+          print 'ERROR: no argmap'
       end command test;
 
       named
@@ -29309,106 +29442,99 @@ scope:
         flag showmeta : bool = false #:
           Display metaclasses.
       scope:
-        if True:
-          cli = self.cli()
-          fs = self.fs()
+        cli = self.cli()
+        fs = self.fs()
 
-          argmap = self._parseArgs(cli.rest)
-          errors = False
-          paths = argmap['metafiles']
-          if paths:
-            config = {}
-            metafiles = []
-            for path in paths:
-              metafile = self.getMeta(path)
-              if not metafile.hasErrors(show=True):
-                metafiles.append(metafile)
-            print metafiles
-            first = metafiles[0]
-            assert first.path().endswith('.meta2')
-            dotpath = fs.basename(first.path()).replace('.meta2', '.dot')
-            self.generateUmlDiagram(
-              metafiles, dotpath, config=config, display=cli.display,
-              show_user=cli.showuser, show_meta=cli.showmeta,
-              show_test=cli.showtest)
-          else:
-            print 'Must provide metafile(s) to generate uml for'
+        argmap = self._parseArgs(cli.rest)
+        errors = False
+        paths = argmap['metafiles']
+        if paths:
+          config = {}
+          metafiles = []
+          for path in paths:
+            metafile = self.getMeta(path)
+            if not metafile.hasErrors(show=True):
+              metafiles.append(metafile)
+          first = metafiles[0]
+          dotpath = fs.basename(PathFromMeta(first.path(), '.dot'))
+          self.generateUmlDiagram(
+            metafiles, dotpath, config=config, display=cli.display,
+            show_user=cli.showuser, show_meta=cli.showmeta,
+            show_test=cli.showtest)
+        else:
+          print 'Must provide metafile(s) to generate uml for'
       end command uml;
 
       command __default__ #:
         Compile specified .meta files.
       scope:
-        if True:
-          /# As a convenience, if all are .meta2 files or fqns, we assume the
-          /# action is a combination of 'compile' and 'test.
-          allargs = cli.rest
-          if allargs:
-            command = allargs[0]
-            argmap = self._parseArgs(allargs, implicit=True)
-            if (
-              not argmap['args']
-              and not argmap['badfiles']
-              and (argmap['metafiles'] or argmap['fqns'])
-            ):
-              /# All args are .meta2. or fqns. We parse/expand/compile the
-              /# .meta2 files then invoke the blaze test targets associated with
-              /# each fqn.
-              self.argmapIs(argmap)
-              if self._compile_command():
-                if argmap['fqns']:
-                  self._test_command()
-            else:
-              print 'ERROR : Unknown command "%s"' % command
-            fs = self.fs()
-            if fs.kind() == 'memory':
-              fp = sys.stdout
-              fp.write('Meta filesystem is inmemory:\n')
-              fs.summarize(fp=fp)
+        /# As a convenience, if all are .meta2 files or fqns, we assume the
+        /# action is a combination of 'compile' and 'test.
+        allargs = cli.rest
+        if allargs:
+          command = allargs[0]
+          argmap = self._parseArgs(allargs, implicit=True)
+          if (
+            not argmap['args']
+            and not argmap['badfiles']
+            and (argmap['metafiles'] or argmap['fqns'])
+          ):
+            /# All args are .meta2. or fqns. We parse/expand/compile the
+            /# .meta2 files then invoke the blaze test targets associated with
+            /# each fqn.
+            self.argmapIs(argmap)
+            if self._compile_command():
+              if argmap['fqns']:
+                self._test_command()
+          else:
+            print 'ERROR : Unknown command "%s"' % command
+          fs = self.fs()
+          if cli.showfs or fs.kind() == 'memory':
+            fp = sys.stdout
+            fp.write('Meta filesystem is inmemory:\n')
+            fs.summarize(fp=fp)
       end command __default__;
       
     scope:
-      
-      if True:
-        /# This initial block creates a Command instance and performs some
-        /# initial sanity checks.
+      /# This initial block creates a Command instance and performs some
+      /# initial sanity checks.
 
-        /# IMPORTANT: This entry point is somewhat non-standard, because the
-        /# 'meta2' script creates a Command instance, parses some flags, then
-        /# invokes this entry method, which creates another Command and various
-        /# subCommands.
-        /#  - passing the right argv, and the right 'parent' to the
-        /#    constructors and 'instantiate' method is critically important.
-        /#    - the argv passed by the 'meta2' script into the Entry method
-        /#      ensures that the first arg is 'main' so that when we
-        /#      instantiate the top-level construct within the auto-generated
-        /#      code-base, the right values are analyzed.
-        /#  - the auto-generated code uses a special meta__names variable
-        /#    to compare values in the nested command structure, and this
-        /#    variable is assumed to have the name of the main construct
-        /#
-        /# CODETANGLE(meta2_entry_main): First arg must be 'main'
-        assert meta__args[0] == 'main'
-        while meta__names[0] != 'main':
-          meta__names.pop(0)
-          meta__names.append(False)
+      /# IMPORTANT: This entry point is somewhat non-standard, because the
+      /# 'meta2' script creates a Command instance, parses some flags, then
+      /# invokes this entry method, which creates another Command and various
+      /# subCommands.
+      /#  - passing the right argv, and the right 'parent' to the
+      /#    constructors and 'instantiate' method is critically important.
+      /#    - the argv passed by the 'meta2' script into the Entry method
+      /#      ensures that the first arg is 'main' so that when we
+      /#      instantiate the top-level construct within the auto-generated
+      /#      code-base, the right values are analyzed.
+      /#  - the auto-generated code uses a special meta__names variable
+      /#    to compare values in the nested command structure, and this
+      /#    variable is assumed to have the name of the main construct
+      /#
+      /# CODETANGLE(meta2_entry_main): First arg must be 'main'
+      assert meta__args[0] == 'main'
+      while meta__names[0] != 'main':
+        meta__names.pop(0)
+        meta__names.append(False)
 
-        /# We update MetaObject's idea of instantiated command.
-        assert metax.root.MetaObject.CLI() is not None
-        metax.root.MetaObject.CLI()._command_Is(meta__command)
+      /# We update MetaObject's idea of instantiated command.
+      assert metax.root.MetaObject.CLI() is not None
+      metax.root.MetaObject.CLI()._command_Is(meta__command)
 
-        /# Create the Compiler instance.
-        metac = metax.c.Compiler(metal=cli.metalang, basel=cli.baselang)
-        metax.c.Compiler.CurrentIs(metac)
-        /# Ensure that the repository directory exists.
-        if not metac.verifyDirectory(metadir='.meta2'):
-          sys.exit(1)
+      /# Create the Compiler instance.
+      metac = metax.c.Compiler(metal=cli.metalang, basel=cli.baselang)
+      metax.c.Compiler.CurrentIs(metac)
+      /# Ensure that the repository directory exists.
+      if not metac.verifyDirectory(metadir='.meta2'):
+        sys.exit(1)
 
-        /# The Entry method is meta-level, so 'self' isn't defined.  We
-        /# have self refer to the newly created Compiler instance. This will
-        /# make it easy to flip between virtual and function implementations
-        /# of the code.
-        self = metac
-
+      /# The Entry method is meta-level, so 'self' isn't defined.  We
+      /# have self refer to the newly created Compiler instance. This will
+      /# make it easy to flip between virtual and function implementations
+      /# of the code.
+      self = metac
     end command metacnew;
 
   end class Compiler;

@@ -298,7 +298,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
     
   - using the Meta type system, we have the following variants:
     - *str : can be null
-    - &str : cannot be null
+    - &str : cannot be null  (unless we special-case it)
     - @str : storage space
     - str: same as &#str?
 
@@ -320,15 +320,15 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
      testing is beneficial.
      
    - a variable of type 'str' (Python), 'String' (Javascript), or scalar (Perl)
-     can be null, and in some languages (Javascript) one can indicate a distinction
-     between "string that can be null" and "string that cannot be null"
-     
+     can be null, and in some languages (Javascript) one can indicate a
+     distinction between "string that can be null" and "string that cannot be
+     null"
 
 - In C++
    - there are a variety of types that can be used to represent a string:
      - char*
      - std::string
-     - std::string_view  (points to pre-existing char* or string)
+     - str::string_view  (points to pre-existing char* or string)
    - when needed to convert between types:
       - char* to string requires a copy: O(N)
       - char* to string_view does not require a copy: O(1)
@@ -343,6 +343,16 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
    - implementing 'str' using 'const char*'
       - no length, no convenient methods for various things.
       - not viable
+
+   - implementing 'str' using 'const std::string' and std::string_view
+      - when used in a field or local var:
+         - @str --> std::string
+         - &str --> const std::string&
+         - *str --> const std::string*
+      - when used as an arg or return of a method
+         - @str --> std::string_view      
+         - &str --> std::string_view or const std::string_view&
+         - *str --> const std::string_view*      
       
    - implementing 'str' using 'const std::string'
       - variants:
@@ -519,7 +529,9 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
            with closure requires us to be able to distinguish betweeen 'str can
            be null' and 'str cannot be null'
       - cons:
-         - In C++ syntax is cumbersome (but see '*str' discussion above for
+         - In C++, we often pass strings by reference because they are rarely
+           allowed to be null, and having to dreference string pointers is
+           very cumbersome (but see '*str' discussion above for
            possible workaround).
            
    - Variant 2: 'str' means '&str'

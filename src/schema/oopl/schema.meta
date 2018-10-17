@@ -1,5 +1,5 @@
 MetaLanguage oopl name Oopl parent meta toplevel <namespace> #:
-  The constructs in Meta(Oopl).
+  Augmentation and unification of object-oriented programming languages.
 config:
 
   abstract
@@ -305,7 +305,6 @@ config:
       >|${end_namespace}
       >|
       >|${imposts}
-      >|
       >|#endif // ${namespace_under}_${class}_h
     end Template cpp_decl;
 
@@ -315,9 +314,7 @@ config:
       >|
       >|${namespace_spec}
       >|${preclass_local}
-      >|
       >|${scope}
-      >|
       >|${postclass_local}
       >|
       >|${end_namespace}

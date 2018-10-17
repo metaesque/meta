@@ -1378,7 +1378,7 @@ scope:
         helpfull: provide detailed help for the part.
   scope:
     receiver Command scope:
-      fp.write('%s%s: %s\n' % (indent, self.name(), self.summary() or ''))
+      fp.write('%s%s:\n%s  %s\n' % (indent, self.name(), indent, self.summary() or ''))
       subindent = indent + '  '
 
       if mode == 'summary':

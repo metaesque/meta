@@ -102,6 +102,12 @@ config:
     Attribute amount : word = <required> aliases <=> #:
       The amount consumed.
 
+    secondary
+    Attribute calories : word = <empty> #:
+      If provided, no search for data is performed ... the explicitly
+      specified calories is accounted for, but no other nutritional info is
+      recorded.
+
     Attribute comment:;
     Attribute config:;
     

@@ -160,7 +160,7 @@
 (defconst metafood2-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
 (defconst metafood2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "day" "exercise" "food" "meal"))
-(defconst metafood2-attribute-keys '("#" "<" "=" "@" "aliases" "amount" "autokey" "certainty" "children" "color" "comment" "config" "default" "delim" "is" "key" "kind" "location" "name" "parent" "presence" "replacer" "scope" "suffixes" "time" "toplevel" "type" "value"))
+(defconst metafood2-attribute-keys '("#" "%" "<" "=" "@" "aliases" "amount" "autokey" "calories" "certainty" "children" "color" "comment" "config" "default" "delim" "is" "key" "kind" "location" "name" "parent" "presence" "replacer" "scope" "suffixes" "time" "toplevel" "type" "value"))
 (defconst metafood2-feature-values '("abstract" "aliaskey" "certain" "concrete" "feature" "maybe" "nokey" "noval" "primary" "secondary" "showkey" "showval" "undef" "userval" "wag"))
 (defconst metafood2-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
 (defconst metafood2-basewords      '())
