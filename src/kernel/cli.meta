@@ -350,20 +350,22 @@ scope:
       test.command.help(fp=fp)
       test.command.help(fp=fp, full=True)
       test.iseqtext(
-        >|"""meta2: 
+        >|"""meta2:
         >|  --baselang|b: The baselang to compile into.
         >|  --metadir: The subdir to write code to.
         >|  --metalang|L: The metalang the code is defined in.
-        >|  canonical: Canonicalize the specified meta files and report diffs.
+        >|  canonical:
+        >|    Canonicalize the specified meta files and report diffs.
         >|    --expand|e: If true, invoke expandMeta() before canonicalizing
-        >|meta2: 
+        >|meta2:
         >|  --baselang|b: The baselang to compile into.
         >|    If this is <special>, a metalang-specific default is used
         >|  --metadir: The subdir to write code to.
         >|    A value of .meta2 is treated specially, being symlinked to repo
         >|  --metalang|L: The metalang the code is defined in.
         >|
-        >|  canonical: Canonicalize the specified meta files and report diffs.
+        >|  canonical:
+        >|    Canonicalize the specified meta files and report diffs.
         >|    --expand|e: If true, invoke expandMeta() before canonicalizing
         >|      By default, expandMeta() invokes parseMeta() but not expandMeta().
         >|""",
@@ -974,7 +976,8 @@ scope:
         test.iseqvec(['./person', 'image'], res.names())
 
         test.iseqtext(
-          >|"""faux: A command with a flag and arg of each type.
+          >|"""faux:
+          >|  A command with a flag and arg of each type.
           >|  --deps                 0                              None       =         
           >|  --gender               undef                          None       =         
           >|  --height               1.87                           None       =         
@@ -983,7 +986,8 @@ scope:
           before)
 
         test.iseqtext(
-          >|"""image: Image processing.
+          >|"""image:
+          >|  Image processing.
           >|  --deps                 1                              =          0         
           >|  --gender               female                         =          undef     
           >|  --height               1.63                           =          1.87      
@@ -998,7 +1002,8 @@ scope:
         res.show(fp=test.fp())
 
         test.iseqtext(
-          >|"""list: Image listing
+          >|"""list:
+          >|  Image listing
           >|  --deps                 1                              =          0         
           >|  --gender               female                         =          undef     
           >|  --height               1.63                           =          1.87      
@@ -1378,7 +1383,10 @@ scope:
         helpfull: provide detailed help for the part.
   scope:
     receiver Command scope:
-      fp.write('%s%s:\n%s  %s\n' % (indent, self.name(), indent, self.summary() or ''))
+      fp.write('%s%s:\n' % (indent, self.name()))
+      summary = self.summary()
+      if summary:
+        fp.write('%s  %s\n' % (indent, summary))
       subindent = indent + '  '
 
       if mode == 'summary':
@@ -1410,7 +1418,7 @@ scope:
       fp = test.fp()
       test.command.show(fp=fp)
       test.iseqtext(
-        >|"""meta2: 
+        >|"""meta2:
         >|  --baselang             <special>                      None       =         
         >|  --metadir              .meta2                         None       =         
         >|  --metalang             oopl                           None       =         

@@ -8997,6 +8997,7 @@ scope:
 
       cc_any = metax.c.OoplCpp.CC_ANY
       cc_str = metax.c.OoplCpp.CC_STR
+      cc_strview = metax.c.OoplCpp.CC_STRVIEW
       cc_str_value = metax.c.OoplCpp.CC_STR_VALUE
 
       for metastr, epy, ejs, ecc in (
@@ -9006,17 +9007,17 @@ scope:
         ('*any', 'any', '?*', cc_any + '*'),
         ('&any', 'any', '!*', cc_any + '&'),
         ('@any', 'any', '!*', cc_any),
-        ('str', 'str', '?string', cc_str + '*'),
-        ('*str', 'str', '?string', cc_str + '*'),
-        ('&str', 'str', '!string', cc_str + '&'),
-        ('@str', 'str', '!string', cc_str_value),
-        ('&*str', 'str', '?string', cc_str + '*&'),
+        ('str', 'str', '?string', cc_strview),
+        ('*str', 'str', '?string', cc_strview),
+        ('&str', 'str', '!string', cc_strview),
+        ('@str', 'str', '!string', cc_strview),
+        ('&*str', 'str', '?string', cc_strview),
         ('@vec', 'list', '!Array.<?*>', 'std::vector<%s*>' % cc_any),
-        ('@map', 'dict', '!Object.<!string,?*>', 'std::map<%s,%s*>' % (cc_str_value, cc_any)),
+        ('@map', 'dict', '!Object.<!string,?*>', 'std::map<%s,%s*>' % (cc_strview, cc_any)),
         ('ostream', 'file', '?Object', 'std::ostream*'),
         ('*#nm.sp.A', 'nm.sp.A', '?nm.sp.A', 'const nm::sp::A*'),
         ('#*nm.sp.A', 'nm.sp.A', '?nm.sp.A', 'nm::sp::A*const'),
-        ('@vec<@str>', 'list', '!Array.<!string>', 'std::vector<%s>' % cc_str_value),
+        ('@vec<@str>', 'list', '!Array.<!string>', 'std::vector<%s>' % cc_strview),
       ):
         metatype = metax.c.Type.Instance(metastr)
         pybase = ooplpy.typeToBase(metatype)
@@ -10726,7 +10727,8 @@ scope:
       prefix = ftype.prefix()
       strview = Type.Instance('@' + OoplCpp.CC_STRVIEW.replace('::', '.'))
       strref = Type.Instance('&' + OoplCpp.CC_STRVIEW.replace('::', '.'))
-
+      result = None
+      
       res = ''
       if acc == 'get':
         /# if T is primitive, getter is T
@@ -15102,8 +15104,16 @@ scope:
 
       D.translate.end()
     test:
-      print 'FIX NamespaceConstruct.translatemeta'
+      /# TODO(wmh): This is working when tested with
+      /#  % metac -rv parser metax.c.NamespaceConstruct.translateMeta
+      /#  % metac -rv parser metax.c.NamespaceConstruct
+      /# but fails with
+      /#  % metac -rv parser metax.c
+      /# so some state is being corrupted by other tests in some other class.
+
+      print 'FIX NamespaceConstruct.translateMeta (affected by other tests)'
       return
+
       cards1, scope, namespace, path = test.getMetaFile(
         'oopl', 'cards1', debuglevel=0)
       namespace.expandMeta()
@@ -15111,7 +15121,7 @@ scope:
       metac = namespace.compiler()
       test.isfalse(namespace.metafile().hasErrors(show=True))
       fs = metac.fs()
-      /# fs.summarize()
+      /#fs.summarize()
       test.iseqvec(
         ['oopl/python/demo/__init__.py',
          'oopl/python/demo/cards1/.Card.py',
@@ -25239,7 +25249,8 @@ scope:
           errors += 1
         elif imports:
           /# Import
-          metafile.importMeta()
+          if not flags.disable_imports:
+            metafile.importMeta()
           if metafile.hasErrors(show=True):
             errors += 1
           elif translate:

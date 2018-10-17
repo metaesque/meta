@@ -333,6 +333,9 @@ def ParseArgv(argv, cli_module, root_module=None):
   command.newFlag(
     'write_goldens', 'bool', default='false', aliases='W',
     summary='If true, tests involving goldens write instead of compare.')
+  command.newFlag(
+    'disable_imports', 'bool', default='false', 
+    summary='If true, do not invoke importMeta during compilation.')
   command.newArg(
     'args', multi=True, summary='All other args')
 
