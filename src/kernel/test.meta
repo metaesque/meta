@@ -408,59 +408,31 @@ scope:
     cls assoc metax.root.Error;
   scope:
 
-    meta
+    static
     field Debug : bool #:
       What to initialize TestCase.debug to.
-    meta
+
+    static
     field InstanceCount : int = 1 #:
       Counts the number of instances created so we can assign unique ids.
       Useful for debugging purposes.
-    meta
+
+    static
     field WriteGoldens : bool #:
       If true, methods that invoke iseqstrgold() or iseqfilegold() will
       update goldens instead of compare goldens.
-    meta
+
+    static
     field CanonicalStdout : ostream #:
       The 'normal' stdout.
-    meta
+
+    static
     field CanonicalStderr : ostream #:
       The 'normal' stderr.
-    meta
+
+    static
     field Interactive : bool #:
       Set this to True to enable interactive unit tests.      
-
-    meta
-    lifecycle #:
-      Initialize class-level variables.  This includes variables for
-      controlling golden writing, interactivity, debugging, etc, based on
-      the value of envars.
-
-      TODO(wmh): This should be added to the 'meta lifecycle' above, when
-      support has been provided by Meta.
-    scope<py>:
-      /# TODO(wmh): How can we set environment variables when using bazel?
-      /# The --action_env flag from
-      /#    https://bazel.build/designs/2016/06/21/environment.html
-      /# does not appear to be working the way I understand it,
-      /# neither with entries in ~/.bazelrc or explicitly specified on
-      /# the command line:
-      /#   bazel test --action_env=BLAH=blork --test_output=all //wmh:regexp_test
-      import os
-      meta.WriteGoldensIs(os.getenv('WRITE_GOLDENS', '') == 'true')
-      debug = os.getenv('META_DEBUG', '')
-      if ' tests ' in debug:
-        meta.DebugIs(True)
-      meta.CanonicalStdoutIs(sys.stdout)
-      meta.CanonicalStderrIs(sys.stderr)
-
-      meta.cStringIOClass = cStringIO.StringIO().__class__
-    scope<js>:
-      /# TODO(wmh): Establish whether there is any way to emulate
-      /# class variables in Javascript other than adding them as
-      /# instance variables within the meta class.
-    scope<cc>:
-      /# Initialize the class-level vars!
-    end lifecycle;
 
     field debug : bool #:
       If True, prints out each invocation of the initializer, setup,
@@ -570,7 +542,7 @@ scope:
     super<py> (method_name)
     super<js> (method_name)
     init<py>:
-      self.debugIs(self.__class__.Debug())
+      self.debugIs(TestCase.Debug())
       count = metax.test.TestCase.InstanceCount() + 1
       metax.test.TestCase.InstanceCountIs(count)
       self.uidIs('%s:%d' % (method_name, count))
@@ -578,20 +550,36 @@ scope:
       self.method_nameIs(method_name)
       self._start = None
     init<js>:
-      var count = MetaTestCase.InstanceCount() + 1;
-      MetaTestCase.InstanceCountIs(count);
+      var count = TestCase.InstanceCount() + 1;
+      TestCase.InstanceCountIs(count);
       console.log('Here with ' + method_name + ' and ' + this.methname());
       this.uidIs(method_name + ':' + count);
       this.deblog(
           'Invoking ' + this.name() + ' initializer for ' + method_name);
       this.method_nameIs(method_name);
     init<cc>:
-      int count = MetaTestCase->InstanceCount() + 1;
-      MetaTestCase->InstanceCountIs(count);
+      int count = TestCase::InstanceCount() + 1;
+      TestCase::InstanceCountIs(count);
       this->deblog(
         std::string("Invoking ") + this->name() + " initializer for "
         + method_name);
       this->method_nameIs(method_name);
+    clinit<py>:
+      /# TODO(wmh): How can we set environment variables when using bazel?
+      /# The --action_env flag from
+      /#    https://bazel.build/designs/2016/06/21/environment.html
+      /# does not appear to be working the way I understand it,
+      /# neither with entries in ~/.bazelrc or explicitly specified on
+      /# the command line:
+      /#   bazel test --action_env=BLAH=blork --test_output=all //wmh:regexp_test
+      import os
+      cls.WriteGoldensIs(os.getenv('WRITE_GOLDENS', '') == 'true')
+      debug = os.getenv('META_DEBUG', '')
+      if ' tests ' in debug:
+        cls.DebugIs(True)
+      cls.CanonicalStdoutIs(sys.stdout)
+      cls.CanonicalStderrIs(sys.stderr)
+      cls.cStringIOClass = cStringIO.StringIO().__class__
     finalize<py>:
       self.deblog('Invoking %s finalizer for %s' % (self.name(), self.methname()))
     setup<py>:
@@ -617,14 +605,14 @@ scope:
       this->deblog(
         "Invoking " + this->name() + " setUp for " + this->methname());
     clsetup<py>:
-      if meta.Debug():
+      if metax.test.TestCase.Debug():
         print 'Invoking %s SetUp' % meta.__name__
     clsetup<js>:
-      if (/* metax.test.*/ MetaTestCase.Debug()) {
+      if (/* metax.test.*/ TestCase.Debug()) {
         console.log('Invoking ' + this.constructor.name + ' SetUp');
       }
     clsetup<cc>:
-      if (MetaTestCase->Debug()) {
+      if (metax::test::TestCase::Debug()) {
         std::cout << "Invoking " << MetaTestCase->metaname() << " SetUp" << std::endl;
       }
     teardown<py>:
@@ -675,21 +663,21 @@ scope:
       /# From goog.testing.propertyreplacer.js
       /# this._stubs.reset();
     teardown<cc>:
-      std::cerr << "Fix C++ teardown" << std::endl;
-
       /# Delete all strstreams in strstreams()
       auto& strstreams = this->strstreamsRef();
+      for (auto* strstream : strstreams) {
+        delete strstream;
+      }
       /# More here!
-
     clteardown<py>:
-      if meta.Debug():
+      if metax.test.TestCase.Debug():
         print 'Invoking %s TearDown' % cls.__name__
     clteardown<js>:
-      if (MetaTestCase.Debug()) {
+      if (TestCase.Debug()) {
         console.log('Invoking ' + this.constructor.name + ' TearDown');
       }
     clteardown<cc>:
-      if (MetaTestCase->Debug()) {
+      if (metax::test::TestCase::Debug()) {
         std::cerr << "Invoking " << MetaTestCase->metaname() << " TearDown" << std::endl;
       }
     end lifecycle;
@@ -1072,10 +1060,10 @@ scope:
       throw new Error('TestCase.fp() not yet implemented');
     scope<cc>:
       std::stringstream* result;
-      if (content == nullptr) {
+      if (content == meta::NullStr()) {
         result = new std::stringstream();
       } else {
-        result = new std::stringstream(*content);
+        result = new std::stringstream(content);
       }
       this->strstreamsRef().push_back(result);
       return result;
@@ -1094,12 +1082,12 @@ scope:
     scope<js>:
       throw new Error('TestCase.out() not yet implemented');
     scope<cc>:
-      auto* strstreams = self.strstreams();
-      int size = strstreams->size()
+      const auto& strstreams = self.strstreams();
+      int size = strstreams.size();
       if (size > 0) {
-        return strstreams[size].str();
+        return strstreams[size-1]->str();
       } else {
-        return "";
+        return meta::NullStr();
       }
     end method out;
 
@@ -1210,7 +1198,7 @@ scope:
     scope<js>:
       return MetaTestCase.Interactive();
     scope<cc>:
-      return MetaTestCase->Interactive();
+      return TestCase::Interactive();
     end method isInteractive;
 
     new
@@ -1782,6 +1770,32 @@ scope:
       throw metax::root::Error("TestCase.iseq() not yet implemented");
     end method iseq;
 
+    method iseqint #:
+      Compare an arbitrary two entities for equality (not pointer equality!)
+
+      NOTE: This method may not be implementable in C++. Decide whether we
+      want to keep it for use in other baselangs, or if allowing it
+      encourages people to use methods that won't work in <cc> and <*>.
+    params:
+      var expected : int;
+      var item : int;
+      var message : any = null;
+    scope<py>:
+      if message is None:
+        eval = str(expected).replace('\n', '\\n')
+        aval = str(item).replace('\n', '\\n')
+        message = '"%s" != "%s"' % (eval, aval)
+      self.assertEqual(expected, item, message)
+    scope<js>:
+      if (message == null) {
+        assertEquals(expected, item);
+      } else {
+        assertEquals(message, expected, item);
+      }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseq() not yet implemented");
+    end method iseqint;
+
     method noteq #:
       Compare an arbitrary two entities for non-equality (not pointer equality!)
 
@@ -1827,7 +1841,7 @@ scope:
       }
     scope<cc>:
       throw metax::root::Error("TestCase.iseq() not yet implemented");
-      if (message == nullptr) {
+      if (message == meta::NullStr()) {
       } else {
       }
     test<py>:
@@ -1851,7 +1865,7 @@ scope:
       }
     scope<cc>:
       throw metax::root::Error("TestCase.iseq() not yet implemented");
-      if (message == nullptr) {
+      if (message == meta::NullStr()) {
       } else {
       }
     end method noteqstr;
@@ -1946,7 +1960,7 @@ scope:
       var content : any;
       var golden : any;
     scope<py>:
-      if self.meta().WriteGoldens():
+      if TestCase.WriteGoldens():
         with open(golden, 'w') as fp:
           fp.write(content)
         print 'Wrote %d bytes to golden %s' % (len(content), golden)
@@ -1975,7 +1989,7 @@ scope:
       var path : any;
       var golden : any;
     scope<py>:
-      if self.meta().WriteGoldens():
+      if TestCase.WriteGoldens():
         shutil.copyfile(path, golden)
         print 'Copied %s to %s' % (path, golden)
       else:
@@ -2023,6 +2037,8 @@ scope:
       else:
         for i in range(0, len1):
           self.assertAlmostEqual(lf1[i], lf2[i], delta=delta, msg=msg)
+    scope<cc>:
+      throw metax::root::Error("TestCase.isapproxvec() not yet implemented");
     end method isapproxvec;
 
     method islt params:

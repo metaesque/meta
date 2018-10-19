@@ -59,9 +59,9 @@ scope:
     params:
       var name : &str #:
         The name of the class being created
-      var bases : &vec<class> #:
+      var bases : &#vec<class> #:
         The parent classes of the class (instances of metaclasses)
-      var symbols : &map #:
+      var symbols : &#map #:
         The symbols available within the class.
     super<py> (name, bases, symbols)
     scope<py>:
@@ -78,40 +78,6 @@ scope:
   end class ObjectMetaRoot;
 
   native _ scope<py>:
-    /# _CLI: metax.cli.Values
-    /#   - Stores an instance of metax.cli.Values, providing access to the set of
-    /#     flags and args dictated by the command line. Also provides access to
-    /#     the instantiated Command (via CLI()._command_()).
-    /#     - This is currently typed as 'any' because there will be a circularity
-    /#       induced if we type it as metax.cli.Values. Need to establish
-    /#       whether this will be implementable in C++.
-    /#     - Initialized via metax.root.MetaObject.Initialize(), which is
-    /#       invoked by 'meta2'. However, we need a mechanism for initializing
-    /#       it in situations where this object is desired 'in the wild'
-    /#       without the compiler as intermediary.
-    /#     - TODO(wmh): Find a way to initialize this properly.
-    /#   - Intionally NOT a meta field of Object because that would produce
-    /#     one instance per subclass, when the object should be shared amongst
-    /#     all classes and objects.
-    _CLI = None
-
-    /# _ResourceMap: map
-    /#   Maps fully qualified resource names to explicit paths. The
-    /#   Object.Resource() method looks in this map before performing its
-    /#   default logic. Initialized by Object.Initialize().
-    _ResourceMap = None
-
-    /# _Config: map
-    /#   Initialized when ObjectMeta.Config() is first invoked. Intentionally
-    /#   NOT a meta field of Object because that would produce one instance
-    /#   per subclass, when the object should be shared amongst all classes 
-    /#   and objects.
-    _Config = None
-
-    /# _ConfigPath: str
-    /#   The path of the file storing the data in _Config.
-    _ConfigPath = None
-
     /# NaN: float
     /#   The not-a-number value.
     NaN = float('nan')
@@ -146,65 +112,69 @@ scope:
     cls assoc metax.root.ObjectMetaRoot;
   scope:
 
-    meta
-    lifecycle #:
-      Do NOT add anything here! It is executed for every subclass.
-      Do NOT add any meta-level fields either, as they implicitly get added
-      here.
+    static
+    field Config : map<@str,@str> #:
+      Initialized when ObjectMeta.Config() is first invoked. Intentionally
+      NOT a meta field of Object because that would produce one instance
+      per subclass, when the object should be shared amongst all classes 
+      and objects.
     scope:
-    end lifecycle;
-
-    meta
-    method Initialize #:
-      A means of initializing information that should be accessible from
-      every meta-generated class.
-    params:
-      var cli : any = null #:
-        A metax.cli.Values instance obtained from instantiating a command
-        line.
-      var resources : map = null #:
-        An explicit mapping for resources.
-    scope:
-      global _CLI
-      if cli is not None:
-        _CLI = cli
-      global _ResourceMap
-      if resources is not None:
-        _ResourceMap = resources
-    end method Initialize;
-
-    meta
-    method CLI : any #:
-      An instance of metax.cli.Values.
-    scope:
-      return _CLI
-    end method CLI;
-
-    meta
-    method ResourceMap : map #:
-      An explicit mapping from fully qualified resource name to path.
-    scope:
-      return _ResourceMap
-    end method ResourceMap;
-
-    meta
-    method Config : tuple<map,str> #:
-      Provides access to the info in ~/.config/metameta.
-    scope:
-      global _Config
-      global _ConfigPath
-      result = _Config
-      configpath = _ConfigPath
-      if result is None:
+      accessor get
+      lazy<py>:
         /# TODO(wmh): Get this working in bazel!  Need to add to assocs
         /# and define a BUILD target ... in oopl.tgz?
         import metastrap
         /# print 'NOTE: Initializing metax.root.Config!'
-        result, configpath = metastrap.Config()
-        _Config = result
-        _ConfigPath = configpath
-      return result, configpath
-    end method Config;
+        result = metastrap.Config()
+        --> result
+      lazy<cc>:
+        std::cerr << "metax.c.ObjectMeta.Config() not yet implemented" << std::endl;
+    end field Config;
+
+    static
+    field CLI : any #:
+      Stores an instance of metax.cli.Values, providing access to the set of
+      flags and args dictated by the command line. Also provides access to
+      the instantiated Command (via CLI()._command_()).
+      - This is currently typed as 'any' because there will be a circularity
+        induced if we type it as metax.cli.Values. Need to establish
+        whether this will be implementable in C++.
+      - Initialized via metax.root.MetaObject.Initialize(), which is
+        invoked by 'meta2'. However, we need a mechanism for initializing
+        it in situations where this object is desired 'in the wild'
+        without the compiler as intermediary.
+      - TODO(wmh): Find a way to initialize this properly.
+
+    static
+    field ResourceMap : map<@str,@str> #:
+      Maps fully qualified resource names to explicit paths. The
+      Object.Resource() method looks in this map before performing its
+      default logic. Initialized by Object.Initialize().
+
+    static
+    method Init #:
+      A means of initializing information that should be accessible from
+      every meta-generated class.
+    params:
+      var cli : any = null #:
+        A metax.cli.Values instance obtained from instantiating a command line.
+        IMPORTANT: We are not specifying the type (metax.cli.Values) here because
+        it would introduce a circularity to depend on metax.cli.Values.
+      var resources : map<@str,@str> = null #:
+        An explicit mapping for resources.
+    scope<py>:
+      if cli is not None:
+        Object.CLIIs(cli)
+      if resources is not None:
+        Object.ResourceMapIs(resources)
+    scope<cc>:
+      if (cli != nullptr) {
+        Object::CLIIs(cli);
+      }
+      if (resources != nullptr) {
+        Object::ResourceMapIs(resources);
+      }
+    end method Init;
 
     meta
     method Resource : str #:
@@ -283,7 +253,7 @@ scope:
           /# the directory containing WORKSPACE.
           parts = [os.getcwd()] + subparts
         else:
-          config, configpath = cls.Config()
+          config = cls.Config()
           if version == 'beta':
             if config:
               metarep = config['repository_path']
@@ -312,18 +282,19 @@ scope:
         result = os.path.realpath(path)
       return result
     scope<cc>:
+      return nullptr;
     scope<js>:
       return null;
     end method Resource;
 
-    user
     lifecycle #:
       Do NOT introduce any instance-level state here.
+      DO NOT introduce any meta-level state either.
     scope:
     end lifecycle;
 
     remark hidden #:
-      We are currently disabling the test class for Object because it adds to
+      I am currently disabling the test class for Object because it adds to
       the complexity of bootstrapping javascript. Consider reinstating these.
 
       raw test field obj : metax.root.Object;
@@ -359,6 +330,15 @@ scope:
     cls assoc ObjectMetaRoot;
     std assoc exception;
   scope:
+
+    lifecycle #:
+      Pass the message.
+    params<cc>:
+      var msg : str = null;
+    super<cc> (msg)
+    scope<cc>:
+    end;
+
   end class Error;
 
 end namespace metax.root;

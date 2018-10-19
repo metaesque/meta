@@ -32,7 +32,6 @@ CC = /usr/local/wmh/gcc-8.2/bin/g++
 #  If one edits the CROSSTOOL file and deletes the first occurrences of
 #  -Wthread-safety and -Wself-assign unrecognized
 
-
 run: any
 	./any
 
@@ -65,14 +64,27 @@ crosstool:
 	@echo $$(readlink $$(bazel info execution_root)/external/local_config_cc/CROSSTOOL)
 	@mtime $$(bazel info execution_root)/external/local_config_cc/CROSSTOOL
 
+hello: .FORCE
+	bazel build :hello
+	bazel-bin/hello
+	bazel build --cxxopt=-std=c++1z --verbose_failures --sandbox_debug :hello
+	bazel-bin/hello
+
 bazel-default: .FORCE
-	bazel build --cxxopt=-std=c++1z --verbose_failures --sandbox_debug :any_clang
+	bazel build --cxxopt=-std=c++1z --verbose_failures --sandbox_debug :any_clang && bazel-bin/any_clang
 
 bazel-default-cast: .FORCE
-	bazel build --cxxopt=-DCAST --cxxopt=-std=c++1z --verbose_failures --sandbox_debug :any_clang
+	bazel build --cxxopt=-DCAST --cxxopt=-std=c++1z --verbose_failures --sandbox_debug :any_clang && bazel-bin/any_clang
 
 clobber:
 	bazel clean --expunge
 	touch WORKSPACE
+
+bazel-version:
+	bazel info release
+
+# https://blog.bazel.build/2018/08/22/bazel-homebrew.html
+bazel-upgrade:
+	brew upgrade bazel
 
 .FORCE:

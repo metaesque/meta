@@ -3,6 +3,7 @@ cc_library(
   # it or its dependencies are available.
   name = "__Meta__",
   hdrs = ["__Meta__.h"],
+  srcs = ["__Meta__.cc"],
   deps = [],
   visibility = ["//visibility:public"],
 )

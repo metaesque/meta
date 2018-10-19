@@ -41,6 +41,10 @@ def main():
     # Perform base-to-meta line remapping on the exception string.
     print 'WARNING: Error occurred while attempting to create Compiler'
     err = traceback.format_exc()
+    print '#' * 70
+    print err
+    print '#' * 70
+    
     metac = compiler_class.Current()
     if metac is None:
       # TODO(wmh): This means the attempt to instantiate the specified

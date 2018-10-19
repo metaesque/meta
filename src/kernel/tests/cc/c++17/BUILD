@@ -1,4 +1,9 @@
 cc_binary(
+    name = "hello",
+    srcs = ["hello.cc"],
+)
+
+cc_binary(
     name = "main",
     srcs = ["main.cc"],
 )

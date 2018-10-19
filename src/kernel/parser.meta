@@ -324,6 +324,19 @@ scope:
       assert text[end] == '\n'
       if start > 0:
         assert text[start-1] == '\n'
+    setup:
+      text = (
+        'class Person scope:\n'
+        '  field name : str;\n'
+        '\n'
+        'end class;\n'
+      )
+      self.text = text
+      lines = metax.c.Line.FromText(text)
+      self.line = lines[0]
+      self.line2 = lines[1]
+      self.line3 = lines[2]
+      self.line4 = lines[3]
     test:
       test.iseq(0, test.line.indent())
       test.iseq(2, test.line2.indent())
@@ -429,1003 +442,7 @@ scope:
       test.iseq('   2: 2:  field name : str;', lines[1].asStr())
     end method FromText;
 
-    test
-    lifecycle setup:
-      text = (
-        'class Person scope:\n'
-        '  field name : str;\n'
-        '\n'
-        'end class;\n'
-      )
-      self.text = text
-      lines = metax.c.Line.FromText(text)
-      self.line = lines[0]
-      self.line2 = lines[1]
-      self.line3 = lines[2]
-      self.line4 = lines[3]
-    end;
-
   end class Line;
-
-  class Type #:
-    An abstraction of a Meta type.
-
-    Primitive Types
-     - bool
-     - char (nightmare of unicode)
-     - int<1> to int<128>, with what 'int' refers to be customizable.
-        - implemented with masking, shifting, etc.
-     - real<32>, real<64>, real<128> with 'real' being customizable.
-     - complex
-
-    Interned String Type
-     - See discussion in <<src_root>/README.md
-
-    Native Types
-    - These are types that are mapped to baselanguage-level types where
-      possible.
-    - A meta class exists to define the interface, but the same interface
-      is mapped onto base language functionality.
-    - All primitive types provide a similar 'virtual' interface, so methods
-      can be sent to numbers: 5.2.round, 7.floor, etc.
-    - Native types are those that:
-       - exist in Type.NATIVE, or
-       - start with 'meta!' or '!'
-
-    To be supported:
-     - unique, shared, weak pointers
-        - http://www.codeproject.com/Articles/570638/Ten-Cplusplus-Features-Every-Cplusplus-Developer
-     - http://clang.llvm.org/docs/ThreadSafetyAnalysis.html
-     - literals for units of measurement
-        - Ex: 95kg, 1.2m, 37oC, etc.
-        - https://en.wikipedia.org/wiki/Units_of_measurement
-        - kinds of units
-           - length (metre, foot, yard, etc)
-           - mass (kilogram, pound, stone, etc.)
-           - time (second, minute, hour, day, week)
-           - electric current (ampere, ???)
-           - temperature (kelvin, celsius, fahrenheit)
-           - luminous intensity (candela, ...)
-           - amount of substance (mole, ...)
-           - ... how to deal with derived units?
-
-    Notes on combining the pass-by indicator ('@', '*' and '&') with
-    constness indicator ('#'):
-      pass-by-pointer
-         *T   -> pointer to T
-         *#T  -> pointer to const T (cannot modify what var points to)
-         #*T  -> const pointer to T (can change var to a different value)
-         #*#T -> const pointer to const T (cannot modify var or what it points to)
-
-         &T   -> reference to T
-         &#T  -> reference to constant T (cannot modify T, cannot modify ref)
-     no! #&T  -> const reference to T, but references are always const so
-                 this is the same as &T (and is disallowed to avoid clutter).
-
-         @T   -> by-value T (copy if arg, guartanteed to be non-null if field)
-         @#T  -> copy of const T (no different than just @T in most cases, but may be useful for local vars where one wants to remind oneself not to modify something ... const int val)
-     no! #@T  -> const copy of T (same as @#T which is more canonical so this is disallowed)
-
-    Notes about unique_ptr, shared_ptr and weak_ptr.
-          u*T -> std::unique_ptr<T>
-         u*#T -> std::unique_ptr<const T>
-         #u*T -> const std::unique_ptr<T>
-        #u*#T -> const std::unique_ptr<const T>
-
-          s*T -> std::shared_ptr<T>
-         s*#T -> std::shared_ptr<const T>
-         #s*T -> const std::shared_ptr<T>
-        #s*#T -> const std::shared_ptr<const T>
-
-          w*T -> std::weak_ptr<T>
-         w*#T -> std::weak_ptr<const T>
-         #w*T -> const std::weak_ptr<T>
-        #w*#T -> const std::weak_ptr<const T>
-
-    Other rules about types:
-     no! &&T  -> cannot take reference to a reference
-         &*T  -> a reference to a pointer (so the pointer itself can be modified)
-     no! *&T  -> a pointer to a reference is not allowed
-     no! #&   -> use &#
-     no! #@   -> use @#
-     no! ##   -> redundant
-     no! @*   -> use *
-     no! @&   -> use &
-     no! u#*T -> use #u*T
-     no! s#*T -> use #s*T
-     no! w#*T -> use #w*T
-
-    Legal type prefixes are:
-      @#?
-      &?(#?[usw]?\*)*#?
-
-    How to type a variable V.
-     - Establish the base type T
-     - Is T modifiable?
-         If not, prefix with '#'
-     - Can the variable be null?
-        - if not
-          - for a field or local var, prefix with '@'
-          - for an arg, prefix with '&' (pass-by-ref) or '@' (pass-by-value)
-     - Is T a class type and can variable can be null?
-        - prefix with '*' or leave off (default is to prefix with '*')
-     - If the variable is a primitive type and one wants pass-by-refence semantics,
-        - prefix with '&' or '*' (boxed class will be used if lang does not support)
-     - Any '*' in the prefix can be prefixed with 'u' (unique ptr), 's'
-       (shared ptr) or 'w' (weak ptr) to obtain implicit memory management,
-       and can be further prefixed by '#' to indicate the pointer itself is
-       const (cannot be changed).  Note that in languages that provide
-       garbage collection [usw] is ignored, but '#' can still be semantically
-       useful.
-
-    Does it make sense to claim that Meta has any primitive types?  Maybe
-    these are just numeric examples of native types supported by Meta?
-
-    On the other hand, it is useful to be able to ask if the type is primitve
-    in situations where none of @, * or & are specified ... primitive types
-    default to @, others to * (see details in Type.Instance())
-
-    ----------------------------------------------------------------------
-    Type Analysis and Inference In Meta
-
-    Meta has the following data-structures useful for type analysis and inference
-     - ClassConstruct maintains
-        - the collection of all 'field' instances
-        - the collection of all 'method' instances
-       and they are initialized in ...?
-
-     - ExecutableConstruct maintains:
-        - the collection of all ...?
-
-  scope:
-
-    meta
-    lifecycle MetaType #:
-      meta public raw field PRIMITIVE : map<str,map> #:
-        A mapping from Meta primitive type name to map containing:
-          args: tuple
-        Note that aliases for Meta primitive types must also be specified
-        explicitly (e.g. 'float' and 'double', etc.
-      meta public raw field NATIVE : map<str,map> #:
-        Keys are Meta native types, values are maps containing:
-          defparam: str
-          args: tuple
-      meta public raw field EXTERNAL_CLASS_INDICATOR : str = '^' #:
-        Any type that starts with this value indicates that the core type
-        is one defined outside of Meta. For example, the 'object' class from
-        python is denoted '^object', and the 'Object' class from javascript
-        is denoted '^Object'. Without such a prefix, 'object' would be
-        interpreted as a relative type name, and the namespace would be
-        appended to it to obtain the actual type.
-      meta public raw field RE : regexp #:
-        The regexp identifying a legal Meta type and all of its constituent parts.
-      meta public raw field Repository : map #:
-        The repository of interned Type instances.  Keys are 'raw' representations,
-        and values are Type instances.  A first invocation of Type.Instance()
-        with a particular raw type string will create a new Type instance, cache
-        it, and return it.  Subsequent invocations of Type.Instance() for the
-        same raw type string will return the previously created instance.
-    scope:
-      cls.EXTERNAL_CLASS_INDICATOR = '^';
-      cls.PRIMITIVE = {
-        /# bool, boolean
-        'bool': {},
-        /# char
-        'char': {},  # <1>, <2>, <4> ???
-        /# byte, short, int, long, longlong
-        'int': {'args': ('int',)},   # <1> ... <128>
-        /# unsigned byte, short, int, long, longlong
-        'uint': {'args': ('int',)},   # <1> ... <128>
-        /# float, double
-        'real': {'args': ('int',)},  # <32> or <64> or <128>
-        'float': {},
-        'double': {},
-        /# complex
-        /# TODO(wmh): This should probably be moved to 'native' ... we cannot
-        /# actually provide a primitive implementation of complex numbers in
-        /# all baselangs.
-        'complex': {},
-      }
-      cls.NATIVE = {
-        'any': {},
-        'void': {'defparam': ''},
-        /# interned (const) string
-        'str': {},
-        /# mutable string
-        'string': {},
-        /# map, dict, hashtable, associative array
-        'map': {'args': ('*', '*')},
-        /# immutable ordered container: tuple
-        /#  - a k-tuple can be specified with either no parameters or with k params.
-        /#     - tuple
-        /#     - tuple<int,str,Person>
-        'tuple': {},
-        /# mutable ordered container: vector, list, growable array
-        'vec': {'args': ('*')},
-        /# mutable unordered container: set, frozenset
-        'set': {'args': ('*')},
-
-        'ostream': {},
-        'istream': {},
-        'strstream': {},
-
-        /# TODO(wmh): Establish what the names for time-related native types
-        /# will be:
-        /#  - to represent a date and time
-        /#    - if year, month, day, hour, minute, second explicitly
-        /#      - datetime
-        /#      - time
-        /#      - ymdhms
-        /#    - if only store number of seconds relative to start
-        /#      - timestamp
-        /#    - if we want support for relative dates
-        /#      - ??
-        /#  - to represent a date (year, month, day)
-        /#    - if year, month, day explicitly
-        /#      - date
-        /#      - ymd
-        /#    - if only store number of days relative to start
-        /#      - ??
-        /#  - to represent a time within a day without the date
-        /#    - if hour, minute, second stored explicitly
-        /#      - hms
-        /#    - if only store number of seconds relative to 00:00:00
-        /#      - should this be related to the concept of Duration?
-        /#
-        /# Would be preferable to find high-level names that don't assume a
-        /# particular implementation (and provide implementation-specific
-        /# variants similar to how we'll do for map and vec).
-        /#
-        /# Desired features
-        /#  - very space efficient
-        /#  - very time efficient
-        /#  - can perform relative date manipulation
-        'ymd': {},   # date without time of day
-        'hms': {},   # time of day without date
-        'date': {},  # this is a date plus time of day
-
-        'regexp': {},
-
-        'nulltype': {},
-        'class': {},
-        'method': {},
-        'function': {},
-
-        'void': {},
-      }
-
-      cls.RE = None
-      cls.Repository = None
-
-      /# TODO(wmh): Added the $? on 2016-06-30 to support "generic types" ala
-      /# templates and generics (hash<$K,$V>, etc.).  Need to add support for
-      /# this throughout the codebase.
-      cls.LEGAL_METATYPE_RE = re.compile(
-        r'^(?P<prefix>&?(?:#?[usw]?\*)*#?|@#?|&#?|\$)?'
-        r'(?P<base>\%s?[a-zA-Z0-9_.!:]+)'
-        r'(?:<(?P<params>\S+)>)?$'
-        % cls.EXTERNAL_CLASS_INDICATOR)
-      cls.METATYPE_SPLIT = re.compile(r'([#])?([usw])?\*')
-    end lifecycle MetaType;
-
-    meta
-    method Initialize #:
-      Initialize the repository with some fundamental types.
-
-      This method is intentionally NOT placed within the metaclass initializer
-      because it is useful to be able to reset the repository during unit tests.
-    scope:
-      /# We create Type instances for various ubiquitous types and aliases
-      /# of those types.
-      /#
-      /# See ../../README.md section 'Implementing interned string support'
-      /# for details on *str, &str, @str, #str and str. Below, we are
-      /# implementing 'str' = '*str'.
-      assert cls.Repository is None
-      cls.Repository = {}
-      strreftype = cls.Instance('&str')
-      strptrtype = cls.Instance('*str')
-      /# Because 'str' means '*str' it really isn't necessary to pass in
-      /# default_prefix, but it is left in case we decide to swtich back to
-      /# 'str' meaning '&'.
-      strtype = cls.Instance('str', default_prefix='*')
-      assert sorted(cls.Repository.keys()) == ['&str', '*str', 'str']
-
-      /# TODO(wmh): Are there other types we should intern?
-    test:
-      metax.c.Type.Repository = None
-      metax.c.Type.Initialize()
-      test.iseqvec(
-        ['&str', '*str', 'str'],
-        sorted(metax.c.Type.Repository.keys()))
-    end method Initialize;
-
-    meta
-    method Instance #:
-      Return the interned instance of a Type given a representation.
-    params:
-      var raw : str #:
-        The raw type
-      var allow_invalid : bool = false #:
-        If True, invalid types do not raise an Error.
-      var cons : str = null #:
-        The construct kind.  Used to determine what the default prefix
-        should be when one is not specified.
-      var default_prefix : str = null #:
-        This is almost never given, but can be provided for special snowflake
-        types whose default prefix differs from the normal rules ('@' for
-        primitives, '*' for anything else). See Type.Initialize() for an
-        example.
-      var namespace_function : function = null #:
-        A function accepting no args that returns the namespace within which
-        the Type appears.  Used to resolve relative class types.  If resolution
-        is needed, it is an error not to provide such a function
-    scope:
-      wrapper = None
-      result = cls.Repository.get(raw, None)
-      if not result:
-        match = cls.LEGAL_METATYPE_RE.match(raw)
-        if match:
-          prefix, base, params_str = match.groups()
-          params = cls.ParseTypes(
-            params_str, allow_invalid=allow_invalid,
-            namespace_function=namespace_function)
-          native = (base in cls.NATIVE) or base.startswith('meta!') or base[0] == '!'
-          primitive = base in cls.PRIMITIVE
-          if not prefix:
-            /# The rationale for what prefix to use when one is not explicit
-            /# provided is discussed in detail in <<src_root>>/README.md. The
-            /# summary is:
-            /#   - Use '@' for primitive types
-            /#   - Use '&' for 'str' (because &str is interpreted specially)
-            /#   - Use '*' for all other types.
-            if base == 'void' or primitive:
-              prefix = '@'
-            elif default_prefix is not None:
-              prefix = default_prefix
-            else:
-              prefix = '*'
-
-          use_native = native or primitive
-          if (
-            not use_native
-            and Context.TOKENS['scope_sep'] not in base
-            and base[0] != Context.TOKENS['explicit_class_indicator']
-          ):
-            /# This type refers to a relative class name (as opposed to a fully
-            /# qualified one).  We need to establish both a Type instance that
-            /# uses the fully qualified class name, and a TypeWrapper instance
-            /# that captures this particular relative type.
-            if namespace_function is None:
-              raise Error('Must provide a namespace')
-            namespace = namespace_function()
-            if not isinstance(namespace, NamespaceConstruct):
-              print 'ERROR: %s() = %s (%s) when resolving type "%s"' % (
-                namespace_function,
-                namespace, namespace.kindid() if namespace else None, base)
-              raise Error(
-                'Failed to establish namespace ... cannot qualify %s' % raw)
-
-            wrapper = namespace.getType(raw)
-            if wrapper:
-              /# We have previously seen the same relative type, and can use it.
-              result = wrapper.type()
-            else:
-              /# We need to create Type and TypeWrapper instances.
-              nmsp = namespace.id()
-              fqcn = nmsp + '.' + base
-              fqraw = prefix + fqcn + (params_str or '')
-              result = cls(
-                fqraw, prefix, fqcn, params=params, native=False)
-              wrapper = TypeWrapper(result, raw)
-              namespace.registerType(wrapper)
-          else:
-            result = cls(raw, prefix, base, params=params, native=use_native)
-        else:
-          if allow_invalid:
-            /# We are to return a Type instance even though it is invalid.
-            result = cls(raw, prefix=None, base=None, native=False)
-          else:
-            result = None
-        if result:
-          cls.Repository[result.raw()] = result
-      if not allow_invalid:
-        if not result or not result.isValid():
-          raise metax.root.Error('Invalid type %s (%s)' % (raw, result))
-      return wrapper or result
-    test:
-      /# Create a namespace for use when a type needs to resolve a relative
-      /# class.
-      _, _, context, _ = self.cachedInfo()
-      namespace = metax.c.NamespaceConstruct.NewFromData('nm.sp', context)
-      nmspfunc = lambda: namespace
-
-      /# The following types should all be valid and verbatim
-      for mtstr in (
-        '*str',
-        '@void',
-        '*map<*str,@int>',
-        '*tuple<&#int,*#int,#*int,@#int>',
-        '*nm.sp.Person',
-      ):
-        typ = metax.c.Type.Instance(mtstr, namespace_function=nmspfunc)
-        self.assertTrue(typ.isValid())
-        test.iseq(mtstr, typ.asStr(mode=1))
-
-      /# The following types are valid but involve a rewrite.
-      for mtstr, canonical in (
-        ('int', '@int'),
-        ('void', '@void'),
-        /# TODO(wmh): Should '*^Object' be cleaned up or left as is?
-        /# Note that '^' is not legal in types, only in 'parent', 'metaparent',
-        /# and 'testparent' attributes of 'class' constructs, which have type
-        /# 'word', not 'type'.  So having '^Object' in this list is kinda
-        /# wrong to begin with.
-        ('^Object', '*^Object'),
-        ('str', '*str'),
-        ('a.b.Person', '*a.b.Person'),
-        ('map<int,*str,*a.b.Person>', '*map<@int,*str,*a.b.Person>'),
-        ('A', '*nm.sp.A'),
-        ('*A', '*nm.sp.A'),
-        ('u*A', 'u*nm.sp.A'),
-        ('s*A', 's*nm.sp.A'),
-        ('w*A', 'w*nm.sp.A'),
-        ('#u*A', '#u*nm.sp.A'),
-        ('#s*A', '#s*nm.sp.A'),
-        ('#w*A', '#w*nm.sp.A'),
-        /# TODO(wmh): support this!
-        /#('map<int,str,Person>', '&map<@int,*str,*Person>')
-      ):
-        typ = metax.c.Type.Instance(mtstr, namespace_function=nmspfunc)
-        self.assertTrue(typ.isValid())
-        test.iseq(canonical, typ.asStr(mode=1))
-
-      /# The following types are invalid
-      for mtstr in (
-        'int@',
-        'u#*A',
-        's#*A',
-        'w#*A',
-      ):
-        typ = metax.c.Type.Instance(
-          mtstr, allow_invalid=True, namespace_function=nmspfunc)
-        test.iseq(False, typ.isValid())
-    end method Instance;
-
-    meta
-    method ParseTypes : vec<Type> #:
-      Parse a comma-separated list of types into a list of Types.
-
-      This parses the parameterized types associated with container classes.
-      For example, a Map is of the form '*map<str,@int>', and a
-      vector of vector of maps is: vec<vec<map<str,*int>>>'.  This
-      method does not parse the entire type, just the portion inside the <...>,
-      so for our two examples, params_str would be 'str,@int' and
-      'vec<map<str,*int>>' respectively.
-    params:
-      var params_str : str #:
-        The comma-separated list of within-parameter types to parse.
-      var allow_invalid : bool = false #:
-        If True, allow invalid types, otherwise raise Error.
-      var namespace_function : function = null #:
-        A function accepting no args that returns the namespace within which
-        the Type appears.  Used to resolve relative class types.  If resolution
-        is needed, it is an error not to provide such a function
-    scope:
-      if not params_str:
-        return None
-      result = []
-      angles = 0
-      start = 0
-      i = 0
-      N = len(params_str)
-      sep = ','
-      while True:
-        if i > N:
-          break
-        if i == N or (params_str[i] == sep and angles == 0):
-          raw = params_str[start:i]
-          try:
-            /# We first check if 'raw' is an integer.
-            type_ = int(raw)
-          except ValueError:
-            type_ = cls.Instance(
-              raw, allow_invalid=allow_invalid,
-              namespace_function=namespace_function)
-          result.append(type_)
-          i += 1
-          start = i
-        else:
-          c = params_str[i]
-          if c == '<':
-            angles += 1
-          elif c == '>':
-            angles -= 1
-            if angles < 0:
-              /# TODO(wmh): What to do when allow_invalid is true?
-              raise metax.root.Error(
-                'Invalid params (too many <): %s' % params_str)
-          i += 1
-      return result
-    test:
-      metax.c.Type.Repository = None
-      metax.c.Type.Initialize()
-      res = metax.c.Type.ParseTypes('*str,@int')
-      test.iseq(['*str', '@int'], [t.raw() for t in res])
-      test.iseq(
-        ['&str', '*str', '@int', 'str'], sorted(metax.c.Type.Repository.keys()))
-      res2 = metax.c.Type.ParseTypes('*map<*str,@int>')
-      test.iseq(1, len(res2))
-      params = res2[0].params()
-      test.iseq(['*str', '@int'], [t.raw() for t in params])
-      self.assertTrue(params[0] is metax.c.Type.Repository['*str'])
-      self.assertTrue(params[1] is metax.c.Type.Repository['@int'])
-      res3 = metax.c.Type.ParseTypes('3')
-      test.iseq([3], res3)
-    end method ParseTypes;
-
-    meta
-    method ShowRepository #:
-      Print out the repository (useful during debugging).
-    params:
-      var fp : ostream = out;
-    scope:
-      rep = cls.Repository
-      for tstr in sorted(rep):
-        metatype = rep[tstr]
-        fp.write('%-30s : %s\n' % (tstr, metatype))
-    test:
-      metax.c.Type.Repository = None
-      metax.c.Type.Initialize()
-      fp = test.newStr()
-      metax.c.Type.ShowRepository(fp=fp)
-      test.iseqtext(
-        '&str                           : &str\n'
-        '*str                           : *str\n'
-        'str                            : str\n',
-        fp.getvalue())
-    end method ShowRepository;
-
-    field prefix : str #:
-      The pass-by and const semantics indicators.
-    field base : str #:
-      The base type
-    field native : bool #:
-      True if we are to use the base-language native type associated with
-      this type when generating base-language code.  This is true
-      for both native types and primitive types.
-    field params : vec<any> #:
-      The parameters of this type. Each element can be either a Type or an int.
-    field raw : str #:
-      The raw representation of the type.
-
-    lifecycle params:
-      var raw -> raw;
-      var prefix -> prefix;
-      var base -> base;
-      var params -> params = null;
-      var native -> native = false;
-    scope:
-    test:
-      test.iseq('@int<32>', test.type.raw())
-    end lifecycle;
-
-    method clone : Type #:
-      Make a copy of myself.
-      TODO(wmh): Move to 'copy' attribute of 'lifecycle' when support available.
-    scope:
-      cls = self.__class__
-      if self._params is None:
-        params = None
-      else:
-        params = []
-        for param in self._params:
-          if isinstance(param, Type):
-            params.append(param.clone())
-          else:
-            params.append(param)
-      return cls(
-        self._raw, self._prefix, self._base, params=params, native=self._native)
-    test:
-      type = test.type
-      type2 = type.clone()
-      test.notsame(type, type2)
-      test.iseq(type.asStr(), type2.asStr())
-    end method clone;
-
-    method dump : void #:
-      Print out details about this Type instance.
-
-      TODO(wmh): This should be an automatically generated method.
-    params:
-      var fp : ostream = out;
-    scope:
-      fp.write('Type: %s\n' % self._raw)
-      fp.write('  prefix = %s\n' % self._prefix)
-      fp.write('  base   = %s\n' % self._base)
-      fp.write('  native = %s\n' % self._native)
-      fp.write('  params = %s\n' % self._params)
-    test:
-      fp = test.newStr()
-      test.type.dump(fp=fp)
-      test.iseqtext(
-        'Type: @int<32>\n'
-        '  prefix = @\n'
-        '  base   = int\n'
-        '  native = False\n'
-        "  params = ['32']\n",
-        fp.getvalue())
-    end method dump;
-
-    method numericParam : int #:
-      Returns an integer if the params has size 1 and is an int, else 0.
-    scope:
-      params = self._params
-      if params and len(params) == 1 and isinstance(params[0], int):
-        result = params[0]
-      elif self._raw == 'bool':
-        result = 1
-      else:
-        result = 0
-      return result
-    test:
-      test.iseq(0, test.type.numericParam())
-      typ = metax.c.Type.Instance('uint<14>')
-      test.iseq(14, typ.numericParam())
-      typ2 = metax.c.Type.Instance('map<14,str>')
-      test.iseq(0, typ2.numericParam())
-      typ3 = metax.c.Type.Instance('bool')
-      test.iseq(1, typ3.numericParam())
-    end method numericParam;
-
-    method fqcn : str #:
-      Obtain the fully qualified class name.
-
-      Returns:
-        Returns None if the type is primitive or native.
-    scope:
-      if self.isPrimitive() or self.isNative():
-        result = None
-      else:
-        result = self.base()
-      return result
-    test:
-      types = metax.c.Type.ParseTypes('int,str,nmsp.sub.A,&a.b.C')
-      test.iseq(
-        [None, None, 'nmsp.sub.A', 'a.b.C'],
-        [t.fqcn() for t in types])
-    end method fqcn;
-
-    method paramStr : str #:
-      The parameters of the type as a string.
-    scope:
-      raw = self.raw()
-      index = raw.find('<')
-      if index == -1:
-        result = ''
-      else:
-        result = raw[index:]
-      return result
-    test:
-      test.iseq('', metax.c.Type.Instance('int').paramStr())
-      test.iseq('<17>', metax.c.Type.Instance('int<17>').paramStr())
-      test.iseq('<str,a.A>', metax.c.Type.Instance('map<str,a.A>').paramStr())
-    end method paramStr;
-
-    method isPrimitive : bool #:
-      Determine if the base type is primitive.  Note that a pointer to a pointer
-      to a primitive is considered primitive.
-    scope:
-      return self.__class__.PRIMITIVE.get(self.base(), None) is not None
-    test:
-      typ1 = metax.c.Type.Instance('uint<8>')
-      test.iseq(True, typ1.isPrimitive())
-      typ2 = metax.c.Type.Instance('*a.b.Person')
-      test.iseq(False, typ2.isPrimitive())
-    end method isPrimitive;
-
-    method isNative : bool #:
-      Determine if the base type is a native type.
-    scope:
-      return self.__class__.NATIVE.get(self.base(), None) is not None
-    test:
-      test.isfalse(test.type.isNative())
-    end method isNative;
-
-    method isValid : bool #:
-      Determine if this is a valid (legal) type.
-    scope:
-      base = self.base()
-      return self._native or bool(self.prefix() and base)
-    test:
-      t1 = metax.c.Type.Instance('*str')
-      test.iseq(True, t1.isValid())
-      t2 = metax.c.Type.Instance('@@blah', allow_invalid=True)
-      test.iseq(False, t2.isValid())
-    end method isValid;
-
-    method isBaseConst : bool #:
-      Determine if the base type is const or not.
-      TODO(wmh): isPrimitive and isNative are about base types too, but
-      are not named isBasePrimitive or isBaseNative. Why is this not named
-      isConst() instead?
-    scope:
-      /# TODO(wmh): Conceptually, 'str' (and '@str' and '&str' and '*str')
-      /# should return true for isBaseConst. But currently isBaseConst() is
-      /# used in FieldConstruct.translateMeta() to determine whether to
-      /# generate setters/reffers (no for const types) ... but we DO want
-      /# to generate setters for fields of type 'str' (distinction between
-      /# changing the string and changing the variable storing the string).
-
-      return self.prefix().endswith('#')
-    test:
-      test.iseq(
-        [False, False, True, True, False],
-        [t.isBaseConst() for t in
-         metax.c.Type.ParseTypes(
-           'str,int,#a.Person,#int,#*a.Person')])
-    end method isBaseConst;
-
-    method isTemplate : bool #:
-      Determine if this is a template type or not.
-    scope:
-      prefix = self.prefix()
-      return prefix and prefix == '$'
-    test:
-      test.isfalse(test.type.isTemplate())
-    end method isTemplate;
-
-    method isPtr : bool #:
-      Determine if this is a pointer type or not.
-    scope:
-      prefix = self.prefix()
-      if not prefix:
-        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
-      /# If there is a '*' anywhere in prefix, this is a pointer type.
-      return '*' in prefix
-    test:
-      test.iseq(
-        [True, False, True, True, True, False, True, True, False],
-        [t.isPtr() for t in
-         metax.c.Type.ParseTypes(
-           'str,int,*a.Person,*int,a.Person,&a.Person,*#a.A,**a.A,&#a.A')])
-    end method isPtr;
-
-    method isRef : bool #:
-      Determine if this is a reference type or not.
-    scope:
-      prefix = self.prefix()
-      if not prefix:
-        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
-      return prefix[0] == '&' and '*' not in prefix
-    test:
-      test.iseq(
-        [False, False, False, False, False, True, False],
-        [t.isRef() for t in
-         metax.c.Type.ParseTypes(
-           'str,int,*a.Person,*int,a.Person,&a.Person,&*a.A')])
-    end method isRef;
-
-    method isRefPtr : bool #:
-      Determine if this is areference to a pointer.
-    scope:
-      prefix = self.prefix()
-      if not prefix:
-        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
-      return prefix[0] == '&' and '*' in prefix
-    test:
-      test.iseq(
-        [False, False, False, False, False, False, False, False, False, True],
-        [t.isRefPtr() for t in
-         metax.c.Type.ParseTypes(
-           'str,int,*a.Person,*int,a.Person,&a.Person,*#a.A,**a.A,&#a.A,&*a.A')])
-    end method isRefPtr;
-
-    method isValue : bool #:
-      Determine if this is a value type or not.
-    scope:
-      prefix = self.prefix()
-      if not prefix:
-        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
-      return prefix[0] == '@'
-    test:
-      test.istrue(test.type.isValue())
-    end method isValue;
-
-    method isStr : bool #:
-      True if the type is 'str' (or '@str' or '&str' or '*str')
-    scope:
-      return self.base() == 'str'
-    test:
-      test.isfalse(test.type.isStr())
-      test.istrue(metax.c.Type.Instance('str').isStr())
-    end method isStr;
-
-    method isVoid : bool #:
-      Determine if this is the void type or not.
-      TODO(wmh): We will almost certainly need to make a distinction between
-      '*void' and 'void'. Currently this method returns True for both, but
-      we should maybe have isVoid() and isBaseVoid() to distinguish.
-    scope:
-      return self.base() == 'void'
-    test:
-      test.isfalse(test.type.isVoid())
-      test.istrue(metax.c.Type.Instance('void').isVoid())
-    end method isVoid;
-
-    method isAny : bool #:
-      Determine if this is the 'any' type or not.
-      TODO(wmh): We will almost certainly need to make a distinction between
-      '*any' and 'any'. Currently this method returns True for both, but
-      we should maybe have isAny() and isBaseAny() to distinguish.
-    scope:
-      return self.base() == 'any'
-    test:
-      test.isfalse(test.type.isVoid())
-    end method isAny;
-
-    method asStr : str #:
-      Convert to a string according to mode.
-    params:
-      var mode : int = 0 #:
-        If 0, print the verbatim type seen.
-        Otherwise print the type formed by composing parsed data.
-    scope:
-      raw = self.raw()
-      if mode == 0 or raw.startswith('{#') and raw.endswith('#}'):
-        result = raw
-      else:
-        params_str = ''
-        params = self.params()
-        if params:
-          params_list = []
-          for type_ in params:
-            params_list.append(type_.asStr(mode=mode))
-          params_str = '<' + ','.join(params_list) + '>'
-        result = '%s%s%s' % (
-          self.prefix(), self.base(), params_str)
-        /#if result != self.raw():
-        /#  result += ' [%s]' % self.raw()
-      return result
-    test:
-      test.iseq('@int<32>', test.type.asStr())
-    end method asStr;
-
-    method __str__ : str #:
-      TODO(wmh): Meta should auto-generate baselang-specific to-string
-      methods based on asStr() or some more formal method.
-    scope:
-      return self.asStr()
-    test:
-      t1 = metax.c.Type.Instance('*str')
-      test.iseq('*str', str(t1))
-    end method __str__;
-
-    test
-    lifecycle setup:
-      metax.c.Type.Repository = None
-      metax.c.Type.Initialize()
-      self.type = metax.c.Type('@int<32>', '@', 'int', ['32'])
-    end lifecycle;
-  end class Type;
-
-  native #:
-    TODO(wmh): How to cleanly handle this situation? The following
-    code cannot be invoked within the metaclass initializer because it
-    attempts to create an instance of Type, which does not yet exist within
-    the metaclass initializer.
-  scope:
-    Type.Initialize()
-  end;
-
-  class TypeWrapper #:
-    A wrapper for the Type class.
-
-    The Type class has interned instances for each type in the system.
-    Internment provides efficiency but is at odds with wanting a distinction
-    between the canonical type and display type (where display type can differ
-    depending on context).
-
-    In particular, suppose we have
-       namespace ex.code ::
-         class A ::
-           method meth : B ...
-    The return type of 'meth' is not fully qualified, but under the hood Meta
-    needs to know the fully qualified type in order to be able to find the
-    associated class during type analysis. But if we create an interned Type
-    instance with value ex.code.B, then when we canonicalize the code, the type
-    will no longer be local, it will appear as 'ex.code.B', when the local
-    version is arguably more readable (less clutter).
-
-    To address this issue, the following strategy is used:
-     - All interned Type instances specify fully qualified class names
-       (for non-native, non-primitive types)
-     - In the code, a type specification that is not fully qualified is
-       made an instance of TypeWrapper, which contains the internted Type
-       instance and a display representation.  This class otherwise responds
-       to exactly the same interface as Type, with the sole difference being
-       how the type responds to __str__ ... Type instances print the fully
-       qualified class name, TypeWrapper instances print their cached display
-       string instead.  There can be many TypeWrapper instances for the
-       same local type, but only a single Type instance.
-
-  scope:
-
-    field type : metax.c.Type #:
-      The type being wrapped.
-
-    field display : str #:
-      The local type name found in the source code, and to be displayed during
-      (some) canonicalizations.
-
-    lifecycle params:
-      var type -> type;
-      var display -> display;
-    scope:
-    end;
-
-    method wrappedRaw : str #:
-      The local type name found in the source code.
-    scope:
-      return self._display
-    test:
-      test.iseq('Person', test.wrap.wrappedRaw())
-    end method wrappedRaw;
-
-    method __str__ : str #:
-      The printable representation of this WrappedType instance.
-    scope:
-      return self._display
-    test:
-      test.iseq('a.b.Person', str(test.type))
-      test.iseq('Person', str(test.wrap))
-    end method __str__;
-
-    method __getattr__ : any #:
-      This method delegates all non-locally defined methods to the contained
-      self.type().
-      TODO(wmh): This is a python-specific method, and a more general mechanism
-      for delegating all non-local methods to a contained object is needed.
-    params:
-      var name;
-    scope:
-      return getattr(self._type, name)
-    test:
-      /# noop. See test_isPtr, test_isRef, test_fqcn below.
-      pass
-    end method __getattr__;
-
-    test
-    lifecycle #:
-      TODO(wmh): Remember that in Meta2, we won't have a tests: block
-      in classes, and instead will define methods as test methods like we
-      currently define meta methods.
-    setup:
-      metax.c.Type.Repository = None
-      metax.c.Type.Initialize()
-      self.type = metax.c.Type.Instance('a.b.Person')
-      self.wrap = metax.c.TypeWrapper(self.type, 'Person')
-    end lifecycle;
-
-    test
-    method test_isPtr scope:
-      test.iseq(True, test.type.isPtr())
-      test.iseq(True, test.wrap.isPtr())
-    end method test_isPtr;
-
-    test
-    method test_isRef scope:
-      test.iseq(False, test.type.isRef())
-      test.iseq(False, test.wrap.isRef())
-    end method test_isRef;
-
-    test
-    method test_fqcn scope:
-      test.iseq('a.b.Person', test.type.fqcn())
-      test.iseq('a.b.Person', test.wrap.fqcn())
-    end method test_fqcn;
-
-  end class TypeWrapper;
 
   class SymbolTable #:
     Maintain a collection of symbol/construct mappings, supporting inheritance.
@@ -1455,6 +472,67 @@ scope:
       var construct -> construct;
       var parent -> parent;
     scope:
+    setup:
+      test.defineClassAndMethods('py')
+      TypeInst = metax.c.Type.Instance
+
+      context = test.context
+
+      /# Namespace symbol tables contain:
+      /#  - symbols for each class defined within the namespace.
+      /#  - symbols of dependent namespaces.
+      test.ntable = metax.c.SymbolTable(test.namespace, None)
+      test.ntable.register(test.klass.id(), test.klass)
+
+      /# Class symbol tables contain:
+      /#  - methods defined on them (user classes have user methods,
+      /#    meta classes have meta methods)
+      /#  - fields defined on them (user classes have user fields,
+      /#    meta classes have meta fields). The raw field name is stored.
+      /#
+      /# This symbol table is used when establishing what symbols are legal
+      /# at a call-site whose receiver is of class type C ... only symbols
+      /# in the symbol table of C are legal.
+      test.ctable = metax.c.SymbolTable(test.klass, test.ntable)
+      test.ctable.register(test.method.id(), test.method)
+      test.ctable.register(test.method2.id(), test.method2)
+      test.ctable.register(test.initializer.id(), test.initializer)
+
+      /# Method symbol tables contain:
+      /#  - all parameters
+      /#  - all local variables not within lexically scoped blocks.
+      /#  - the special receiver pseudovar ('self' or 'test' or 'meta')
+      /#  - (not?) meta-level fields/methods within user-level class method.
+      /#  - DOES NOT inherit from class symboltable directly (indirectly
+      /#    via the special receiver pseudovar).
+      /#
+      /# This symbol table is used when resolving variable references within
+      /# method scope (e.g. default values of params, super args, local vars,
+      /# etc.). If we have:
+      /#     method f params:
+      /#       var a : int = b;
+      /#     super (a, C)
+      /#     scope:
+      /#       var f : int = g;
+      /#     end;
+      /# we need to be able to "see" variables 'b', 'C' and 'g' from the method
+      /# symbol table in order for the syntax to be legal.
+      test.mtable = metax.c.SymbolTable(test.method, None)
+      test.mtable.register(
+        'height',
+        metax.c.VarConstruct.NewFromData(
+          'height', context, termcode=1,
+          secondaries=[(':', TypeInst('real'))]))
+      test.mtable.register(
+        'name',
+        metax.c.VarConstruct.NewFromData(
+          'name', context, termcode=1,
+          secondaries=[(':', TypeInst('str'))]))
+      test.mtable.register(
+        'self',
+        metax.c.VarConstruct.NewFromData(
+          'self', context, termcode=1,
+          secondaries=[(':', TypeInst(test.klass.fqn()))]))
     end;
 
     method allSymbols : map<str,Construct> #:
@@ -1609,70 +687,6 @@ scope:
         test.out())
     end method show;
 
-    test
-    lifecycle setup:
-      test.defineClassAndMethods('py')
-      TypeInst = metax.c.Type.Instance
-
-      context = test.context
-
-      /# Namespace symbol tables contain:
-      /#  - symbols for each class defined within the namespace.
-      /#  - symbols of dependent namespaces.
-      test.ntable = metax.c.SymbolTable(test.namespace, None)
-      test.ntable.register(test.klass.id(), test.klass)
-
-      /# Class symbol tables contain:
-      /#  - methods defined on them (user classes have user methods,
-      /#    meta classes have meta methods)
-      /#  - fields defined on them (user classes have user fields,
-      /#    meta classes have meta fields). The raw field name is stored.
-      /#
-      /# This symbol table is used when establishing what symbols are legal
-      /# at a call-site whose receiver is of class type C ... only symbols
-      /# in the symbol table of C are legal.
-      test.ctable = metax.c.SymbolTable(test.klass, test.ntable)
-      test.ctable.register(test.method.id(), test.method)
-      test.ctable.register(test.method2.id(), test.method2)
-      test.ctable.register(test.initializer.id(), test.initializer)
-
-      /# Method symbol tables contain:
-      /#  - all parameters
-      /#  - all local variables not within lexically scoped blocks.
-      /#  - the special receiver pseudovar ('self' or 'test' or 'meta')
-      /#  - (not?) meta-level fields/methods within user-level class method.
-      /#  - DOES NOT inherit from class symboltable directly (indirectly
-      /#    via the special receiver pseudovar).
-      /#
-      /# This symbol table is used when resolving variable references within
-      /# method scope (e.g. default values of params, super args, local vars,
-      /# etc.). If we have:
-      /#     method f params:
-      /#       var a : int = b;
-      /#     super (a, C)
-      /#     scope:
-      /#       var f : int = g;
-      /#     end;
-      /# we need to be able to "see" variables 'b', 'C' and 'g' from the method
-      /# symbol table in order for the syntax to be legal.
-      test.mtable = metax.c.SymbolTable(test.method, None)
-      test.mtable.register(
-        'height',
-        metax.c.VarConstruct.NewFromData(
-          'height', context, termcode=1,
-          secondaries=[(':', TypeInst('real'))]))
-      test.mtable.register(
-        'name',
-        metax.c.VarConstruct.NewFromData(
-          'name', context, termcode=1,
-          secondaries=[(':', TypeInst('str'))]))
-      test.mtable.register(
-        'self',
-        metax.c.VarConstruct.NewFromData(
-          'self', context, termcode=1,
-          secondaries=[(':', TypeInst(test.klass.fqn()))]))
-    end lifecycle;
-
   end class SymbolTable;
 
   class ExprParser #:
@@ -1692,7 +706,55 @@ scope:
   scope:
 
     meta
-    lifecycle scope:
+    method StrExpr : Expr #:
+      Given a string representation of an expression, obtain its Expr.
+    params:
+      var src : str #:
+        The input string reprsentation.
+    scope:
+      /# Since ExprParser assumes a MetaFile containing all lines to be
+      /# parsed, we need to wrap our src string.  Rather than creating a new
+      /# MetaFile each time, we use a cached one. TODO(wmh): Lock this, or
+      /# make thread-local, etc.
+      metafile = cls.DummyMetaFile
+      if metafile is None:
+        metafile = MetaFile('/fake/path.meta', None, text='\n')
+        cls.DummyMetaFile = metafile
+
+      text = src + '\n'
+      metafile.linesIs(Line.FromText(text))
+      metafile.textIs(text)
+      expr = cls(metafile).parse()
+      return expr
+    end method StrExpr;
+
+    field source : MetaFile #:
+      The MetaFile within which the expr resides.
+    field row : int #:
+      The line with source of the current position within the expr (from 0).
+    field col : int #:
+      The index within current row of the current position in the expr (from 0).
+    field start : tuple<int,int> #:
+      The row/col of the start of the expr.
+    field errors : @vec<str> #:
+      The collection of errors encountered during parsing.
+    field line : str #:
+      This is source[row].  If null, it means EOF has been reached.
+    field terms : @vec<str> #:
+      Maintains the list of terminators during recursive parsing of nested
+      expressions like list, plist and hash.
+
+    lifecycle params:
+      var source -> source;
+      var row -> row = 0;
+      var col -> col = 0;
+    scope<py>:
+      assert isinstance(source, MetaFile)
+
+      self.startIs((row, col))
+      self.terms().append(';')
+      self.set(row=row, col=col)
+    clinit:
       /# Map chars to functions for parsing exprs identified by the char.
       cmap = {}
       cls.CharMap = cmap
@@ -1746,60 +808,6 @@ scope:
 
       /# This will be used in StrExpr()
       cls.DummyMetaFile = None
-    test:
-      /# pprint.pprint(metax.c.ExprParser.CharMap)
-      test.iseq(72, len(metax.c.ExprParser.CharMap))
-    end lifecycle;
-
-    meta
-    method StrExpr : Expr #:
-      Given a string representation of an expression, obtain its Expr.
-    params:
-      var src : str #:
-        The input string reprsentation.
-    scope:
-      /# Since ExprParser assumes a MetaFile containing all lines to be
-      /# parsed, we need to wrap our src string.  Rather than creating a new
-      /# MetaFile each time, we use a cached one. TODO(wmh): Lock this, or
-      /# make thread-local, etc.
-      metafile = cls.DummyMetaFile
-      if metafile is None:
-        metafile = MetaFile('/fake/path.meta', None, text='\n')
-        cls.DummyMetaFile = metafile
-
-      text = src + '\n'
-      metafile.linesIs(Line.FromText(text))
-      metafile.textIs(text)
-      expr = cls(metafile).parse()
-      return expr
-    end method StrExpr;
-
-    field source : MetaFile #:
-      The MetaFile within which the expr resides.
-    field row : int #:
-      The line with source of the current position within the expr (from 0).
-    field col : int #:
-      The index within current row of the current position in the expr (from 0).
-    field start : tuple<int,int> #:
-      The row/col of the start of the expr.
-    field errors : @vec<str> #:
-      The collection of errors encountered during parsing.
-    field line : str #:
-      This is source[row].  If null, it means EOF has been reached.
-    field terms : @vec<str> #:
-      Maintains the list of terminators during recursive parsing of nested
-      expressions like list, plist and hash.
-
-    lifecycle params:
-      var source -> source;
-      var row -> row = 0;
-      var col -> col = 0;
-    scope<py>:
-      assert isinstance(source, MetaFile)
-
-      self.startIs((row, col))
-      self.terms().append(';')
-      self.set(row=row, col=col)
     end;
 
     method numrows : int #:
@@ -2962,6 +1970,7 @@ scope:
   class Expr #:
     A parsed expression as returned by ExprParser.parse().
   scope:
+
     field kind : str #:
       One of 'num', 'real', 'str', 'id', 'list', 'hash', 'plist', 'call',...
     field text : str #:
@@ -3073,6 +2082,11 @@ scope:
           delim = item[3] if n > 3 else None
           width = item[4] if n > 4 else -1
           self.addVar(var, value, attribute=attribute, delim=delim, width=width)
+    setup:
+      self.varset = metax.c.VarSet()
+      self.varset.addVar('age', 25)
+      self.varset.addVar('name', 'Bob', attribute=None)
+      self.varset2 = metax.c.VarSet(items=(('age', 25), ('name', 'Bob', None)))
     end lifecycle;
 
     method clone : VarSet #:
@@ -3294,13 +2308,6 @@ scope:
         fp.getvalue())
     end method show;
 
-    test
-    lifecycle setup:
-      self.varset = metax.c.VarSet()
-      self.varset.addVar('age', 25)
-      self.varset.addVar('name', 'Bob', attribute=None)
-      self.varset2 = metax.c.VarSet(items=(('age', 25), ('name', 'Bob', None)))
-    end lifecycle;
   end class VarSet;
 
   class BaseStreams #:
@@ -3325,6 +2332,10 @@ scope:
       be a str or BaseSegment.
 
     lifecycle scope:
+    setup:
+      self.bs = metax.c.BaseStreams()
+      self.bs2 = metax.c.BaseStreams()
+      self.bs2.initStreams('a', 'b', 'c')
     end;
 
     method clear #:
@@ -3549,12 +2560,6 @@ scope:
       fp.write('\n')
     end method dump;
 
-    test
-    lifecycle setup:
-      self.bs = metax.c.BaseStreams()
-      self.bs2 = metax.c.BaseStreams()
-      self.bs2.initStreams('a', 'b', 'c')
-    end lifecycle;
   end class BaseStreams;
 
   class Stream #:
@@ -3573,6 +2578,8 @@ scope:
       var name -> name;
       var data -> data;
     scope:
+    setup:
+      test.stream = metax.c.Stream('decl', ['a', 'b'])
     end;
 
     method append params:
@@ -3632,23 +2639,12 @@ scope:
       return self._data + o
     end method __add__;
 
-    test
-    lifecycle setup:
-      test.stream = metax.c.Stream('decl', ['a', 'b'])
-    end;
-
   end class Stream;
 
   class BaseSegment #:
     A collection of contiguous lines of baselang text originating at a specific
     line in a .meta file.
   scope:
-
-    meta
-    lifecycle scope:
-      cls.TMPL_RE = re.compile(
-        '((?:^|\n) *)?\$\{([a-zA-Z0-9_-]+)(?:\?([^\}]*))?\}')
-    end lifecycle;
 
     field chunks : vec<any> #:
       The collection of str and BaseSegment instances making up this
@@ -3688,6 +2684,9 @@ scope:
       if chunks is None:
         chunks = []
       self.chunksIs(chunks)
+    clinit:
+      cls.TMPL_RE = re.compile(
+        '((?:^|\n) *)?\$\{([a-zA-Z0-9_-]+)(?:\?([^\}]*))?\}')
     end lifecycle;
 
     method show #:
@@ -4319,10 +3318,6 @@ scope:
       test.iseqvec(['hello', ''], metax.c.BaseSegment.StrChunkToList('hello\n\n'))
     end method StrChunkToList;
 
-    test
-    lifecycle setup:
-    end;
-
   end class BaseSegment;
 
   class BaseFile #:
@@ -4380,10 +3375,7 @@ scope:
         print '-' * 70
         print subpath
         print contents
-    end lifecycle;
-
-    test
-    lifecycle setup:
+    setup:
       contents = 'MetaLanguage Test config:\nend;\n'
       self.base = metax.c.BaseFile('faux/path', contents)
     end lifecycle;
@@ -4605,6 +3597,8 @@ scope:
       primary = self.primary()
       for prim in prims:
         primary[prim] = primary_data
+    setup:
+      self.cons = metax.c.ConsInfo('person', 'id', None)
     end lifecycle;
 
     method clone : ConsInfo #:
@@ -5061,10 +4055,6 @@ scope:
     test:
     end method findTemplate;
 
-    test
-    lifecycle setup:
-      self.cons = metax.c.ConsInfo('person', 'id', None)
-    end;
   end class ConsInfo;
 
   class ConsGroup #:
@@ -5145,49 +4135,6 @@ scope:
     new Context.
   scope:
 
-    meta
-    lifecycle scope:
-      /# A collection of constants. Code should use self.token('<key>')
-      /# instead of hard-coding any of these.  For now they are stored here
-      /# in a class var, but we may want to allow customization within
-      /# config blocks, in which case they will become instance fields.
-      cls.TOKENS = {
-        /# What character starts a new scope. Block-valued attributes must
-        /# end with this.
-        'scope': ':',
-
-        /# What separates identifiers in a fully qualified scope. For
-        /# example, nm.sp.Class.meth is separated by '.'.
-        'scope_sep': '.',
-
-        /# What terminates a construct.
-        'term': ';',
-
-        /# The secondary terminator text.
-        'end': 'end',
-
-        /# Meta-level one-line comment
-        'remark': '/#',
-
-        /# How many characters is each scope indented relative to parent.
-        'blockdent': 2,
-
-        /# What is inserted before field names to produce raw field name
-        /#  - CODETANGLE(fieldinit): See FieldConstruct.expandMeta() and
-        /#    BaseLanguageOopl.initCode()
-        'field_prefix': '_',
-
-        /# What is inserted after field names to produce raw field name
-        /#  - CODETANGLE(fieldinit): See FieldConstruct.expandMeta() and
-        /#    BaseLanguageOopl.initCode()
-        'field_suffix': '',
-
-        /# The character used to indicate that the class in a type is
-        /# to be treated "as is".
-        'explicit_class_indicator': '^',
-      }
-    end lifecycle;
-
     field parent : Context #:
       The parent context.  Only null when parsing a schema file. When
       parsing a metafile, the Context associated with the MetaLanguage
@@ -5240,12 +4187,59 @@ scope:
       MetaFile.
     end field metafile;
 
+    static
+    field Tokens : map<@str,@str> #:
+      A collection of constants. Code should use self.token('<key>')
+      instead of hard-coding any of these.  For now they are stored here
+      in a class var, but we may want to allow customization within
+      config blocks, in which case they will become instance fields.
+
     lifecycle params:
       var parent -> parent;
       var consmap -> consmap;
       var compiler -> compiler;
       var metafile -> metafile;
     scope:
+    clinit:
+      cls.TokensIs({
+        /# What character starts a new scope. Block-valued attributes must
+        /# end with this.
+        'scope': ':',
+
+        /# What separates identifiers in a fully qualified scope. For
+        /# example, nm.sp.Class.meth is separated by '.'.
+        'scope_sep': '.',
+
+        /# What terminates a construct.
+        'term': ';',
+
+        /# The secondary terminator text.
+        'end': 'end',
+
+        /# Meta-level one-line comment
+        'remark': '/#',
+
+        /# How many characters is each scope indented relative to parent.
+        'blockdent': 2,
+
+        /# What is inserted before field names to produce raw field name
+        /#  - CODETANGLE(fieldinit): See FieldConstruct.expandMeta() and
+        /#    BaseLanguageOopl.initCode()
+        'field_prefix': '_',
+
+        /# What is inserted after field names to produce raw field name
+        /#  - CODETANGLE(fieldinit): See FieldConstruct.expandMeta() and
+        /#    BaseLanguageOopl.initCode()
+        'field_suffix': '',
+
+        /# The character used to indicate that the class in a type is
+        /# to be treated "as is".
+        'explicit_class_indicator': '^',
+      })
+    setup:
+      _, _, _, compiler = test.cachedInfo(metal='meta')
+      self.compiler = compiler
+      self.context = compiler.bootstrapContext()
     end lifecycle;
 
     method subclone : Context #:
@@ -5399,7 +4393,7 @@ scope:
     params:
       var name : str;
     scope:
-      return self.__class__.TOKENS[name]
+      return Context.Tokens()[name]
     test:
       context = test.context
       test.iseq(';', context.token('term'))
@@ -5514,13 +4508,952 @@ scope:
       test.iseqvec(['Attribute', 'Construct'], sorted(res3.primaries()))
     end method legalInfo;
 
-    test
-    lifecycle setup:
-      _, _, _, compiler = test.cachedInfo(metal='meta')
-      self.compiler = compiler
-      self.context = compiler.bootstrapContext()
-    end lifecycle;
   end class Context;
+
+  class Type #:
+    An abstraction of a Meta type.
+
+    Primitive Types
+     - bool
+     - char (nightmare of unicode)
+     - int<1> to int<128>, with what 'int' refers to be customizable.
+        - implemented with masking, shifting, etc.
+     - real<32>, real<64>, real<128> with 'real' being customizable.
+     - complex
+
+    Interned String Type
+     - See discussion in <<src_root>/README.md
+
+    Native Types
+    - These are types that are mapped to baselanguage-level types where
+      possible.
+    - A meta class exists to define the interface, but the same interface
+      is mapped onto base language functionality.
+    - All primitive types provide a similar 'virtual' interface, so methods
+      can be sent to numbers: 5.2.round, 7.floor, etc.
+    - Native types are those that:
+       - exist in Type.Natives(), or
+       - start with 'meta!' or '!'
+
+    To be supported:
+     - unique, shared, weak pointers
+        - http://www.codeproject.com/Articles/570638/Ten-Cplusplus-Features-Every-Cplusplus-Developer
+     - http://clang.llvm.org/docs/ThreadSafetyAnalysis.html
+     - literals for units of measurement
+        - Ex: 95kg, 1.2m, 37oC, etc.
+        - https://en.wikipedia.org/wiki/Units_of_measurement
+        - kinds of units
+           - length (metre, foot, yard, etc)
+           - mass (kilogram, pound, stone, etc.)
+           - time (second, minute, hour, day, week)
+           - electric current (ampere, ???)
+           - temperature (kelvin, celsius, fahrenheit)
+           - luminous intensity (candela, ...)
+           - amount of substance (mole, ...)
+           - ... how to deal with derived units?
+
+    Notes on combining the pass-by indicator ('@', '*' and '&') with
+    constness indicator ('#'):
+      pass-by-pointer
+         *T   -> pointer to T
+         *#T  -> pointer to const T (cannot modify what var points to)
+         #*T  -> const pointer to T (can change var to a different value)
+         #*#T -> const pointer to const T (cannot modify var or what it points to)
+
+         &T   -> reference to T
+         &#T  -> reference to constant T (cannot modify T, cannot modify ref)
+     no! #&T  -> const reference to T, but references are always const so
+                 this is the same as &T (and is disallowed to avoid clutter).
+
+         @T   -> by-value T (copy if arg, guartanteed to be non-null if field)
+         @#T  -> copy of const T (no different than just @T in most cases, but may be useful for local vars where one wants to remind oneself not to modify something ... const int val)
+     no! #@T  -> const copy of T (same as @#T which is more canonical so this is disallowed)
+
+    Notes about unique_ptr, shared_ptr and weak_ptr.
+          u*T -> std::unique_ptr<T>
+         u*#T -> std::unique_ptr<const T>
+         #u*T -> const std::unique_ptr<T>
+        #u*#T -> const std::unique_ptr<const T>
+
+          s*T -> std::shared_ptr<T>
+         s*#T -> std::shared_ptr<const T>
+         #s*T -> const std::shared_ptr<T>
+        #s*#T -> const std::shared_ptr<const T>
+
+          w*T -> std::weak_ptr<T>
+         w*#T -> std::weak_ptr<const T>
+         #w*T -> const std::weak_ptr<T>
+        #w*#T -> const std::weak_ptr<const T>
+
+    Other rules about types:
+     no! &&T  -> cannot take reference to a reference
+         &*T  -> a reference to a pointer (so the pointer itself can be modified)
+     no! *&T  -> a pointer to a reference is not allowed
+     no! #&   -> use &#
+     no! #@   -> use @#
+     no! ##   -> redundant
+     no! @*   -> use *
+     no! @&   -> use &
+     no! u#*T -> use #u*T
+     no! s#*T -> use #s*T
+     no! w#*T -> use #w*T
+
+    Legal type prefixes are:
+      @#?
+      &?(#?[usw]?\*)*#?
+
+    How to type a variable V.
+     - Establish the base type T
+     - Is T modifiable?
+         If not, prefix with '#'
+     - Can the variable be null?
+        - if not
+          - for a field or local var, prefix with '@'
+          - for an arg, prefix with '&' (pass-by-ref) or '@' (pass-by-value)
+     - Is T a class type and can variable can be null?
+        - prefix with '*' or leave off (default is to prefix with '*')
+     - If the variable is a primitive type and one wants pass-by-refence semantics,
+        - prefix with '&' or '*' (boxed class will be used if lang does not support)
+     - Any '*' in the prefix can be prefixed with 'u' (unique ptr), 's'
+       (shared ptr) or 'w' (weak ptr) to obtain implicit memory management,
+       and can be further prefixed by '#' to indicate the pointer itself is
+       const (cannot be changed).  Note that in languages that provide
+       garbage collection [usw] is ignored, but '#' can still be semantically
+       useful.
+
+    Does it make sense to claim that Meta has any primitive types?  Maybe
+    these are just numeric examples of native types supported by Meta?
+
+    On the other hand, it is useful to be able to ask if the type is primitve
+    in situations where none of @, * or & are specified ... primitive types
+    default to @, others to * (see details in Type.Instance())
+
+    ----------------------------------------------------------------------
+    Type Analysis and Inference In Meta
+
+    Meta has the following data-structures useful for type analysis and inference
+     - ClassConstruct maintains
+        - the collection of all 'field' instances
+        - the collection of all 'method' instances
+       and they are initialized in ...?
+
+     - ExecutableConstruct maintains:
+        - the collection of all ...?
+
+  scope:
+
+    meta
+    method Instance #:
+      Return the interned instance of a Type given a representation.
+    params:
+      var raw : str #:
+        The raw type
+      var allow_invalid : bool = false #:
+        If True, invalid types do not raise an Error.
+      var cons : str = null #:
+        The construct kind.  Used to determine what the default prefix
+        should be when one is not specified.
+      var default_prefix : str = null #:
+        This is almost never given, but can be provided for special snowflake
+        types whose default prefix differs from the normal rules ('@' for
+        primitives, '*' for anything else). See the Type clinit: block for an
+        example.
+      var namespace_function : function = null #:
+        A function accepting no args that returns the namespace within which
+        the Type appears.  Used to resolve relative class types.  If resolution
+        is needed, it is an error not to provide such a function
+    scope:
+      wrapper = None
+      result = cls.Repository.get(raw, None)
+      if not result:
+        match = cls.LEGAL_METATYPE_RE.match(raw)
+        if match:
+          prefix, base, params_str = match.groups()
+          params = cls.ParseTypes(
+            params_str, allow_invalid=allow_invalid,
+            namespace_function=namespace_function)
+          native = (base in cls.Natives()) or base.startswith('meta!') or base[0] == '!'
+          primitive = base in cls.Primitives()
+          if not prefix or prefix == '#':
+            /# The rationale for what prefix to use when one is not explicit
+            /# provided is discussed in detail in <<src_root>>/README.md. The
+            /# summary is:
+            /#   - Use '@' for primitive types
+            /#   - Use '&' for 'str' (because &str is interpreted specially)
+            /#   - Use '*' for all other types.
+            if base == 'void' or primitive:
+              prefix = prefix + '@'
+            elif default_prefix is not None:
+              prefix = default_prefix
+            else:
+              prefix = '*' + prefix
+
+          tokens = Context.Tokens()
+          use_native = native or primitive
+          if (
+            not use_native
+            and tokens['scope_sep'] not in base
+            and base[0] != tokens['explicit_class_indicator']
+          ):
+            /# This type refers to a relative class name (as opposed to a fully
+            /# qualified one).  We need to establish both a Type instance that
+            /# uses the fully qualified class name, and a TypeWrapper instance
+            /# that captures this particular relative type.
+            if namespace_function is None:
+              raise Error('Must provide a namespace')
+            namespace = namespace_function()
+            if not isinstance(namespace, NamespaceConstruct):
+              print 'ERROR: %s() = %s (%s) when resolving type "%s"' % (
+                namespace_function,
+                namespace, namespace.kindid() if namespace else None, base)
+              raise Error(
+                'Failed to establish namespace ... cannot qualify %s' % raw)
+
+            wrapper = namespace.getType(raw)
+            if wrapper:
+              /# We have previously seen the same relative type, and can use it.
+              result = wrapper.type()
+            else:
+              /# We need to create Type and TypeWrapper instances.
+              nmsp = namespace.id()
+              fqcn = nmsp + '.' + base
+              fqraw = prefix + fqcn + (params_str or '')
+              result = cls(
+                fqraw, prefix, fqcn, params=params, native=False)
+              wrapper = TypeWrapper(result, raw)
+              namespace.registerType(wrapper)
+          else:
+            result = cls(raw, prefix, base, params=params, native=use_native)
+        else:
+          if allow_invalid:
+            /# We are to return a Type instance even though it is invalid.
+            result = cls(raw, prefix=None, base=None, native=False)
+          else:
+            result = None
+        if result:
+          cls.Repository[result.raw()] = result
+      if not allow_invalid:
+        if not result or not result.isValid():
+          raise metax.root.Error('Invalid type %s (%s)' % (raw, result))
+      return wrapper or result
+    test:
+      /# Create a namespace for use when a type needs to resolve a relative
+      /# class.
+      _, _, context, _ = self.cachedInfo()
+      namespace = metax.c.NamespaceConstruct.NewFromData('nm.sp', context)
+      nmspfunc = lambda: namespace
+
+      /# The following types should all be valid and verbatim
+      for mtstr in (
+        '*str',
+        '@void',
+        '*map<*str,@int>',
+        '*tuple<&#int,*#int,#*int,@#int>',
+        '*nm.sp.Person',
+      ):
+        typ = metax.c.Type.Instance(mtstr, namespace_function=nmspfunc)
+        self.assertTrue(typ.isValid())
+        test.iseq(mtstr, typ.asStr(mode=1))
+
+      /# The following types are valid but involve a rewrite.
+      for mtstr, canonical in (
+        ('int', '@int'),
+        ('void', '@void'),
+        /# TODO(wmh): Should '*^Object' be cleaned up or left as is?
+        /# Note that '^' is not legal in types, only in 'parent', 'metaparent',
+        /# and 'testparent' attributes of 'class' constructs, which have type
+        /# 'word', not 'type'.  So having '^Object' in this list is kinda
+        /# wrong to begin with.
+        ('^Object', '*^Object'),
+        ('str', '*str'),
+        ('a.b.Person', '*a.b.Person'),
+        ('map<int,*str,*a.b.Person>', '*map<@int,*str,*a.b.Person>'),
+        ('A', '*nm.sp.A'),
+        ('*A', '*nm.sp.A'),
+        ('u*A', 'u*nm.sp.A'),
+        ('s*A', 's*nm.sp.A'),
+        ('w*A', 'w*nm.sp.A'),
+        ('#u*A', '#u*nm.sp.A'),
+        ('#s*A', '#s*nm.sp.A'),
+        ('#w*A', '#w*nm.sp.A'),
+        /# TODO(wmh): support this!
+        /#('map<int,str,Person>', '&map<@int,*str,*Person>')
+      ):
+        typ = metax.c.Type.Instance(mtstr, namespace_function=nmspfunc)
+        self.assertTrue(typ.isValid())
+        test.iseq(canonical, typ.asStr(mode=1))
+
+      /# The following types are invalid
+      for mtstr in (
+        'int@',
+        'u#*A',
+        's#*A',
+        'w#*A',
+      ):
+        typ = metax.c.Type.Instance(
+          mtstr, allow_invalid=True, namespace_function=nmspfunc)
+        test.iseq(False, typ.isValid())
+    end method Instance;
+
+    meta
+    method ParseTypes : vec<Type> #:
+      Parse a comma-separated list of types into a list of Types.
+
+      This parses the parameterized types associated with container classes.
+      For example, a Map is of the form '*map<str,@int>', and a
+      vector of vector of maps is: vec<vec<map<str,*int>>>'.  This
+      method does not parse the entire type, just the portion inside the <...>,
+      so for our two examples, params_str would be 'str,@int' and
+      'vec<map<str,*int>>' respectively.
+    params:
+      var params_str : str #:
+        The comma-separated list of within-parameter types to parse.
+      var allow_invalid : bool = false #:
+        If True, allow invalid types, otherwise raise Error.
+      var namespace_function : function = null #:
+        A function accepting no args that returns the namespace within which
+        the Type appears.  Used to resolve relative class types.  If resolution
+        is needed, it is an error not to provide such a function
+    scope:
+      if not params_str:
+        return None
+      result = []
+      angles = 0
+      start = 0
+      i = 0
+      N = len(params_str)
+      sep = ','
+      while True:
+        if i > N:
+          break
+        if i == N or (params_str[i] == sep and angles == 0):
+          raw = params_str[start:i]
+          try:
+            /# We first check if 'raw' is an integer.
+            type_ = int(raw)
+          except ValueError:
+            type_ = cls.Instance(
+              raw, allow_invalid=allow_invalid,
+              namespace_function=namespace_function)
+          result.append(type_)
+          i += 1
+          start = i
+        else:
+          c = params_str[i]
+          if c == '<':
+            angles += 1
+          elif c == '>':
+            angles -= 1
+            if angles < 0:
+              /# TODO(wmh): What to do when allow_invalid is true?
+              raise metax.root.Error(
+                'Invalid params (too many <): %s' % params_str)
+          i += 1
+      return result
+    test:
+      metax.c.Type.Repository = None
+      metax.c.Type.Meta__Initialize()
+      res = metax.c.Type.ParseTypes('*str,@int')
+      test.iseq(['*str', '@int'], [t.raw() for t in res])
+      test.iseq(
+        ['&str', '*str', '@int', 'str'], sorted(metax.c.Type.Repository.keys()))
+      res2 = metax.c.Type.ParseTypes('*map<*str,@int>')
+      test.iseq(1, len(res2))
+      params = res2[0].params()
+      test.iseq(['*str', '@int'], [t.raw() for t in params])
+      self.assertTrue(params[0] is metax.c.Type.Repository['*str'])
+      self.assertTrue(params[1] is metax.c.Type.Repository['@int'])
+      res3 = metax.c.Type.ParseTypes('3')
+      test.iseq([3], res3)
+    end method ParseTypes;
+
+    meta
+    method ShowRepository #:
+      Print out the repository (useful during debugging).
+    params:
+      var fp : ostream = out;
+    scope:
+      rep = cls.Repository
+      for tstr in sorted(rep):
+        metatype = rep[tstr]
+        fp.write('%-30s : %s\n' % (tstr, metatype))
+    test:
+      metax.c.Type.Repository = None
+      metax.c.Type.Meta__Initialize()
+      fp = test.newStr()
+      metax.c.Type.ShowRepository(fp=fp)
+      test.iseqtext(
+        '&str                           : &str\n'
+        '*str                           : *str\n'
+        'str                            : str\n',
+        fp.getvalue())
+    end method ShowRepository;
+
+    field prefix : str #:
+      The pass-by and const semantics indicators.
+    field base : str #:
+      The base type
+    field native : bool #:
+      True if we are to use the base-language native type associated with
+      this type when generating base-language code.  This is true
+      for both native types and primitive types.
+    field params : vec<any> #:
+      The parameters of this type. Each element can be either a Type or an int.
+    field raw : str #:
+      The raw representation of the type.
+
+    static
+    field Primitives : map<str,map> #:
+      A mapping from Meta primitive type name to map containing:
+        args: tuple
+      Note that aliases for Meta primitive types must also be specified
+      explicitly (e.g. 'float' and 'double', etc.
+
+    static
+    field Natives : map<str,map> #:
+      Keys are Meta native types, values are maps containing:
+        defparam: str
+        args: tuple
+
+    lifecycle params:
+      var raw -> raw;
+      var prefix -> prefix;
+      var base -> base;
+      var params -> params = null;
+      var native -> native = false;
+    scope:
+    metainit:
+      cls.EXTERNAL_CLASS_INDICATOR = '^';
+      /# TODO(wmh): Added the $? on 2016-06-30 to support "generic types" ala
+      /# templates and generics (hash<$K,$V>, etc.).  Need to add support for
+      /# this throughout the codebase.
+      cls.LEGAL_METATYPE_RE = re.compile(
+        r'^(?P<prefix>&?(?:#?[usw]?\*)*#?|@#?|&#?|\$)?'
+        r'(?P<base>\%s?[a-zA-Z0-9_.!:]+)'
+        r'(?:<(?P<params>\S+)>)?$'
+        % cls.EXTERNAL_CLASS_INDICATOR)
+    clinit:
+      cls.RE = None
+      cls.METATYPE_SPLIT = re.compile(r'([#])?([usw])?\*')
+
+      cls.PrimitivesIs({
+        /# bool, boolean
+        'bool': {},
+        /# char
+        'char': {},  # <1>, <2>, <4> ???
+        /# byte, short, int, long, longlong
+        'int': {'args': ('int',)},   # <1> ... <128>
+        /# unsigned byte, short, int, long, longlong
+        'uint': {'args': ('int',)},   # <1> ... <128>
+        /# float, double
+        'real': {'args': ('int',)},  # <32> or <64> or <128>
+        'float': {},
+        'double': {},
+        /# complex
+        /# TODO(wmh): This should probably be moved to 'native' ... we cannot
+        /# actually provide a primitive implementation of complex numbers in
+        /# all baselangs.
+        'complex': {},
+      })
+
+      cls.NativesIs({
+        'any': {},
+        'void': {'defparam': ''},
+        /# interned (const) string
+        'str': {},
+        /# mutable string
+        'string': {},
+        /# map, dict, hashtable, associative array
+        'map': {'args': ('*', '*')},
+        /# pair of types.
+        'pair': {'args': ('*', '*')},
+        /# immutable ordered container: tuple
+        /#  - a k-tuple can be specified with either no parameters or with k params.
+        /#     - tuple
+        /#     - tuple<int,str,Person>
+        'tuple': {
+          /# 'args' being an empty tuple means can have any number of args.
+          'args': tuple(),
+        },
+        /# mutable ordered container: vector, list, growable array
+        'vec': {'args': ('*',)},
+        /# mutable unordered container: set, frozenset
+        'set': {'args': ('*',)},
+
+        'ostream': {},
+        'istream': {},
+        'strstream': {},
+
+        /# TODO(wmh): Establish what the names for time-related native types
+        /# will be:
+        /#  - to represent a date and time
+        /#    - if year, month, day, hour, minute, second explicitly
+        /#      - datetime
+        /#      - time
+        /#      - ymdhms
+        /#    - if only store number of seconds relative to start
+        /#      - timestamp
+        /#    - if we want support for relative dates
+        /#      - ??
+        /#  - to represent a date (year, month, day)
+        /#    - if year, month, day explicitly
+        /#      - date
+        /#      - ymd
+        /#    - if only store number of days relative to start
+        /#      - ??
+        /#  - to represent a time within a day without the date
+        /#    - if hour, minute, second stored explicitly
+        /#      - hms
+        /#    - if only store number of seconds relative to 00:00:00
+        /#      - should this be related to the concept of Duration?
+        /#
+        /# Would be preferable to find high-level names that don't assume a
+        /# particular implementation (and provide implementation-specific
+        /# variants similar to how we'll do for map and vec).
+        /#
+        /# Desired features
+        /#  - very space efficient
+        /#  - very time efficient
+        /#  - can perform relative date manipulation
+        'ymd': {},   # date without time of day
+        'hms': {},   # time of day without date
+        'date': {},  # this is a date plus time of day
+
+        'regexp': {},
+
+        'nulltype': {},
+        'class': {},
+        'method': {},
+        'function': {},
+
+        'void': {},
+      })
+
+      /# We create Type instances for various ubiquitous types and aliases
+      /# of those types.
+      /#
+      /# See ../../README.md section 'Implementing interned string support'
+      /# for details on *str, &str, @str, #str and str. Below, we are
+      /# implementing 'str' = '*str'.
+      cls.Repository = {}
+      strreftype = cls.Instance('&str')
+      strptrtype = cls.Instance('*str')
+      /# Because 'str' means '*str' it really isn't necessary to pass in
+      /# default_prefix, but it is left in case we decide to swtich back to
+      /# 'str' meaning '&'.
+      strtype = cls.Instance('str', default_prefix='*')
+      assert sorted(cls.Repository.keys()) == ['&str', '*str', 'str']
+      /# TODO(wmh): Are there other types we should intern?
+    setup:
+      metax.c.Type.Repository = None
+      metax.c.Type.Meta__Initialize()
+      self.type = metax.c.Type('@int<32>', '@', 'int', ['32'])
+    test:
+      test.iseq('@int<32>', test.type.raw())
+    end lifecycle;
+
+    method clone : Type #:
+      Make a copy of myself.
+      TODO(wmh): Move to 'copy' attribute of 'lifecycle' when support available.
+    scope:
+      cls = self.__class__
+      if self._params is None:
+        params = None
+      else:
+        params = []
+        for param in self._params:
+          if isinstance(param, Type):
+            params.append(param.clone())
+          else:
+            params.append(param)
+      return cls(
+        self._raw, self._prefix, self._base, params=params, native=self._native)
+    test:
+      type = test.type
+      type2 = type.clone()
+      test.notsame(type, type2)
+      test.iseq(type.asStr(), type2.asStr())
+    end method clone;
+
+    method dump : void #:
+      Print out details about this Type instance.
+
+      TODO(wmh): This should be an automatically generated method.
+    params:
+      var fp : ostream = out;
+    scope:
+      fp.write('Type: %s\n' % self._raw)
+      fp.write('  prefix = %s\n' % self._prefix)
+      fp.write('  base   = %s\n' % self._base)
+      fp.write('  native = %s\n' % self._native)
+      fp.write('  params = %s\n' % self._params)
+    test:
+      fp = test.newStr()
+      test.type.dump(fp=fp)
+      test.iseqtext(
+        'Type: @int<32>\n'
+        '  prefix = @\n'
+        '  base   = int\n'
+        '  native = False\n'
+        "  params = ['32']\n",
+        fp.getvalue())
+    end method dump;
+
+    method numericParam : int #:
+      Returns an integer if the params has size 1 and is an int, else 0.
+    scope:
+      params = self._params
+      if params and len(params) == 1 and isinstance(params[0], int):
+        result = params[0]
+      elif self._raw == 'bool':
+        result = 1
+      else:
+        result = 0
+      return result
+    test:
+      test.iseq(0, test.type.numericParam())
+      typ = metax.c.Type.Instance('uint<14>')
+      test.iseq(14, typ.numericParam())
+      typ2 = metax.c.Type.Instance('map<14,str>')
+      test.iseq(0, typ2.numericParam())
+      typ3 = metax.c.Type.Instance('bool')
+      test.iseq(1, typ3.numericParam())
+    end method numericParam;
+
+    method fqcn : str #:
+      Obtain the fully qualified class name.
+
+      Returns:
+        Returns None if the type is primitive or native.
+    scope:
+      if self.isPrimitive() or self.isNative():
+        result = None
+      else:
+        result = self.base()
+      return result
+    test:
+      types = metax.c.Type.ParseTypes('int,str,nmsp.sub.A,&a.b.C')
+      test.iseq(
+        [None, None, 'nmsp.sub.A', 'a.b.C'],
+        [t.fqcn() for t in types])
+    end method fqcn;
+
+    method paramStr : str #:
+      The parameters of the type as a string.
+    scope:
+      raw = self.raw()
+      index = raw.find('<')
+      if index == -1:
+        result = ''
+      else:
+        result = raw[index:]
+      return result
+    test:
+      test.iseq('', metax.c.Type.Instance('int').paramStr())
+      test.iseq('<17>', metax.c.Type.Instance('int<17>').paramStr())
+      test.iseq('<str,a.A>', metax.c.Type.Instance('map<str,a.A>').paramStr())
+    end method paramStr;
+
+    method isPrimitive : bool #:
+      Determine if the base type is primitive.  Note that a pointer to a pointer
+      to a primitive is considered primitive.
+    scope:
+      return Type.Primitives().get(self.base(), None) is not None
+    test:
+      typ1 = metax.c.Type.Instance('uint<8>')
+      test.iseq(True, typ1.isPrimitive())
+      typ2 = metax.c.Type.Instance('*a.b.Person')
+      test.iseq(False, typ2.isPrimitive())
+    end method isPrimitive;
+
+    method isNative : bool #:
+      Determine if the base type is a native type.
+    scope:
+      return Type.Natives().get(self.base(), None) is not None
+    test:
+      test.isfalse(test.type.isNative())
+    end method isNative;
+
+    method isValid : bool #:
+      Determine if this is a valid (legal) type.
+    scope:
+      base = self.base()
+      return self._native or bool(self.prefix() and base)
+    test:
+      t1 = metax.c.Type.Instance('*str')
+      test.iseq(True, t1.isValid())
+      t2 = metax.c.Type.Instance('@@blah', allow_invalid=True)
+      test.iseq(False, t2.isValid())
+    end method isValid;
+
+    method isBaseConst : bool #:
+      Determine if the base type is const or not.
+      TODO(wmh): isPrimitive and isNative are about base types too, but
+      are not named isBasePrimitive or isBaseNative. Why is this not named
+      isConst() instead?
+    scope:
+      /# TODO(wmh): Conceptually, 'str' (and '@str' and '&str' and '*str')
+      /# should return true for isBaseConst. But currently isBaseConst() is
+      /# used in FieldConstruct.translateMeta() to determine whether to
+      /# generate setters/reffers (no for const types) ... but we DO want
+      /# to generate setters for fields of type 'str' (distinction between
+      /# changing the string and changing the variable storing the string).
+      prefix = self.prefix()
+      return prefix and (prefix[-1] == '#' or prefix.endswith('#@'))
+    test:
+      test.iseqvec(
+        [False, False, True, True, False],
+        [t.isBaseConst() for t in
+         metax.c.Type.ParseTypes(
+           'str,int,#a.Person,#int,#*a.Person')])
+    end method isBaseConst;
+
+    method isTemplate : bool #:
+      Determine if this is a template type or not.
+    scope:
+      prefix = self.prefix()
+      return prefix and prefix == '$'
+    test:
+      test.isfalse(test.type.isTemplate())
+    end method isTemplate;
+
+    method isPtr : bool #:
+      Determine if this is a pointer type or not.
+    scope:
+      prefix = self.prefix()
+      if not prefix:
+        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
+      /# If there is a '*' anywhere in prefix, this is a pointer type.
+      return '*' in prefix
+    test:
+      test.iseq(
+        [True, False, True, True, True, False, True, True, False],
+        [t.isPtr() for t in
+         metax.c.Type.ParseTypes(
+           'str,int,*a.Person,*int,a.Person,&a.Person,*#a.A,**a.A,&#a.A')])
+    end method isPtr;
+
+    method isRef : bool #:
+      Determine if this is a reference type or not.
+    scope:
+      prefix = self.prefix()
+      if not prefix:
+        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
+      return prefix[0] == '&' and '*' not in prefix
+    test:
+      test.iseq(
+        [False, False, False, False, False, True, False],
+        [t.isRef() for t in
+         metax.c.Type.ParseTypes(
+           'str,int,*a.Person,*int,a.Person,&a.Person,&*a.A')])
+    end method isRef;
+
+    method isRefPtr : bool #:
+      Determine if this is areference to a pointer.
+    scope:
+      prefix = self.prefix()
+      if not prefix:
+        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
+      return prefix[0] == '&' and '*' in prefix
+    test:
+      test.iseq(
+        [False, False, False, False, False, False, False, False, False, True],
+        [t.isRefPtr() for t in
+         metax.c.Type.ParseTypes(
+           'str,int,*a.Person,*int,a.Person,&a.Person,*#a.A,**a.A,&#a.A,&*a.A')])
+    end method isRefPtr;
+
+    method isValue : bool #:
+      Determine if this is a value type or not.
+    scope:
+      prefix = self.prefix()
+      if not prefix:
+        raise metax.root.Error('All types should have a prefix: %s' % self.raw())
+      return prefix[0] == '@'
+    test:
+      test.istrue(test.type.isValue())
+    end method isValue;
+
+    method isStr : bool #:
+      True if the type is 'str' (or '@str' or '&str' or '*str')
+    scope:
+      return self.base() == 'str'
+    test:
+      test.isfalse(test.type.isStr())
+      test.istrue(metax.c.Type.Instance('str').isStr())
+    end method isStr;
+
+    method isVoid : bool #:
+      Determine if this is the void type or not.
+      TODO(wmh): We will almost certainly need to make a distinction between
+      '*void' and 'void'. Currently this method returns True for both, but
+      we should maybe have isVoid() and isBaseVoid() to distinguish.
+    scope:
+      return self.base() == 'void'
+    test:
+      test.isfalse(test.type.isVoid())
+      test.istrue(metax.c.Type.Instance('void').isVoid())
+    end method isVoid;
+
+    method isAny : bool #:
+      Determine if this is the 'any' type or not.
+      TODO(wmh): We will almost certainly need to make a distinction between
+      '*any' and 'any'. Currently this method returns True for both, but
+      we should maybe have isAny() and isBaseAny() to distinguish.
+    scope:
+      return self.base() == 'any'
+    test:
+      test.isfalse(test.type.isVoid())
+    end method isAny;
+
+    method asStr : str #:
+      Convert to a string according to mode.
+    params:
+      var mode : int = 0 #:
+        If 0, print the verbatim type seen.
+        Otherwise print the type formed by composing parsed data.
+    scope:
+      raw = self.raw()
+      if mode == 0 or raw.startswith('{#') and raw.endswith('#}'):
+        result = raw
+      else:
+        params_str = ''
+        params = self.params()
+        if params:
+          params_list = []
+          for type_ in params:
+            params_list.append(type_.asStr(mode=mode))
+          params_str = '<' + ','.join(params_list) + '>'
+        result = '%s%s%s' % (
+          self.prefix(), self.base(), params_str)
+        /#if result != self.raw():
+        /#  result += ' [%s]' % self.raw()
+      return result
+    test:
+      test.iseq('@int<32>', test.type.asStr())
+    end method asStr;
+
+    method __str__ : str #:
+      TODO(wmh): Meta should auto-generate baselang-specific to-string
+      methods based on asStr() or some more formal method.
+    scope:
+      return self.asStr()
+    test:
+      t1 = metax.c.Type.Instance('*str')
+      test.iseq('*str', str(t1))
+    end method __str__;
+
+    test
+    method testx_verifyInitiale scope:
+      metax.c.Type.Repository = None
+      metax.c.Type.Meta__Initialize()
+      test.iseqvec(
+        ['&str', '*str', 'str'],
+        sorted(metax.c.Type.Repository.keys()))
+
+  end class Type;
+
+  class TypeWrapper #:
+    A wrapper for the Type class.
+
+    The Type class has interned instances for each type in the system.
+    Internment provides efficiency but is at odds with wanting a distinction
+    between the canonical type and display type (where display type can differ
+    depending on context).
+
+    In particular, suppose we have
+       namespace ex.code ::
+         class A ::
+           method meth : B ...
+    The return type of 'meth' is not fully qualified, but under the hood Meta
+    needs to know the fully qualified type in order to be able to find the
+    associated class during type analysis. But if we create an interned Type
+    instance with value ex.code.B, then when we canonicalize the code, the type
+    will no longer be local, it will appear as 'ex.code.B', when the local
+    version is arguably more readable (less clutter).
+
+    To address this issue, the following strategy is used:
+     - All interned Type instances specify fully qualified class names
+       (for non-native, non-primitive types)
+     - In the code, a type specification that is not fully qualified is
+       made an instance of TypeWrapper, which contains the internted Type
+       instance and a display representation.  This class otherwise responds
+       to exactly the same interface as Type, with the sole difference being
+       how the type responds to __str__ ... Type instances print the fully
+       qualified class name, TypeWrapper instances print their cached display
+       string instead.  There can be many TypeWrapper instances for the
+       same local type, but only a single Type instance.
+
+  scope:
+
+    field type : metax.c.Type #:
+      The type being wrapped.
+
+    field display : str #:
+      The local type name found in the source code, and to be displayed during
+      (some) canonicalizations.
+
+    lifecycle params:
+      var type -> type;
+      var display -> display;
+    scope:
+    setup:
+      metax.c.Type.Repository = None
+      metax.c.Type.Meta__Initialize()
+      self.type = metax.c.Type.Instance('a.b.Person')
+      self.wrap = metax.c.TypeWrapper(self.type, 'Person')
+    end;
+
+    method wrappedRaw : str #:
+      The local type name found in the source code.
+    scope:
+      return self._display
+    test:
+      test.iseq('Person', test.wrap.wrappedRaw())
+    end method wrappedRaw;
+
+    method __str__ : str #:
+      The printable representation of this WrappedType instance.
+    scope:
+      return self._display
+    test:
+      test.iseq('a.b.Person', str(test.type))
+      test.iseq('Person', str(test.wrap))
+    end method __str__;
+
+    method __getattr__ : any #:
+      This method delegates all non-locally defined methods to the contained
+      self.type().
+      TODO(wmh): This is a python-specific method, and a more general mechanism
+      for delegating all non-local methods to a contained object is needed.
+    params:
+      var name;
+    scope:
+      return getattr(self._type, name)
+    test:
+      /# noop. See test_isPtr, test_isRef, test_fqcn below.
+      pass
+    end method __getattr__;
+
+    test
+    method test_isPtr scope:
+      test.iseq(True, test.type.isPtr())
+      test.iseq(True, test.wrap.isPtr())
+    end method test_isPtr;
+
+    test
+    method test_isRef scope:
+      test.iseq(False, test.type.isRef())
+      test.iseq(False, test.wrap.isRef())
+    end method test_isRef;
+
+    test
+    method test_fqcn scope:
+      test.iseq('a.b.Person', test.type.fqcn())
+      test.iseq('a.b.Person', test.wrap.fqcn())
+    end method test_fqcn;
+
+  end class TypeWrapper;
 
   abstract
   class Attribute #:
@@ -6404,13 +6337,16 @@ scope:
     params:
       var cid : str #:
         The construct id to search for.
+      var default : int = REQUIRED;
     scope:
       cmap = self._map
       if cid not in cmap:
-        metafile.error(
-          "Attempt to add construct '%s' relative to undefined '%s'" %
-          (construct.fqn(), cid))
-        result = -1
+        if default is REQUIRED:
+          raise Error('Failed to find %s in %s' % (cid, sorted(cmap)))
+          self.parent().metafile().error(
+            "Request for unknown construct '%s'" % cid)
+        else:
+          result = default
       else:
         construct = cmap[cid]
         result = self._value.index(construct)
@@ -6507,16 +6443,22 @@ scope:
           /# We are to insert after the construct identified by position.
           /#  - TODO(wmh): adjust postcount.
           /#    See old code ComplexBlockAttribute.registerConstruct
-          index = self.findIndex(position[1:])
-          value.insert(index+1, construct)
+          index = self.findIndex(position[1:], default=-1)
+          if index == -1:
+            value.append(construct)
+          else:
+            value.insert(index+1, construct)
           cmap[cid] = construct
 
         elif position[0] == '-':
           /# We are to insert before the construct identified by position.
           /#  - TODO(wmh): adjust postcount.
           /#    See old code ComplexBlockAttribute.registerConstruct
-          index = self.findIndex(position[1:])
-          value.insert(index, construct)
+          index = self.findIndex(position[1:], default=-1)
+          if index == -1:
+            value.append(construct)
+          else:
+            value.insert(index, construct)
           cmap[cid] = construct
 
         else:
@@ -8681,6 +8623,9 @@ scope:
       selfsep : str
         What separates the receiver variable from a method invocation.
         Ex. In Java and Python, this is '.', while in C++ and Perl it is '->'.
+      staticsep : str
+        What separates the class and method/field for static references.
+        Ex. In Java and Python, this is '.', while in C++ and Perl it is '::'.
       stmtend : str
         What character(s) end statements in this baselang.
         ex: In python, this is empty.  In C++, Java and Javscript it is ';'.
@@ -8704,44 +8649,6 @@ scope:
         TestCase instance after invoking all tests on it.
   scope:
 
-    meta
-    lifecycle scope:
-      /# This class var has the same keys as SPECIALS in BaseLanguageOopl and its
-      /# children, but instead of the value being a baselang representation of
-      /# the meta identifier specified by the key, the value here is the Type
-      /# instance that the value is an instance of.
-      cls.PSEUDOVARS = {
-        /# TODO(wmh): With the advent of TypeWrapper, should we have these be
-        /# TypeWrapper instances whose underlying type is the fqcn of the actual
-        /# class?
-        'false': Type.Instance('bool'),
-        'out': Type.Instance('meta.ostream'),
-        'err': Type.Instance('meta.ostream'),
-        'in': Type.Instance('meta.istream'),
-        /# TODO(wmh): What is the type of null in Meta??
-        'null': Type.Instance('meta.Null'),
-        'nan': float,
-        'self': SELF,
-        'test': SELF,
-        'this': SELF,
-        'true': Type.Instance('bool'),
-      }
-
-      /# TODO(wmh): Change to std::any
-      any = Type.Instance('any')
-      cls.TEMPLATES = {
-        'vec': (('TV', any),),
-        /# NOTE: In C++, we need the map key to be 'std::string' (rather than
-        /# std::string* or std::string&) if we are using std::string to
-        /# implement 'str' (will be better when we move to IStr). It is possible
-        /# that javascript instead expects *str ... TBD.
-        'map': (('TK', Type.Instance('@str')), ('TV', any)),
-      }
-
-      cls.SPECIAL_RE = re.compile(
-        r'^(?P<indent>\s*)Meta:(?P<action>[a-zA-Z0-9_<>]+):\s*(?P<text>.*)')
-    end lifecycle;
-
     field metatypes : map #:
       Maps meta-level primitive/native types to base-lang information
       about those types. Some metatypes require a parameter (e.g. int<32>,
@@ -8758,6 +8665,63 @@ scope:
           If None, it means there is no meaningful default value for the type
           in question.
     end field metatypes;
+
+    static
+    field SpecialRE : regexp #:
+      A regexp to apply to each line in comment blocks. A matching line is
+      a request to suppress some Meta (or base-lang) warning.
+
+    static
+    field PseudoVars : map<@str,metax.c.Type> #:
+      This static field has the same keys as BaseLanguageOopl.SPECIALS and its
+      children, but instead of the value being a baselang representation of the
+      meta identifier specified by the key, the value here is the Type instance
+      that the value is an instance of.
+
+    static
+    field Templates : map<@str,pair<@str,metax.c.Type>> #:
+      Keys are native types, values are tuples of two-tuples, specifying
+      the allowed template args (conceptual-name, type). An empty tuple
+      means an arbitrary number of template args are allowed, and they will
+      be named 'T1', 'T2', etc. and have type any.
+
+    lifecycle clinit:
+      cls.SpecialREIs(re.compile(
+        r'^(?P<indent>\s*)Meta:(?P<action>[a-zA-Z0-9_<>]+):\s*(?P<text>.*)'))
+
+      cls.PseudoVarsIs({
+        /# TODO(wmh): With the advent of TypeWrapper, should we have these be
+        /# TypeWrapper instances whose underlying type is the fqcn of the actual
+        /# class?
+        'out': Type.Instance('meta.ostream'),
+        'err': Type.Instance('meta.ostream'),
+        'in': Type.Instance('meta.istream'),
+        /# TODO(wmh): What is the type of null in Meta??
+        'null': Type.Instance('meta.Null'),
+        'nan': float,
+        'self': SELF,
+        'test': SELF,
+        'this': SELF,
+        'false': Type.Instance('bool'),
+        'true': Type.Instance('bool'),
+      })
+
+      /# TODO(wmh): Change to std::any
+      any = Type.Instance('any')
+      cls.TemplatesIs({
+        'vec': (('TV', any),),
+        /# NOTE: In C++, we need the map key to be 'std::string' (rather than
+        /# std::string* or std::string&) if we are using std::string to
+        /# implement 'str' (will be better when we move to IStr). It is possible
+        /# that javascript instead expects *str ... TBD. Note also that
+        /# std::string_view helps here.
+        'map': (('TK', Type.Instance('@str')), ('TV', any)),
+        'pair': (('T1', 'any'), ('T2', any)),
+        /# NOTE: An entry in Templates() that is empty implies any number of
+        /# params, each with default any.
+        'tuple': tuple(), 
+      })
+    end lifecycle;
 
     method metabase : any #:
       Obtain base-lang info for a given (base) metatype.
@@ -8880,11 +8844,12 @@ scope:
         If true, convert fully-qualified class-based types to class-name only.
         Used to support situations where the fully-qualified name poses
         problems in the baselang.
+      var debug : bool = false #:
+        If true, enable debugging.
     scope:
       defqn = False
 
       cls = self.__class__
-      debug = False
       if debug:
         print 'In BaseLanguageOopl.typeToBase with metatype=%s' % (
           metatype.raw() if metatype else None)
@@ -8917,10 +8882,11 @@ scope:
         /# Check if the metabase type is a known metatype (e.g. in METATYPES).
         numeric = metatype.numericParam() or None
         basetype = self.metabase(metabase, param=numeric if params else None)
+        scope_sep = Context.Tokens()['scope_sep']
 
         if debug:
-          print '  metabase=%s basetype=%s numeric=%s' % (
-            metabase, basetype, numeric)
+          print '  metabase=%s basetype=%s numeric=%s isptr=%s isref=%s' % (
+            metabase, basetype, numeric, metatype.isPtr(), metatype.isRef())
 
         if basetype:
           /# We've found a mapping from meta-level to base-level.
@@ -8932,7 +8898,7 @@ scope:
             /# We set up a default mapping from parameter name to type, in case
             /# we have a metatype that does not specify all of the types.
             param_map = {}
-            param_pairs = cls.TEMPLATES.get(metabase, [])
+            param_pairs = cls.Templates().get(metabase, [])
 
             if False:
               print '-' * 70
@@ -8946,15 +8912,20 @@ scope:
             if param_pairs:
               /# This type has a certain number of parameters that can be
               /# provided (defaults are supported for parameters not given).
-              for i in range(0, len(param_pairs)):
-                pkey, defmtype = param_pairs[i]
-                if i < np:
-                  mtype = params[i]
-                else:
-                  mtype = defmtype
-                param_map[pkey] = self.typeToBase(
-                  /# TODO(wmh): Should some variant of 'value' be passed down?
-                  mtype, class_construct=class_construct, defqn=defqn)
+              /# TODO(wmh): Add support for empty pairs meaning arbitrary numbers of params
+              if len(param_pairs) == 0:
+                raise Error('Not yet supporting arbitrary template params')
+              else:
+                for i in range(0, len(param_pairs)):
+                  pkey, defmtype = param_pairs[i]
+                  if i < np:
+                    mtype = params[i]
+                  else:
+                    mtype = defmtype
+                  param_map[pkey] = self.typeToBase(
+                    /# TODO(wmh): Should some variant of 'value' be passed down?
+                    mtype, class_construct=class_construct, defqn=defqn)
+                /# print 'PARAM PAIRS for %s: %s = %s [%s]' % (metabase, param_pairs, param_map, basetype)
             result = basetype % param_map
         else:
           /# The metatype is not native/primitive, so it must be a class.
@@ -8963,7 +8934,7 @@ scope:
               /# TODO(wmh): Fix this hackery!
               result = metabase
             else:
-              result = metabase.split(Context.TOKENS['scope_sep'])[-1]
+              result = metabase.split(scope_sep)[-1]
           else:
             result = metabase
 
@@ -8975,7 +8946,6 @@ scope:
         /# In javascript, we cannot (for some reason I really want to address)
         /# refer to the fully-qualified name of the class from within the
         /# class itself. Instead, we must use the non-qualified class name.
-        scope_sep = Context.TOKENS['scope_sep']
         if class_construct:
           nmspfqn = class_construct.namespace().fqn()
           /#print 'HERE with %-30s and %s' % (nmspfqn, result)
@@ -9000,32 +8970,95 @@ scope:
       cc_strview = metax.c.OoplCpp.CC_STRVIEW
       cc_str_value = metax.c.OoplCpp.CC_STR_VALUE
 
-      for metastr, epy, ejs, ecc in (
-        ('int', 'int', '!number', 'int32_t'),
-        ('*demo.cards2.Card', 'demo.cards2.Card', '?demo.cards2.Card', 'demo::cards2::Card*'),
-        ('any', 'any', '?*', cc_any + '*'),
-        ('*any', 'any', '?*', cc_any + '*'),
-        ('&any', 'any', '!*', cc_any + '&'),
-        ('@any', 'any', '!*', cc_any),
-        ('str', 'str', '?string', cc_strview),
-        ('*str', 'str', '?string', cc_strview),
-        ('&str', 'str', '!string', cc_strview),
-        ('@str', 'str', '!string', cc_strview),
-        ('&*str', 'str', '?string', cc_strview),
-        ('@vec', 'list', '!Array.<?*>', 'std::vector<%s*>' % cc_any),
-        ('@map', 'dict', '!Object.<!string,?*>', 'std::map<%s,%s*>' % (cc_strview, cc_any)),
-        ('ostream', 'file', '?Object', 'std::ostream*'),
-        ('*#nm.sp.A', 'nm.sp.A', '?nm.sp.A', 'const nm::sp::A*'),
-        ('#*nm.sp.A', 'nm.sp.A', '?nm.sp.A', 'nm::sp::A*const'),
-        ('@vec<@str>', 'list', '!Array.<!string>', 'std::vector<%s>' % cc_strview),
+      oomap = {
+        'py': ooplpy.typeToBase,
+        'js': oopljs.typeToBase,
+        'cc': ooplcc.typeToBase,
+      }
+
+      for item in (
+        {'type': 'int', 'py': 'int', 'js': '!number', 'cc': 'int32_t'},
+        {'type': '*demo.cards2.Card',
+         'py': 'demo.cards2.Card',
+         'js': '?demo.cards2.Card',
+         'cc': 'demo::cards2::Card*',
+        },
+        {'type': 'any', 'py': 'any', 'js': '?*', 'cc': cc_any + '*'},
+        {'type': '*any', 'py': 'any', 'js': '?*', 'cc': cc_any + '*'},
+        {'type': '&any', 'py': 'any', 'js': '!*', 'cc': cc_any + '&'},
+        {'type': '@any', 'py': 'any', 'js': '!*', 'cc': cc_any},
+        {'type': 'str', 'py': 'str', 'js': '?string', 'cc': cc_strview},
+        {'type': '*str', 'py': 'str', 'js': '?string', 'cc': cc_strview},
+        {'type': '&str', 'py': 'str', 'js': '!string', 'cc': cc_strview},
+        {'type': '@str', 'py': 'str', 'js': '!string', 'cc': cc_strview},
+        {'type': '&*str', 'py': 'str', 'js': '?string', 'cc': cc_strview},
+        {'type': '@vec',
+         'py': 'list',
+         'js': '!Array.<?*>',
+         'cc': 'std::vector<%s*>' % cc_any,
+        },
+        {'type': '@map',
+         'py': 'dict',
+         'js': '!Object.<!string,?*>',
+         'cc': 'std::map<%s,%s*>' % (cc_strview, cc_any),
+        },
+        {'type': 'ostream',
+         'py': 'file', 'js': '?Object', 'cc': 'std::ostream*',
+        },
+        {'type': '*#nm.sp.A',
+         'py': 'nm.sp.A', 'js': '?nm.sp.A', 'cc': 'const nm::sp::A*',
+        },
+        {'type': '#*nm.sp.A',
+         'py': 'nm.sp.A', 'js': '?nm.sp.A', 'cc': 'nm::sp::A*const',
+        },
+        {'type': '&nm.sp.A',
+         'py': 'nm.sp.A', 'js': '!nm.sp.A', 'cc': 'nm::sp::A&',
+        },
+        {'type': '&#nm.sp.A',
+         'py': 'nm.sp.A', 'js': '!nm.sp.A', 'cc': 'const nm::sp::A&',
+        },
+        {'type': '@vec<@str>',
+         'py': 'list',
+         'js': '!Array.<!string>',
+         'cc': 'std::vector<%s>' % cc_strview,
+        },
+        {'type': 'vec<@str>',
+         'py': 'list',
+         'js': '?Array.<!string>',
+         'cc': 'std::vector<%s>*' % cc_strview,
+         'debug': False,
+        },
+        {'type': '#vec<@str>',
+         'py': 'list',
+         'js': '?Array.<!string>',
+         'cc': 'const std::vector<%s>*' % cc_strview,
+         'debug': False,
+        },
+        {'type': '@pair<int,int>',
+         'py': 'tuple',
+         'js': '!Array.<?*>',
+         'cc': 'std::pair<int32_t,int32_t>',
+        },
+        {'type': '@pair<@map,@str>',
+         'py': 'tuple',
+         'js': '!Array.<?*>',
+         'cc': 'std::pair<std::map<%s,%s*>,%s>' % (cc_strview, cc_any, cc_strview),
+        },
       ):
-        metatype = metax.c.Type.Instance(metastr)
-        pybase = ooplpy.typeToBase(metatype)
-        test.iseq(epy, pybase, '%s != %s for %s' % (epy, pybase, metastr))
-        jsbase = oopljs.typeToBase(metatype)
-        test.iseq(ejs, jsbase, '%s != %s for %s' % (ejs, jsbase, metastr))
-        ccbase = ooplcc.typeToBase(metatype)
-        test.iseq(ecc, ccbase, '%s != %s for %s' % (ecc, ccbase, metastr))
+        metastr = item['type']
+        try:
+          metatype = metax.c.Type.Instance(metastr)
+        except metax.c.Error as e:
+          self.fail('Type "%s" raises exception: %s' % (metastr, e))
+        else:
+          debug = item.get('debug', False)
+          for bl in sorted(oomap):
+            base = oomap[bl](metatype, debug=debug)
+            expected = item[bl]
+            test.iseq(
+              item[bl], base,
+              'baselang %s for %s\n  expected: %s\n  computed: %s' %
+              (bl, metastr, expected, base))
 
       test.iseq(
         '?nm.sp.A',
@@ -9033,7 +9066,6 @@ scope:
       test.iseq(
         '?Array.<?nm.sp.A>',
         oopljs.typeToBase(metax.c.Type.Instance('vec<nm.sp.A>'), defqn=True))
-
     end method typeToBase;
 
     method _compileExprAttr : tuple<str,Type> #:
@@ -9155,7 +9187,7 @@ scope:
       Chk('True', 'bool', ooplpy.compileExpr(expr_true, metafile))
 
       expr_null = metax.c.ExprParser(test.metafileFor('null\n')).parse()
-      Chk('None', 'cls.Null', ooplpy.compileExpr(expr_null, metafile))
+      Chk('None', 'meta.Null', ooplpy.compileExpr(expr_null, metafile))
 
       expr_one = metax.c.ExprParser(test.metafileFor('1\n')).parse()
       Chk('1', 'uint', ooplpy.compileExpr(expr_one, metafile))
@@ -9255,7 +9287,7 @@ scope:
         /#
         /# There are some special values that look like identifiers that are to
         /# be treated differently (e.g. self, true, false, null, ...). Any key
-        /# in BaseLanguageOopl.PSEUDOVARS is mapped to an associated value.
+        /# in BaseLanguageOopl.PseudoVars() is mapped to an associated value.
         /#
         /# Also, if data contains a 'default' key (another full expr), this
         /# overall expression is presumably part of a parameter list with a
@@ -9652,11 +9684,11 @@ scope:
         /# We have a pseudovar, and basestr is the baselang representation.
         result = basestr
         /# The metatype of this special identifier is stored in
-        /# BaseLanguageOopl.PSEUDOVARS. Note that this code intentionally
-        /# assumes the key exists in PSEUDOVARS as a forcing function to keep
-        /# PSEUDOVARS in sync with pseudovars().
+        /# BaseLanguageOopl.PseudoVars(). Note that this code intentionally
+        /# assumes the key exists in PseudoVars() as a forcing function to keep
+        /# PseudoVars() in sync with pseudovars().
         cls = self.__class__
-        metatype = cls.PSEUDOVARS[varname]
+        metatype = cls.PseudoVars()[varname]
         if metatype is SELF:
           /# Special indicator that the type matches that of the receiver.
           if executable:
@@ -9693,7 +9725,7 @@ scope:
 
       Chk('True', 'bool', ooplpy.analyzeVariable('true', executable=method))
       Chk('False', 'bool', ooplpy.analyzeVariable('false', executable=method))
-      Chk('None', 'cls.Null', ooplpy.analyzeVariable('null', executable=method))
+      Chk('None', 'meta.Null', ooplpy.analyzeVariable('null', executable=method))
       Chk(metax.c.SELF, '&nm.sp.Card', ooplpy.analyzeVariable('self', executable=method))
     end method analyzeVariable;
 
@@ -9837,7 +9869,7 @@ scope:
               /# CODETANGLE(fieldinit): See FieldConstruct.expandMeta(), which
               /# specifies how rawfields are formed from field names. 
               /# TODO(wmh): Generalize this code to use the 'field_prefix' and
-              /# 'field_suffix' keys of Context.TOKENS. Make sure to handle
+              /# 'field_suffix' keys of Context.Tokens(). Make sure to handle
               /# public fields that do not make a difference between rawfield
               /# and field.
               fname = rawfield
@@ -9970,7 +10002,7 @@ scope:
           recre = None
 
         comre = re.compile(
-          r'^( *)%s( ?)(.*)' % re.escape(Context.TOKENS['remark']))
+          r'^( *)%s( ?)(.*)' % re.escape(Context.Tokens()['remark']))
         lines = simple.value()
         s = 0
         e = len(lines)
@@ -10062,7 +10094,7 @@ scope:
         If true, the fqn is a namespace, not a class.
     scope:
       if fqn:
-        parts = fqn.split(Context.TOKENS['scope_sep'])
+        parts = fqn.split(Context.Tokens()['scope_sep'])
         if lib:
           last = parts[-1]
         else:
@@ -10114,8 +10146,8 @@ scope:
       if lines:
         inret = False
         retstr = 'Returns:'
-        prefix = Context.TOKENS['remark'] + ' '
-        spre = BaseLanguageOopl.SPECIAL_RE
+        prefix = Context.Tokens()['remark'] + ' '
+        spre = BaseLanguageOopl.SpecialRE()
         metafile = self.metafile()
 
         for i, line in enumerate(lines):
@@ -10253,6 +10285,9 @@ scope:
 
         /# How to handle 'void' is still being worked out.
         'void': {'base': 'void', 'default': None},
+
+        'pair': {'base': 'tuple', 'default': 'tuple()'},
+        'tuple': {'base': 'tuple', 'default': 'tuple()'},
       })
 
       /# https://docs.python.org/3/reference/lexical_analysis.html#keywords
@@ -10271,6 +10306,7 @@ scope:
         'self': 'self',
         'cls': 'cls',
         'selfsep': '.',
+        'staticsep': '.',
         'stmtend': '',
 
         'setup': {'name': 'setUp'},  # https://docs.python.org/2/library/unittest.html#test-cases
@@ -10293,14 +10329,12 @@ scope:
         'in': 'sys.stdin',
         'err': 'sys.stderr',
       })
-    end;
-
-    test
-    lifecycle setup:
+    setup:
       baselang, _, context, _ = self.cachedInfo(basel='python')
       self.baselang = baselang
       self.context = context
-    end lifecycle;
+    end;
+
   end class OoplPython;
 
   class OoplJavascript < BaseLanguageOopl #:
@@ -10390,6 +10424,9 @@ scope:
 
         /# How to handle 'void' is still being worked out.
         'void': {'base': 'void', 'default': None},
+
+        'pair':    {'base': 'Array.<?*>', 'default': '[]'},
+        'tuple':   {'base': 'Array.<?*>', 'default': '[]'},
       })
 
       /# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Reserved_Words
@@ -10413,6 +10450,7 @@ scope:
         'self': 'this',
         'cls': 'this',
         'selfsep': '.',
+        'staticsep': '.',
         'stmtend': ';',
 
         'setup': {'name': 'setUp', 'level': 'instance'},  # $CLOSURE_ROOT/library/closure/goog-orig/testing/testcase.js
@@ -10433,14 +10471,11 @@ scope:
         'in': '?',
         'err': '?',
       })
-    end;
-
-    test
-    lifecycle setup:
+    setup:
       baselang, _, context, _ = self.cachedInfo(basel='javascript')
       self.baselang = baselang
       self.context = context
-    end lifecycle;
+    end;
 
     test
     method test_typeToBase scope:
@@ -10476,10 +10511,15 @@ scope:
     std assoc subprocess;
   scope:
 
-    meta
-    lifecycle scope:
+    lifecycle params:
+      var id : str;
+      var parent : ComplexBlock;
+      var context : Context;
+      var precount : int = 0;
+    super (id, parent, context, precount=precount)
+    clinit:
       /# cls.CC_ANY = 'long long'
-      cls.CC_ANY = 'void*'
+      cls.CC_ANY = 'void'
       /#cls.CC_STR = 'const std::string'
       /#cls.CC_STR_VALUE = 'std::string'
       cls.CC_STR = 'meta::str'
@@ -10490,14 +10530,6 @@ scope:
         's': 'std::shared_ptr',
         'w': 'std::weak_ptr',
       }
-    end;
-
-    lifecycle params:
-      var id : str;
-      var parent : ComplexBlock;
-      var context : Context;
-      var precount : int = 0;
-    super (id, parent, context, precount=precount)
     scope:
       self.idIs('cpp')
       self.nameIs('C++')
@@ -10561,7 +10593,7 @@ scope:
         /# for including required implicit targets implemented.
         /# TODO(wmh): Change 'long long' to 'std::any' when c++17 support available
         /# in bazel.
-        'class': {'base': OoplCpp.CC_ANY, 'default': 'nullptr'},
+        'class': {'base': 'metax.root.ObjectMetaRoot', 'default': 'nullptr'},
         /# TODO(wmh): Can we use std::function? Sometimes (e.g.
         /# TestCase.raises()) we do not know the signature ... can std::function
         /# handle varargs?
@@ -10570,6 +10602,10 @@ scope:
 
         /# How to handle 'void' is still being worked out.
         'void': {'base': 'void', 'default': None},
+
+        'pair': {'base': 'std::pair<%(T1)s,%(T2)s>', 'default': 'std::pair<%(T1)s,%(T2)s>()'},
+        'tuple': {'base': 'types.TupleType', 'default': 'tuple()'},
+        'map': {'base': 'std::map<%(TK)s,%(TV)s>', 'default': None},
       })
 
       self.keywordsIs(
@@ -10595,6 +10631,7 @@ scope:
         'self': 'this',
         'cls': 'this',
         'selfsep': '->',
+        'staticsep': '::',
         'stmtend': ';',
 
         /# https://github.com/google/googletest/blob/master/googletest/docs/Primer.md
@@ -10613,7 +10650,10 @@ scope:
         'err': 'std::cerr',
         'self': SELF,
       })
-
+    setup:
+      baselang, _, context, _ = self.cachedInfo(basel='cpp')
+      self.baselang = baselang
+      self.context = context
     end lifecycle;
 
     method typeToBase : str #:
@@ -10635,13 +10675,15 @@ scope:
         If true, convert fully-qualified class-based types to class-name only.
         Used to support situations where the fully-qualified name poses
         problems in the baselang.
+      var debug : bool = false;
     scope:
       /# TODO(wmh): This should be a behavior.
       if metatype.isStr():
         result = OoplCpp.CC_STRVIEW
       else:
         result = super(OoplCpp, self).typeToBase(
-          metatype, class_construct=class_construct, value=value, defqn=defqn)
+          metatype, class_construct=class_construct, value=value, defqn=defqn,
+          debug=debug)
       return result
     test:
       baselang, _, context, _ = test.cachedInfo(basel='cpp')
@@ -10655,13 +10697,6 @@ scope:
       test.iseq('%s' % cc_strview, baselang.typeToBase(MetaType('&str')))
       test.iseq('%s' % cc_strview, baselang.typeToBase(MetaType('*str')))
     end method typeToBase;
-
-    test
-    lifecycle setup:
-      baselang, _, context, _ = self.cachedInfo(basel='cpp')
-      self.baselang = baselang
-      self.context = context
-    end lifecycle;
 
   end class OoplCpp;
 
@@ -11246,7 +11281,7 @@ scope:
               postclass.append('tc.runSelfTests();')
 
       elif kind == 'method':
-        dot = Context.TOKENS['scope_sep']
+        dot = Context.Tokens()['scope_sep']
         myclass = construct.myclass()
         method_prefix = myclass.fqn()
         kind = construct.attrval('kind')
@@ -11294,6 +11329,8 @@ scope:
       if kind == 'class':
         metaclass = construct.metaclass()
         underclass = construct.underclass()
+        metafile = construct.metafile()
+        streams = metafile.streams()
 
         namespace = construct.namespace()
         fqn = namespace.id()
@@ -11323,6 +11360,15 @@ scope:
         preamble = varset.getValue('preamble')
         preclass_defn = []
         postclass_defn = []
+
+        /# Sub-constructs of class may write to the 'decl-post' stream (e.g.
+        /# static field constructs write static field definition and
+        /# initialization code here). They are to be inserted into the .cc
+        /# file outside of the class scope (after it).
+        defn_post_segments = streams.stream('defn-post')
+        if defn_post_segments:
+          postclass_defn.extend(defn_post_segments)
+
         if construct.isMeta():
           if underclass:
             /# Each metaclass FooMeta associated with userclass Foo should
@@ -11334,10 +11380,15 @@ scope:
             /# instance, rather than a variable? Matches better with Meta's
             /# "everything should be a function" philosophy.
             metaclass_instname = ClassConstruct.MetaInstifyName(underclass.id())
+            postclass.append('')
+            postclass.append('// The singleton instance of the metaclass.')
             postclass.append(
               'extern %s* %s;' % (construct.id(), metaclass_instname))
+            postclass_defn.append('')
             postclass_defn.append(
-              'static std::vector<%s*> _bases;' % OoplCpp.CC_ANY)
+              '// Create the singleton instance of the metaclass.')
+            postclass_defn.append(
+              'static std::vector<metax::root::ObjectMetaRoot*> _bases;')
             postclass_defn.append(
               'static std::map<%s, %s*> _symbols;' %
               (OoplCpp.CC_STR_VALUE, OoplCpp.CC_ANY))
@@ -12410,6 +12461,17 @@ scope:
       return (imports, targets)
     end receiver BaseLanguageOopl;
 
+    receiver OoplCpp scope:
+      /# Every header file in C++ includes the special metastrap/__Meta__.h
+      /# file, which defines all the core types like meta::str, etc.
+      class_construct.addDependency(
+        'metastrap.__Meta__', 'lib',
+        'implicit import in OoplCpp.formatDependencies',
+        target='//metastrap:__Meta__')
+      imports, targets = super(OoplCpp, self).formatDependencies(
+        class_construct)
+      return imports, targets
+
   end behavior formatDependencies;
 
   behavior formatDependency : tuple<str,str> #:
@@ -12532,7 +12594,9 @@ scope:
 
     receiver OoplCpp scope:
       deps = class_construct.deps()
+
       info = deps[fqn]
+
       kind = info['kind']
       target = info['target']
       fqn_path = '/'.join(fqn.split('.'))
@@ -12631,11 +12695,16 @@ scope:
 
   end behavior formatExpr;
 
-  behavior formatFieldDefinition #:
+  behavior formatFieldDefinition : vec<str> #:
     Obtain the baselang code needed to define this field.
   params:
     var field : FieldConstruct #:
       The field to format.
+    var defn : bool = false #:
+      For baselangs that do not distinguish between declaration and definition,
+      this arg is ignored. For languages that do care, false (default) means
+      generate field declaration code, true means generate field definition
+      code.
   scope:
     abstract receiver BaseLanguageOopl;
 
@@ -12692,9 +12761,23 @@ scope:
         basetype = self.typeToBase(metatype, class_construct=myclass)
         /# print '****** %-20s %-30s = %s' % (rawfield, metatype, basetype)
 
+      kind = field.attrval('kind')
+      kindstr = 'static ' if kind == 'static' else ''
       value = ''
-      defn = 'private: %s %s%s;' % (basetype, rawfield, value)
-      result.append(defn)
+      if defn:
+        if kind == 'static':
+          if not value:
+            value = self.defaultValue(metatype)
+          result.append('')
+          result.append('// static field %s : %s' % (field.id(), metatype.raw()))
+          if value is None:
+            code = '%s %s::%s;' % (basetype, myclass.id(), rawfield)
+          else:
+            code = '%s %s::%s = %s;' % (basetype, myclass.id(), rawfield, value)
+          result.append(code)
+      else:
+        code = 'private: %s%s %s%s;' % (kindstr, basetype, rawfield, value)
+        result.append(code)
       return result
     test:
     end receiver OoplCpp;
@@ -12981,6 +13064,7 @@ scope:
 
       mutability = executable.attrval('mutability')
       presence = executable.attrval('presence')
+      kind = executable.attrval('kind')
 
       variadics = []
       params = executable.parsedParams()
@@ -13008,7 +13092,7 @@ scope:
         result.append('...')
 
       result = '(%s)' % ', '.join(result)
-      if mutability == 'const':
+      if mutability == 'const' and kind != 'static':
         result += ' const'
       if presence == 'abstract':
         result += ' = 0'
@@ -15032,7 +15116,7 @@ scope:
       metac = self.compiler()
       baselang = self.baselang()
       metafile = self.metafile()
-      scope_sep = Context.TOKENS['scope_sep']
+      scope_sep = Context.Tokens()['scope_sep']
       nameparts = fqn.split(scope_sep)
       nmspbase = nameparts[-1]
       fs = metac.fs()
@@ -15160,7 +15244,7 @@ scope:
       baselang = self.baselang()
       metafile = self.metafile()
       variant = self.variant()
-      scope_sep = Context.TOKENS['scope_sep']
+      scope_sep = Context.Tokens()['scope_sep']
       nameparts = fqn.split(scope_sep)
       nmspbase = nameparts[-1]
       fs = metac.fs()
@@ -15306,6 +15390,9 @@ scope:
       /# chunks contains (offset, lines) pairs
       chunks = []
 
+      /# The class iniitalization lines.
+      clinit_lines = []
+
       /# imports : vec<str>
       /#  - Accumulates all the import lines from individual classes, to be
       /#    inserted at the top of the namespace file. Preserves order of
@@ -15333,8 +15420,20 @@ scope:
         /# which breaks metax.root.Object.Resource(..., fqn='...').
         /# contents = r.sub(r'\1\2', basefile.contents().rstrip())
         contents = basefile.contents().rstrip()
-        istestcase = klass.isTestCase()
 
+        /# We check if the last line is an invocation of Meta__Initialize().
+        /#  - if so, we remove it from end of contents and add it to clinit_lines
+        /#  - by inserting all such calls at the bottom of the namespace file,
+        /#    all classes in the namespace are defined before any class
+        /#    initialization occurs, which means the class initializers can
+        /#    rely on all other classes in the namespace.
+        ridx = contents.rfind('\n')
+        last_line = contents[ridx+1:]
+        if last_line.endswith('.Meta__Initialize()'):
+          contents = contents[:ridx]
+          clinit_lines.append(last_line)
+
+        istestcase = klass.isTestCase()
         submapfile = basefile.mapfile()
 
         /# All python class files are required to have a line containing
@@ -15454,6 +15553,11 @@ scope:
         mapfile.addSubFile(submapfile, len(all_lines) - removed)
         all_lines.extend(lines)
 
+      /# We add the class initialization calls here.
+      all_lines.append('')
+      all_lines.append('# Class initialization methods')
+      all_lines.extend(clinit_lines)
+
       parts = fqn.split('.')
       mytarget = '//%s:%s' % (fqn.replace('.', '/'), parts[-1])
       targets.discard(mytarget)
@@ -15559,6 +15663,11 @@ scope:
         1. True if the construct was moved to a different class, false if not.
     scope:
       myclass = self.ancestor('class')
+      if myclass is None:
+        /# This particular instance of the classic construct is NOT within a
+        /# class (e.g. directly within a namespace).
+        return (None, False)
+
       metafile = myclass.metafile()
       assert myclass is not None
       variant = myclass.variant()
@@ -15763,7 +15872,7 @@ scope:
       var namespace : NamespaceConstruct = null #:
         The namespace within which the class type resides.
     scope:
-      if name[0] == Context.TOKENS['explicit_class_indicator']:
+      if name[0] == Context.Tokens()['explicit_class_indicator']:
         /# A class that starts with '^' is a verbatim request from user.
         fqn = name[1:]
       elif name == 'void':
@@ -15773,7 +15882,7 @@ scope:
           /# We have a relative class name ... prepend the namespace.
           if namespace is None:
             raise Error('No namespace provided: cannot qualify "%s"' % name)
-          fqn = namespace.id() + Context.TOKENS['scope_sep'] + name
+          fqn = namespace.id() + Context.Tokens()['scope_sep'] + name
         else:
           fqn = name
       return fqn
@@ -16058,8 +16167,9 @@ scope:
         assert userclass is self
         assert underclass is None
         if autogen['test']:
-          assert testclass is not None
-          assert testclass.userclass() is self
+          if not self.isErrorClass():
+            assert testclass is not None
+            assert testclass.userclass() is self
         else:
           assert testclass is None
 
@@ -16321,7 +16431,7 @@ scope:
             'id': parts[-1],
             'metafqn': metafqn,
             'class': None}
-          if parent[0] == Context.TOKENS['explicit_class_indicator']:
+          if parent[0] == Context.Tokens()['explicit_class_indicator']:
             pdata['external'] = True
           parentclasses.append(pdata)
         else:
@@ -16813,7 +16923,7 @@ scope:
         else:
           /# If there is no explicit initializer, we define one.
           /#  - In javascript, required if not using ES2015 classes, since
-          /#    the initializer function is what actually defines the clas..
+          /#    the initializer function is what actually defines the class.
           /#  - useful in other languages because we often need to insert
           /#    implicit field initialization code.
           /#     - we can optimize unnecessary initializers out of the code
@@ -16861,8 +16971,12 @@ scope:
               secondaries.append(('params:', params))
               super_expr = ExprParser.StrExpr('(args, kwds)')
               secondaries.append(('super', super_expr))
+            elif basel == 'cpp':
+              /# TODO(wmh): How do we invoke the parent constructor with
+              /# all the same args?
+              pass
             else:
-              print '***** FIX ME FIX ME!'
+              raise Error('Not yet handling implicit initializers for %s' % basel)
 
           secondaries.append(('scope:', [], -1))
           initializer = MethodConstruct.NewFromData(
@@ -17002,9 +17116,9 @@ scope:
                 {'var': 'name',
                  'secondaries': [(':', Type.Instance('&str'))]},
                 {'var': 'bases',
-                 'secondaries': [(':', Type.Instance('&vec<class>'))]},
+                 'secondaries': [(':', Type.Instance('&#vec<class>'))]},
                 {'var': 'symbols',
-                 'secondaries': [(':', Type.Instance('&map'))]},
+                 'secondaries': [(':', Type.Instance('&#map'))]},
               ],
               context)
 
@@ -17217,12 +17331,31 @@ scope:
       /#   category
       extralines = self.extralines()
       streams = metafile.streams()
-      streams.initStreams('decl', 'defn')
+      /# Streams used within classes:
+      /#   decl:
+      /#     For classes that have a distinction between declaration and
+      /#     definition, this represents the declaration (public interface)
+      /#   defn: 
+      /#     For classes that have a distinction between declaration and
+      /#     definition, this represents the definition of the class (actual
+      /#     implementation). For classes without a distinction, this is where
+      /#     all code is written.
+      /#   decl-post:
+      /#     This represents code to be inserted after the class declaration,
+      /#     but which is still associated with the class. It is not used for
+      /#     baselangs that don't distinguish (note that we have inconsistency
+      /#     in various places about whether we use decl or defn in such langs,
+      /#     needs to be cleaned up!).
+      /#   defn-post:
+      /#     This represents code to be inserted after the class, but which is
+      /#     still associated with the class definition.
+      streams.initStreams('decl', 'defn', 'decl-post', 'defn-post')
       scope, children = self.attrpair('scope:')
       for construct in children:
         construct.translateMeta()
       decl_segments = streams.stream('decl')
       defn_segments = streams.stream('defn')
+      decl_post_segments = streams.stream('decl-post')
 
       /# parentspec: str
       /#   the baselang syntax needed to define all parents (extends/implements)
@@ -17240,9 +17373,21 @@ scope:
         preclass.extend(prelines)
 
       /# postclass: vec<str>
-      /#   baselang code associated with a class definition but appearing
-      /#   after the class.
+      /#   - baselang code associated with a class declaration but appearing
+      /#     after the class.
+      /#   - extra-lines may contain native code.
+      /#      - TODO(wmh): Consider replacing extra_lines with decl-post now
+      /#        that it exists!
       postclass = []
+      if decl_post_segments:
+        postclass.extend(decl_post_segments)
+      /# TODO(wmh): Clean up the confusion about decl vs defn in languages that
+      /# don't make a distinction.  Note that varset var 'postclass' is for
+      /# declaration, and 'postclass-local' is for definition for langs that
+      /# care, and 'postclass' is used for langs that don't care.
+      postlines = extralines.get('post', {}).get('defn', None)
+      if postlines:
+        postclass.extend(postlines)
 
       /# preamble: vec<str>
       /#   Lines of text within class scope before user-provided scope.
@@ -17288,12 +17433,6 @@ scope:
       /#  - could define augmentPythonVarset, augmentJavascriptVarset, etc.
       /#    in each construct class?
       baselang.augmentVarset(self, varset)
-
-      /# Add any extra lines to postclass from native constructs found
-      /# after the class associated with the class.
-      postlines = extralines.get('post', {}).get('defn', None)
-      if postlines:
-        postclass.extend(postlines)
 
       /# Instantiate the template using the varset
       has_decl = False
@@ -17444,6 +17583,8 @@ scope:
               aid, namespace=namespace)
 
           atarget = dep.attrval('target', default=None)
+          /#print '*** HER with %s' % atarget
+
           if atarget is None:
             /# TODO(wmh): If akind is 'std' we could set atarget to null, but we
             /# would need to still register the dependency. Currently, we handle
@@ -17452,7 +17593,8 @@ scope:
           else:
             atarget = atarget.asStr(unquote=True)
           if atarget:
-            self.addDependency(fqn, akind, 'in assocs', alias=alias)
+            self.addDependency(
+              fqn, akind, 'in assocs', alias=alias, target=atarget)
 
       /# Implicit imports
       if metaclass is not None:
@@ -17589,7 +17731,7 @@ scope:
         /# TODO(wmh): When statement-level constructs exist, define this
         /# method in Meta<*>:
         metaclass_instname = ClassConstruct.MetaInstifyName(name)
-        test_body = ["%s noop" % Context.TOKENS['remark']]
+        test_body = ["%s noop" % Context.Tokens()['remark']]
         if baselang.id() == 'python':
           test_body.append('pass')
         meta_body = baselang.metaMethodBody(metaclass_instname, metaclass)
@@ -18595,6 +18737,11 @@ scope:
     Represents a 'field' construct.
   scope:
 
+    field namespace : NamespaceConstruct #:
+      The namespace this field belongs to. Note that this has been added to
+      allow 'field' constructs to appear directly within namespaces. Further
+      exploration of the impact of this is needed.
+
     field rawfield : str #:
       The rawfield name for this field.  This is usually some minor variant
       of self.id(), but for packed fields it will be completely different.
@@ -18632,30 +18779,18 @@ scope:
       else:
         name = self.id()
         fqn = self.fqn()
-        clsname = myclass.id()
-        fqcn = myclass.fqn()
+        if myclass:
+          clsname = myclass.id()
+          fqcn = myclass.fqn()
+          namespace = myclass.namespace()
+        else:
+          clsname = None
+          fqcn = None
+          namespace = self.ancestor('namespace')
+        nmspfunc = lambda: namespace
         baselang = self.baselang()
         metafile = self.metafile()
         context = self.context()
-        namespace = myclass.namespace()
-        nmspfunc = lambda: namespace
-
-        /# We establish the receiver to use for accessors
-        /#  - use the receiver dictated by the baselang so that we don't
-        /#    incur inefficiencies introducing a variable unlikely to be used
-        /#    by the user
-        /#  - HOWEVER, when user defines accessors in field scope:, they
-        /#    need to know which variable to use to reference the receiver.
-        /#    We need to either be consistent, document inconsistencies, or
-        /#    auto-insert receiver variables as needed.
-        /#  - Note that some baselangs do not have a specific receiver variable
-        /#    (e.g. Python and Perl), in which case we use the meta-level
-        /#    receiver variable.
-        location = 'test' if myclass.isTest() else ('meta' if myclass.isMeta() else 'user')
-        receiver_code = baselang.receiverStr(
-          self, style='base', location=location, myclass=myclass)
-
-        /# print 'FieldConstruct.expandMeta: %s' % fqn
 
         kind = self.attrval('kind')
         scope, accessors = self.attrpair('scope:', default=None)
@@ -18668,13 +18803,40 @@ scope:
           return
         isconst = type.isBaseConst()
 
+        /# We establish the receiver to use for accessors
+        /#  - use the receiver dictated by the baselang so that we don't
+        /#    incur inefficiencies introducing a variable unlikely to be used
+        /#    by the user
+        /#  - HOWEVER, when user defines accessors in field scope:, they
+        /#    need to know which variable to use to reference the receiver.
+        /#    We need to either be consistent, document inconsistencies, or
+        /#    auto-insert receiver variables as needed.
+        /#  - Note that some baselangs do not have a specific receiver variable
+        /#    (e.g. Python and Perl), in which case we use the meta-level
+        /#    receiver variable.
+        if myclass:
+          location = 'test' if myclass.isTest() else ('meta' if myclass.isMeta() else 'user')
+          receiver_code = (
+            baselang.receiverStr(
+              self, style='base', location=location, myclass=myclass))
+          if kind == 'static':
+            receiver_code += baselang.config('staticsep')
+          else:
+            receiver_code += baselang.config('selfsep')
+          /# print '%s = %s [%s]' % (self.kindfqn(), receiver_code, kind)
+        else:
+          receiver_code = ''
+
+        /# print 'FieldConstruct.expandMeta: %s' % fqn
+
         /# Register this field with the class.
-        myclass.fields().append(self)
+        if myclass:
+          myclass.fields().append(self)
 
         /# Establish the rawfield of this field
         if pack == 'packed':
           raise Error('Not yet handling packed fields')
-        tokens = Context.TOKENS
+        tokens = Context.Tokens()
         /# CODETANGLE(fieldinit):
         if tmpvis == 'tmppublic':
           rawfield = name
@@ -18685,8 +18847,7 @@ scope:
 
         /# Establish the default accessor code.
         /#  - also establishes the legal set of accessor ids.
-        field_code = '%s%s%s' % (
-          receiver_code, baselang.config('selfsep'), rawfield)
+        field_code = '%s%s' % (receiver_code, rawfield)
         bodymap = {}
         bodymap['get'] = ['return %s%s' % (field_code, stmtend)]
         bodymap['set'] = [
@@ -18847,13 +19008,16 @@ scope:
         position = '+' + name
         if reffer:
           dest_scope.registerConstruct(reffer, position=position)
-          myclass.registerSymbol(reffer.id(), reffer)
+          if myclass:
+            myclass.registerSymbol(reffer.id(), reffer)
         if setter:
           dest_scope.registerConstruct(setter, position=position)
-          myclass.registerSymbol(setter.id(), setter)
+          if myclass:
+            myclass.registerSymbol(setter.id(), setter)
         if getter:
           dest_scope.registerConstruct(getter, position=position)
-          myclass.registerSymbol(getter.id(), getter)
+          if myclass:
+            myclass.registerSymbol(getter.id(), getter)
 
         /# QUESTION: Do we register rawfield or field?
         /#  - From a practical perspective, it is cleaner to register rawfield,
@@ -18892,7 +19056,8 @@ scope:
         /#  - The current implementation is to have the symbol table store
         /#    conceptual names.  We can revisit if we find problems with this.
         /# CODETANGLE(highlevel_symbols):
-        myclass.registerSymbol(name, self)
+        if myclass:
+          myclass.registerSymbol(name, self)
 
       D.expand.end()
     test:
@@ -18938,6 +19103,8 @@ scope:
           k -= 1
         for i in range(0, k+1):
           clines.append(rem + '  ' + comlines[i])
+      lines = clines[:]
+      lines.extend(baselang.formatFieldDefinition(self))
 
       /# In most languages, the field definition occurs in the merged defn/decl
       /# stream, but in languages with separated decl/defn (at least in C++),
@@ -18947,13 +19114,14 @@ scope:
       sname = 'defn'
       if baselang.config('definition_separate'):
         sname = 'decl'
-      streams.addLines(sname, clines)
-
-      lines = baselang.formatFieldDefinition(self)
       if lines:
         /# TODO(wmh): Do we need to create a BaseSegment so we have line
-        /# numbering?
+        /# numbering? Will need to split apart comment lines and code lines.
         streams.addLines(sname, lines)
+
+      if baselang.id() == 'cpp':
+        defn_lines = baselang.formatFieldDefinition(self, defn=True)
+        streams.addLines('defn-post', defn_lines)
 
       D.translate.end()
     test:
@@ -19005,6 +19173,13 @@ scope:
       assert name.startswith('test_')
       return name[5:]
     end method UntestifyName;
+
+    field namespace : NamespaceConstruct #:
+      The namespace this method belongs to. Only really needed for methods
+      defined directly within namespace scope. 
+      TODO(wmh): Consider whether there is a different way to handle this, so
+      we aren't wasting a slot in every instance when few need it. For
+      example, mark this field optional?
 
     field returntype : Type #:
       The return type of this Executable. Represents a cached version of
@@ -19820,46 +19995,51 @@ scope:
       D.imports.sinfo(name)
 
       myclass = self.myclass()
-      parentclass = myclass.parentclass()
-      if parentclass is not None:
-        psymbols = parentclass.symbols()
-        super_method = psymbols.find(name)
-        if super_method:
-          self.supermethodIs(super_method)
-          attrkind = self.attrval('kind')
-          if attrkind == 'initializer':
-            /# Knowing the parent initializer will be useful for many purposes.
+      if myclass:
+        parentclass = myclass.parentclass()
+        if parentclass is not None:
+          psymbols = parentclass.symbols()
+          super_method = psymbols.find(name)
+          if super_method:
+            self.supermethodIs(super_method)
+            attrkind = self.attrval('kind')
+            if attrkind == 'initializer':
+              /# Knowing the parent initializer will be useful for many purposes.
+              pass
+            else:
+              /# TODO(wmh): methods from behaviors are not showing up as being
+              /# overridden.
+              if name != 'meta':
+                /# print '  In %s found parent definition %s' % (self.kindfqn(), super_method.kindfqn())
+                pass
+
+        /# Now initialize the symbol table of the method.
+        /#  - for methods with simple blocks, we only have access to the params
+        /#  - for methods with complex blocks, we have all vars specified at
+        /#    top-level within the method as well.
+        table = self.symbols()
+        params = self.attrval('params:', default=None) or []
+        for i, pvar in enumerate(params):
+          table.register(pvar.id(), pvar, source=self, note='From param #%d' % (i+1))
+
+        scope = self.attr('scope:', default=None)
+        if scope:
+          if scope.isComplexBlock():
+            /# TODO(wmh): Do we add all top-level 'var' constructs now? A variable
+            /# cannot be used until declared in most baselangs, so pre-populating
+            /# the symbol table is problematic unless we add an 'inactive' field
+            /# that allows us to indicate when a symbol is and is not active.
             pass
           else:
-            /# TODO(wmh): methods from behaviors are not showing up as being
-            /# overridden.
-            if name != 'meta':
-              /# print '  In %s found parent definition %s' % (self.kindfqn(), super_method.kindfqn())
-              pass
-
-      /# Now initialize the symbol table of the method.
-      /#  - for methods with simple blocks, we only have access to the params
-      /#  - for methods with complex blocks, we have all vars specified at
-      /#    top-level within the method as well.
-      table = self.symbols()
-      params = self.attrval('params:', default=None) or []
-      for i, pvar in enumerate(params):
-        table.register(pvar.id(), pvar, source=self, note='From param #%d' % (i+1))
-
-      scope = self.attr('scope:', default=None)
-      if scope:
-        if scope.isComplexBlock():
-          /# TODO(wmh): Do we add all top-level 'var' constructs now? A variable
-          /# cannot be used until declared in most baselangs, so pre-populating
-          /# the symbol table is problematic unless we add an 'inactive' field
-          /# that allows us to indicate when a symbol is and is not active.
-          pass
-        else:
-          /# TODO(wmh): We could do some heuristic analysis of the baselang
-          /# source code fairly easily. Or, if we have access to a
-          /# statement-level parser for each baselang, we can identify all
-          /# variable declarations.
-          pass
+            /# TODO(wmh): We could do some heuristic analysis of the baselang
+            /# source code fairly easily. Or, if we have access to a
+            /# statement-level parser for each baselang, we can identify all
+            /# variable declarations.
+            pass
+      else:
+        /# If myclass is None, we have a method (including accessor) defined
+        /# at namespace level.
+        pass
       
       D.imports.end()
     end method importMeta;
@@ -19951,7 +20131,9 @@ scope:
         initname = baselang.initializerName(myclass)
         position = '-' + self.id()
         context = self.context()
-        scope = myclass.attr('scope:')
+        class_scope = myclass.attr('scope:', default=REQUIRED)
+        scope = self.attr('scope:', default=None)
+
         features = []
         for fkey in (
           'presence', 'visibility', 'mutability', 'extensibility', 'dispatch',
@@ -19973,51 +20155,138 @@ scope:
           fval = self.attrval(fkey, default=None)
           if fval is not None:
             features.append((fkey, fval))
-        features.append(('kind', 'initializer'))
-        primary_line = self.primary().line()
-        initializer = MethodConstruct.NewFromData(
-          initname, context, parent=scope,
-          features=features,
-          primary_line=primary_line,
-          position=position)
-        /# Now move all the secondary attributes from the lifecycle to the
-        /# initializer.
+        secondaries = []
         for skey in (
           'returns', 'returns:', 'comment:', 'params:', 'super',
           'pres:', 'posts:', 'scope:', 'test:', 'tests:',
         ):
           secondary = self.attr(skey, default=None)
           if secondary is not None:
+            secondaries.append(secondary)
+
+        if scope:
+          /# If there is a scope: block, we create an explicit initializer,
+          /# and copy over many of the attributes from the lifecycle to the
+          /# initialzier.
+          features.append(('kind', 'initializer'))
+          primary_line = self.primary().line()
+          initializer = MethodConstruct.NewFromData(
+            initname, context, parent=class_scope,
+            features=features,
+            primary_line=primary_line,
+            position=position)
+          /# Now move all the secondary attributes from the lifecycle to the
+          /# initializer.
+          for secondary in secondaries:
             secondary.changeParent(initializer)
-        myclass.registerInitializer(initializer)
-        /# Now expand the newly created initializer (to move the test attribute,
-        /# etc.)
-        initializer.expandMeta()
+          myclass.registerInitializer(initializer)
+
+          /# Now expand the newly created initializer (to move the test attribute,
+          /# etc.)
+          initializer.expandMeta()
+        else:
+          /# IMPORTANT: If there is no scope block, we do NOT create an
+          /# initializer construct here, which means the code in
+          /# ClassConstruct.expandMeta() for creating a default initializer will
+          /# be exercised.
+          /#
+          /# HOWEVER, if any of the feature or secondary attributes of 'lifecycle'
+          /# that would be moved to the initializer are present, we warn the
+          /# programmer that they will be ignored.
+          /#
+          /# TODO(wmh): Certain feature attributes in this list should probably
+          /# be except from warnings (like location).
+          if features:
+            fvals = [pair[1] for pair in features]
+            try:
+              fvals.remove('test')
+            except ValueError:
+              pass
+            if fvals:
+              metafile.warning(
+                '%s has no scope but has features that will be dropped when '
+                'implicit initializer is created: %s' %
+                (self.kindfqn(), ' '.join(fvals)),
+                line=self.primary().line())
+          if secondaries:
+            skeys = [sec.key() for sec in secondaries]
+            try:
+              skeys.remove('comment:')
+            except ValueError:
+              pass
+            if skeys:
+              metafile.warning(
+                '%s has no scope but has secondaries that will be dropped when '
+                'implicit initializer is created: %s' %
+                (self.kindfqn(), ' '.join(skeys)))
 
         /# TODO(wmh): Create a finalizer method if there is a 'finalize'
         /# attribute in this lifecycle.
 
         /# Handle the 'clinit' block.
+        /#  - create a Meta__Initialize method whose body is the scope of clinit:
+        /#  - invoke the method after the class is defined.
         clinit_attr, clinit_lines = self.attrpair('clinit:', default=None)
         if clinit_attr is not None:
           /# TODO(wmh): Generalize to all baselangs
           if baselang.id() == 'python':
-            /# We create a Meta__Initialize() method.
-            clinit = MethodConstruct.NewFromData(
-              'Meta__Initialize', context, parent=scope,
-              features=[('kind', 'static')],
-              secondaries=[('scope:', clinit_lines)],
-              primary_line=clinit_attr.line(),
-              position='+' + initname)
-            myclass.registerStaticInitializer(clinit)
+            clinit_lines.insert(0, 'cls = %s' % myclass.id())
+          elif baselang.id() == 'cpp':
+            clinit_lines.insert(0, 'auto* cls = %s;' % myclass.id())
           else:
             metafile.error(
               'Not yet supporting clinit: for baselang %s' % baselang.id(),
               line=clinit_attr.line())
+          /# We create a Meta__Initialize() method.
+          clinit = MethodConstruct.NewFromData(
+            'Meta__Initialize', context, parent=class_scope,
+            features=[('kind', 'static')],
+            secondaries=[('scope:', clinit_lines)],
+            primary_line=clinit_attr.line(),
+            position='+' + initname)
+          myclass.registerStaticInitializer(clinit)
 
-        /# Create baselang-specific setup/teardown methods depending on
-        /# which of 'setup', 'clsetup', 'teardown' and 'clteardown' exists
-        /# as attributes on this lifecycle.
+        /# Handle meta-level secondary attributes:
+        /#  - if this is a user class, move the meta-specific blocks to an
+        /#    implicitly created lifecycle with location 'meta'
+        meta_attrs = {}
+        meta_attr_list = (('metainit', 'scope'), ('metafinalize', 'finalize'))
+        for attr, canattr in meta_attr_list:
+          block = self.attr(attr + ':', default=None)
+          if block:
+            if ((variant == 'metauser') or (variant == 'meta')):
+              metafile.warning(
+                'For explicit meta lifecycles use scope: and finalize: not metainit: or metafinalize:',
+                line=self.primary().line())
+            else:
+              /# This is a user-level lifecycle ... we remember the block so we
+              /# can move it to an implicitly created lifecycle with location meta.
+              meta_attrs[attr] = block
+        if meta_attrs:
+          /# We create a location=meta lifecycle construct and recursively
+          /# expand it.
+          /# TODO(wmh): Verify a meta lifecycle doesn't already exist!
+          meta_lifecycle = LifecycleConstruct.NewFromData(
+            context.autoId(), context, parent=class_scope,
+            features=[('location', 'meta')])
+          for attrbase, canattr in meta_attr_list:
+            attr = meta_attrs.get(attrbase)
+            if attr:
+              key = canattr + ':'
+              parent = attr.parent()
+              parent.unregisterAttribute(attr)
+              attr.keyIs(key)
+              attr.litkeyIs(key)
+              meta_lifecycle.registerAttribute(attr)
+          /# TODO(wmh): Should we pass output into this call to expandMeta?
+          meta_lifecycle.expandMeta()
+
+        /# Handle test-level secondary attributes:
+        /#  - if this is a user class, move the blocks to an implicitly
+        /#    created lifecycle with location 'test'
+        /#  - if this is a test class, create baselang-specific setup/teardown
+        /#    methods depending on which of 'setup', 'clsetup', 'teardown' and
+        /#    'clteardown' exists as attributes on this lifecycle.
         test_attrs = {}
         test_attr_list = ('setup', 'clsetup', 'teardown', 'clteardown')
         for attr in test_attr_list:
@@ -20028,6 +20297,8 @@ scope:
               (variant == 'test') or
               (variant == 'user' and myclass.id() == 'TestCase')
             ):
+              /# We are processing a test class, so we generate special methods
+              /# within this class scope.
               tinfo = baselang.config(attr)
               tname = tinfo['name']
               tlevel = tinfo.get('level', 'instance')
@@ -20045,29 +20316,29 @@ scope:
                   ('inheritance', 'prex' if 'teardown' in attr else 'postx'))
 
               tmethod = MethodConstruct.NewFromData(
-                tname, context, parent=scope,
+                tname, context, parent=class_scope,
                 features=features,
                 secondaries=[('scope:', block.value())],
                 primary_line=block.line())
               tmethod.myclassIs(myclass)
               tmethod.expandMeta()
             else:
+              /# This is a user-level lifecycle ... we remember the block so we
+              /# can move it to an implicitly created lifecycle with location test.
               test_attrs[attr] = block
-              /#metafile.warning(
-              /#  'Attribute "%s" does not apply to %s %s' %
-              /#  (attr, variant, myclass.kindfqn()))
         if test_attrs:
-          /# We create a location=test lifecycle construct (verifying one
-          /# doesn't already exist) and recursively expand it.
+          /# We create a location=test lifecycle construct and recursively
+          /# expand it.
+          /# TODO(wmh): Verify a test lifecycle doesn't already exist!
           test_lifecycle = LifecycleConstruct.NewFromData(
-            context.autoId(), context, parent=scope,
+            context.autoId(), context, parent=class_scope,
             features=[('location', 'test')])
           for attrbase in test_attr_list:
             attr = test_attrs.get(attrbase)
             if attr:
               attr.changeParent(test_lifecycle)
-          /# test_lifecycle.write()
-          /# TODO(wmh): Should we pass output into this call?
+
+          /# TODO(wmh): Should we pass output into this call to expandMeta?
           test_lifecycle.expandMeta()
       D.expand.end()
     end method expandMeta;
@@ -20485,81 +20756,6 @@ scope:
     std assoc time;
   scope:
 
-    meta lifecycle scope:
-      /# AttrTypeMap maps conceptual attribute value type strings to
-      /# three-tuples containing
-      /#    <subclass, exception_class, function>
-      /# The value establishes the subclass of Attribute to use for representing
-      /# attribute values of the key type. If the value is a tuple, the second
-      /# element is the exception raised if a particular value is invalid,
-      /# and the third element is a function accepting an input value that
-      /# returns a canonicalized value.
-      cls.AttrTypeMap = {
-        'feature': (FeatureAttribute, None, None),
-
-        /# Word-based
-        'id': (IdAttribute, None, None),
-        'xid': (IdAttribute, None, None),
-        'word': (WordAttribute, None, None),
-        'num': (NumAttribute, ValueError, None),
-        'enum': (EnumAttribute, TypeError, None),
-
-        /# Specialty
-        'str': (ExprAttribute, None, None),
-        'expr': (ExprAttribute, None, None),
-        'type': (TypeAttribute, InvalidType, None),
-
-        /# Block-valued
-        'simple': (SimpleBlock, None, None),
-        'complex': (ComplexBlock, None, None),
-        'simplex': (SimpleBlock, None, None),
-
-        /# List-valued
-        /#'word-list': (WordListAttribute, None, None),
-        /#'id-list': (IdListAttribute, None, None),
-      }
-
-      /# Maps attrtype strings to functions accepting attribute key, type and
-      /# value. Returns true if the value type checks relative to the type, and
-      /# False if not.
-      cls.AttrTypeCheck = {
-        'id': lambda akey, atype, aval: ExprParser.ID_RE.match(aval),
-        'xid': lambda akey, atype, aval: ExprParser.XID_RE.match(aval),
-        'num': lambda akey, atype, aval: ExprParser.NUM_RE.match(aval),
-        'enum': lambda akey, atype, aval: ExprParser.ENUM_RE.match(aval),
-      }
-
-      def Err():
-        raise InvalidAttributeType(
-          'No sensible default exists for this value type')
-
-      cls.AttrValueEmpty = {
-        /# should never see 'feature', since feature Attribute instances should
-        /# never have default <empty>
-        'feature': Err,
-
-        'id': lambda: '',  # not legal, must disable typechecking in createNewAttribute
-        'xid': lambda: '', # not legal, must disable typechecking in createNewAttribute
-        'word': lambda: '',
-        'num': lambda: 0,
-        'enum': lambda: tuple(),
-
-        'str': lambda: Expr('str', '""', '""'),
-        'expr': Err,       # is there a meaningful empty expr?
-        'type': Err,       # is there a meaningful empty type?
-
-        'complex': lambda: tuple(),
-        'simplex': lambda: tuple(),
-        'simple': lambda: tuple(),
-
-        'word-list': lambda: tuple(),
-        'id-list': lambda: tuple(),
-      }
-
-      cls.TERM_RE = re.compile(
-        r'((?P<end>end)(?:\s+(?P<kind>\S+)(?:\s+(?P<id>\S+))?)?)?;')
-    end lifecycle;
-
     field path : str #:
       The path to the .meta file being parsed.
 
@@ -20637,12 +20833,26 @@ scope:
         parsing: currentingly being parsed
         parsed: finished parsing, have not yet expanded
         expanding: currently expanding
-        expanded: finished expanding, have not yet translated
+        expanded: finished expanding, have not yet imported
+        importing: currently importing
+        imported: finished importing, have not yet translated
         translating: currently translating
         translated: finished translating, have not yet compiled
         compiling: currently compiling
         compiled: finished compiling
         complete: all actions have been accomplished.
+
+    field phases : @vec<str> #:
+      The phases that have been completed. Legal values are:
+        parse
+        expand
+        import
+        translate
+        compile
+      Although 'state' almost uniquely establishes which phases have
+      been completed, 'import' is a special case (sometimes a metafile
+      is imported, sometimes not, but translate and compile can still
+      occur either way).                                                   
 
     lifecycle params:
       var path -> path;
@@ -20670,6 +20880,84 @@ scope:
       self.linesIs(lines)
       self.textIs(text)
       self.streamsIs(streams)
+    clinit:
+      /# AttrTypeMap maps conceptual attribute value type strings to
+      /# three-tuples containing
+      /#    <subclass, exception_class, function>
+      /# The value establishes the subclass of Attribute to use for representing
+      /# attribute values of the key type. If the value is a tuple, the second
+      /# element is the exception raised if a particular value is invalid,
+      /# and the third element is a function accepting an input value that
+      /# returns a canonicalized value.
+      cls.AttrTypeMap = {
+        'feature': (FeatureAttribute, None, None),
+
+        /# Word-based
+        'id': (IdAttribute, None, None),
+        'xid': (IdAttribute, None, None),
+        'word': (WordAttribute, None, None),
+        'num': (NumAttribute, ValueError, None),
+        'enum': (EnumAttribute, TypeError, None),
+
+        /# Specialty
+        'str': (ExprAttribute, None, None),
+        'expr': (ExprAttribute, None, None),
+        'type': (TypeAttribute, InvalidType, None),
+
+        /# Block-valued
+        'simple': (SimpleBlock, None, None),
+        'complex': (ComplexBlock, None, None),
+        'simplex': (SimpleBlock, None, None),
+
+        /# List-valued
+        /#'word-list': (WordListAttribute, None, None),
+        /#'id-list': (IdListAttribute, None, None),
+      }
+
+      /# Maps attrtype strings to functions accepting attribute key, type and
+      /# value. Returns true if the value type checks relative to the type, and
+      /# False if not.
+      cls.AttrTypeCheck = {
+        'id': lambda akey, atype, aval: ExprParser.ID_RE.match(aval),
+        'xid': lambda akey, atype, aval: ExprParser.XID_RE.match(aval),
+        'num': lambda akey, atype, aval: ExprParser.NUM_RE.match(aval),
+        'enum': lambda akey, atype, aval: ExprParser.ENUM_RE.match(aval),
+      }
+
+      def Err():
+        raise InvalidAttributeType(
+          'No sensible default exists for this value type')
+
+      cls.AttrValueEmpty = {
+        /# should never see 'feature', since feature Attribute instances should
+        /# never have default <empty>
+        'feature': Err,
+
+        'id': lambda: '',  # not legal, must disable typechecking in createNewAttribute
+        'xid': lambda: '', # not legal, must disable typechecking in createNewAttribute
+        'word': lambda: '',
+        'num': lambda: 0,
+        'enum': lambda: tuple(),
+
+        'str': lambda: Expr('str', '""', '""'),
+        'expr': Err,       # is there a meaningful empty expr?
+        'type': Err,       # is there a meaningful empty type?
+
+        'complex': lambda: tuple(),
+        'simplex': lambda: tuple(),
+        'simple': lambda: tuple(),
+
+        'word-list': lambda: tuple(),
+        'id-list': lambda: tuple(),
+      }
+
+      cls.TERM_RE = re.compile(
+        r'((?P<end>end)(?:\s+(?P<kind>\S+)(?:\s+(?P<id>\S+))?)?)?;')
+    setup:
+      /# testdata = metax.root.Object.Resource('testdata', fqn='metax.c.Meta')
+      _, _, _, compiler = test.cachedInfo(metal='meta')
+      text = 'MetaLanguage Test config:\nend MetaLanguage Test;\n'
+      self.metafile = metax.c.MetaFile('fauxpath', compiler, text=text)
     end lifecycle;
 
     method set #:
@@ -23410,6 +23698,8 @@ scope:
 
       self.stats()['parse'] = time.time() - start
       self.stateIs('parsed')
+      self.phases().append('parse')
+
       return file_construct
     test:
       text = (
@@ -23438,6 +23728,7 @@ scope:
       self.construct().expandMeta()
       self.stats()['expand'] = time.time() - start
       self.stateIs('expanded')
+      self.phases().append('expand')
 
       D.expand.end()
     end method expandMeta;
@@ -23452,6 +23743,7 @@ scope:
       self.construct().importMeta()
       self.stats()['import'] = time.time() - start
       self.stateIs('imported')
+      self.phases().append('import')
 
       D.imports.end()
     test:
@@ -23465,6 +23757,7 @@ scope:
       self.construct().translateMeta()
       self.stats()['translate'] = time.time() - start
       self.stateIs('translated')
+      self.phases().append('translate')
 
       D.translate.end()
     end method translateMeta;
@@ -23477,17 +23770,11 @@ scope:
       self.construct().compileMeta()
       self.stats()['compile'] = time.time() - start
       self.stateIs('compiled')
+      self.phases().append('compile')
 
       D.compile.end()
     end method compileMeta;
 
-    test
-    lifecycle setup:
-      /# testdata = metax.root.Object.Resource('testdata', fqn='metax.c.Meta')
-      _, _, _, compiler = test.cachedInfo(metal='meta')
-      text = 'MetaLanguage Test config:\nend MetaLanguage Test;\n'
-      self.metafile = metax.c.MetaFile('fauxpath', compiler, text=text)
-    end lifecycle;
   end class MetaFile;
 
   class Compiler #:
@@ -23536,7 +23823,202 @@ scope:
       Initialized in the Entry meta-method to the instance created there-in.
 
     meta
-    lifecycle scope:
+    method Initialize #:
+      This method must be invoked before anything else in order to initialize
+      class-level state based on command-line flags.
+    params:
+      var metadata : map = null #:
+        Maps metalang id to metalang info.
+        TODO(wmh): This arg will be changed/removed when we more fully move
+        to defining all metalang info in the associated schema.
+    scope:
+      if metadata:
+        cls.METADATA.update(metadata)
+      config = metax.root.MetaObject.Config()
+      cls.CONFIG = config
+      errors = []
+
+      /# TODO(wmh): Get this working via Filesystem!
+      import os
+      if 'bazel' not in config:
+        errors.append("Must specify 'bazel' (path to bazel executable)")
+      elif not os.path.exists(config['bazel']):
+        errors.append('Invalid bazel %s (does not exist)' % config['bazel'])
+      if 'src_root' not in config:
+        errors.append('Must specify src_root (where Meta is installed)')
+      elif not os.path.exists(config['src_root']):
+        errors.append('Invalid src_root %s (does not exist)' % config['src_root'])
+      if not os.path.exists(config['repository_path']):
+        errors.append('Invalid repository_path %s (does not exist)' % config['repository_path'])
+      if errors:
+        for error in errors:
+          print 'ERROR: %s' % error
+        print 'Please edit %s and fix the above errors' % config['config_path']
+        sys.exit(1)
+    end;
+
+    field metalangs : @map<str,MetaLanguageConstruct> #:
+      Maps ids/names of metalanguages to MetaLanguage instances.
+
+    field metalang : MetaLanguageConstruct #:
+      The meta language that source files are written in. Determines which
+      schema file to load, and thus the set of legal constructs.
+
+    field baselang : BaseLanguage #:
+      The base language to compile to. For some operations, this is not
+      needed, while for others it is.
+
+    field metafiles : @map<str,MetaFile> #:
+      Maps both relative and absolute paths to MetaFile instances.
+
+    field metaorder : @vec<MetaFile> #:
+      The MetaFile instances in the order they were parsed.
+
+    field classes : @map<ClassConstruct> #:
+      Maps fqcn to ClassConstruct, for every class that has had expandMeta
+      invoked on it across all MetaFiles in this compiler.
+      TODO(wmh): Determine if we should register classes earlier than
+      expandMeta.
+
+    field argmap : map #:
+      A grouping of args into categories.
+
+    field levels : map #:
+      Maps the various compilation dimensions to values
+        'off', 'low', 'avg', 'high', 'max'.
+
+    field filesystem : metax.fs.Filesystem #:
+      The I/O abstraction object.  All I/O should go thru it.
+
+    field repodir : str #:
+      The directory containing the repository.
+
+    field shelldata : map #:
+      A collection of key/value pairs used in the implementation of shell-like
+      features.  Keys include:
+        cwd: str
+          A conceptual current working directory, with '/' representing top
+          of repo, '/nm' representing a particular top-level namespace,
+          '/nm/sp' representing a second-level namespace, etc. Commands like
+          'ls' and 'show' provide information across baselangs based on this
+          value.
+
+    field metadata : @map #:
+      Maps (lower) metalang ids to maps providing information about the
+      metalang.
+      TODO(wmh): This field can be removed now that MetaLanguageConstruct
+      and BaseLanguageConstruct exist ... everything about a metalang is
+      specifiable in its schema file (although we need to figure out how
+      to map constructs to class in the transitory period during which they
+      are defined separately ... at some point we'll be able to put the
+      definitions directly into the 'scope:' attribute of the constructs in
+      the schema file (allowing users to extend the language by modifying
+      the schema) but that is a ways away.
+
+    lifecycle params:
+      var metal : str = 'Oopl';
+      var basel : str = null;
+      var rootdir : str = null #:
+        The directory that metadir is relative to. Normally null, in which
+        case the current dir is used. This works if current dir contains
+        the meta files being parsed. An explicit value can be passed in,
+        for example, unit tests.
+      var metadir : str = null #:
+        The path, relative to rootdir, within which the meta repository resides.
+        If this matches metax.c.SPECIAL_CHILD_DIR, it is treated specially in
+        various places in the codebase.
+      var kind : str = null #:
+        The kind of filesystem to use. One of the legal values of the
+        metax.c.Filesystem.kind field ('disk', 'memory', 'emulate'). If null,
+        established based on value of --inmemory.
+      var repodir : str = null #:
+        The directory containing the repository. If null, obtained from the
+        global config.
+      var resources : map = null #:
+        Explicit resources (maps fully qualified resource names to explicit
+        paths). Used to override the default resource resolution strategy
+        of Object.Resource().
+    scope:
+      cls = self.__class__
+      flags = metax.root.MetaObject.CLI()
+      import logging
+      logging.info('Here with flags %s', str(flags))
+      if flags:
+        optimize_level = flags.optimize_level
+        if metadir is None:
+          metadir = flags.metadir
+        inmemory = flags.inmemory
+      else:
+        optimize_level = 'high'
+        if metadir is None:
+          metadir = '.meta2'
+        inmemory = False
+
+      if resources:
+        metax.root.Object.Init(resources=resources)
+
+      levels = {
+        'warn': 'max',
+        'debug': 'max',
+        'optimize': optimize_level if flags else 'off',
+        'profile': 'off',
+        'inline': 'off',
+      }
+      self.metalangIs(None)
+
+      /# Save the repodir
+      /#  - the repositoryPath() method checks if this is null and if so,
+      /#    obtains a value based on METAREP.
+      /#  - lazy evaluation done because unittests that rely on it need to
+      /#    invoke test.fixenv() first ... most tests do not rely on it, so
+      /#    we don't force them all to fixenv.
+      self.repodirIs(repodir)
+
+      /# Create the filesystem.
+      /#  - TODO(wmh): Add some kind of flag support for turning on 'emulate'.
+      /#  - Do we want to replace --inmemory with --iokind?
+      if metadir is None:
+        metadir = metadir
+        if metadir == '.meta':
+          metadir = '.meta' + metax.c.NEWSUFFIX
+      if kind is None:
+        kind = 'memory' if inmemory else 'disk'
+      if kind == 'memory':
+        logging.warning('Meta compiler is inmemory (no changes will be saved to disk)')
+      fs = metax.fs.Filesystem(kind=kind, metadir=metadir, rootdir=rootdir)
+      self.filesystemIs(fs)
+
+      /# Every compiler needs access to the Meta(Meta) language, so we load it
+      /# up first.
+      metameta = self.metalangNamed('meta')
+
+      /# Now create the Meta(L) language that this compiler is parsing source
+      /# files for (inherits, directly or indirectly, from metameta).
+      metalang = self.metalangNamed(metal)
+      if not metalang:
+        raise metax.root.Error('Unknown MetaLanguage %s' % metal)
+
+      self.metalangIs(metalang)
+      self.levelsIs(levels)
+
+      /# The baselang doesn't need to be set upon creation, but will be
+      /# needed for actions involving expansion and compilation.
+      /#  - if the metalang in question doesn't have baselangs, the basel
+      /#    is completely ignored (e.g. Meta(Meta)).
+      if basel and metalang.baselangs():
+        baselang = metalang.baselangNamed(basel)
+        if not baselang:
+          raise metax.root.Error(
+            'Unknown BaseLanguage %s for %s' % (basel, metal))
+        self.baselangIs(baselang)
+      else:
+        self.baselangIs(None)
+
+      /# Initialize the shelldata.
+      self.shelldataIs({
+        'cwd': '/',
+      })
+    clinit:
       cls.MAP_RE = re.compile(
         r'^\s*(?P<baseline>-?\d+)\s+(?P<metaline>-?\d+)\s+(?P<fullid>\S+)')
       cls.BAZEL_STDOUT_RE = re.compile(
@@ -24000,207 +24482,6 @@ scope:
         /# on explicit test-classes provided by users.
         'metatestclass': False,
       }
-    end lifecycle;
-
-    meta
-    method Initialize #:
-      This method must be invoked before anything else in order to initialize
-      class-level state based on command-line flags.
-    params:
-      var metadata : map = null #:
-        Maps metalang id to metalang info.
-        TODO(wmh): This arg will be changed/removed when we more fully move
-        to defining all metalang info in the associated schema.
-    scope:
-      if metadata:
-        cls.METADATA.update(metadata)
-
-      config, configpath = metax.root.MetaObject.Config()
-      cls.CONFIG = config
-
-      errors = []
-
-      /# TODO(wmh): Get this working via Filesystem!
-      import os
-      if 'bazel' not in config:
-        errors.append("Must specify 'bazel' (path to bazel executable)")
-      elif not os.path.exists(config['bazel']):
-        errors.append('Invalid bazel %s (does not exist)' % config['bazel'])
-      if 'src_root' not in config:
-        errors.append('Must specify src_root (where Meta is installed)')
-      elif not os.path.exists(config['src_root']):
-        errors.append('Invalid src_root %s (does not exist)' % config['src_root'])
-      if not os.path.exists(config['repository_path']):
-        errors.append('Invalid repository_path %s (does not exist)' % config['repository_path'])
-      if errors:
-        for error in errors:
-          print 'ERROR: %s' % error
-        print 'Please edit %s and fix the above errors' % configpath
-        sys.exit(1)
-    end;
-
-    field metalangs : @map<str,MetaLanguageConstruct> #:
-      Maps ids/names of metalanguages to MetaLanguage instances.
-
-    field metalang : MetaLanguageConstruct #:
-      The meta language that source files are written in. Determines which
-      schema file to load, and thus the set of legal constructs.
-
-    field baselang : BaseLanguage #:
-      The base language to compile to. For some operations, this is not
-      needed, while for others it is.
-
-    field metafiles : @map<str,MetaFile> #:
-      Maps both relative and absolute paths to MetaFile instances.
-
-    field metaorder : @vec<MetaFile> #:
-      The MetaFile instances in the order they were parsed.
-
-    field classes : @map<ClassConstruct> #:
-      Maps fqcn to ClassConstruct, for every class that has had expandMeta
-      invoked on it across all MetaFiles in this compiler.
-      TODO(wmh): Determine if we should register classes earlier than
-      expandMeta.
-
-    field argmap : map #:
-      A grouping of args into categories.
-
-    field levels : map #:
-      Maps the various compilation dimensions to values
-        'off', 'low', 'avg', 'high', 'max'.
-
-    field filesystem : metax.fs.Filesystem #:
-      The I/O abstraction object.  All I/O should go thru it.
-
-    field repodir : str #:
-      The directory containing the repository.
-
-    field shelldata : map #:
-      A collection of key/value pairs used in the implementation of shell-like
-      features.  Keys include:
-        cwd: str
-          A conceptual current working directory, with '/' representing top
-          of repo, '/nm' representing a particular top-level namespace,
-          '/nm/sp' representing a second-level namespace, etc. Commands like
-          'ls' and 'show' provide information across baselangs based on this
-          value.
-
-    field metadata : @map #:
-      Maps (lower) metalang ids to maps providing information about the
-      metalang.
-      TODO(wmh): This field can be removed now that MetaLanguageConstruct
-      and BaseLanguageConstruct exist ... everything about a metalang is
-      specifiable in its schema file (although we need to figure out how
-      to map constructs to class in the transitory period during which they
-      are defined separately ... at some point we'll be able to put the
-      definitions directly into the 'scope:' attribute of the constructs in
-      the schema file (allowing users to extend the language by modifying
-      the schema) but that is a ways away.
-
-    lifecycle params:
-      var metal : str = 'Oopl';
-      var basel : str = null;
-      var rootdir : str = null #:
-        The directory that metadir is relative to. Normally null, in which
-        case the current dir is used. This works if current dir contains
-        the meta files being parsed. An explicit value can be passed in,
-        for example, unit tests.
-      var metadir : str = null #:
-        The path, relative to rootdir, within which the meta repository resides.
-        If this matches metax.c.SPECIAL_CHILD_DIR, it is treated specially in
-        various places in the codebase.
-      var kind : str = null #:
-        The kind of filesystem to use. One of the legal values of the
-        metax.c.Filesystem.kind field ('disk', 'memory', 'emulate'). If null,
-        established based on value of --inmemory.
-      var repodir : str = null #:
-        The directory containing the repository. If null, obtained from the
-        global config.
-      var resources : map = null #:
-        Explicit resources (maps fully qualified resource names to explicit
-        paths). Used to override the default resource resolution strategy
-        of Object.Resource().
-    scope:
-      cls = self.__class__
-      flags = metax.root.MetaObject.CLI()
-      import logging
-      logging.info('Here with flags %s', str(flags))
-      if flags:
-        optimize_level = flags.optimize_level
-        if metadir is None:
-          metadir = flags.metadir
-        inmemory = flags.inmemory
-      else:
-        optimize_level = 'high'
-        if metadir is None:
-          metadir = '.meta2'
-        inmemory = False
-
-      if resources:
-        metax.root.MetaObject.Initialize(resources=resources)
-
-      levels = {
-        'warn': 'max',
-        'debug': 'max',
-        'optimize': optimize_level if flags else 'off',
-        'profile': 'off',
-        'inline': 'off',
-      }
-      self.metalangIs(None)
-
-      /# Save the repodir
-      /#  - the repositoryPath() method checks if this is null and if so,
-      /#    obtains a value based on METAREP.
-      /#  - lazy evaluation done because unittests that rely on it need to
-      /#    invoke test.fixenv() first ... most tests do not rely on it, so
-      /#    we don't force them all to fixenv.
-      self.repodirIs(repodir)
-
-      /# Create the filesystem.
-      /#  - TODO(wmh): Add some kind of flag support for turning on 'emulate'.
-      /#  - Do we want to replace --inmemory with --iokind?
-      if metadir is None:
-        metadir = metadir
-        if metadir == '.meta':
-          metadir = '.meta' + metax.c.NEWSUFFIX
-      if kind is None:
-        kind = 'memory' if inmemory else 'disk'
-      if kind == 'memory':
-        logging.warning('Meta compiler is inmemory (no changes will be saved to disk)')
-      fs = metax.fs.Filesystem(kind=kind, metadir=metadir, rootdir=rootdir)
-      self.filesystemIs(fs)
-
-      /# Every compiler needs access to the Meta(Meta) language, so we load it
-      /# up first.
-      metameta = self.metalangNamed('meta')
-
-      /# Now create the Meta(L) language that this compiler is parsing source
-      /# files for (inherits, directly or indirectly, from metameta).
-      metalang = self.metalangNamed(metal)
-      if not metalang:
-        raise metax.root.Error('Unknown MetaLanguage %s' % metal)
-
-      self.metalangIs(metalang)
-      self.levelsIs(levels)
-
-      /# The baselang doesn't need to be set upon creation, but will be
-      /# needed for actions involving expansion and compilation.
-      /#  - if the metalang in question doesn't have baselangs, the basel
-      /#    is completely ignored (e.g. Meta(Meta)).
-      if basel and metalang.baselangs():
-        baselang = metalang.baselangNamed(basel)
-        if not baselang:
-          raise metax.root.Error(
-            'Unknown BaseLanguage %s for %s' % (basel, metal))
-        self.baselangIs(baselang)
-      else:
-        self.baselangIs(None)
-
-      /# Initialize the shelldata.
-      self.shelldataIs({
-        'cwd': '/',
-      })
-
     end lifecycle;
 
     method cli : metax.cli.Values #:
@@ -25215,6 +25496,9 @@ scope:
     params:
       var path : str #:
         The .meta file to process.
+      var metafile : MetaFile = null #:
+        If not present, we parse from first principles, else we ensure that
+        any phases requested but not yet performed are performed.
       var debug : bool = false #:
         If true, print out progress.
       var fp : ostream = null #:
@@ -25231,36 +25515,47 @@ scope:
       flags = self.cli()
       context = self.metalang().context()
       errors, warnings = (0, 0)
+      if debug:
+        print 'processMeta: processing %s' % path
 
       /# Parse
-      start = time.time()
-      metafile = self.parseMeta(
-        path, debuglevel=flags.debug, context=context)
-      stats = metafile.stats()
-      parse_time = time.time() - start
-      /# TODO(wmh): Compare parse_time against metafile.stats()['parse'] to
-      /# ensure there isn't a big discrepancy.
+      if metafile is None:
+        metafile = self.parseMeta(
+          path, debuglevel=flags.debug, context=context)
+      phases = metafile.phases()
+
       if metafile.hasErrors(show=True):
         errors += 1
       elif expand:
         /# Expand
-        metafile.expandMeta()
+        if 'expand' not in phases:
+          if debug:
+            print 'processMeta: expanding %s' % path
+          metafile.expandMeta()
         if metafile.hasErrors(show=True):
           errors += 1
         elif imports:
           /# Import
-          if not flags.disable_imports:
+          if not flags.disable_imports and 'import' not in phases:
+            if debug:
+              print 'processMeta: importing %s' % path
             metafile.importMeta()
           if metafile.hasErrors(show=True):
             errors += 1
           elif translate:
             /# Translate
-            metafile.translateMeta()
+            if 'translate' not in phases:
+              if debug:
+                print 'processMeta: translating %s' % path
+              metafile.translateMeta()
             if metafile.hasErrors(show=True):
               errors += 1
             elif compile:
               /# Compile
-              metafile.compileMeta()
+              if 'compile' not in phases:
+                if debug:
+                  print 'processMeta: compiling %s' % path
+                metafile.compileMeta()
               if metafile.hasErrors(show=True):
                 errors += 1
               if metafile.hasErrors(show=True, category='W'):
@@ -25295,18 +25590,18 @@ scope:
         raise Error('%s does not exist' % path)
       realpath = fs.realpath(path)
 
-      result = self.metafiles().get(realpath, None)
-      if result is None:
-        result, _, _ = self.processMeta(
-          realpath, debug=debug, fp=fp,
-          expand=expand, imports=imports, translate=translate, compile=compile)
-      else:
-        if result.state() != 'complete':
-          /# raise Error(
-          /#   'metafile %s has state %s' % (result.path(), result.state()))
-          pass
-        if debug:
-          print 'Used cached %s' % path
+      /# We may have already obtained (and partially/fully process) the MetaFiile
+      /# so we check for a cached version.
+      metafile = self.metafiles().get(realpath, None)
+
+      /# Even if we have a cached version, we may not have performed all of
+      /# phases on it that are specified by the args to this method. The
+      /# processMeta() method knows which phases have been completed and avoids
+      /# repeating them.
+      result, _, _ = self.processMeta(
+        realpath, metafile=metafile, debug=debug, fp=fp,
+        expand=expand, imports=imports, translate=translate, compile=compile)
+
       return result
     test:
     end method getMeta;
@@ -27063,7 +27358,7 @@ scope:
       var showout : bool = false #:
         If true, show stdout
     scope:
-      scope_sep = Context.TOKENS['scope_sep']
+      scope_sep = Context.Tokens()['scope_sep']
       for target in sorted(tests):
         tdata = tests[target]
         namespace_name = tdata['namespace']
@@ -27196,11 +27491,14 @@ scope:
 
       def PathAbbrev(paths, path):
         /# Return an abbrev for a path.
+        /#
         /# var paths : dict
         /#   The current set of paths with abbrevs.
         /# var path: str
         /#   The path to obtain an abbrev for.
+        /#
         /# Returns: str
+        /#   The basename of the path, potentially with a one-char addition.
         distinguishers = ('', '@', '#', '$', '%', '^', '&')
         base = fs.basename(path)
         result = None
@@ -27249,7 +27547,7 @@ scope:
             r'^[^ :]+:\d+:\d+:',
             {'meta': '%(metapath)s:%(metaline)d:%(column)s',
              /# TODO(wmh): Fix this ... add in the baselang info.
-            'both': '%(metapath)s:%(metaline)d:%(column)s'}),
+             'both': '%(metapath)s:%(metaline)d:%(column)s'}),
         },
         'javascript': {
           'match': re.compile(r'^(?P<path>[^:]+):(?P<line>\d+): (?P<error>.*)'),
@@ -27362,7 +27660,11 @@ scope:
               metadata['metaline'] = metaline
 
           if metadata:
-            /# Maybe reformat the baselang file path.
+            /# Conditionally reformat the file paths
+            metapath = metadata['metapath']
+            if '/' in metapath and len(metapath) > 20:
+              metadata['metapath'] = PathAbbrev(meta_paths, metapath)
+
             replacer = replace_options['both']
             if basekind is None or basekind == 'none':
               replacer = replace_options['meta']
@@ -28220,7 +28522,7 @@ scope:
       /#    links around brings in a massive amount of additional unnecessary files.
       /#  - we'll need to loosen this up a bit in the future, but better safe than
       /#    broken.
-      config, _ = meta.Config()
+      config = meta.Config()
       kerneldir = fs.join(config['src_root'], 'src', 'kernel')
       for path in (
         fs.join(kerneldir, 'testdata', '.meta2'),
@@ -28310,7 +28612,7 @@ scope:
       srcdir = fs.join(newpath, 'src')
       fs.mkdir(srcdir, 0755)  
       for base in fs.listdir(kerneldir):
-        if base.endswith('.meta2') and base != '.meta2':
+        if base.endswith('.meta') and base != '.meta':
           srcfile = fs.join(kerneldir, base)
           destfile = fs.join(srcdir, base)
           fs.copyfile(srcfile, destfile)
@@ -28498,7 +28800,6 @@ scope:
       blsuffix = baselang.suffix()[1:]
       context = metalang.context()
       errors = 0
-      suffix = '.meta2'
       chatty = True
 
       /#print 'Here with width=%s showbox=%s htmldir=%s' % (width, showbox, htmldir)
@@ -28860,10 +29161,15 @@ scope:
         /# arg args : list<str>;
         flags = self.cli()
         argmap = self._parseArgs(flags.rest, implicit=True)
+
+        /# TODO(wmh): Fix this ... dictate from some flag.
+        debug = False
+
         metafile_paths = argmap['metafiles']
         fp = sys.stdout
         try:
-          metafiles, errors, warnings = self.getMetas(metafile_paths, fp=fp)
+          metafiles, errors, warnings = self.getMetas(
+            metafile_paths, debug=debug, fp=fp)
         except Exception as e:
           text = traceback.format_exc()
           if False:
@@ -29565,11 +29871,11 @@ scope:
   class TestCase < metax.test.TestCase assocs:
     std assoc optparse;
 
-    resource ex1 path "./testdata/ex1.meta2";
-    resource ex2 path "./testdata/ex2.meta2";
-    resource cards1 path "./testdata/cards1.meta2";
-    resource cards2 path "./testdata/cards2.meta2";
-    resource cards3 path "./testdata/cards3.meta2";
+    resource ex1 path "./testdata/ex1.meta";
+    resource ex2 path "./testdata/ex2.meta";
+    resource cards1 path "./testdata/cards1.meta";
+    resource cards2 path "./testdata/cards2.meta";
+    resource cards3 path "./testdata/cards3.meta";
 
     resource sample_logs path "./testdata/sample_logs";
   scope:
@@ -29608,7 +29914,7 @@ scope:
       self._invoked_fixenv = False
 
       if metax.c.Compiler.CONFIG is None:
-        metax.c.Compiler.CONFIG = metax.root.MetaObject.Config()[0]
+        metax.c.Compiler.CONFIG = metax.root.MetaObject.Config()
 
     teardown:
       self.unfixenv()

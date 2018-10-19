@@ -77,7 +77,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <class|behavior|native>;
+    Attribute scope: children <class|behavior|native|field|method>;
 
     Template python scope:
       >|WARNING: THIS TEMPLATE NOT CURRENTLY USED
@@ -875,6 +875,7 @@ config:
     end Template;
 
     Template cpp_decl scope:
+      >|
       >|${comment}
       >|${modifiers? }${returns? }${method}${params}${inline}
     end Template cpp_decl;
@@ -953,6 +954,22 @@ config:
     Attribute finalize: : simplex = <empty> aliases <::> #:
       A finalizer block for cleaning up the object before garbage
       collection.
+
+    secondary
+    Attribute metainit: : simplex = <empty> #:
+      An block found within a user-level lifecycle defining a meta-class
+      initializer. Convenience mechanism so that we can define everything in
+      a single lifecycle instead of having a user lifecycle, test lifecycle
+      and meta lifecycle.  A location=meta lifecycle is implicitly created
+      and the metainit: block is moved to the scope: of this new lifecycle.
+
+    secondary
+    Attribute metafinalize: : simplex = <empty> #:
+      An block found within a user-level lifecycle defining a meta-class
+      finalizer. Convenience mechanism so that we can define everything in a
+      single lifecycle instead of having a user lifecycle, test lifecycle and
+      meta lifecycle. A location=meta lifecycle is implicitly created and the
+      metafinalize: block is moved to the finalize: of this new lifecycle.
 
     secondary
     Attribute setup: : simplex = <empty> #:

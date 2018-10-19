@@ -19,10 +19,6 @@ Verbose = False
 #   to optimize Config().
 _Config = None
 
-# _ConfigPath: str
-#   The path of the file from which _Config is initialized.
-_ConfigPath = None
-
 # Version: str
 #   The version of Meta being used, as established by ConfigureVersion().
 Version = None
@@ -46,9 +42,7 @@ def Config(verbose=Verbose):
   # Meta.Config() returns the same thing as metameta2.Config().
 
   global _Config
-  global _ConfigPath
   result = _Config
-  configpath = _ConfigPath
   if result is None:
     # CODETANGLE(parse_config): Similar code exists in
     # <<src_root/src/kernel/parser.meta2.
@@ -70,18 +64,19 @@ def Config(verbose=Verbose):
       print 'NOTE: Reading %s' % configpath
     result = {}
     _Config = result
-    _ConfigPath = configpath
     if exists:
       with open(configpath, 'r') as fp:
         for line in fp:
           m = vre.match(line)
           if m:
             result[m.group('var')] = os.path.expandvars(m.group('val'))
+      result['config_path'] = configpath
     else:
       print 'WARNING: %s does not exist' % configpath
       print 'PWD: %s' % os.getcwd()
       print 'DIR: %s' % str(os.listdir(os.getcwd()))
-  return result, configpath
+      result['config_path'] = configpath
+  return result
 
 
 def ConfigureVersion(verbose=Verbose):
@@ -108,7 +103,7 @@ def Setup(verbose=Verbose, auto=False):
   # TODO(wmh): Pass in argv, setting to sys.argv by default.
   # TODO(wmh): Modify argv, not sys.argv (so that if a non sys.argv argv is
   # is passed in, it is modified instead of sys.argv).
-  config, configpath = Config()
+  config = Config()
 
   # The list of paths to add, in reverse order, to the beginning of sys.path.
   updates = []
@@ -182,7 +177,7 @@ def VersionPath(version):
     version: str
       A subdir of <<src_root>>/lib/versions.
   """
-  config, configpath = Config()  
+  config = Config()  
   result = os.path.join(config['src_root'], 'lib', 'versions', version, 'lib')
   if not os.path.exists(result):
     raise Exception(
@@ -350,7 +345,9 @@ def ParseArgv(argv, cli_module, root_module=None):
       cli.verbose = True
     # Initialize metax.root.MetaObject
     if root_module:
-      root_module.MetaObject.Initialize(cli)
+      #print root_module
+      #root_module.Object.Initialize2(cli=cli)
+      root_module.Object.Init(cli=cli)
   else:
     cli = None
 
@@ -373,7 +370,7 @@ class MetaImporter(object):
 
   @classmethod
   def Initialize(cls):
-    config, configpath = Config()
+    config = Config()
     path = config['repository_path']
     cls.METAREP = path
     cls.PATH_RE = re.compile('^%s/' % re.escape(path))
