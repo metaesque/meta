@@ -1,0 +1,22 @@
+Pressing issues:
+
+ - Python's lookup rules for class variables
+   - metax.root.Object.Config is a static field that defines _Config on all
+     subclasses.
+   - suppose we have a class defined somewhere life:
+      class SomeClass scope:
+        meta method Config scope:
+          return 1
+   - Some how, the Config() from object is being used instead of the above,
+     wichin SomeClass.
+
+
+ - The following crashes the parser (note the ':' instead of '#:' on first line)
+    method list :
+      List the children of the current node
+    scope:
+      for cid, child in self.children().iteritems():
+        print cid
+    test:
+    end method list;
+

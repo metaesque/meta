@@ -130,6 +130,11 @@ config:
     Attribute time : word = <empty> aliases <%> #:
       When the meal was consumed.
 
+    secondary
+    Attribute calories : word = <empty> #:
+      If provided, specifies the calories burned.  Will be subtracted from
+      the per-day total.
+
     Attribute comment:;
     Attribute config:;
     Attribute scope:;

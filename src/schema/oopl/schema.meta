@@ -4,6 +4,8 @@ config:
 
   abstract
   Construct _oopl_ #:
+    Abstract construct from which all Meta(Oopl) constructs inheret.
+
     All constructs in Meta(Oopl) inherit from this abstract construct,
     so the Attribute definitions here are available in subconstructs.
     However, note that the existence of an Attribute here does NOT mean it
@@ -14,6 +16,8 @@ config:
 
     feature
     Attribute location : <user|test|meta|usertest> = user #:
+      Which class this construct applies to (user, test or meta).
+
       Many constructs have an associated class, and each user-defined
       class has an associated test-class and meta-class. This feature
       attribute allows one to indicate which class (user, test or meta)
@@ -28,14 +32,20 @@ config:
       FeatureValue user #:
         Applies to user-provided class (the most common situation).
       FeatureValue test #:
-        Applies to the testclass of the class this construct belongs to. If that
-        class has location 'test' it is an error to specify location value
-        'test' (test classs do not have test classes).
+        Applies to the testclass of the class this construct belongs to.
+
+        If the class has location 'test' it is an error to specify location
+        value 'test' on a child, as that would require a test class of the
+        test class, which is not supported.
       FeatureValue meta #:
-        Applies to the metaclass of the class this construct belongs to. If that
-        class has location 'meta' it is an error to specify location value
-        'meta' (meta classs do not have meta classes).
+        Applies to the metaclass of the class this construct belongs to.
+
+        If the class has location 'meta' it is an error to specify location
+        value 'meta' on a child, as that would require a meta class of the
+        meta class, whcih is not supported.
       FeatureValue usertest #:
+        Applies to both user and test class. Temporary.
+
         This is only legal in a small number of subconstructs. For example,
         an 'assoc' may be needed in both user and test class.
         TODO(wmh): Remove this option from here and add it in 'assoc'.
@@ -43,13 +53,11 @@ config:
     
     secondary
     Attribute comment: : simple = <empty> aliases <#:> #:
-      An arbitrary multi-line comment used to describe the purpose of the
-      construct.
+      Arbitrary multi-line text describing the purpose of the construct.
 
     secondary
     Attribute config: : complex = <empty> children <Construct> #:
-      The complex block within which Construct/Attribute instances can be
-      modified.
+      The complex block that defines/modifies Construct/Attribute instances.
 
     secondary
     Attribute scope: : complex = <empty> aliases <::> #:
@@ -67,13 +75,14 @@ config:
 
     secondary
     Attribute preports: : simple = <empty> #:
-      Lines to insert before any imports within a namespace.  Used to provide
-      path modification in python, etc.
+      Lines to insert before any imports within a namespace.
+
+      This can be used, for example, to modify sys.path in python before
+      imports are specified.
 
     secondary
     Attribute testpreports: : simple = <empty> #:
-      Lines to insert before any imports within a test namespace.  Used to provide
-      path modification in python, etc.
+      Lines to insert before any imports within a test namespace.
 
     Attribute comment:;
     Attribute config:;
@@ -477,6 +486,18 @@ config:
         default value.
     end Attribute status;
 
+    feature
+    Attribute ownership : <owned|unowned> = unowned #:
+      Whether this field is optional.
+    config:
+      FeatureValue owned #:
+        The class instance is responsible for cleaning up this field.
+        In UML diagrams, this marks composition.
+      FeatureValue unowned #:
+        The class instance is not responsible for cleaning up this field.
+        In UML diagrams, this marks aggregation.
+    end Attribute ownership;
+
     Attribute location;
     Attribute kind;
 
@@ -527,9 +548,17 @@ config:
         *<any>  null 
         @vec    []
         @map    {}
-
-      TODO(wmh): This should have type 'expr', not 'word'.
     end Attribute default;
+
+    secondary
+    Attribute role : str = <empty> #:
+      The role name to add to UML class diagrams to identify how the field
+      participates with this class. Only meaningful for fields of class type.
+      Note that there will not be a role label on the side of the link connected
+      to the class within which the field resides unless the class of which the
+      field is an instance has a reciprocal field linking to an instance, and
+      specifies a 'role' attribute.  Multiplicity is establish by the type
+      of the field (is it a vec/map/etc?)
 
     Attribute comment:;
     Attribute config:;

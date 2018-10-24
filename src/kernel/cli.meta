@@ -758,7 +758,7 @@ scope:
       errors = []
 
       if debug:
-        print 'DEBUG: Starting instantiate with %s and %s' % (self.names(), argv)
+        print 'DEBUG: Starting instantiate with names=%s argv=%s start=%s' % (self.names(), argv, start)
         self.show()
 
       if parent is None:
@@ -829,8 +829,8 @@ scope:
                   if start:
                     flag.startIs(flag.value())
                   if debug:
-                    print 'DEBUG: item "%s" sets flag "-%s" to "%s"' % (
-                      item, short, flag.value())
+                    print 'DEBUG: item "%s" sets flag "--%s" to "%s"' % (
+                      item, flag.name(), flag.value())
               else:
                 errors.append(
                   'Command %s does not recognize flag -%s' %
@@ -978,10 +978,10 @@ scope:
         test.iseqtext(
           >|"""faux:
           >|  A command with a flag and arg of each type.
-          >|  --deps                 0                              None       =         
-          >|  --gender               undef                          None       =         
-          >|  --height               1.87                           None       =         
-          >|  --name                 Bob                            None       =         
+          >|  --deps                 0                              none       =         
+          >|  --gender               undef                          none       =         
+          >|  --height               1.87                           none       =         
+          >|  --name                 Bob                            none       =         
           >|""",
           before)
 
@@ -1419,9 +1419,9 @@ scope:
       test.command.show(fp=fp)
       test.iseqtext(
         >|"""meta2:
-        >|  --baselang             <special>                      None       =         
-        >|  --metadir              .meta2                         None       =         
-        >|  --metalang             oopl                           None       =         
+        >|  --baselang             <special>                      none       =         
+        >|  --metadir              .meta2                         none       =         
+        >|  --metalang             oopl                           none       =         
         >|""",
         test.out())
     end receiver Command;
@@ -1436,7 +1436,7 @@ scope:
         return val if w < width else val[:width-1] + '$'
 
       if mode == 'summary':
-        sval = '=' if str(start) == str(value) else Trunc(str(start), 10)
+        sval = 'none' if start is None else ('=' if str(start) == str(value) else Trunc(str(start), 10))
         dval = '=' if str(default) == str(value) else Trunc(str(default), 10)
 
         fp.write(
@@ -1456,8 +1456,8 @@ scope:
     test:
       fp = test.newStr()
       test.baselang.show(fp=fp)
-      test.iseq(
-        '--baselang             <special>                      None       '
+      test.iseqtext(
+        '--baselang             <special>                      none       '
         '=         \n',
         fp.getvalue())
     end receiver Flag;
@@ -1493,7 +1493,7 @@ scope:
       fp = test.newStr()
       test.baselang.show(fp=fp)
       test.iseq(
-        '--baselang             <special>                      None       '
+        '--baselang             <special>                      none       '
         '=         \n',
         fp.getvalue())
     end receiver Arg;

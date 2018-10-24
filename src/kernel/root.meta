@@ -114,10 +114,9 @@ scope:
 
     static
     field Config : map<@str,@str> #:
-      Initialized when ObjectMeta.Config() is first invoked. Intentionally
-      NOT a meta field of Object because that would produce one instance
-      per subclass, when the object should be shared amongst all classes 
-      and objects.
+      Initialized when it is first invoked. Intentionally NOT a meta field of
+      Object because that would produce one instance per subclass, when the
+      object should be shared amongst all classes and objects.
     scope:
       accessor get
       lazy<py>:
@@ -126,7 +125,7 @@ scope:
         import metastrap
         /# print 'NOTE: Initializing metax.root.Config!'
         result = metastrap.Config()
-        --> result
+        -> result
       lazy<cc>:
         std::cerr << "metax.c.ObjectMeta.Config() not yet implemented" << std::endl;
     end field Config;

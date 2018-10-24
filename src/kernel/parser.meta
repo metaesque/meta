@@ -2385,7 +2385,7 @@ scope:
           streams[name] = result
         else:
           raise metax.c.InternalError(
-            'Failed to find stream named "%s"' % name)
+            'Failed to find stream named "%s" in %s' % (name, sorted(streams)))
       if False:
         /# Use this if you want to debug the actions taken on individual
         /# stream collections.  All the code is designed to handle lists
@@ -3319,68 +3319,6 @@ scope:
     end method StrChunkToList;
 
   end class BaseSegment;
-
-  class BaseFile #:
-    An output file generated when compiling Meta source into a base language.
-
-    Provides an abstraction layer between on-disk vs in-memory files. Also
-    provides a mechanism for maintaining a mapping between line numbers in
-    Meta source code and associated lines in the baselang code (for BaseFile
-    instances that represent baselang source files)
-  scope:
-
-    field subpath : str #:
-      The on-disk path of the file relative to Compiler.repositoryPath().
-
-    field contents : str #:
-      The contents of the file.
-
-    field metafile : MetaFile #:
-      The meta file that generated this BaseFile.
-
-    field mapfile : MapFile #:
-      The mapfile associated with this BaseFile. Not all BaseFile instance
-      have mapfiles (e.g. BUILD, etc.)
-
-    field mode : int #:
-      The mode to be associated with this file.
-
-    field link : str #:
-      If not null, indicates this file is a symlink to the file
-      in this field.
-
-    lifecycle params:
-      var subpath -> subpath;
-      var contents -> contents;
-      var metafile -> metafile = null;
-      var mapfile -> mapfile = null;
-      var mode -> mode = 416 #:
-        TODO(wmh): Support octal numbers (0640) in Meta!
-      var link -> link = null;
-    scope:
-      /# We ensure that contents is either empty or always end with a newline
-      /# and do not have any spurious trailing whitespace.
-      if contents:
-        if contents[-1] != '\n':
-          print '#' * 70
-          print subpath
-          print contents
-          raise Error('contents must end with newline')
-        if contents[-2] in (' ', '\n'):
-          print '=' * 70
-          print subpath
-          print contents
-          raise Error('contents should not have spurious trailing whitespace')
-      if False:
-        print '-' * 70
-        print subpath
-        print contents
-    setup:
-      contents = 'MetaLanguage Test config:\nend;\n'
-      self.base = metax.c.BaseFile('faux/path', contents)
-    end lifecycle;
-
-  end class BaseFile;
 
   class MapFile #:
     Associated with a BaseFile. Contains file lines number mappings from base to
@@ -6464,6 +6402,13 @@ scope:
         else:
           raise Error('Invalid position "%s"' % position)
 
+      /# TODO(wmh): We should check if parent.kind() == 'class', and if so,
+      /# invoke "construct.myclassIs(parent). See the code at the end of
+      /# Construct.NewFromData(), which does this as a special case. Should be
+      /# done always! Note that 'parent' here is a Construct, and self is a
+      /# ComplexBlock.
+      /#  if parent.kind() == 'class':
+      /#    construct.myclassIs(parent)
       if register_in_metafile and metafile:
         metafile.registerConstructInMetaFile(construct)
     test:
@@ -7157,6 +7102,9 @@ scope:
         Type, not a str), or can also be Attribute subclass instances
         wrapping the proper value type (thus, 'scope:' can either be a
         list of strings or a SimpleBlock, 'params:' can be a ComplexBlock, etc.
+        As a special case, 'params:' can be a list of tuples, in which case
+        ExecutableConstruct.CreateParams() is invoked with that list to
+        obtain the complex block.
       var precount : precount = 0 #:
         How many empty lines appear before this construct in the source file.
       var termcode : int = 15;
@@ -7213,12 +7161,14 @@ scope:
           skey = stup[0]
           sval = stup[1]
           line = stup[2] if len(stup) > 2 else -1
+          if skey == 'params:' and isinstance(sval, list):
+            sval = ExecutableConstruct.CreateParams(sval, context)
+
           if sval is None:
             /# An indication that this secondary is to not be generated at
             /# all.  Useful when forming the tuples passed in as secondaries
             /# from code that may or may not produce null values ... avoids
             /# caller having to do checks.
-
             /# print '**** WARNING: IGNORING %s (None) within %s' % (skey, construct.kindfqn())
             continue
           elif isinstance(sval, Attribute):
@@ -7240,6 +7190,7 @@ scope:
       /#    but hopefully not.
       if parent:
         parent.registerConstruct(construct, position=position)
+        /# TODO(wmh): 
         consparent = parent.parent()
         if consparent and consparent.kind() == 'class':
           construct.myclassIs(consparent)
@@ -8530,7 +8481,7 @@ scope:
         self.suffixesIs(suffixes)
     end method postCreationInitialization;
 
-    method suffix : str #:
+    method rawsuffix : str #:
       The suffix to use for a given location
     params:
       var location : str = 'defn';
@@ -8542,7 +8493,23 @@ scope:
         result = suffixes[1] if len(suffixes) > 1 else suffixes[0]
       else:
         raise Error('Unknown suffix location "%s"' % location)
-      return '.' + result
+      return result
+    test:
+      _, metalang, _, _ = test.cachedInfo()
+      py = metalang.baselangNamed('python')
+      cpp = metalang.baselangNamed('cpp')
+      test.iseq('py', py.rawsuffix())
+      test.iseq('py', py.rawsuffix(location='decl'))
+      test.iseq('cc', cpp.rawsuffix())
+      test.iseq('h', cpp.rawsuffix(location='decl'))
+    end method rawsuffix;
+
+    method suffix : str #:
+      The suffix to use for a given location
+    params:
+      var location : str = 'defn';
+    scope:
+      return '.' + self.rawsuffix(location=location)
     test:
       _, metalang, _, _ = test.cachedInfo()
       py = metalang.baselangNamed('python')
@@ -10197,6 +10164,10 @@ scope:
 
       accessorType(ftype:Type,acc:str):Type
       augmentVarset(construct:Construct,varset:VarSet)
+      autogenStr(construct:ClassConstruct)
+      autogenPrint(construct:ClassConstruct)
+      autogenWrite(construct:ClassConstruct)
+      autogenSize(construct:ClassConstruct):int
       buildPreambleText():str
       classSubPath(klass:ClassConstruct):str
       createBuildFragment(
@@ -10221,9 +10192,11 @@ scope:
         preamble:vec<str>,decl:bool=false):vec<str>
       formatParentSpec(
         class_construct:ClassConstruct):tuple<str,tuple<str,str,str>>
+      fqnToTarget(fqn)
       initializerName(klass:ClassConstruct):str
       metaMethodBody(metainst:str,metaclass:ClassConstruct):vec<str>
       parseBazelLog(logdata:str,tdata:map,debug:bool=false):any
+      processTestOutput(stdout:str,stderr:str,cwd:str,namespace:str,...)
       repl()
       superCode(method:ExecutableConstruct,output:vec<str>,width:int=80):void
       _annotateBaseType(metatype:Type,basetype:str):str
@@ -10248,16 +10221,42 @@ scope:
       self.nameIs('Python')
       self.suffixesIs(['py'])
 
-      strptr = {'base': 'str', 'default': 'None'}
-      strref = {'base': 'str', 'default': "''"}
+      strptr = {
+        'base': 'str', 'default': 'None',
+        'format': lambda var: 'self.%s()' % var,
+      }
+      strref = {
+        'base': 'str', 'default': "''",
+      }
       self.metatypesIs({
-        'bool': {'base': 'bool', 'default': 'False'},
-        'char': {'base': 'str', 'default': "''"},
-        'int': {'base': 'int', 'default': '0'},
-        'uint': {'base': 'int', 'default': '0'},
-        'real': {'base': 'float', 'default': '0.0'},
-        'double': {'base': 'float', 'default': '0.0'},
-        'float': {'base': 'float', 'default': '0.0'},
+        'bool': {
+          'base': 'bool', 'default': 'False',
+          'format': lambda var: 'str(' + var + ').lower()',
+        },
+        'char': {
+          'base': 'str', 'default': "''",
+          'format': lambda var: var,
+        },
+        'int': {
+          'base': 'int', 'default': '0',
+          'format': lambda var: "'%d' % " + var,
+        },
+        'uint': {
+          'base': 'int', 'default': '0',
+          'format': lambda var: "'%d' % " + var,
+        },
+        'real': {
+          'base': 'float', 'default': '0.0',
+          'format': lambda var: "'%g' % self." + var + '()',
+        },
+        'double': {
+          'base': 'float', 'default': '0.0',
+          'format': lambda var: "'%g' % self." + var + '()',
+        },
+        'float': {
+          'base': 'float', 'default': '0.0',
+          'format': lambda var: "'%g' % self." + var + '()',
+        },
         /# The 'str' type has some special handling.
         /#   *str and str should be the same
         /#   &str should be a version that cannot be null
@@ -11469,6 +11468,128 @@ scope:
     end receiver OoplCpp;
 
   end behavior augmentVarset;
+
+  behavior autogenStr : str #:
+    Auto-generate the human-readable metaxPrint() method.
+      method metaxStr : str;
+  params:
+    var klass : ClassConstruct;
+  scope:
+
+    receiver OoplPython scope:
+      context = klass.context()
+      scope = klass.attr('scope:', default=REQUIRED)
+      metatypes = self.metatypes()
+    end receiver OoplPython;
+
+  end behavior autogenStr;
+
+  behavior autogenPrint #:
+    Auto-generate the human-readable metaxPrint() method.
+
+      method metaxPrint params:
+        var fp : ostream = out;
+        var indent : str = '';
+      end;
+  params:
+    var klass : ClassConstruct;
+  scope:
+
+    receiver OoplPython scope:
+      context = klass.context()
+      scope = klass.attr('scope:', default=REQUIRED)
+      metatypes = self.metatypes()
+
+      body = []
+      body.append('subindent = indent + "  "')
+      body.extend([
+        /# IMPORTANT: We do NOT add 'indent' to the beginning of the line
+        /# describing the class type, because this code is invoked after a
+        /# a field name has already been printed (this only prints the value,
+        /# not the entire field).
+        "fp.write('%s %%x:\\n' %% id(self))" % klass.id()
+      ])
+
+      maxlen = max([len(field.id()) for field in klass.fields()])
+
+      /# TODO(wmh): We need the complete set of fields as inherited from the
+      /# ancestor chain!
+      for field in klass.fields():
+        mtype = field.attrval('type')
+        accs = field.accessors()
+        formatter = accs.get('format', None) if accs else None
+        minfo = metatypes.get(mtype.raw(), None)
+        fstr = field.id().ljust(maxlen)
+        format_code = None
+        more_code = None
+        if formatter:
+          /# The user has provided explicit code to use for formatting the
+          /# field, so we invoke the format accessor
+          format_code = 'fix me'  # invoke receiver.<field>Format()
+        elif minfo and 'format' in minfo:
+          /# There is an explicit format specified in the base language for
+          /# this type.
+          format_code = minfo.get('format', None)(field.id())
+          body.append(
+            "fp.write('%%s  %s = %%s\\n' %% (indent, %s))" %
+            (fstr, format_code))
+        else:
+          /# The field is assumed to be of a class type, so it defines the
+          /# metaxPrint() method. We invoke it.
+          body.append("fp.write('%%s  %s = ' %% indent)" % fstr)
+          body.append(
+            "self.%s().metaxPrint(fp=fp, indent=subindent)\n" % field.id())
+
+      method = metax.c.MethodConstruct.NewFromData(
+        'metaxPrint',
+        context,
+        parent=scope,
+        features=[],
+        secondaries=[
+          ('#:',['Auto-generated human-readable summary of this object.']),
+          ('params:', [
+            {'var': 'fp', 'secondaries': [
+              (':', Type.Instance('ostream')),
+              ('=', Expr('var', 'out', 'out')),
+            ]},
+            {'var': 'indent', 'secondaries': [
+              (':', Type.Instance('str')),
+              ('=', Expr('str', "''", "''")),
+            ]},
+          ]),
+          ('scope:', body),
+        ],
+      )
+
+      assert method.myclass() is klass
+      method.expandMeta()
+      return method
+    test:
+    end receiver OoplPython;
+ 
+  end behavior autogenPrint;
+
+  behavior autogenWrite #:
+      Auto-generate the machine-readable metaxSerialize() method.
+  params:
+    var klass : ClassConstruct;
+  scope:
+
+    receiver OoplPython scope:
+    end receiver OoplPython;
+
+  end behavior autogenWrite;
+
+  behavior autogenSize #:
+      Auto-generate the byte-size calculator. 
+  params:
+    var klass : ClassConstruct;
+  scope:
+
+    receiver OoplPython scope:
+    end receiver OoplPython;
+
+  end behavior autogenSize;
 
   behavior classPath : str #:
     Obtain the baselang specific path in which a class is stored.
@@ -13223,6 +13344,295 @@ scope:
 
   end behavior formatParentSpec;
 
+  behavior fqnToTarget : map #:
+    Convert a fully-qualified name into a Bazel BUILD target and --test_args.
+
+    Returns:
+      namespace: str
+        The namespace portion of the fqn
+      class: str
+        The class within the namepace. Not present if fqn is just a namespace.
+      method: str
+        The method within the namepace. Not present if fqn has no method.
+      target: str
+        The full BUILD target for the specified fqn.
+      test_target: str
+        The full BUILD target for the test target associated with specified fqn.
+      test_arg: str
+        The --test_arg value to pass to the target (not present if not needed)
+      kind: str
+        The kind of fqn ('namespace', 'class', or 'method'). Not present if
+        error exists.
+      path: str
+        The path to a baselang file containing the fqn.
+      test_path: str
+        The path to a baselang file containing the test variant of fqn.
+      error: str
+        If present, the fqn is not valid, and this value explains why.
+        Callers must test for present of this to establish success.
+  params:
+    var fqn : str #:
+      The fully qualified namespace[.class[.method]] for which a target is
+      desired.
+  scope:
+    receiver BaseLanguageOopl #:
+      This implementation is applicable to baselanguages that have per-class
+      BUILD targets and 'first-class' class files.
+    scope:
+      result = {}
+      /# The smallest granularity of target is a class. For methods we use
+      /# --test_arg.
+      metac = self.compiler()
+      metarep = metac.repositoryPath()
+      fs = metac.fs()
+      parts = fqn.split('.')
+      k = len(parts)
+      ispy = self.id() == 'python'
+
+      /# Establish the namespace portion of the fqn.
+      nmsps = []
+      rootdir = fs.join(metarep, metac.basePath())
+      ndir = rootdir
+      i = 0
+      while i < k:
+        tdir = fs.join(ndir, parts[i])
+        if not fs.isdir(tdir): break
+        nmsps.append(parts[i])
+        ndir = tdir
+        i += 1
+
+      if i == 0:
+        /# Failed to find any namespaces.
+        result['error'] = '%s does not represent a valid target' % fqn
+      else:
+        result['namespace'] = '.'.join(nmsps)
+        testbase = NamespaceConstruct.TestifyName(nmsps[-1])
+
+        /# NOTE: We can determine whether the namespace is terminal (has classes)
+        /# based on whether the _test version of the namespace exists.
+        namespace_path = ndir
+        namespace_test_path = NamespaceConstruct.TestifyName(ndir)
+        
+        namespace_terminal = False
+        if fs.isdir(namespace_test_path):
+          namespace_terminal = True
+        namespace_target = '//%s:%s' % ('/'.join(nmsps), nmsps[-1])
+        namespace_test_target = (
+          '//%s/%s:%s' % ('/'.join(nmsps[:-1]), testbase, testbase)
+          if len(nmsps) > 1 else '//%s:%s' % (testbase, testbase))
+
+        if i < k:
+          /# Per-class map files are in .<name>.<suffix>.map (even in python)
+          class_candidate = parts[i]
+          /# In C++, self.suffix() is .cc, but we need to use .h because the
+          /# .h.map file is guaranteed to have all symbols whereas .cc.map will
+          /# not have header-inlined symbols.
+          suffix = self.suffix()
+          map_suffix = '.h' if self.id() == 'cpp' else suffix
+          mapbase = '.%s%s.map' % (class_candidate, map_suffix)
+          clsbase = '__init__.py' if ispy else class_candidate + suffix
+          tstbase = '__init__.py' if ispy else ClassConstruct.TestifyName(class_candidate) + suffix
+          tbase = nmsps[-1] if ispy else class_candidate
+          tfile = fs.join(ndir, mapbase)
+          if fs.exists(tfile):
+            /# We've verified a class name.
+            result['target'] = (
+              namespace_target if ispy else '//%s:%s' % ('/'.join(nmsps), tbase))
+            result['test_target'] = (
+              namespace_test_target if ispy
+              else '//%s:%s' % (
+                NamespaceConstruct.TestifyName('/'.join(nmsps)),
+                ClassConstruct.TestifyName(class_candidate)))
+            result['class'] = class_candidate
+            result['path'] = fs.relpath(
+              fs.join(namespace_path, clsbase), rootdir)
+            if namespace_terminal:
+              result['test_path'] = fs.relpath(
+                fs.join(namespace_test_path, tstbase), rootdir)
+
+            i += 1
+            if i < k:
+              /# The fqn is a method.
+              /# To validate this, we can parse/grep tfile
+              method_name = parts[i]
+              verified = False
+              with open(tfile, 'r') as mfp:
+                for line in mfp:
+                  if fqn in line:
+                    verified = True
+                    break
+              if verified:
+                result['kind'] = 'method'
+                result['method'] = method_name
+                if ispy:
+                  result['test_arg'] = '%s.%s' % (
+                    ClassConstruct.TestifyName(class_candidate),
+                    ExecutableConstruct.TestifyName(method_name))
+                else:
+                  result['test_arg'] = ExecutableConstruct.TestifyName(method_name)
+              else:
+                result['error'] = '%s is not a method within %s' % (
+                  method_name, fqn)
+            else:
+              /# The fqn is a class.
+              result['kind'] = 'class'
+              if ispy:
+                result['test_arg'] = ClassConstruct.TestifyName(class_candidate)
+          else:
+            /# Invalid class name.
+            result['error'] = (
+              '%s is not a namespace or class in %s' % (class_candidate, fqn))
+        else:
+          /# The fqn contains only namespaces.
+          result['kind'] = 'namespace'
+          result['target'] = namespace_target
+          if namespace_terminal:
+            result['test_target'] = namespace_test_target
+          if ispy:
+            result['path'] = fs.relpath(
+              fs.join(namespace_path, '__init__.py'), rootdir)
+            if namespace_terminal:
+              result['test_path'] = fs.relpath(
+                fs.join(namespace_test_path, '__init__.py'), rootdir)
+
+      return result
+    test:
+      /# TODO(wmh): Add in additional class-based baselangs as they are supported.
+      for bl in ('cc',):
+        test.defineClassAndMethods('cc')
+        test.iseqmap(
+          {
+            'namespace': 'metax',
+            'target': '//metax:metax',
+            'kind': 'namespace',
+          },
+          test.baselang.fqnToTarget('metax'))
+        test.iseqmap(
+          {
+            'error': 'bad does not represent a valid target',
+          },
+          test.baselang.fqnToTarget('bad'))
+        test.iseqmap(
+          {
+            'namespace': 'metax.root',
+            'target': '//metax/root:root',
+            'test_target': '//metax/root_test:root_test',
+            'kind': 'namespace',
+         },
+          test.baselang.fqnToTarget('metax.root'))
+        test.iseqmap(
+          {
+            'namespace': 'metax',
+            'error': 'bad is not a namespace or class in metax.bad',
+          },
+          test.baselang.fqnToTarget('metax.bad'))
+        test.iseqmap(
+          {
+            'namespace': 'metax.root',
+            'class': 'Object',
+            'target': '//metax/root:Object',
+            'test_target': '//metax/root_test:ObjectTest',
+            'path': 'metax/root/Object.cc',
+            'test_path': 'metax/root_test/ObjectTest.cc',
+            'kind': 'class',
+          },
+          test.baselang.fqnToTarget('metax.root.Object'))
+        test.iseqmap(
+          {
+            'namespace': 'metax.root',
+            'class': 'Object',
+            'method': 'Init',
+            'target': '//metax/root:Object',
+            'test_target': '//metax/root_test:ObjectTest',
+            'path': 'metax/root/Object.cc',
+            'test_path': 'metax/root_test/ObjectTest.cc',
+            'test_arg': 'test_Init',
+            'kind': 'method',
+          },
+          test.baselang.fqnToTarget('metax.root.Object.Init'))
+        test.iseqmap(
+          {
+            'namespace': 'metax.root',
+            'class': 'Object',
+            'target': '//metax/root:Object',
+            'test_target': '//metax/root_test:ObjectTest',
+            'path': 'metax/root/Object.cc',
+            'test_path': 'metax/root_test/ObjectTest.cc',
+            'error': 'bad is not a method within metax.root.Object.bad',
+          },
+          test.baselang.fqnToTarget('metax.root.Object.bad'))
+
+      /# Python is a special case.
+      test.defineClassAndMethods('py')
+      test.iseqmap(
+        {
+          'namespace': 'metax',
+          'target': '//metax:metax',
+          'path': 'metax/__init__.py',
+          'kind': 'namespace',
+        },
+        test.baselang.fqnToTarget('metax'))
+      test.iseqmap(
+        {
+          'error': 'bad does not represent a valid target',
+        },
+        test.baselang.fqnToTarget('bad'))
+      test.iseqmap(
+        {
+          'namespace': 'metax.root',
+          'target': '//metax/root:root',
+          'test_target': '//metax/root_test:root_test',
+          'kind': 'namespace',
+          'path': 'metax/root/__init__.py',
+          'test_path': 'metax/root_test/__init__.py',
+       },
+        test.baselang.fqnToTarget('metax.root'))
+      test.iseqmap(
+        {
+          'namespace': 'metax',
+          'error': 'bad is not a namespace or class in metax.bad',
+        },
+        test.baselang.fqnToTarget('metax.bad'))
+      test.iseqmap(
+        {
+          'namespace': 'metax.root',
+          'class': 'Object',
+          'target': '//metax/root:root',
+          'test_target': '//metax/root_test:root_test',
+          'test_arg': 'ObjectTest',
+          'kind': 'class',
+          'path': 'metax/root/__init__.py',
+          'test_path': 'metax/root_test/__init__.py',
+        },
+        test.baselang.fqnToTarget('metax.root.Object'))
+      test.iseqmap(
+        {
+          'namespace': 'metax.root',
+          'class': 'Object',
+          'method': 'Init',
+          'target': '//metax/root:root',
+          'test_target': '//metax/root_test:root_test',
+          'test_arg': 'ObjectTest.test_Init',
+          'kind': 'method',
+          'path': 'metax/root/__init__.py',
+          'test_path': 'metax/root_test/__init__.py',
+        },
+        test.baselang.fqnToTarget('metax.root.Object.Init'))
+      test.iseqmap(
+        {
+          'namespace': 'metax.root',
+          'class': 'Object',
+          'target': '//metax/root:root',
+          'test_target': '//metax/root_test:root_test',
+          'error': 'bad is not a method within metax.root.Object.bad',
+          'path': 'metax/root/__init__.py',
+          'test_path': 'metax/root_test/__init__.py',
+        },
+        test.baselang.fqnToTarget('metax.root.Object.bad'))
+    end;
+
+  end behavior fqnToTarget;
+
   behavior initializerName : str #:
     The name of the initializer for a given class.
 
@@ -13717,12 +14127,19 @@ scope:
         re.compile(r'\[  FAILED  \] (?P<failed>\d+) test, listed below:'),
       ]
 
-      outputs = {}
+      outputs = {5: ['']}
       matches = {}
       order = []
       index = 0
 
+      if debug:
+        print '@' * 70
+        print logdata
+        print '@' * 70
+
       for line in logdata.split('\n'):
+        if debug:
+          print '### %s' % line
         if index >= len(regexps):
           outputs.setdefault(index, []).append(line)
         else:
@@ -13769,19 +14186,34 @@ scope:
                 order.append((matches[5], matches[6], outputs[5]))
 
       /# Now we parse 'order' into 'methods'
-      for start_dict, end_dict, stderr in order:
+      for start_dict, end_dict, outlines in order:
         assert start_dict['class'] == end_dict['class']
         assert start_dict['method'] == end_dict['method']
         cmname = '%s.%s' % (start_dict['class'], start_dict['method'])
         ok = end_dict['mstatus'] == 'OK'
-        methods[cmname] = {
-          /# It appears that C++ log files to not make any distinction between
-          /# stdout and stderr (unfortunate!). We put everything in stderr.
-          'stdout': None,
-          'stderr': stderr,
+        mdata = {
           'us': StrToMicroSeconds(end_dict['mtime']),
           'ok': ok
         }
+        stdout = []
+        stderr = []
+        tlines = stdout
+        tre = re.compile(r': Failure$')
+        if outlines:
+          if outlines[0] == '':
+            outlines.pop(0)
+          /# We assume everything in outlines is stdout until we find a line
+          /# matching tre, after which we assume everything is stderr.
+          for line in outlines:
+            m = tre.search(line)
+            if m:
+              tlines = stderr
+            tlines.append(line)
+        if stdout:
+          mdata['stdout'] = '\n'.join(stdout)
+        if stderr:
+          mdata['stderr'] = '\n'.join(stderr)
+        methods[cmname] = mdata
 
       /# Establish overall status2
       if 11 in matches:
@@ -13806,6 +14238,8 @@ scope:
             print '  ' + line
         pprint.pprint(matches)
         pprint.pprint(order)
+        for key in methods:
+          print '%-20s: %s' % (key, methods[key])
 
     test:
       logdata = (
@@ -13849,29 +14283,247 @@ scope:
          'methods': {
            'FrenchDeck.FrenchDeck': {
              'ok': True,
-             'stderr': ['Fix C++ teardown'],
-             'stdout': None,
+             'stdout': 'Fix C++ teardown',
              'us': 0,
            },
            'FrenchDeck.asStr': {
              'ok': False,
-             'stderr': ['unknown file: Failure',
-             'C++ exception with description "TestCase.iseq() not yet implemented" thrown in the test body.',
-             'Fix C++ teardown'],
-             'stdout': None,
+             'stderr': 'unknown file: Failure\nC++ exception with description "TestCase.iseq() not yet implemented" thrown in the test body.\nFix C++ teardown',
              'us': 1000,
            },
            'FrenchDeck.meta': {
              'ok': True,
-             'stderr': ['Fix C++ teardown'],
-             'stdout': None,
+             'stdout': 'Fix C++ teardown',
              'us': 0,
            },
          },
-        }, tdata)
+        }, tdata, pprint.pformat(tdata))
     end receiver OoplCpp;
 
   end behavior parseBazelLog;
+
+  behavior processTestOutput #:
+    Process the output of non-bazel execution of the baselang test harness.
+    Note that various baselangs rely on bazel to provide a testing harness,
+    cannot be invoked without bazel (and thus don't have a definition here).
+  params:
+    var stdout : str #:
+      The stdout produced by invoking the non-bazel test harness.
+    var stderr : str #:
+      The stderr produced by invoking the non-bazel test harness.
+    var cwd : str #:
+      The directory from which to process.
+    var namespace : str #:
+      The namespace under test.
+    var nofilt : bool = false #:
+      If true, do not filter the stdout/stderr, just print verbatim
+    var verbosity : int = 0 #:
+      0 = Show only errors
+      1 = Show one line for each method, and full errors
+  scope:
+
+    receiver OoplPython scope:
+      ifp = cStringIO.StringIO(stderr or '')
+      efp = cStringIO.StringIO()
+      metac = self.compiler()
+      metac.filterMetaOutput(cwd=cwd, ifp=ifp, ofp=efp)
+      filterr = efp.getvalue()
+
+      if nofilt:
+        if stdout:
+          dsep(title='stdout')
+          print stdout
+        if stderr:
+          dsep(title='stderr')
+          /#print stderr
+          print filterr
+        if stdout or stderr:
+          dsep(end=True)
+        return
+
+      /# Perform base-to-meta line mapping on stderr
+      outlines = stdout.split('\n')
+      errlines = filterr.split('\n')
+
+      /# Establish some vars.
+      outre = re.compile(
+        r'^(?P<fqn>\S+)\s+\.\.\.(?P<rest>.*)')
+      timere = re.compile(
+        r'^(?P<head>.*?)\s+(?P<us>\d+) us  (?:(?P<status>.*))?$')
+      failre = re.compile(
+        r'^(?P<status>FAIL|ERROR): test_(?P<method>\S+) \(\S+\.(?P<class>\S+)Test\)')
+      sepre = re.compile('^(?P<c>[=-])(?P=c){60,}')
+      ranre = re.compile(r'^Ran (?P<numtests>\d+) tests? in (?P<seconds>\S+)s')
+
+      def PrintStripped(data, prefix):
+        """Strip leading/trailing lines of whitespace from data list."""
+        i = 0
+        n = len(data)
+        if False:
+          /# We should NOT be stripping blank leading/trailing lines if they
+          /# represent actual output produced by the code ... if spurious
+          /# blank lines are being introduced, fix that issue rather than
+          /# stripping potentially valuable empty lines from actual output.
+          while i < n and not data[i].strip():
+            i += 1
+          while n > 0 and not data[n-1].strip():
+            n -= 1
+        for j in range(i, n):
+          print prefix + data[j]
+
+      /# We'll add one dict per test to data, merging stdout and stderr.
+      /#   name: str
+      /#     fqn of test.
+      /#   time: int
+      /#     number of microseconds
+      /#   stdout: vec<str>
+      /#   stderr: vec<str>
+      data = []
+      /# datamap maps fqn name to the same dict stored in data for that fqn.
+      datamap = {}
+
+      /# Parse stdout
+      /#  - we are expecting lines of the form:
+      /#      <class>.<method>                   ...    <time> us  [<status>]
+      /#    optionally followed by output from a test method.
+      current_fqn = None
+      for line in outlines:
+        m = outre.match(line)
+        if m:
+          fqn = m.group('fqn')
+          item = {
+            'fqn': fqn, 'stdout': [], 'stderr': [], 'status': None,
+            'time': None}
+          rest = m.group('rest')
+          tm = timere.match(rest)
+          if tm:
+            /# We have a time for this test ... no output expected.
+            item['time'] = int(tm.group('us'))
+            item['status'] = tm.group('status')
+            current_fqn = None
+          else:
+            /# We did not find a time for this test, which means the test
+            /# produced some output on stdout. We consume it in subsequent
+            /# iterations through the loop, until we find a line ending in
+            /# a timespec.
+            current_fqn = fqn
+            item['stdout'].append(rest)
+          data.append(item)
+          datamap[fqn] = item
+        else:
+          if current_fqn is None:
+            /# We are not currently expecting output
+            if line.strip():
+              print 'UNKNOWN STDOUT: %s' % line
+          else:
+            /# This is stdout for current_fqn
+            item = datamap[current_fqn]
+            tm = timere.match(line)
+            if tm:
+              /# We've found the end of expected stdout
+              current_fqn = None
+              item['time'] = int(tm.group('us'))
+              item['status'] = tm.group('status')
+              head = tm.group('head')
+              if head:
+                item['stdout'].append(head)
+            else:
+              item['stdout'].append(line)
+
+      /# Parse stderr
+      /#  - we are expecting records of the form:
+      /#
+      /#      =================================================================
+      /#      ERROR: test_attrinfo (__main__.ContextTest)
+      /#      -----------------------------------------------------------------
+      /#      Traceback (most recent call last):
+      /#        File "metax/c_test/__init__.py", line 1610, in setUp
+      /#          _, _, _, compiler = self.cachedInfo(metal='meta')
+      /#      AttributeError: 'ContextTest' object has no attribute 'cachedInfo'
+      /#
+      /# - It is possible that we will encounter a class/method pair in stderr
+      /#   that is NOT present in stdout (not sure how, but it happens).
+      i = 0
+      N = len(errlines)
+      current_fqn = None
+      postamble = None
+      summary_data = {}
+      while i < N:
+        line = errlines[i]
+        i += 1
+        /# We ignore separator lines, as the line after seplines uniquely
+        /# identifies which section we are in (at least in output I've seen).
+        if sepre.match(line): continue
+        failm = failre.match(line)
+        ranm = ranre.match(line)
+
+        if failm:
+          d = failm.groupdict()
+          fqn = '%s.%s' % (d['class'], d['method'])
+          if not sepre.match(errlines[i]):
+            raise Error('Should have found separator line after "%s"' % line)
+          if fqn not in datamap:
+            item = {
+              'fqn': fqn, 'stderr': [], 'stdout': [], 'status': None,
+              'time': None
+            }
+            data.append(item)
+            datamap[fqn] = item
+          current_fqn = fqn
+        elif ranm:
+          /# End of tests ... grab all remaining output.
+          summary_data.update(ranm.groupdict())
+          assert not errlines[i].strip()
+          summary_data['status'] = errlines[i+1]
+          j = i+2
+          while j < len(errlines) and not errlines[j].strip():
+            j += 1
+          postamble = errlines[j:]
+          break
+        elif current_fqn is None:
+          print 'UNKNOWN STDERR: %s' % line
+        else:
+          /# A line of stderr for current fqn, if one exists.
+          item = datamap[current_fqn]
+          item['stderr'].append(line)
+
+      /# Merge the stdout and stderr into a single stream, in the same
+      /# format as used in the bazel-generated output.
+      sep = '-' * 70
+      show_nums = False
+      /# print stdout
+      last_printed_sep = False
+      for i, item in enumerate(data):
+        out = item['stdout']
+        err = item['stderr']
+        special = out or err
+
+        if special and not last_printed_sep: print sep
+
+        if special or verbosity:
+          prefix = '%3d) ' % i if show_nums else ''
+          print '%s%-40s ... %7d us   %s' % (
+            prefix, item['fqn'], item['time'] or -1, item['status'])
+
+        PrintStripped(out, ' |')
+        PrintStripped(err, 'E|')
+
+        if special:
+          print sep
+          last_printed_sep = True
+        elif verbosity:
+          last_printed_sep = False
+
+      if summary_data:
+        print '%-20s: %3d tests in %s seconds: %s' % (
+          namespace, int(summary_data['numtests']), summary_data['seconds'],
+          summary_data['status'])
+      if postamble:
+        for line in postamble:
+          print line
+    end receiver OoplPython;
+
+  end behavior processTestOutput;
 
   behavior receiverStr : str #:
     Obtain the baselang-specific receiver variable
@@ -14066,17 +14718,35 @@ scope:
 
     receiver OoplCpp scope:
       template = """
-      >|# include <iostream>
-      >|using namespace std;
-      >|int main() {
-      >|%(body)s
-      >|}
-      >|"""
+       >|%(includes)s
+       >|using namespace std;
+       >|int main() {
+       >|%(body)s
+       >|}
+       >|"""
 
+      chunks = []
       prompt = '>>> '
       execfile = './tmp'
       tmpfile = 'tmp.cc'
-      chunks = []
+
+      includes = [
+        '#include <iostream>'
+      ]
+
+      def GenCode(lines):
+        text = '\n'.join(lines)
+        if lines:
+          chunks.append(text)
+
+        /# Obtain the C++ code to compile.
+        code = template % {
+          'body': '\n'.join(chunks),
+          'includes': '\n'.join(includes),
+        }
+        with open(tmpfile, 'w') as fp:
+          fp.write(code)
+        return code, text
 
       import os
       while True:
@@ -14084,6 +14754,7 @@ scope:
         /#  - if line is empty or ends with ';' or '}', terminate
         /#  - otherwise keep reading input
         lines = []
+        skip = False
         while True:
           /# Read one line
           line = raw_input(prompt)
@@ -14092,10 +14763,33 @@ scope:
           if line in ('exit', 'quit'):
             return
 
-          /# Check for special print request
-          m = re.match('^\s*(?:p|print)\s+(.*)', line)
+          /# Check for special commands
+          m = re.match(r'^\s*/(\S+)\s*(.*)', line)
           if m:
-            line = 'cout << %s << endl;' % m.group(1).strip().rstrip(';')
+            command, args = m.groups()
+            if command in ('p', 'print'):
+              line = 'cout << %s << endl;' % args
+            elif command == 'show':
+              skip = True
+              code, _ = GenCode(lines)
+              print code
+              break
+            elif command == 'pop':
+              skip = True
+              chunks.pop()
+              break
+            elif command == 'include':
+              skip = True
+              for arg in args.split():
+                if arg[0] == '<': pass
+                elif arg[0] == '\"': pass
+                else:
+                  if arg.endswith('.h'):
+                    arg = '"%s"' % arg
+                  else:
+                    arg = '<%s>' % arg
+                includes.append('#include %s' % arg)
+              break
 
           /# Register line
           lines.append(line)
@@ -14103,19 +14797,16 @@ scope:
           /# Determine if we need to ask for another line or end reading.
           if not line or line[-1] in (';', '}'):
             break
-        text = '\n'.join(lines)
-        chunks.append(text)
 
-        /# Obtain the C++ code to compile.
-        code = template % {'body': '\n'.join(chunks)}
-        with open(tmpfile, 'w') as fp:
-          fp.write(code)
+        if skip:
+          continue
+
+        code, text = GenCode(lines)
 
         /# Compile code, and if no compilation errors, run code.
         rc = subprocess.call(['g++', '-o', execfile, tmpfile])
         if rc == 0:
           rc = subprocess.call([execfile])
-
 
         if rc == 0:
           /# The code did not produce any compile-time or run-time error, so
@@ -14663,10 +15354,12 @@ scope:
         The symbol name.
       var construct : Construct #:
         The construct associated with the symbol.
+      var note : str = null #:
+        Any human-readable notes associated with the symbol.        
     scope:
       table = self.symbols()
       /# print '%s registering symbol %s = %s' % (self.kindfqn(), name, construct.kindfqn())
-      table.register(name, construct, source=self)
+      table.register(name, construct, source=self, note=note)
     test:
       test.defineClassAndMethods('py')
       method = test.method
@@ -14749,6 +15442,8 @@ scope:
            - the associated meta class is currently placed in nm.sp.Class__Meta
              (i.e. metaclasses share the same namespace as the user class,
               but test classes do not).
+  assocs:
+    cls assoc metax.fs.BaseFile;
   scope:
 
     meta
@@ -15102,7 +15797,7 @@ scope:
       D.imports.end()
     end method importMeta;
 
-    method translateMeta : vec<BaseFile> #:
+    method translateMeta : vec<metax.fs.BaseFile> #:
       Namespace compilation code.
        - compile all classes into separate files
        - for languages that are namespace-primary (e.g. Python), create a
@@ -15179,7 +15874,7 @@ scope:
           'tests': [':%s' % k.id() for k in test_classes]}
         contents += '\n' + baselang.formatBuildRule('test_suite', build) + '\n'
 
-      buildfile = BaseFile(buildpath, contents, metafile=metafile)
+      buildfile = metax.fs.BaseFile(buildpath, contents, metafile=metafile)
       metafile.registerFile(buildfile)
 
       /# TODO(wmh): Now that namespaces are nested within namespaces, determine
@@ -15311,7 +16006,7 @@ scope:
           all_lines.append('def Meta():')
           all_lines.append('  return metax.root.MetaObject')
 
-      basefile = BaseFile(
+      basefile = metax.fs.BaseFile(
         metac.basePath(fqn, suffix=basesuffix),
         '\n'.join(all_lines) + '\n', metafile=metafile, mapfile=mapfile)
       metafile.registerFile(basefile)
@@ -15337,7 +16032,7 @@ scope:
       bldfile = None
       if rule is not None:
         fragment = baselang.formatBuildRule(rule, build_data)
-        bldfile = BaseFile(bldpath, '\n' + fragment + '\n', metafile=metafile)
+        bldfile = metax.fs.BaseFile(bldpath, '\n' + fragment + '\n', metafile=metafile)
         metafile.registerFile(bldfile)
 
       /# Ensure that all package directories have a __init__.py file.
@@ -15348,7 +16043,7 @@ scope:
         subpath = fs.join(metac.basePath(pqn), '__init__.py')
         initpath, _ = fs.subfilePath(subpath)
         if not fs.exists(initpath):
-          initfile = BaseFile(subpath, '', metafile=metafile)
+          initfile = metax.fs.BaseFile(subpath, '', metafile=metafile)
           metafile.registerFile(initfile)
 
       return basefile, bldfile
@@ -16028,6 +16723,21 @@ scope:
 
     test:
     end method showDebug;
+
+    method isUser : bool #:
+      True if this class is a user class.
+    params:
+      var full : bool = false #:
+        If true, a user-provided test class or meta class also applies.
+    scope:
+      variant = self.variant()
+      if full:
+        result = variant in ('user', 'testuser', 'metauser')
+      else:
+        result = variant == 'user'
+      return result
+    test:
+    end method isUser;
 
     method isTest : bool #:
       True if this class is a test class.
@@ -16891,6 +17601,8 @@ scope:
         raise InternalError('Failed to initialize proceed')
 
       elif proceed:
+        /# We are to perform actual expansion on this class.
+
         /# Invoke expandMeta() on child constructs.
         /#  - we make a copy of children so that we do NOT expand the implicit
         /#    children added to children by calls to child.expandMeta().
@@ -17001,6 +17713,20 @@ scope:
             self.termcodeIs(3)
           if self.precount() == 0:
             self.precountIs(1)
+
+        /# Perform auto-generation of serializers, sizers, etc.
+        if self.isUser():
+          /# For now, we do not generate these methods for test or meta classes,
+          /# but we may want to...
+          if not metac.importlist():
+            /# For now, we do not generate these methods for classes found
+            /# during importMeta.
+            /# TODO(wmh): Determine whether this is safe, or if there are
+            /# situations where it is important for such methods to be autogened
+            /# for dependended-on classes too.
+            flags = metax.root.MetaObject.CLI()
+            if flags and flags.hack:
+              self._autogenAll()
 
         if self.isTest():
           /# There are two different kinds of classes that can appear within a
@@ -17459,7 +18185,7 @@ scope:
       contents = []
       segment.flattenLines(contents, mapfile, strip_special=True)
       basesubpath = baselang.classSubPath(self)
-      basefile = BaseFile(
+      basefile = metax.fs.BaseFile(
         basesubpath, '\n'.join(contents) + '\n',
         metafile=metafile, mapfile=mapfile)
       metafile.registerFile(basefile)
@@ -17481,7 +18207,7 @@ scope:
         contents = []
         segment.flattenLines(contents, mapfile, strip_special=True)
         basesubpath = baselang.classSubPath(self, location='decl')
-        basefile = BaseFile(
+        basefile = metax.fs.BaseFile(
           basesubpath, '\n'.join(contents) + '\n',
           metafile=metafile, mapfile=mapfile)
         metafile.registerFile(basefile)
@@ -17504,7 +18230,7 @@ scope:
           self, sorted(targets), test=istestcase)
         if rule is not None:
           fragment = baselang.formatBuildRule(rule, build_data)
-          bldfile = BaseFile(bldpath, '\n' + fragment + '\n', metafile=metafile)
+          bldfile = metax.fs.BaseFile(bldpath, '\n' + fragment + '\n', metafile=metafile)
           metafile.registerFile(bldfile)
 
       D.translate.end()
@@ -17534,6 +18260,18 @@ scope:
         child.compileMeta()
       D.compile.end()
     end method compileMeta;
+
+    method _autogenAll #:
+      Autogenerate various methods on this class.
+    scope:
+      print 'Here in _autogenMeta for %s' % self.kindfqn()
+      baselang = self.baselang()
+      baselang.autogenStr(self)
+      baselang.autogenPrint(self)
+      baselang.autogenWrite(self)
+      baselang.autogenSize(self)
+    test:
+    end method _autogenAll;
 
     method registerDependencies #:
       Populate the 'deps' field by adding explicit and implicit dependencies to
@@ -18551,7 +19289,7 @@ scope:
       /#  - we could put it in a class subdir, but we do not need class subdirs
       /#    for anything else currently ... maybe later.
       cmdpath = metac.basePath(nmsp.fqn() + '.' + self.id())
-      cmdfile = BaseFile(
+      cmdfile = metax.fs.BaseFile(
         cmdpath, '\n'.join(cmdlines) + '\n',
         metafile=metafile, mapfile=None, mode=0755)
       metafile.registerFile(cmdfile)
@@ -18577,7 +19315,7 @@ scope:
             'For %s we have %s vs %s' % (linkpath, currpath, relpath),
             line=self.primary().line())
       else:
-        linkfile = BaseFile(
+        linkfile = metax.fs.BaseFile(
           linkpath, None, metafile=metafile, mapfile=None,
           link=relpath)
         metafile.registerFile(linkfile)
@@ -18744,12 +19482,17 @@ scope:
 
     field rawfield : str #:
       The rawfield name for this field.  This is usually some minor variant
-      of self.id(), but for packed fields it will be completely different.
+      of self.id(), but for packed fields it can be completely different.
 
     field packed : tuple<int,int> #:
       Will be null if the field is not packed, otherwise the first integer
       is the lowest bit position in rawfield of this field, and the second
       integer is the number of bits used by the field.
+
+    field accessors : *map<str,AccessorConstruct> #:
+      Maps accessor name to accessor construct. This is just a pointer to
+      the map() field of the scope: block of the field.  It is null if there
+      is no explicit scope:
 
     method kind : str scope:
       return 'field'
@@ -18847,6 +19590,8 @@ scope:
 
         /# Establish the default accessor code.
         /#  - also establishes the legal set of accessor ids.
+        /#  - TODO(wmh): Must generalize this to all baselangs. Defined
+        /#    a 'initBodyMap' behavior.
         field_code = '%s%s' % (receiver_code, rawfield)
         bodymap = {}
         bodymap['get'] = ['return %s%s' % (field_code, stmtend)]
@@ -18857,6 +19602,9 @@ scope:
           /# 'return %s%s' % (receiver_code, stmtend)
         ]
         bodymap['ref'] = ['return %s%s' % (field_code, stmtend)]
+        bodymap['format'] = []
+        bodymap['write'] = []
+        bodymap['size'] = []
 
         /# Determine if there are any explicit accessors.
         lazylines = None
@@ -18941,6 +19689,11 @@ scope:
                 newlines.append('if %s is None:' % resvar)
               for i in range(0, len(lazylines)-1):
                 newlines.append('  ' + lazylines[i])
+              lazyend = lazylines[-1][:3]
+              if lazyend != '-> ':
+                metafile.error(
+                  'Expecting lazy: block of accessor to end with line starting "-> " not "%s"' % 
+                  (lazyend), line=lazy_attr.line())
               resval = lazylines[-1][3:]
               newlines.append('  %s = %s' % (resvar, resval))
               newlines.append('  %s = %s' % (rawvar, resvar))
@@ -19058,6 +19811,9 @@ scope:
         /# CODETANGLE(highlevel_symbols):
         if myclass:
           myclass.registerSymbol(name, self)
+
+        if scope:
+          self.accessorsIs(scope.map())
 
       D.expand.end()
     test:
@@ -20017,10 +20773,9 @@ scope:
         /#  - for methods with simple blocks, we only have access to the params
         /#  - for methods with complex blocks, we have all vars specified at
         /#    top-level within the method as well.
-        table = self.symbols()
         params = self.attrval('params:', default=None) or []
         for i, pvar in enumerate(params):
-          table.register(pvar.id(), pvar, source=self, note='From param #%d' % (i+1))
+          self.registerSymbol(pvar.id(), pvar, note='From param #%d' % (i+1))
 
         scope = self.attr('scope:', default=None)
         if scope:
@@ -23737,13 +24492,16 @@ scope:
       Import additional .meta files identified during expandMeta.
     scope:
       D.imports.sinfo(self.path())
-
+      
+      imports = self.compiler().importlist()
+      imports.append(self)
       self.stateIs('importing')
       start = time.time()
       self.construct().importMeta()
       self.stats()['import'] = time.time() - start
       self.stateIs('imported')
       self.phases().append('import')
+      imports.pop()
 
       D.imports.end()
     test:
@@ -23798,6 +24556,7 @@ scope:
     std assoc platform;
     std assoc pprint;
     std assoc re;
+    std assoc shlex;
     std assoc sre_constants;
     std assoc subprocess;
     std assoc sys;
@@ -23915,6 +24674,12 @@ scope:
       the schema file (allowing users to extend the language by modifying
       the schema) but that is a ways away.
 
+    field importlist : @vec<MetaFile> #:
+      The list of MetaFile instances currently being imported. If the
+      compiler is not currently performing an importMeta() invocation, this
+      will be empty (and is thus a way of determining whether we are in
+      importation code or not).
+
     lifecycle params:
       var metal : str = 'Oopl';
       var basel : str = null;
@@ -24019,6 +24784,24 @@ scope:
         'cwd': '/',
       })
     clinit:
+      /# TODO(wmh): Provide a better way to specify this information.
+      /# For example, add a 'metac _langmap' command (where the underscore means
+      /# it is an implementation detail and not part of the public metac action
+      /# set) that loads up all metalangs and all baselangs and creates this
+      /# mapping (writing to some file that gets included here).
+      cls.SUFFIX_HACK = {
+        'oopl': {
+          'py': 'python',
+          'python': 'python',
+          'cpp': 'cpp',
+          'cc': 'cpp',
+          'h': 'cpp',
+          'javascript': 'javascript',
+          'js': 'javascript',
+          'java': 'java',
+          'jv': 'java',
+        }
+      }
       cls.MAP_RE = re.compile(
         r'^\s*(?P<baseline>-?\d+)\s+(?P<metaline>-?\d+)\s+(?P<fullid>\S+)')
       cls.BAZEL_STDOUT_RE = re.compile(
@@ -24169,7 +24952,8 @@ scope:
         >|    .baselangbox {
         >|        padding: 0px;
         >|        margin: 0px;
-        >|        font-size: 12px;
+        >|        font-size: %(fontsize)s;
+        >|        width: %(width)dch;
         >|    }
         >|    .baselangcode {
         >|        margin: -10px 0px 0px 12px;
@@ -24443,7 +25227,7 @@ scope:
         /# 'lifecycle': 'orange',
       }
       cls.MetaConstructColorMap = {
-        'primary':   'purple',
+        'primary':   'cyan',
         'primary2':  'rgb(0, 100, 0)',      # darkgreen
         'feature':   'rgb(85, 107, 47)',    # darkolivegreen
         /# 'secondary': 'rgb(85, 107, 47)',    # darkolivegreen
@@ -24451,7 +25235,8 @@ scope:
         'secondary': 'rgb(41,171,135)',    # jungle green
         /# 'featval':   'rgb(255,105,180)',    # hotpink
         /#'featval':   'rgb(238, 106, 167)',  # hotpink2
-        'featval':   'rgb(205,96,144)',  # hotpink3
+        /#'featval':   'rgb(205,96,144)',  # hotpink3
+        'featval':   'purple',
         'keyword':   'rgb(255, 20, 147)',   # deep pink
         'end':       'rgb(139, 139, 131)',  # ivory4
         'name':      'rgb(0, 0, 255)',      # blue1
@@ -24829,8 +25614,8 @@ scope:
       capable of parsing any schema file, and thus any Meta language.
 
       This method creates ConsInfo instances to represent the constructs in
-      Meta(Meta) ... MetaLanguage, Construct, Attribute, FeatureValue and File ... and
-      uses them to parse the src/schema/<metalang>/schema.meta file.
+      Meta(Meta) ... MetaLanguage, Construct, Attribute, FeatureValue and File
+      ... and uses them to parse the src/schema/<metalang>/schema.meta file.
     scope:
       /# Now parse <<src_root>>/src/schema/meta/schema.meta
       context = self.bootstrapContext()
@@ -25814,11 +26599,13 @@ scope:
         (available as third element of the triples in result['pair']). If
     scope:
       fs = self.fs()
+      baselang = self.baselang()
       metafile_paths = []
       bad_paths = []
       fqns = []
       other = []
       details = []
+      rootdir = fs.join(self.repositoryPath(), self.basePath())
 
       all_files = fs.listdir(fs.cwd())
 
@@ -25836,7 +26623,7 @@ scope:
       def ImplicitMatches(base):
         """Are there any files in the directory that implicitly match base?"""
         result = []
-        for candidate in filter(lambda f: f.startswith(base + '.'), all_files):
+        for candidate in filter(lambda f: f.startswith(base + '.') and not f.endswith('~'), all_files):
           m = metax.c.SUFFIX_RE.match(candidate)
           if m:
             result.append(candidate)
@@ -25882,13 +26669,13 @@ scope:
             details.append(
               {'arg': arg, 'path': None, 'kind': 'badfile',
                'construct': None})
-          elif '.' in arg:
-            /# TODO(wmh): We currently assume that any arg with a dot is a
-            /# target, but we need to verify that the associated path
-            /# exists before making that assumption.
-            target, test_target, final_path, _, _ = self.fqnToTarget(
-              arg, debug=False)
-            if final_path:
+          else:
+            /# Check if the arg represents a valid fqn target. 
+            /# target, test_target, final_path, _, _ = self.fqnToTarget(
+            /#   arg, debug=False)
+            tdata = baselang.fqnToTarget(arg)
+            if tdata.get('error', None) is None:
+              final_path = fs.join(rootdir, tdata['path'])
               fqn = arg
               construct = None
               metapath = self.basePathToMeta(final_path)
@@ -25905,9 +26692,6 @@ scope:
               details.append(
                 {'arg': arg, 'kind': 'unknown', 'path': None,
                  'construct': None})
-          else:
-            other.append(arg)
-            details.append((arg, 'unknown', None))
         assert len(details) == len(args), '%s not same size as %s' % (details, args)
       result = {
         'metafiles': metafile_paths,
@@ -26232,6 +27016,9 @@ scope:
       var verbose : bool = false #:
         If true, print output of tests, etc.
     scope:
+      /# TODO(wmh): This needs to be implemented on a per-baselang basis as
+      /# a behavior (or at least parts of it).
+
       /# Set this to true to debug baselang parsing of bazel output.
       debug = False
 
@@ -26255,297 +27042,94 @@ scope:
         /# No raw mode for javascript.
         rawtests = False
 
+      rawmap = {
+        /# Maps baselang id to shell executable to invoke for raw tests.
+        /# If a id does not exist, it means that baselang does not support
+        /# raw testing.
+        'python': 'python',
+      }
+
+      if verbose:
+        if rawtests:
+          print 'Running raw tests (without bazel)'
+        else:
+          print 'Running tests with bazel'
+
       tester_map = {}
       raw_commands = []
       for fqn in fqns:
-        tester = None
-        rawcom = {}  # 'cwd' and 'args'
+        /# Establish target info for the specified fqn.
+        newdata = baselang.fqnToTarget(fqn)
 
-        /# We first check if it is an explicit target.
-        if fqn.startswith('//'):
-          print (
-            'WARNING: Not yet supporting explicit BUILD targets. %s ignored' %
-            (fqn))
+        /# Validate fqn
+        error = newdata.get('error', None)
+        if error:
+          print 'ERROR: %s' % error
+          continue
+        test_target = newdata['test_target']
+        test_arg = newdata.get('test_arg', None)
+        rawexec = rawmap.get(baselang.id(), None)
+        if rawtests and not rawexec:
+          print 'WARNING: %s does not support raw testing' % baselang.id()
+          rawtests = False
 
+        /# Establish the command to execute.
+        if rawtests:
+          /# Do not use bazel
+          /#  - TODO(wmh): Should BaseLanguageOopl.fqnToTarget(fqn) compute
+          /#    command?
+          command = [rawexec, newdata['test_path']]
+          if test_arg:
+            command.append(test_arg)
         else:
-          /# We need to determine whether this fqn represents a namespace, a
-          /# class, or a method.
-          parts = fqn.split('.')
-
-          if len(parts) == 1:
-            print 'arg %s looks incorrect' % fqn
-            sys.exit(1)
-
-          /# We find the directory matching some initial portion of the fqn.
-          trailing = []
-          found = False
-          while not found and parts:
-            path = fs.join(cwd, '/'.join(parts))
-            if fs.exists(path):
-              namespace_path = path
-              found = True
-            else:
-              trailing.append(parts.pop())
-
-          if not parts:
-            print 'WARNING: Invalid namespace %s ignored' % fqn
-            continue
-
-          /# The namespace is identified by the found subdirs.
-          namespace_name = '.'.join(parts)
-
-          /# The remaining parts of the fqn, if they exist, are a class name
-          /# and method name.
-          /#  - the class name should have an associated file
-          /#      <namespace_path>/<clsname>.<suffix>
-          /#    except in python, where it is
-          /#      <namespace_path>/.<clsname>.<suffix>
-          /#    (note also that in python the actual file defining all classes
-          /#    in the module is <namespace_path>/__init__.py and there is no
-          /#    strict requirement that the per-class .py files be kept around
-          /#    (e.g. a user may delete those files without breaking anything
-          /#    except this code).
-          /#  - the method name has no file presence so we cannot directly
-          /#    verify correctness without some additional info
-          /#     - TODO(wmh): Look in .map files? Or just allow an error to
-          /#       be generated if an invalid method is specified?
-          nt = len(trailing)
-
-          /# print 'NAMESPACE %s trailing %s path %s' % (namespace_name, trailing, namespace_path)
-
-          if nt == 0:
-            /# The name represents a namespace.
-            method_name = None
-            class_name = None
-          elif nt == 1:
-            /# The name maybe represents a class.
-            class_name = trailing[0]
-            method_name = None
-          elif nt == 2:
-            /# The name maybe represents a method
-            method_name, class_name = trailing
-          else:
-            print 'ERROR: fqn %s is not valid' % fqn
-            continue
-
-          /# print 'PATH: %s  nn=%s cn=%s mn=%s nt=%d trailing=%s suffix=%s' % (
-          /#   path, namespace_name, class_name, method_name, nt, trailing, suffix)
-
-          /# We initially assume a namespace target (will modify if we have a
-          /# class and/or method.
-          nmsp_prefix = '/'.join(parts[:-1])
-          nmsp_prefix_slash = nmsp_prefix + '/' if nmsp_prefix else ''
-          nmsp_suffix = parts[-1]
-          tester = {
-            'target': '//%s%s_test:%s_test' %
-            (nmsp_prefix_slash, nmsp_suffix, nmsp_suffix)}
-
-          /# Establish the commands to use for non-blaze test invocation.
-          /#  - always execute from rootdir, since the code assumes it, and
-          /#    bazel puts us into the rootdir before running its tests.
-          if rawtests:
-            rawcom['cwd'] = rootdir
-            if basel == 'python':
-              /# Python is a unique little snowflake.
-              /# - we verify that the namespace exists.
-              class_path = fs.join(namespace_path, '__init__.py')
-              if not fs.exists(class_path):
-                print 'ERROR: name %s is not a valid target' % namespace_name
-                continue
-
-              if nmsp_prefix:
-                nmsp_dot = nmsp_prefix.replace('/', '.')
-                rawcom['namespace'] = '%s.%s' % (nmsp_dot, nmsp_suffix)
-              else:
-                rawcom['namespace'] = nmsp_suffix
-              rawcom['args'] = [
-                'python', '%s%s_test/__init__.py' % (nmsp_prefix_slash, nmsp_suffix)]
-              rawcom['env'] = {
-                'PYTHONPATH': '.:%s' % (fs.getenv('PYTHONPATH'))
-              }
-              if flags.write_goldens:
-                rawcom['env']['WRITE_GOLDENS'] = 'true'
-
-            elif basel == 'javascript':
-              /# There is no raw mode for javascript, and we should have set
-              /# rawtests to False and thus should never get here.
-              raise InternalError('How did we get here?')
-
-            elif basel == 'cpp':
-              /# A bazel test target exists for C++, but we can also compile
-              /# the test code without bazel.
-              print (
-                'WARNING: For now, ignoring --raw (forcing C++ to use bazel '
-                'for unittests).')
-              rawtests = False
-
-            else:
-              /# TODO(wmh): Each language will have a different mechanism for
-              /# invoking the raw test harness.
-              rawcom['args'] = [
-                'fixme', '%s%s_test%s' % (nmsp_prefix_slash, nmsp_suffix, suffix)]
-
-          if class_name:
-            if basel == 'python':
-              /# Once again, python is a unique little snowflake. We do not have
-              /# per-class targets ... only per-namespace. We instead use
-              /# command line args to narrow things down to a class or method.
-              testarg = ClassConstruct.TestifyName(class_name)
-              if method_name:
-                testarg += '.' + ExecutableConstruct.TestifyName(method_name)
-              tester['arg'] = testarg
-              if rawtests:
-                rawcom['args'].append(testarg)
-            else:
-              /# Now obtain the info bazel needs to test this entity.
-              tester = {
-                'target': '//%s%s_test:%sTest' %
-                (nmsp_prefix_slash, nmsp_suffix, class_name)}
-
-              if method_name:
-                /# TODO(wmh): Verify the method name is legal (by looking in the
-                /# map file, for example?)
-                testmethod_name = ExecutableConstruct.TestifyName(method_name)
-                testclass_name = ClassConstruct.TestifyName(class_name)
-                /# TODO(wmh): How to specify a single method in C++ tests?
-                /# We'll need to write such logic into the main methods.
-                tester['arg'] = '%s.%s' % (testclass_name, testmethod_name)
-
-        tester_map.setdefault(tester['target'], []).append(tester)
-        if rawcom:
-          raw_commands.append(rawcom)
-
-      /# Establish the metafilt args.
-      dofilt = False
-      if dofilt:
-        metafilt = fs.join(fs.getenv('METAROOT'), 'bin', 'metafilt')
-        if not fs.exists(metafilt):
-          raise Error('Failed to find ' + metafilt)
-        /# filt_args = [metafilt, '--debug', '-V', 'beta', '-b', baselang.id()]
-        /# filt_args = [metafilt, '-V', 'beta', '-b', baselang.id(), '--cwd', cwd]
-        filt_args = [metafilt]
-
-      if rawtests:
-        /# We are to invoke the underlying test harness instead of bazel.
-        /#  - we execute the python test harness from
-        /#      rootdir = <<repository_path>>/<metalang>/<baselang>
-        /#    so that the directories are the same between the bazel version and
-        /#    the local version.  Since code should be written such that all
-        /#    modules are visible from the above directory (and may not be
-        /#    written to be available from the exact directory within which
-        /#    the test file resides), this is the right directory to be in.
-        cwd = rootdir
-        if raw_commands:
-          if verbose:
-            print '*' * 80
-            print 'Running raw tests (e.g. without using bazel)'
-            print
-          for rawcom in raw_commands:
-            args = rawcom['args']
-            if verbose:
-              print '=' * 80
-              print ' %% cd %s' % cwd
-              print ' %% %s%s' % (
-                ' '.join(args),
-                (' | metafilt2 %s' % ' '.join(filt_args[1:])) if dofilt else '')
-              print '=' * 80
-            env = copy.copy(fs.environ())
-            if 'env' in rawcom:
-              env.update(rawcom['env'])
-            if dofilt:
-              p1 = subprocess.Popen(
-                args, cwd=cwd, env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-              p2 = subprocess.Popen(filt_args, stdin=p1.stdout)
-              p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
-              p2.communicate()
-            else:
-              /# print 'ARGS: %s' % str(args)
-              /# print 'CWD: %s' % cwd
-              /# print 'PYTHONPATH: %s' % env['PYTHONPATH']
-              p = subprocess.Popen(
-                args, cwd=cwd, env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-              stdout, stderr = p.communicate()
-              self.processPythonTestOutput(
-                stdout, stderr, cwd, rawcom['namespace'],
-                nofilt=flags.raw, verbosity=1 if verbose else 0)
-        else:
-          print 'ERROR: Not yet supporting --rawtests for %s' % basel
-
-      else:
-        if False:
-          for s in dir(flags):
-            if s[0] != '_':
-              print '%-30s = %s' % (s, getattr(flags, s))
-
-        /# Execute the bazel test commands and pipe to metafilt.
-        for target in sorted(tester_map):
-          testers = tester_map[target]
-
-          /# Establish the command to invoke
-          args = [
+          /# DO use bazel
+          command = [
             Compiler.CONFIG['bazel'],
             'test',
             /#'--explain',
             /#'--verbose_explanations',
           ]
-
           if flags.write_goldens:
             /# https://docs.bazel.build/versions/master/user-manual.html#flag--test_env
-            args.append('--test_env=WRITE_GOLDENS=true')
+            command.append('--test_env=WRITE_GOLDENS=true')
+          if test_arg:
+            command.append('--test_arg=' + test_arg)
+          command.append('--test_output=summary')
+          command.append(test_target)
 
-          for tester in testers:
-            if 'arg' in tester:
-              args.append('--test_arg=' + tester['arg'])
+        /# Print out the command being executed.
+        if verbose:
+          print ' %% cd %s' % cwd
+          print ' %% %s%s' % (' '.join(command), ' | special_filtering')
+          print '=' * 80
 
-          /# Determine whether or not to use Bazel.
-          if flags.raw:
-            /# Do not use bazel.
-            args.append('--test_output=%s' % flags.test_output)
-            args.append(target)
-            print 'Command: cd ' + cwd
-            print 'Command: ' + ' '.join(args)
-            subprocess.call(args, cwd=cwd)
+        /# Establish the env to use for the test harness.
+        env = copy.copy(fs.environ())
+        if baselang.id() == 'python':
+          env['PYTHONPATH'] = '.:' + env['PYTHONPATH']
+          if flags.write_goldens:
+            env['WRITE_GOLDENS'] = 'true'
 
+        /# Execute the command
+        p = subprocess.Popen(
+          command, cwd=cwd, env=env,
+          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        /# Process the result
+        if rawtests:
+          stdout, stderr = p.communicate()
+          baselang.processTestOutput(
+            stdout, stderr, cwd, newdata['namespace'],
+            nofilt=flags.raw, verbosity=1 if verbose else 0)
+        else:
+          try:
+            tests = self.parseBazelOutput(
+              stdout=p.stdout, stderr=p.stderr, debug=debug)
+          except Error as e:
+            print 'Internal Error: %s' % str(e)
           else:
-            /# Do use bazel.
-            /#
-            /# We always invoke the summary version of bazel, then parse the
-            /# output which identifies where the full logs are. We then fully
-            /# parse the logs to obtain detailed information about every test.
-            args.append('--test_output=summary')
-            args.append(target)
-            print
-            print 'Command: cd ' + cwd
-            print 'Command: %s | special_filtering' % (' '.join(args))
-            print
-
-            p1 = subprocess.Popen(
-              args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
-            try:
-              tests = self.parseBazelOutput(
-                stdout=p1.stdout, stderr=p1.stderr, debug=debug)
-            except Error as e:
-              print 'Internal Error: %s' % str(e)
-            else:
-              if tests is None:
-                /# We encountered compilation errors, and reported them at the
-                /# time we encountered them.
-                pass
-              else:
-                self.formatBazelOutput(tests, showout=showout, showerr=showerr)
-
-                /# TODO(wmh): Delete the following. We should be able to
-                /# perform line-num remapping internally rather than using
-                /# a subprocess.
-                if False and flags.unfilt:
-                  print 'Command: cd ' + cwd
-                  print 'Command: %s 2>&1 | metafilt %s' % (
-                    ' '.join(args), ' '.join(filt_args[1:]))
-                  p2 = subprocess.Popen(filt_args, stdin=p1.stdout)
-                  p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
-                  p2.communicate()
+            if tests:
+              self.formatBazelOutput(tests, showout=showout, showerr=showerr)
 
     end method runUnitTests;
 
@@ -26566,6 +27150,7 @@ scope:
         0 = Show only errors
         1 = Show one line for each method, and full errors
     scope:
+      print '*************** DEPRECATED IN FAVOR of behavior processTestOutput'
       ifp = cStringIO.StringIO(stderr or '')
       efp = cStringIO.StringIO()
       self.filterMetaOutput(cwd=cwd, ifp=ifp, ofp=efp)
@@ -26781,6 +27366,8 @@ scope:
       var debug : bool = false #:
         Turn on debugging.
     scope:
+      print '***************** DEPRECATED IN FAVOR OF behavior fqnToTarget'
+
       fs = self.fs()
       baselang = self.baselang()
       namespace_primary = baselang.config('namespace_primary')
@@ -26901,6 +27488,9 @@ scope:
           final_testpath = None
       return (target, test_target, final_path, final_testpath, test_args)
     test:
+      /# This code is deprecated! See behavior fqnToTarget instead.
+      return
+
       def Chk(expected_target, expected_test_target, expected_suffix,
               expected_test_suffix, expected_test_args, res):
         target, test_target, path, test_path, test_args = res
@@ -27015,6 +27605,10 @@ scope:
       error = None
       fs = self.fs()
       rundir = fs.realpath(self.workspaceDirectory())
+
+      /# TODO(wmh): Convert this to use the fqnToTarget behavior defined on
+      /# the BaseLanguageOopl hierarchy, and delete Compiler.fqnToTarget.
+      print '**************** HERE!'
       target, test_target, path, test_path, test_args = self.fqnToTarget(fqn)
 
       def Run(args, cwd, verbose=False, debug=False):
@@ -27283,6 +27877,11 @@ scope:
         parts = subpath.split('/')
         nmsp = '.'.join(parts[:-1]).replace('_test', '')
         tdata['namespace'] = nmsp
+        /# TODO(wmh): This is terribly hacky, and does not work for python, where
+        /# the lowest target is namespace (narrowing to class or method requires
+        /# use of --test_arg, so assuming subpath contains the class is invalid.
+        /# We are not passing in --test_arg values, so in Python we don't know
+        /# the class without parsing the methods (paresBazelLog).
         tdata['class'] = parts[-1].replace('Test', '')
         status = tdata['status']
         if status == 'NO STATUS':
@@ -27379,17 +27978,19 @@ scope:
           fqn = namespace_name + scope_sep + cmname
           mdata = meths[cmname]
           mstatus = ' FAIL' if 'stderr' in mdata else ''
-          fp.write('%s  %-60s %8dus%s\n' % (indent, fqn, mdata['us'], mstatus))
-          if showerr:
-            stderr = mdata.get('stderr', '')
-            if stderr:
-              for line in stderr.rstrip().split('\n'):
-                fp.write('%s    E|%s\n' % (indent, line))
+          fp.write(
+            '%s  %-60s %8dus%s\n' %
+            (indent, method_name, mdata['us'], mstatus))
           if showout:
             stdout = mdata.get('stdout', '')
             if stdout:
               for line in stdout.rstrip().split('\n'):
                 fp.write('%s     |%s\n' % (indent, line))
+          if showerr:
+            stderr = mdata.get('stderr', '')
+            if stderr:
+              for line in stderr.rstrip().split('\n'):
+                fp.write('%s    E|%s\n' % (indent, line))
 
         /#pprint.pprint(tdata)
     test:
@@ -27405,16 +28006,16 @@ scope:
       metac.formatBazelOutput(tests, fp=ofp)
       test.iseqtext(
         >|"""demo.cards2.Card                                                  300ms   PASSED
-        >|  demo.cards2.Card.__init__                                          18us
+        >|  __init__                                                           18us
         >|demo.cards2.Card__Meta                                            300ms   PASSED
         >|demo.cards2.FrenchPack                                            200ms   FAILED
-        >|  demo.cards2.FrenchPack.__init__                                    14us
-        >|  demo.cards2.FrenchPack.asStr                                      163us FAIL
+        >|  __init__                                                           14us
+        >|  asStr                                                             163us FAIL
         >|demo.cards2.FrenchPack__Meta                                      300ms   PASSED
-        >|  demo.cards2.FrenchPack__Meta.__init__                              36us
+        >|  __init__                                                           36us
         >|demo.cards2.Pack                                                  300ms   PASSED
-        >|  demo.cards2.Pack.asStr                                             15us
-        >|  demo.cards2.Pack.shuffle                                            4us
+        >|  asStr                                                              15us
+        >|  shuffle                                                             4us
         >|demo.cards2.Pack__Meta                                            300ms   PASSED
         >|demo.cards2.Pile                                                  300ms   PASSED
         >|demo.cards2.Pile__Meta                                            200ms   PASSED
@@ -27425,13 +28026,13 @@ scope:
       metac.formatBazelOutput(tests, fp=ofp, showerr=True, showout=True)
       test.iseqtext(
         >|"""demo.cards2.Card                                                  300ms   PASSED
-        >|  demo.cards2.Card.__init__                                          18us
+        >|  __init__                                                           18us
         >|     |demo.cards2.Card.__init__ missing unittest
         >|demo.cards2.Card__Meta                                            300ms   PASSED
         >|demo.cards2.FrenchPack                                            200ms   FAILED
-        >|  demo.cards2.FrenchPack.__init__                                    14us
+        >|  __init__                                                           14us
         >|     |demo.cards2.FrenchPack.__init__ missing unittest
-        >|  demo.cards2.FrenchPack.asStr                                      163us FAIL
+        >|  asStr                                                             163us FAIL
         >|    E|----------------------------------------------------------------------
         >|    E|Traceback (most recent call last):
         >|    E|  File "/private/var/tmp/_bazel_wmh/8a547b9529defa4d451cf083bf4156d1/bazel-sandbox/e96aaaed-7873-4fb6-a866-0c97391c7dd1-0/execroot/python/bazel-out/local-fastbuild/bin/demo/cards2_test/FrenchPackTest.runfiles/__main__/demo/cards2_test/FrenchPackTest.py", line 13, in test_asStr
@@ -27440,12 +28041,12 @@ scope:
         >|    E|
         >|    E|----------------------------------------------------------------------
         >|demo.cards2.FrenchPack__Meta                                      300ms   PASSED
-        >|  demo.cards2.FrenchPack__Meta.__init__                              36us
+        >|  __init__                                                           36us
         >|     |demo.cards2.FrenchPack__Meta.__init__ missing unittest
         >|demo.cards2.Pack                                                  300ms   PASSED
-        >|  demo.cards2.Pack.asStr                                             15us
+        >|  asStr                                                              15us
         >|     |demo.cards2.Pack.asStr missing unittest
-        >|  demo.cards2.Pack.shuffle                                            4us
+        >|  shuffle                                                             4us
         >|     |demo.cards2.Pack.shuffle missing unittest
         >|demo.cards2.Pack__Meta                                            300ms   PASSED
         >|demo.cards2.Pile                                                  300ms   PASSED
@@ -28772,7 +29373,7 @@ scope:
     end method maybeRecompileMeta;
 
     method generateHtml #:
-      Generate a self-contained html file for a 
+      Generate a self-contained html file for a meta file specified by path.
     params:
       var path : str = null #:
         The metafile to parse.
@@ -28789,12 +29390,16 @@ scope:
         If true, hide all blocks initially.
       var fontsize : str = '80%' #:
         The font size of the generated code.
+      var basefilter : str = null #:
+        If specified, it is a regexp to apply to baselang files. Only those that
+        match are printed. If null, all basefiles are printed.
     scope:
       /# Some useful vars
       cls = self.__class__
       fs = self.fs()
       verbose = True
       flags = self.cli()
+      debug = flags.debug if flags else False
       metalang = self.metalang()
       baselang = self.baselang()
       blsuffix = baselang.suffix()[1:]
@@ -28818,7 +29423,7 @@ scope:
 
       /# Parse the file.
       metafile = self.parseMeta(
-        path, debuglevel=flags.debug, context=context)
+        path, debuglevel=debug, context=context)
 
       if not metafile.hasErrors(show=True):
         /# Generate the HTML file BEFORE we expand the metafile!
@@ -28827,10 +29432,10 @@ scope:
           outlines = []
 
           /# Obtain the htmlish contents.
-          fp = cStringIO.StringIO()
+          hfp = cStringIO.StringIO()
           mode = {'form': 'html', 'out': {}}
-          namespace.write(fp=fp, mode=mode)
-          lines = fp.getvalue().split('\n')
+          namespace.write(fp=hfp, mode=mode)
+          lines = hfp.getvalue().split('\n')
           lines.pop()
 
           out = mode['out']
@@ -29010,7 +29615,8 @@ scope:
               counts['bytes'] += len(contents)
 
             /# Create the baselang .html file.
-            with open(html2path, 'w') as fp:
+            base_re = re.compile(basefilter) if basefilter else None
+            with fs.open(html2path, 'w') as fp:
               fp.write(
                 '<html>\n  <head>\n%s\n  </head>\n' % html_head)
               fp.write('  <body>\n')
@@ -29021,7 +29627,18 @@ scope:
               subpaths = []
               for subpath in sorted(filemap):
                 subbase = fs.basename(subpath)
-                if subbase[0] == '.': continue
+                if subbase[0] == '.':
+                  /# Don't include hidden files (e.g. python per-class files, .bld files, .map files, etc.)
+                  continue
+                if subbase.endswith('.html'):
+                  /# Don't include .html files (baselang files shouldn't contain
+                  /# .html, and including them confuses the insertion code).
+                  continue
+                if base_re and not base_re.search(subbase):
+                  /# A filter regexp was specified and the current file does not
+                  /# match, so it isn't shown.
+                  continue
+
                 basefile = filemap[subpath]
                 contents = basefile.contents()
                 subpath = basefile.subpath()
@@ -29067,25 +29684,6 @@ scope:
        - if the first arg passed in is NOT one of the commands recognized here,
          we hack up a special catch-all
     interface:
-
-      named
-      command emacs #:
-        Generate an emacs major mode for the current meta language.
-      scope:
-        self.generateMajorMode()
-      end command emacs;
-
-      named
-      command verify_bazel #:
-        Test parsing of bazel logs relative to non-bazel test invocations.
-
-        Verify that bazel test stdout/stderr matches expectations relative to an
-        invocation of the test harness without bazel.
-      scope:
-        argmap = self.argmap()
-        for fqn in argmap['fqns']:
-          self.verifyBazelOutput(fqn)
-      end command verify_bazel;
 
       named
       command canonical #:
@@ -29217,6 +29815,13 @@ scope:
       end command config;
 
       named
+      command debug #:
+        Invoke a base-lang specific debugger
+      scope:
+        print 'baselang debugging not yet implemented'
+      end command debug;
+
+      named
       command expand #:
         Expand a specified .meta file.  Consider using 'get' instead.
       scope:
@@ -29242,6 +29847,13 @@ scope:
             print 'Wrote ' + newpath
           metafiles.append(metafile)
       end command expand;
+
+      named
+      command emacs #:
+        Generate an emacs major mode for the current meta language.
+      scope:
+        self.generateMajorMode()
+      end command emacs;
 
       named
       command get #:
@@ -29317,6 +29929,10 @@ scope:
             htmldir=cli.htmldir or None,
             hide=cli.htmlhide,
             fontsize=cli.fontsize)
+          if cli.inmemory:
+            basefile = fs.subpath('../tmp2/person_py_base.html')
+            print basefile.contents()
+            fs.summarize()
       end command html;
 
       named
@@ -29560,6 +30176,69 @@ scope:
       end command run;
 
       named
+      command schema #:
+        Create an HTML file documenting the target schema.
+      scope:
+        def CommentFor(cons, default=None):
+          lines = cons.attrval('comment:', default=None)
+          if lines:
+            text = '\n'.join(lines)
+            /# result = re.sub('\n\s*\n', '</p>\n</p>', text) + '</p>'
+            result = text
+          else:
+            result = default or ''
+          return result
+
+        metalang = self.metalang()
+        config = metalang.attrval('config:')
+        constructs = collections.OrderedDict()
+        mname = 'Meta(%s)' % metalang.name(),
+        data = {
+          'sum': CommentFor(metalang, '?'),
+          'title': mname,
+          'cat': {
+            'Construct': constructs,
+          }
+        }
+        for construct in config:
+          cid = construct.id()
+          attributes = collections.OrderedDict()
+          constructs[cid] = {
+            'sum': CommentFor(construct, '?'),
+            'title': cid,
+            'cat': {
+              'Attribute': attributes,
+            }
+          }
+          attr_config = construct.attrval('config:')
+          for attrcons in attr_config:
+            if attrcons.kind() != 'Attribute': continue
+            aid = attrcons.id()
+            aid2 = aid.replace(':', '_')
+            akind = attrcons.attrval('kind')
+            attr_cat = {}
+            attributes[aid2] = {
+              'sum': CommentFor(attrcons, '?'),
+              'title': '%s (%s)' % (aid, akind),
+              'cat': attr_cat,
+            }
+            /# If attrcons is a feature, add a 'Feature Values' key to cat.
+            if akind == 'feature':
+              fvconfig = attrcons.attrval('config:')
+              fvals = collections.OrderedDict()
+              attr_cat['FeatureValue'] = fvals
+              for fvcons in fvconfig:
+                fvid = fvcons.id()
+                fvals[fvid] = {
+                  'sum': CommentFor(fvcons, '?'),
+                  'title': fvid,
+                }
+
+        import wmh.weblib
+        wmh.weblib.Item.Render(data, 'a.html')
+      end command schema;
+
+      named
       command setup #:
         Perform specialized baselang-specific WORKSPACE configuration.
       scope:
@@ -29685,6 +30364,104 @@ scope:
       end command shell;
 
       named
+      command sh #:
+        A shell for exploring a MetaFile.
+      scope:
+        cli = self.cli()
+        argmap = self._parseArgs(cli.rest, implicit=True)
+        metafiles = argmap['metafiles']
+        if len(metafiles) != 1:
+          print 'ERROR: must provide exactly one meta file to "metac sh".'
+          return
+        path = metafiles[0]
+        metafile = self.getMeta(
+          path, imports=False, translate=False, compile=False)
+
+        /# The virtual filesystem contains correpsonds to the fqn of
+        /# a construct. Thus, metax.c.Compiler.parseMeta has path
+        /# /metax/c/Compiler/parserMeta.
+
+        filecons = metafile.construct()
+        root = MetaNode(None, filecons)
+        root.populate(
+          {'File': ['namespace'],
+           'namespace': ['class'],
+           'class': ['field', 'method'],
+           'field': ['accessor'],
+           /# 'method': [],
+          })
+
+        current = root
+        history = []
+
+        /# Commands:
+        /#  up: move up to parent
+        /#  cd: move to some other path
+        prompt = '>> '
+        given_ans = None
+        while True:
+          if given_ans:
+            print 'Found given "%s"' % given_ans
+            ans = given_ans
+            given_ans = None
+          else:
+            try:
+              ans = raw_input(prompt)
+            except EOFError:
+              print
+              break
+          args = shlex.split(ans)
+          action = args.pop(0)
+
+          construct = current.construct()
+
+          try:
+            save = True
+            if action == 'cd':
+              /# Change directory
+              current = current.cd(args[0])
+            elif action == 'up':
+              /# Move up to parent
+              current = current.cd('..')
+            elif action in ('p', 'print'):
+              /# Print the current construct
+              construct.write(indent='    ')
+            elif action in ('s', 'symbols'):
+              construct.symbols().show(indent='    ')
+            elif action == 'ls':
+              /# List the contents of the current node.
+              current.list()
+            elif action == 'pwd':
+              /# List the contents of the current node.
+              print current.path()
+            elif action in ('h', 'history'):
+              /# List the history.
+              for i, cmd in enumerate(history, start=1):
+                print '%5d  %s' % (i, cmd)
+            elif action[0] == '!':
+              /# History reference.
+              save = False
+              rest = action[1:]
+              if action[1] == '!':
+                /# Previous command.
+                given_arg = history[-1]
+              elif rest.isdigit():
+                /# Some other historical command.
+                index = int(rest)
+                given_arg = history[index]
+              else:
+                /# Error
+                print 'ERROR: Invalid history request "%s"' % ans
+            else:
+              print 'Unknown command "%s"' % action
+          except Exception as e:
+            print 'ERROR: %s' % str(e)
+          else:
+            if save:
+              history.append(ans)
+      end command sh;
+
+      named
       command snapshot @ snap #:
         Create a snapshot.
       interface:
@@ -29782,6 +30559,25 @@ scope:
           print 'Must provide metafile(s) to generate uml for'
       end command uml;
 
+      named
+      command verify_bazel #:
+        Test parsing of bazel logs relative to non-bazel test invocations.
+
+        Verify that bazel test stdout/stderr matches expectations relative to an
+        invocation of the test harness without bazel.
+      scope:
+        argmap = self.argmap()
+        for fqn in argmap['fqns']:
+          self.verifyBazelOutput(fqn)
+      end command verify_bazel;
+
+      named
+      command vim #:
+        Generate vim plug-in for the current meta language.
+      scope:
+        pass
+      end command;
+
       command __default__ #:
         Compile specified .meta files.
       scope:
@@ -29804,14 +30600,13 @@ scope:
               if argmap['fqns']:
                 self._test_command()
           else:
+            pprint.pprint(argmap)
             print 'ERROR : Unknown command "%s"' % command
           fs = self.fs()
           if cli.showfs or fs.kind() == 'memory':
             fp = sys.stdout
-            fp.write('Meta filesystem is inmemory:\n')
             fs.summarize(fp=fp)
       end command __default__;
-      
     scope:
       /# This initial block creates a Command instance and performs some
       /# initial sanity checks.
@@ -29840,8 +30635,48 @@ scope:
       assert metax.root.MetaObject.CLI() is not None
       metax.root.MetaObject.CLI()._command_Is(meta__command)
 
+      /# Check if there are any .meta files with explicit baselangs specified.
+      explicits = set()
+      for arg in sys.argv[1:]:
+        m = metax.c.SUFFIX_RE.match(arg)
+        if m:
+          base, rawsuff = m.groups()
+          if rawsuff:
+            explicits.add(rawsuff)
+      if len(explicits) > 1:
+        print 'ERROR: Cannot compile into multiple baselangs in same metac invocation'
+        sys.exit(1)
+      elif len(explicits) == 1:
+        basel = explicits.pop()
+        metal = cli.metalang.lower()
+        suffix_hack = Compiler.SUFFIX_HACK.get(metal, None)
+        baselang_flag = meta__command.findPart('baselang')
+        if suffix_hack and baselang_flag.start():
+          /# The --baselang flag was explicitly specified. We ensure it doesn't
+          /# conflict.
+          /#  - this is complicated by the fact that we do not yet have a
+          /#    MetaLanguage instance. For now we use Compiler.SUFFIX_HACK
+          canbasel = suffix_hack.get(baselang_flag.value(), None)
+          if canbasel is None:
+            print 'ERROR: Unknown baselang "%s" in Compiler.SUFFIX_HACK' % baselang_flag.value()
+            sys.exit(1)
+          else:
+            cansuff = suffix_hack.get(basel, None)
+            if cansuff is None:
+              print 'ERROR: Unknown baselang suffix "%s"' % basel
+              sys.exit(1)
+            elif cansuff != canbasel:
+              print 'ERROR: Explicit --baselang %s (%s) does not match baselang %s (%s) implied by source suffixes' % (
+                baselang_flag.value(), canbasel, basel, cansuff)
+              sys.exit(1)
+          
+      else:
+        /# TODO(wmh): If -b was explicitly provided (rather than being obtained
+        /# from default), we should report a warning or error.
+        basel = cli.baselang
+
       /# Create the Compiler instance.
-      metac = metax.c.Compiler(metal=cli.metalang, basel=cli.baselang)
+      metac = metax.c.Compiler(metal=cli.metalang, basel=basel)
       metax.c.Compiler.CurrentIs(metac)
       /# Ensure that the repository directory exists.
       if not metac.verifyDirectory(metadir='.meta2'):
@@ -29855,6 +30690,118 @@ scope:
     end command metacnew;
 
   end class Compiler;
+
+  class MetaNode #:
+    Represents a node in the virtual filesystem represening a metafile.
+  assocs:
+    std assoc collections;
+  scope:
+    field parent : MetaNode #:
+      Parent node.
+    field path : str #:
+      The full path of this node.
+    field construct : Construct #:
+      The construct of this node.
+    field children : map<str,MetaNode> #:
+      The child nodes (order of insertion maintained).
+
+    lifecycle params:
+      var parent -> parent;
+      var construct -> construct;
+    scope:
+      self.childrenIs(collections.OrderedDict())
+      if parent:
+        path = parent.path() + '/' + construct.id()
+      else:
+        path = ''
+      self.pathIs(path)
+    setup:
+      test.defineClassAndMethods('py')
+      test.root = metax.c.MetaNode(None, test.filecons)
+      test.namespace_node = metax.c.MetaNode(test.root, test.namespace)
+    end;
+
+    method addChild : MetaNode #:
+      Add a child construct to this node.
+    params:
+      var construct : Construct;
+    scope:
+      cls = self.__class__
+      cid = construct.id()
+      subnode = cls(self, construct)
+      self.children()[cid] = subnode
+      return subnode
+    test:
+    end method addChild;
+
+    method populate #:
+      Add child nodes based on constructs in scope: that match kinds
+    params:
+      var kinds : map<str,vec<str>> #:
+        Maps kind to list of child kinds to register.
+    scope:
+      construct = self.construct()
+      children = construct.attrval('scope:', default=None) or []
+      ckinds = kinds[construct.kind()]
+      for child in children:
+        ckind = child.kind()
+        if ckind not in ckinds: continue
+        childnode = self.addChild(child)
+        if ckind in kinds:
+          childnode.populate(kinds)
+    test:
+      test.iseq(0, len(test.root.children()))
+      test.root.populate(
+        {'File': ['namespace'], 'namespace': ['class'], 'class': ['field', 'method']})
+      test.iseq(1, len(test.root.children()))
+      namespace_node = test.root.children()['nm.sp']
+      class_node = namespace_node.children()['Card']
+      method_node = class_node.children()['show']
+    end method populate;
+
+    method cd : MetaNode #:
+      Return a new node based on path.
+    params:
+      var path : str #:
+        The path to change to. Supports '..' for parent and '.' for self.
+    scope:
+      node = self
+      error = False
+      parts = path.split('/')
+      if parts[0] == '':
+        parts.pop(0)
+        while node.parent():
+          node = node.parent()
+      for part in parts:
+        if part == '..':
+          if node.parent():
+            node = node.parent() 
+        elif part == '.':
+          pass
+        else:
+          children = node.children()
+          subnode = children.get(part, None)
+          if subnode:
+            node = subnode
+          else:
+            print 'ERROR: failed to find "%s" within "%s"' % (part, node.path())
+      return self if error else node
+    test:
+      test.root.populate(
+        {'File': ['namespace'], 'namespace': ['class'], 'class': ['field', 'method']})
+      mnode = test.root.cd('/nm.sp/Card/show')
+      test.iseq('/nm.sp/Card/show', mnode.path())
+    end method cd;
+
+    method list #:
+      List the children of the current node
+    scope:
+      for cid, child in self.children().iteritems():
+        print cid
+    test:
+    end method list;
+
+  end class MetaNode;
 
   test
   native scope:
@@ -30300,9 +31247,13 @@ scope:
       /# 'method2'.
       expr = metax.c.ExprParser(self.metafileFor('(a, b=1, c=false)\n')).parse()
 
+      /# Define a FileConstruct.
+      self.filecons = metax.c.FileConstruct.NewFromData(
+        'dummy.meta', test.context, secondaries=[('scope:', [])])
+
       /# Define a namespace nm.sp
       self.namespace = metax.c.NamespaceConstruct.NewFromData(
-        'nm.sp', context,
+        'nm.sp', context, parent=self.filecons.attr('scope:'),
         secondaries=[('scope:', [])])
 
       /# Define a class Card

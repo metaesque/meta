@@ -303,6 +303,7 @@ scope:
   assocs:
     std assoc os;
     std assoc glob;
+    std assoc io;
     std assoc shutil;
     std assoc tempfile;
 
@@ -372,6 +373,16 @@ scope:
       if kind == 'emulate':
         self.emulateIO()
     end lifecycle;
+
+    method subpath : BaseFile #:
+      Obtain the file with a given subpath. May return null.
+    params:
+      var subpath : str #:
+        The subpath to query for.
+    scope:
+      return self.filemap().get(subpath, None)
+    test:
+    end method subpath;
 
     method environ : map #:
       Obtain the map of all environment variable/value pairs.
@@ -576,7 +587,14 @@ scope:
       var basefile : meta.c.BaseFile;
     scope:
       result = None
-      self.filemap()[basefile.subpath()] = basefile
+      filemap = self.filemap()
+      filemap[basefile.subpath()] = basefile
+      mapfile = basefile.mapfile()
+      if False:
+        /# TODO(wmh): We should record the mapfiles, but filemap requires
+        /# BaseFile instances currently. Do we generalize?
+        if mapfile:
+          filemap[mapfile.path()] = mapfile
       if self.kind() == 'disk':
         /# Serialize this file to disk immediately.
 
@@ -601,7 +619,6 @@ scope:
         result = [fullpath]
 
         /# Write the mapfile associated with the file to disk if it exists.
-        mapfile = basefile.mapfile()
         mappath = None
         if mapfile:
           mappath = self.realpath(self.join(mroot, mapfile.path()))
@@ -668,7 +685,17 @@ scope:
       var path : str;
       var mode : str = 'r';
     scope:
-      return open(path, mode)
+      kind = self.kind()
+      if kind == 'memory':
+        if 'r' in mode:
+          with open(path, mode) as tfp:
+            contents = tfp.read()
+          result = io.BytesIO(contents)
+        else:
+          result = StrStream(self, path)
+      else:
+        result = open(path, mode)
+      return result
     end method open;
 
     method close #:
@@ -784,8 +811,9 @@ scope:
       The relpath of a path
     params:
       var path : str;
+      var src : str = null;
     scope:
-      return os.path.relpath(path)
+      return os.path.relpath(path, src) if src else os.path.relpath(path)
     end method relpath;
 
     method realpath : str #:
@@ -845,7 +873,13 @@ scope:
       var thedir : str;
       var mode : int = 493;
     scope:
-      os.makedirs(thedir, mode)
+      kind = self.kind()
+      if kind == 'memory':
+        /# TODO(wmh): Do we need to create an instance of some directory class
+        /# here, or is this a no-op?
+        pass
+      else:
+        os.makedirs(thedir, mode)
     end method makedirs;
 
     method unlink : bool #:
@@ -1060,6 +1094,128 @@ scope:
     end;
 
   end class Filesystem;
+
+  class BaseFile #:
+    An output file generated when compiling Meta source into a base language.
+
+    Provides an abstraction layer between on-disk vs in-memory files. Also
+    provides a mechanism for maintaining a mapping between line numbers in
+    Meta source code and associated lines in the baselang code (for BaseFile
+    instances that represent baselang source files)
+  scope:
+
+    field subpath : str #:
+      The on-disk path of the file relative to Compiler.repositoryPath().
+
+    field contents : str #:
+      The contents of the file.
+    scope:
+      accessor get lazy:
+        bytes = self.bytes()
+        contents = bytes.getvalue() if bytes else None
+        print 'NOTE: Acquired %d bytes from implicit bytes for %s' % (
+          len(contents), self.subpath())
+        -> contents
+      end;
+    end field contents;
+
+    field bytes : io.BytesIO #:
+      Normally null. Used when Filesystem kind is 'memory'.
+      TODO(wmh): We could avoid having this if we used some wrapper on
+      top of io.BytesIO in metax.fs.Filesystem.open() that properly defined
+      __exit__ to create a BaseFile instance for us.
+
+    field metafile : MetaFile #:
+      The meta file that generated this BaseFile.
+
+    field mapfile : MapFile #:
+      The mapfile associated with this BaseFile. Not all BaseFile instance
+      have mapfiles (e.g. BUILD, etc.)
+
+    field mode : int #:
+      The mode to be associated with this file.
+
+    field link : str #:
+      If not null, indicates this file is a symlink to the file
+      in this field.
+
+    lifecycle params:
+      var subpath -> subpath;
+      var contents -> contents;
+      var metafile -> metafile = null;
+      var mapfile -> mapfile = null;
+      var mode -> mode = 416 #:
+        TODO(wmh): Support octal numbers (0640) in Meta!
+      var link -> link = null;
+      var bytes -> bytes = null;
+    scope:
+      /# We ensure that contents is either empty or always end with a newline
+      /# and do not have any spurious trailing whitespace.
+      if contents:
+        if contents[-1] != '\n':
+          print '#' * 70
+          print subpath
+          print contents
+          raise Error('contents must end with newline')
+        if contents[-2] in (' ', '\n'):
+          print '=' * 70
+          print subpath
+          print contents
+          raise Error('contents should not have spurious trailing whitespace')
+      if False:
+        print '-' * 70
+        print subpath
+        print contents
+    setup:
+      contents = 'MetaLanguage Test config:\nend;\n'
+      self.base = metax.fs.BaseFile('faux/path', contents)
+    end lifecycle;
+
+  end class BaseFile;
+
+  class StrStream #:
+    Used when Filesystem has kind 'memory' to properly handle writing to
+    string streams via 'with'.  See the Filesystem.open() method for usage.
+  scope:
+    field fs : Filesystem #:
+      Where we will register the BaseFile instance.
+    field path : str #:
+      The (sub)path of the BaseFile.
+    field bytes : io.BytesIO #:
+      The bytes stream.
+
+    lifecycle params:
+      var fs -> fs;
+      var path -> path;
+    scope:
+    end;
+
+    method __enter__ scope:
+      self._bytes = io.BytesIO()
+      return self._bytes
+
+    method __exit__ params:
+      var type : type #:
+        The exception type
+      var value : str #:
+        The exception value;
+      var traceback : any #:
+        The traceback.
+    scope:
+      contents = self._bytes.getvalue()
+      /# BaseFile instances are to specify paths relative to
+      /# Compiler.repositoryPath(), but currently Filesystem instances do not
+      /# store a Compiler instance, so we are hacking up the repo-path from
+      /# other fields. It would be cleaner to have Filesystem instance store
+      /# a Compiler and use self.compiler().repositoryPath()
+      fs = self.fs()
+      repository_path = fs.normpath(fs.join(fs.rootdir(), fs.metadir()))
+      relpath = fs.relpath(self.path(), repository_path)
+      basefile = BaseFile(relpath, contents)
+      self._fs.addFile(basefile)
+    end method __exit__;
+
+  end class StrStream;
 
   test
   class TestCase < metax.test.TestCase scope:

@@ -331,12 +331,15 @@ def ParseArgv(argv, cli_module, root_module=None):
   command.newFlag(
     'disable_imports', 'bool', default='false', 
     summary='If true, do not invoke importMeta during compilation.')
+  command.newFlag(
+    'hack', 'bool', default='false', 
+    summary='If true, enable some special code (used during prototyping)')
   command.newArg(
     'args', multi=True, summary='All other args')
 
   # Instantiate the command line args against the above Command, putting all
   # unknown args/flags into 'args'.
-  instantiated = command.instantiate(argv)
+  instantiated = command.instantiate(argv, start=True)
   if instantiated:
     cli = instantiated.asValues()
     if cli.verbose and cli.verbosity == 0:
