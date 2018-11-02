@@ -481,7 +481,7 @@ scope:
     field strstreams : @vec<*strstream> #:
       A list of strstream instances allocated via fp().  Cleaned up in
       teardown, and used in out().
- 
+
     field method_name : @str #:
       The name of the method being tested.
       TODO(wmh): Redundant in Python and Javascript since the superclass
@@ -664,7 +664,7 @@ scope:
       /# this._stubs.reset();
     teardown<cc>:
       /# Delete all strstreams in strstreams()
-      auto& strstreams = this->strstreamsRef();
+      auto& strstreams = this->_strstreams;
       for (auto* strstream : strstreams) {
         delete strstream;
       }
@@ -1054,7 +1054,7 @@ scope:
         result = cStringIO.StringIO()
       else:
         result = cStringIO.StringIO(content)
-      self.strstreamsRef().append(result)
+      self.strstreams().append(result)
       return result
     scope<js>:
       throw new Error('TestCase.fp() not yet implemented');
@@ -1065,7 +1065,7 @@ scope:
       } else {
         result = new std::stringstream(content);
       }
-      this->strstreamsRef().push_back(result);
+      this->_strstreams.push_back(result);
       return result;
     end method fp;
 

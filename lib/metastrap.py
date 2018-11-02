@@ -293,10 +293,15 @@ def ParseArgv(argv, cli_module, root_module=None):
   command.newFlag(
     'metadir', 'str', default='.meta2',
     summary='The subdir to write code to.',
-    desc="A value of .meta2 is treaed specially, being symlinked to repo")
+    desc="A value of .meta2 is treated specially (is symlinked to repo)")
   command.newFlag(
     'metalang', 'str', default='oopl', aliases='L',
     summary='The metalang the code is defined in.')
+  command.newFlag(
+    'metasrcfile', 'str', default='',
+    summary=(
+      'A specially formatted file specifying meta source files to compile.\n'
+      'Each line contains <title>: <metafile>...'))
   command.newFlag(
     'optimize_level', 'enum<off|low|avg|high|max>', default='high', aliases='O',
     summary='The amount of optimization to enable compiled files.',
@@ -311,11 +316,25 @@ def ParseArgv(argv, cli_module, root_module=None):
     summary='If true, do not use bazel to run tests.',
     desc=(
       'Some baselangs can invoke the test harness without bazel, and for such\n'
-      'baselangs this flag disables bazel. Can yield significantly faster\n'
-      'test runtimes.'))
+      'baselangs this flag disables bazel.'))
   command.newFlag(
     'showfs', 'bool', default='false',
     summary='If true, print out filesystem after compilation.')
+  command.newFlag(
+    'summary_counts', 'bool', default='false',
+    summary='If true, show construct counts in compilation summaries.')
+  command.newFlag(
+    'summary_times', 'bool', default='false',
+    summary='If true, show timing results in compilation summaries.')
+  command.newFlag(
+    'summary_files', 'bool', default='true',
+    summary='If true, show file counts in compilation summaries.')
+  command.newFlag(
+    'summary_autogen', 'bool', default='false',
+    summary='If true, show autogened constructs when counting constructs in compilation summaries.')
+  command.newFlag(
+    'summary_nofiles', 'bool', default='false',
+    summary='If true, only show group and total, not per-file counts.')
   command.newFlag(
     'test', 'bool', default='false', aliases='t',
     summary='If true, invoke unit tests on all namespaces in all metafiles processed.')

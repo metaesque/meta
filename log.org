@@ -1,0 +1,29 @@
+* Day
+
+** 2018-11-01
+- Advancements on Meta(doc) slides
+- Fixed long-standing parsing bug that had implicitly terminated 
+  constructs ending in simple blocks improperly consuming empty lines at
+  the end.  This no longer happens.
+
+** 2018-10-29
+- Contemplated 'metac issue'
+  - created stub
+  - experimented with ghi (https://github.com/stephencelis/ghi)
+    - does not support adding attachements to issues
+  - found (but haven't installed/explored) https://github.com/sociomantic-tsunami/git-hub,
+    - does appear to support attachments on issues
+    - will allow us to attach source code as part of the issue-filing process.
+  - explored the github API:
+     - docs
+       - https://github.com/PyGithub/PyGithub
+       - https://developer.github.com/v3/
+     - notes:
+        % pipi PyGithub
+     - very useful:
+       - https://gist.github.com/JeffPaine/3145490
+         - shows a requests-based call to the github v3 API without bothering
+           with PyGithub or anything else.
+         - this is optimal, as it means we can implement the same logic in
+           all baselangs.
+     

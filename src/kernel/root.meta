@@ -235,7 +235,8 @@ scope:
       if result:
         /# We've found an explicit match for the named resource in the
         /# resources mapping, so we use it.
-        logging.info('Found explicit "%s" for %s', result, fqrn)
+        /# logging.info('Found explicit "%s" for %s', result, fqrn)
+        pass
       else:
         /# TODO(wmh): Get this working in bazel!  Need to add to assocs
         /# and define a BUILD target ... in oopl.tgz?
@@ -268,7 +269,7 @@ scope:
             parts = [config['src_root'], 'lib', 'versions', version, 'lib']
           parts.extend(subparts)
         /# CODETANGLE(resource_dir): In metax.c (parser.meta).
-        parts.append('resources')
+        parts.append('.__resources')
         /# CODETANGLE(resource_name): In metax.c (parser.meta).
         parts.append('%s_%s' % (clsname, resource_id))
         path = '/'.join(parts)

@@ -59,12 +59,21 @@ scope:
     code that uses the Meta-generated code without having to use the
     Meta-generated exception classes.
 
+  pre decl
+  native PrePart scope<cc>:
+    // Forward declare the Command class.
+    // TODO(wmh): Support for this should be made available via assocs!
+    class Command;
+  end;
+
   abstract
   class Part #:
     Abstract superclass of Command, Flag and Arg.
-  assocs:
+  assocs<py>:
     std assoc logging;
     std assoc re;
+  assocs<cc>:
+    std assoc iostream;
   scope:
 
     field parent : Command #:
@@ -90,11 +99,12 @@ scope:
         A comma-separated list of aliases.
       var summary -> summary = null;
       var desc -> desc = null;
-    scope:
+    scope<py>:
       if aliases:
         assert isinstance(aliases, str)
         alist = re.split(r'\s*,\s*', aliases);
         self.aliasesIs(alist)
+    scope<cc>:
     end lifecycle;
 
     method typecheck : any #:
@@ -108,7 +118,7 @@ scope:
       var mytype : str = null #:
         The type to use to typecheck. Normally null, in which case self.mytype()
         is used.
-    scope:
+    scope<py>:
       result = None
       if mytype is None:
         mytype = self.mytype()
@@ -187,7 +197,7 @@ scope:
         raise Error('Unknown type "%s"' % mytype)
 
       return result
-    test:
+    test<py>:
       invalid = None
       test.iseq(87, test.arg1.typecheck('87'))
       test.iseq(-1, test.arg1.typecheck('-1'))
@@ -205,14 +215,14 @@ scope:
 
     method names : vec<str> #:
       Obtain the names of my ancestors (and myself).
-    scope:
+    scope<py>:
       names = []
       obj = self
       while obj is not None:
         names.append(obj.name())
         obj = obj.parent()
       return list(reversed(names))
-    test:
+    test<py>:
       test.iseqvec(['faux', 'image'], test.fauximg.names())
     end method names;
 
@@ -221,38 +231,45 @@ scope:
     params:
       var delim : str = '_' #:
         What to separate command names with.
-    scope:
+    scope<py>:
       return delim.join(self.names())
-    test:
+    test<py>:
       test.iseq('meta2', test.command.fqn())
       test.iseq('meta2_canonical', test.subcommand.fqn())
       test.iseq('deps', test.intflag.fqn())
       test.iseq('length', test.arg2.fqn())
     end method fqn;
 
-    method isCommand : bool scope:
+    method isCommand : bool scope<py>:
       return False
-    test:
+    test<py>:
       test.isfalse(test.arg4.isCommand())
       test.isfalse(test.strflag.isCommand())
       test.istrue(test.subcommand.isCommand())
     end method isCommand;
 
-    method isFlag : bool scope:
+    method isFlag : bool scope<py>:
       return False
-    test:
+    test<py>:
       test.isfalse(test.arg4.isFlag())
       test.istrue(test.strflag.isFlag())
     end method isFlag;
 
-    method isArg : bool scope:
+    method isArg : bool scope<py>:
       return False
-    test:
+    test<py>:
       test.istrue(test.arg4.isArg())
       test.isfalse(test.strflag.isArg())
     end method isArg;
 
   end class Part;
+
+  post decl nmsp
+  native PostPart scope<cc>:
+    // Now include the Command
+    // TODO(wmh): Support for this should be made available via assocs!
+    #include "Command.h"
+  end;
 
   class Command < Part #:
     Represents a command, associated flags, and optional args.
@@ -302,7 +319,7 @@ scope:
       var desc : str = null #:
         A multi-line description of the flag.
     super (name, parent=parent, aliases=aliases, summary=summary, desc=desc)
-    scope:
+    scope<py>:
       self.idIs(name)
       if flags:
         for flag in flags:
@@ -310,11 +327,12 @@ scope:
       if args:
         for arg in args:
           self.registerArg(arg)
+    scope<cc>:
     end;
 
-    method isCommand : bool scope:
+    method isCommand : bool scope<py>:
       return True
-    test:
+    test<py>:
       test.isfalse(test.arg4.isCommand())
       test.isfalse(test.strflag.isCommand())
       test.istrue(test.subcommand.isCommand())
@@ -322,14 +340,14 @@ scope:
 
     method root : Command #:
       The top-level command above this one.
-    scope:
+    scope<py>:
       result = self
       cmd = self.parent()
       while cmd is not None:
         result = cmd
         cmd = cmd.parent()
       return result
-    test:
+    test<py>:
       test.issame(test.command, test.subcommand.root())
     end method root;
 
@@ -342,10 +360,10 @@ scope:
         Indentation before each line.
       var full : bool = false #:
         If true, print out full help.
-    scope:
+    scope<py>:
       mode = 'helpfull' if full else 'help'
       self.show(fp=fp, indent=indent, mode=mode)
-    test:
+    test<py>:
       fp = test.fp()
       test.command.help(fp=fp)
       test.command.help(fp=fp, full=True)
@@ -377,9 +395,9 @@ scope:
     params:
       var nora : str #:
         The name or alias of the command desired.
-    scope:
+    scope<py>:
       return self.commands().get(nora, None)
-    test:
+    test<py>:
       test.issame(test.subcommand, test.command.findCommand('canonical'))
       test.issame(test.subcommand, test.command.findCommand('can'))
       test.isnull(test.command.findCommand('not-a-command'))
@@ -390,7 +408,7 @@ scope:
     params:
       var command : Command #:
         docstr
-    scope:
+    scope<py>:
       commands = self.commands()
       order = self.order()
 
@@ -407,7 +425,7 @@ scope:
             '%s "%s" of command %s conflicts with pre-existing command "%s"' %
             (kind, nora, command.name(), existing.name()))
         commands[nora] = command
-    test:
+    test<py>:
       command = test.command
       newcom = metax.cli.Command('subcom', aliases='can')
       test.raises(
@@ -429,7 +447,7 @@ scope:
         A one-line summary of the flag.
       var desc : str = null #:
         A multi-line description of the flag.
-    scope:
+    scope<py>:
       if self.args():
         /# Cannot add a subcommand to a command that has args.
         raise Error(
@@ -440,7 +458,7 @@ scope:
         summary=summary, desc=desc)
       self.registerCommand(command)
       return command
-    test:
+    test<py>:
       test.iseq([], sorted(test.subcommand.commands()))
       command = test.subcommand.newCommand('subcan')
       test.iseq(['subcan'], sorted(test.subcommand.commands()))
@@ -456,14 +474,14 @@ scope:
     params:
       var nora : str #:
         Name or alias (or string-valued index) of flag/arg desired.
-    scope:
+    scope<py>:
       obj = self
       while obj is not None:
         result = obj.parts().get(nora, None)
         if result: break
         obj = obj.parent()
       return result
-    test:
+    test<py>:
       command = test.subcommand
       test.iseq('metalang', command.findPart('metalang').name())
       test.iseq('metalang', command.findPart('L').name())
@@ -475,7 +493,7 @@ scope:
     params:
       var part : Part #:
         The flag or arg to register.
-    scope:
+    scope<py>:
       parts = self.parts()
       noras = [part.name()] + (part.aliases() or [])
       for nora in noras:
@@ -527,7 +545,7 @@ scope:
           if existing:
             raise NameConflict('Arg %s (%s) has conflict' % (argkey, arg.name()))
           parts[argkey] = arg
-    test:
+    test<py>:
       cmd = metax.cli.Command(
         'cmd', aliases='cc', summary='Some command.')
       test.iseq([], sorted(cmd.parts()))
@@ -565,7 +583,7 @@ scope:
         If true, include aliases (which means there will be multiple keys with
         the same Flag instance). By default, returns name to flag, wherein
         there is one key per Flag.
-    scope:
+    scope<py>:
       result = {}
       command = self
       while command is not None:
@@ -575,7 +593,7 @@ scope:
             result[nora] = part
         command = command.parent()
       return result
-    test:
+    test<py>:
       test.iseqvec(
         ['baselang', 'metadir', 'metalang'],
         sorted(test.command.allParts()))
@@ -606,7 +624,7 @@ scope:
         A one-line summary of the flag.
       var desc : str = null #:
         A multi-line description of the flag.
-    scope:
+    scope<py>:
       if default is None:
         raise Error('Flag --%s : %s needs a default value' % (name, mytype))
       result = Flag(
@@ -614,7 +632,7 @@ scope:
         summary=summary, desc=desc)
       self.registerPart(result)
       return result
-    test:
+    test<py>:
       command = self.subcommand
       test.iseq(['e', 'expand'], sorted(command.parts()))
       
@@ -637,12 +655,12 @@ scope:
     params:
       var nora : str #:
         Name or alias of flag desired.
-    scope:
+    scope<py>:
       result = self.findPart(nora)
       if result and not result.isFlag():
         result = None
       return result
-    test:
+    test<py>:
       cmd1 = test.subcommand
 
       test.iseq('metalang', cmd1.findFlag('metalang').name())
@@ -676,7 +694,7 @@ scope:
       var multi : bool = false #:
         If true, this Arg bundles all remaining command line args into a single
         list of strings.
-    scope:
+    scope<py>:
       if multi:
         if not mytype.startswith('list<'):
           mytype = 'list<' + mytype + '>'
@@ -686,7 +704,7 @@ scope:
         summary=summary, desc=desc)
       self.registerPart(result)
       return result
-    test:
+    test<py>:
       /# TestCase setup invoked newArg on test.faux
       command = self.fauximg
       test.iseq(3, len(command.args()))
@@ -702,12 +720,12 @@ scope:
     params:
       var nora : str #:
         Name or alias or string-valued index of arg desired.
-    scope:
+    scope<py>:
       result = self.findPart(str(nora))
       if result and not result.isArg():
         result = None
       return result
-    test:
+    test<py>:
       cmd1 = test.fauximg2
       test.iseq('files', cmd1.findArg('files').name())
       test.isnull(cmd1.findArg('not-a-arg'))
@@ -753,7 +771,7 @@ scope:
         If true, turn on debugging output. Useful in tracking down esoteric
         errors, which are easy to create if one is careless about passing
         in the wrong combination of argv and parent.
-    scope:
+    scope<py>:
       result = self
       errors = []
 
@@ -961,7 +979,7 @@ scope:
 
       return result              
     tests:
-      testx t1 scope:
+      testx t1 scope<py>:
         command = test.faux
         test.iseq('faux', command.fqn())
         command.show(fp=test.fp())
@@ -1039,7 +1057,7 @@ scope:
         test.iseq('hierarchy', res.name())
         test.iseq(['a.b'], res.findPart('rest').value())
 
-      testx t2 scope:
+      testx t2 scope<py>:
         command = metax.cli.Command('demo', parent=None, summary='', desc='')
         command.newFlag(
           'name', mytype='str', default='Bob', aliases='n',
@@ -1064,7 +1082,7 @@ scope:
     params:
       var nora : str #:
         The name or alias desired.
-    scope:
+    scope<py>:
       flags = self.allParts()
       part = flags.get(nora, None)
       if part:
@@ -1072,7 +1090,7 @@ scope:
       else:
         result = None
       return result
-    test:
+    test<py>:
       res = test.faux.instantiate(
         ['./person', '--name', 'Charles', 'list', 'a', 'b', 'c'])
       test.iseq('Charles', res.findValue('name'))
@@ -1082,9 +1100,9 @@ scope:
 
     method asValues : Values #:
       Wrap myself in a Values instance
-    scope:
+    scope<py>:
       return Values(self)
-    test:
+    test<py>:
       res = test.faux.instantiate(
         ['./person', '--name', 'Charles', 'list', 'a', 'b', 'c'])
       values = res.asValues()
@@ -1093,9 +1111,9 @@ scope:
 
     method title : str #:
       A small snippet summarizing this flag.
-    scope:
+    scope<py>:
       return 'Command %s' % self.name()
-    test:
+    test<py>:
     end method title;
 
   end class Command;
@@ -1134,7 +1152,7 @@ scope:
         else:
           result = None
         -> result
-      test:
+      test<py>:
         print '**** FIX ME ... not being generated in meta2!'
       end accessor get;
     end field;
@@ -1158,7 +1176,7 @@ scope:
       var summary : str = null;
       var desc : str = null;
     super (name, aliases=aliases, summary=summary, desc=desc)
-    scope:
+    scope<py>:
       default = self.default()
       if default is None:
         self.valueIs(None)
@@ -1168,6 +1186,7 @@ scope:
           raise Error(
             '%s cannot have default value "%s"' % (self.title(), default))
         self.valueIs(value)
+    scope<cc>:
     end;
 
   end class SubPart;
@@ -1195,7 +1214,7 @@ scope:
       var nextval : str #:
         The value of the arg after the flag. This may or may not be used,
         depending on nora and inline. A value of null means no value available.
-    scope:
+    scope<py>:
       /# None means the value is invalid
       /# True means the value is valid and nextval was consumed
       /# False means the value is valid and nextval was not consumed
@@ -1236,7 +1255,7 @@ scope:
         self.valueIs(realval)
 
       return result
-    test:
+    test<py>:
       def Chk(flag, flagname, inval, nextval, eres, evalue):
         res = flag.instantiate(flagname, inval, nextval)
         test.iseq(eres, res)
@@ -1261,18 +1280,18 @@ scope:
       Chk(test.expand, 'expand', 'blah', 'true', None, None)
     end method instantiate;
 
-    method isFlag : bool scope:
+    method isFlag : bool scope<py>:
       return True
-    test:
+    test<py>:
       test.isfalse(test.arg4.isFlag())
       test.istrue(test.strflag.isFlag())
     end method isFlag;
 
     method title : str #:
       A small snippet summarizing this flag.
-    scope:
+    scope<py>:
       return 'Flag --%s : %s' % (self.name(), self.mytype())
-    test:
+    test<py>:
     end method title;
 
   end class Flag;
@@ -1294,7 +1313,7 @@ scope:
         The values being processed.
       var index : int #:
         The index within values corresponding to this arg.
-    scope:
+    scope<py>:
 
       if self.ismulti():
         /# This is a multi-valued arg (i.e. type 'list<...>')
@@ -1322,7 +1341,7 @@ scope:
           self.valueIs(realval)
           result = index + 1
       return result
-    test:
+    test<py>:
       /# TODO(wmh): How to redirect the stream written to by logging.info()?
       /# Maybe https://stackoverflow.com/questions/22105465/how-can-i-temporarily-redirect-the-output-of-logging-in-python
       arg1 = test.arg1
@@ -1346,25 +1365,25 @@ scope:
 
     method ismulti : bool #:
       True if this is a multi-value arg.
-    scope:
+    scope<py>:
       return self.mytype().startswith('list<')
-    test:
+    test<py>:
       test.isfalse(test.arg1.ismulti())
       test.istrue(test.arg4.ismulti())
     end method ismulti;
 
-    method isArg : bool scope:
+    method isArg : bool scope<py>:
       return True
-    test:
+    test<py>:
       test.istrue(test.arg4.isArg())
       test.isfalse(test.strflag.isArg())
     end method isArg;
 
     method title : str #:
       A small snippet summarizing this flag.
-    scope:
+    scope<py>:
       return 'Arg %s : %s' % (self.name(), self.mytype())
-    test:
+    test<py>:
     end method title;
 
   end class Arg;
@@ -1382,7 +1401,7 @@ scope:
         help: provide help for the part
         helpfull: provide detailed help for the part.
   scope:
-    receiver Command scope:
+    receiver Command scope<py>:
       fp.write('%s%s:\n' % (indent, self.name()))
       summary = self.summary()
       if summary:
@@ -1414,7 +1433,7 @@ scope:
       for arg in self.args():
         if 'help' not in mode or not arg.ismulti or 'full' in mode:
           arg.show(fp=fp, indent=subindent, mode=mode)
-    test:
+    test<py>:
       fp = test.fp()
       test.command.show(fp=fp)
       test.iseqtext(
@@ -1426,7 +1445,7 @@ scope:
         test.out())
     end receiver Command;
 
-    receiver Flag scope:
+    receiver Flag scope<py>:
       value = self.value()
       start = self.start()
       default = self.default()
@@ -1453,7 +1472,7 @@ scope:
 
       else:
         fp.write('%sERROR: Unknown mode %s\n' % (indent, summary))
-    test:
+    test<py>:
       fp = test.newStr()
       test.baselang.show(fp=fp)
       test.iseqtext(
@@ -1462,7 +1481,7 @@ scope:
         fp.getvalue())
     end receiver Flag;
 
-    receiver Arg scope:
+    receiver Arg scope<py>:
       value = self.value()
       start = self.start()
       default = self.default()
@@ -1489,7 +1508,7 @@ scope:
 
       else:
         fp.write('%sERROR: Unknown mode %s\n' % (indent, summary))
-    test:
+    test<py>:
       fp = test.newStr()
       test.baselang.show(fp=fp)
       test.iseq(
@@ -1511,7 +1530,8 @@ scope:
 
     lifecycle params:
       var command -> _command_;
-    scope:
+    scope<py>:
+    scope<cc>:
     end;
 
     method __getattr__ : any #:
@@ -1519,13 +1539,13 @@ scope:
     params:
       var nora : str #:
         The name or alias of the flag or arg desired.
-    scope:
+    scope<py>:
       command = self._command_()
       result = command.findValue(nora)
       if result is None:
         raise AttributeError('Undefined flag --%s (or arg %s)' % (nora, nora))
       return result
-    test:
+    test<py>:
       command = test.faux.instantiate(
         ['./person', '--name', 'Charles', 'list', 'a', 'b', 'c'])
       values = metax.cli.Values(command)
@@ -1548,7 +1568,7 @@ scope:
         The name or alias of the flag or arg to set.
       var value : any #:
         The value to assign.
-    scope:
+    scope<py>:
       if nora == '_Values__command_':
         self.__dict__[nora] = value
       else:
@@ -1563,7 +1583,7 @@ scope:
             logging.error("%s cannot have value '%s'", self.title(), value)
           else:
             part.valueIs(value)
-    test:
+    test<py>:
     end method __setattr__;
 
   end class Values;

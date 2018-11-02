@@ -46,9 +46,6 @@ scope:
 
     method einfo #:
       Unconditionally decrement indentation before printing message conditionally.
-
-      Args:
-        msg: str or None
     params:
       var msg : str = null #:
         The message to print. If None, no message is printed.

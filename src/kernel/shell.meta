@@ -101,10 +101,6 @@ scope:
       )
     end lifecycle;
 
-    remark #:
-      ----------------------------------------------------------------------
-      Overriding parent methods
-
     override
     method dispatch : bool #:
       Find and execute a command based on a command and args provided by user.
@@ -178,10 +174,6 @@ scope:
       command.help()
     test:
     end method helpCommand;
-
-    remark #:
-      ----------------------------------------------------------------------
-      Command methods
 
     method showMetaContext : any #:
       Print out the Context instance identified by directory or args.
@@ -273,10 +265,6 @@ scope:
         self._showHierarchy(child, subindent)
     test:
     end method _showHierarchy;
-
-    remark #:
-      ----------------------------------------------------------------------
-      Generator methods
 
     method generateMetafiles  #:
       Dynamically populate 'parent' with child directories, the names of which

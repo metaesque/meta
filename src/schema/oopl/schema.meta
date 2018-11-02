@@ -1,4 +1,4 @@
-MetaLanguage oopl name Oopl parent meta toplevel <namespace> #:
+MetaLanguage oopl name Oopl parent meta toplevel <namespace|class> #:
   Augmentation and unification of object-oriented programming languages.
 config:
 
@@ -50,7 +50,7 @@ config:
         an 'assoc' may be needed in both user and test class.
         TODO(wmh): Remove this option from here and add it in 'assoc'.
     end Attribute location;
-    
+
     secondary
     Attribute comment: : simple = <empty> aliases <#:> #:
       Arbitrary multi-line text describing the purpose of the construct.
@@ -405,7 +405,7 @@ config:
   config:
 
     feature
-    Attribute select : <ro|rw|rwx|raw> = ro #:
+    Attribute access : <ro|rw|rwx|raw> = ro #:
       Which accessors are public (the others are protected).
 
       TODO(wmh): This mechanism is somewhat limited. If we could specify,
@@ -418,6 +418,7 @@ config:
         x = reffer
         i = adj
         @ = the field itself
+        $ = element-of
 
       We could specify a particular accessor with:
         +r = getter is public
@@ -458,14 +459,14 @@ config:
         The getter, setter and reffer are public, no other accessors.
       FeatureValue raw #:
         No accessors are generated.
-    end Attribute select;
+    end Attribute access;
 
     feature
     Attribute visibility : <tmppublic|tmpprivate> = tmpprivate #:
       The visibility of the field.
 
       TODO(wmh): This attribute is temporary. It is subsumed by the 
-      multi-valued version of 'select', and code should start migrating
+      multi-valued version of 'access', and code should start migrating
       away from the use of this field.  Hence the 'tmp' prefix on
       legal values.
     config:
@@ -516,7 +517,7 @@ config:
     Attribute inheritance : <new|override> = override #:
       Whether the accessors are defined in parents or not.
       TODO(wmh): We need to be able to specify this on a per-accessor
-      basis. This can be done by moving the 'select' feature attribute to
+      basis. This can be done by moving the 'access' feature attribute to
       a more robust implementation, and/or by adding a feature key on
       the 'accessor' construct.
 
@@ -785,6 +786,13 @@ config:
     end Attribute kind;
 
     secondary
+    Attribute alias : word = <empty> #:
+      Alternative names for this entity. Although singular, it can be a
+      comma-separate list of identifiers. For example, a method may have
+      id 'perimeter' and alias 'circumference', in which case both are legal.
+      TODO(wmh): Make this an idlist instead of word!
+
+    secondary
     Attribute params: : complex = <required> children <var> #:
       The parameters of this method.
 
@@ -849,6 +857,8 @@ config:
     primary
     Attribute method : id = <required> #:
       The name of the method.
+
+    Attribute alias;
 
     Attribute params:;
     Attribute super;
@@ -1045,6 +1055,8 @@ config:
     Attribute behavior : id = <required> #:
       The name of the behavior.
 
+    Attribute alias;
+
     Attribute params:;
     Attribute super;
     Attribute returns;
@@ -1152,6 +1164,22 @@ config:
         In C++, this identifies the .h file.
     end Attribute placement;
 
+    feature
+    Attribute level : <cls|nmsp> = cls #:
+      Controls whether the code is inserted within a namespace or outside
+      of the namespace. For example, in C++ when defining/declaring a class,
+      the declaration is wrapped within namespace scopes, and pre/post content
+      more appear within the namespace scope before/after the class, or may
+      appear outside of the namespace scope before/after the class.
+    config:
+      FeatureValue cls #:
+        When a native block appears before/after a class, this identifies that
+        the code is to be inserted within the namespace qualifiers.
+      FeatureValue nmsp #:
+        When a native block appears before/after a class, this identifies that
+        the code is to be inserted outside of the namespace qualifiers.
+    end Attribute level;
+
     primary
     Attribute native : id = <auto> #:
       The name of the native.
@@ -1168,7 +1196,7 @@ config:
     Attribute location;
 
     feature
-    Attribute kind : <cls|lib|std> = cls #:
+    Attribute kind : <cls|lib|std|decl|def> = cls #:
       The kind of association.
     config:
       FeatureValue cls #:
@@ -1178,6 +1206,11 @@ config:
         imported)
       FeatureValue std #:
         The assoc is from the standard library (and thus doesn't need a target).
+      FeatureValue decl #:
+        The assoc is a class to be declared but not defined.
+      FeatureValue def #:
+        The assoc is a class to be declared, and its definition imported
+        *after* the declaration of the containing class.
     end Attribute kind;
 
     primary
@@ -1430,9 +1463,6 @@ config:
       a default value means the param is optional.  When defined in an
       executable block, it provides an explicit value to initialize the
       variable to instead of using a type-specific default.
-
-      TODO(wmh): This should have type 'expr', not 'word'. Work needs to
-      be done to properly update the code with this new type in mind.
     end Attribute default;
 
     Attribute comment:;

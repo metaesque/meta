@@ -1,3 +1,51 @@
+# HOWTO: How to do things
+
+## Create a new Meta-language
+
+METAROOT=$(metac config src_root)
+
+1. Decide what the $name and $id of the metalang will be
+ - name is usually capitalized and can contain arbitrary characters.
+ - id is an identifier
+
+2. Define a schema
+ % cd $METAROOT/src/schema
+ % mkdir $id
+ % cd $id
+ % cp ../oopl/schema.meta .
+ % $EDITOR schema.meta
+ - Update the MetaLanguage info, and define the constructs and attributes.
+ - Define the BaseLanguage instances in the schema too
+   - establish name, id and suffixes for each baselang.
+
+3. Define the classes
+ % cd $METAROOT/src/kernel
+ % $EDITOR parser.meta
+ - Define a subclass ${name}Construct of Construct as abstract superclass of
+   all constructs for metalang $name.
+ - For each construct defined in the new metalanguage, define a subclass
+   ${basename}Construct of ${name}Construct:
+    - must define kind(), expandMeta() and translateMeta()
+    - examples:
+        SlideConstruct < DocConstruct
+
+ - Define a subclass BaseLanguage$Name of BaseLanguageConstruct
+ - Define subclasses $name$basename of BaseLanguage$name for each baselang
+   - example: for Meta(Doc) we have name=Doc id=doc, and for baselang markdown
+     we have basename=Markdown baseid=markdown.  So we are creating subclass
+     DocMarkdown of BaseLanguageDoc.
+   - lifecycle specifies four args (id, parent, context, precount) and passes
+     them to parent.
+   - lifecycle initializes id, name and suffixes
+   - TODO(wmh): This can be done automatically from the BaseLanguageConstruct
+     instances.  
+
+ - Update Compiler.METADATA, defining the metalang, toplevel constructs, all
+   known constructs (with mapping to associated class), and all known baselangs
+   (with mapping to associated class)
+   - NOTE: This will be automated when we move the implementation of
+     constructs and baselangs into the schema.
+
 # The Implementation of Meta
 
 This document provides details about the implementation (and design)

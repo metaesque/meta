@@ -749,7 +749,15 @@ scope:
       var path : str #:
         The path to check for existence.
     scope:
-      return os.path.exists(path)
+      kind = self.kind()
+      if kind == 'memory':
+        /# We need to make a distinction between "readonly" (which has
+        /# read-access to the file system) and "no filesystem at all". For now,
+        /# 'memory' really means 'readonly'
+        result = os.path.exists(path)
+      else:
+        result = os.path.exists(path)
+      return result
     end method exists;
 
     method lexists : bool #:
@@ -760,7 +768,12 @@ scope:
       var path : str #:
         The path to check for existence.
     scope:
-      return os.path.lexists(path)
+      kind = self.kind()
+      if kind == 'memory':
+        raise Error('lexists not implemented')
+      else:
+        result = os.path.lexists(path)
+      return result
     end method lexists;
 
     method chmod #:
@@ -771,7 +784,11 @@ scope:
       var mode : int #:
         The mode (e.g. 0640, 0755, etc.)
     scope:
-      os.chmod(path, mode)
+      kind = self.kind()
+      if kind == 'memory':
+        raise Error('lexists not implemented')
+      else:
+        os.chmod(path, mode)
     end method chmod;
 
     method basename : str #:
@@ -779,7 +796,12 @@ scope:
     params:
       var path : str;
     scope:
-      return os.path.basename(path)
+      kind = self.kind()
+      if kind == 'memory':
+        return os.path.basename(path)
+        /# raise Error('basename not implemented')
+      else:
+        return os.path.basename(path)
     end method basename;
 
     method dirname : str #:
@@ -787,7 +809,12 @@ scope:
     params:
       var path : str;
     scope:
-      return os.path.dirname(path)
+      kind = self.kind()
+      if kind == 'memory':
+        return os.path.dirname(path)
+        /# raise Error('dirname not implemented')
+      else:
+        return os.path.dirname(path)
     end method dirname;
 
     method abspath : str #:
@@ -795,7 +822,12 @@ scope:
     params:
       var path : str;
     scope:
-      return os.path.abspath(path)
+      kind = self.kind()
+      if kind == 'memory':
+        return os.path.abspath(path)
+        /# raise Error('abspath not implemented')
+      else:
+        return os.path.abspath(path)
     test:
     end method abspath;
 
@@ -804,7 +836,12 @@ scope:
     params:
       var path : str;
     scope:
-      return os.path.normpath(path)
+      kind = self.kind()
+      if kind == 'memory':
+        return os.path.normpath(path)
+        /# raise Error('normpath not implemented')
+      else:
+        return os.path.normpath(path)
     end method normpath;
 
     method relpath : str #:
@@ -864,7 +901,11 @@ scope:
       var mode : int = 493;
     scope:
       /# print 'MKDIR: %s' % thedir
-      os.mkdir(thedir, mode)
+      kind = self.kind()
+      if kind == 'memory':
+        raise Error('mkdir not implemented')
+      else:
+        os.mkdir(thedir, mode)
     end method mkdir;
 
     method makedirs #:
@@ -887,7 +928,11 @@ scope:
     params:
       var path : str;
     scope:
-      return os.unlink(path)
+      kind = self.kind()
+      if kind == 'memory':
+        raise Error('unlink not implemented')
+      else:
+        return os.unlink(path)
     end method unlink;
 
     method symlink #:
@@ -896,9 +941,13 @@ scope:
       var realpath : str;
       var linkpath : str;
     scope:
-      if os.path.exists(linkpath):
-        os.unlink(linkpath)
-      os.symlink(realpath, linkpath)
+      kind = self.kind()
+      if kind == 'memory':
+        raise Error('unlink not implemented')
+      else:
+        if os.path.exists(linkpath):
+          os.unlink(linkpath)
+        os.symlink(realpath, linkpath)
     end method symlink;
 
     method isdir : bool #:
@@ -906,7 +955,11 @@ scope:
     params:
       var path : str;
     scope:
-      return os.path.isdir(path)
+      kind = self.kind()
+      if kind == 'memory':
+        raise Error('isdir not implemented')
+      else:
+        return os.path.isdir(path)
     end method isdir;
 
     method isfile : bool #:
@@ -914,7 +967,11 @@ scope:
     params:
       var path : str;
     scope:
-      return os.path.isfile(path)
+      kind = self.kind()
+      if kind == 'memory':
+        raise Error('isfile not implemented')
+      else:
+        return os.path.isfile(path)
     end method isfile;
 
     method islink : bool #:
@@ -922,7 +979,11 @@ scope:
     params:
       var path : str;
     scope:
-      return os.path.islink(path)
+      kind = self.kind()
+      if kind == 'memory':
+        raise Error('islink not implemented')
+      else:
+        return os.path.islink(path)
     end method islink;
 
     method mtime : float #:
@@ -947,8 +1008,12 @@ scope:
       var oldpath : str;
       var newpath : str;
     scope:
-      print 'RENAME: %s %s' % (oldpath, newpath)
-      os.rename(oldpath, newpath)
+      kind = self.kind()
+      if kind == 'memory':
+        raise Error('rename not implemented')
+      else:
+        print 'RENAME: %s %s' % (oldpath, newpath)
+        os.rename(oldpath, newpath)
     end method rename;
 
     method listdir #:
@@ -959,7 +1024,11 @@ scope:
       var thedir : str #:
         The directory to query.
     scope:
-      return os.listdir(thedir)
+      kind = self.kind()
+      if kind == 'memory':
+        raise Error('listdir not implemented')
+      else:
+        return os.listdir(thedir)
     end method listdir;
 
     method filesWithinMatching : vec<str> #:
@@ -1002,7 +1071,7 @@ scope:
         fp.write('#' * 80 + '\n')
       fp.write('Filesystem:\n')
       filemap = self.filemap()
-      for subpath in sorted(filemap):
+      for i, subpath in enumerate(sorted(filemap), start=1):
         basefile = filemap[subpath]
         contents = basefile.contents()
         mapfile = basefile.mapfile()
@@ -1010,8 +1079,8 @@ scope:
           fp.write('  ' + '=' * 80 + '\n')
         subpathstr = subpath if len(subpath) < 60 else subpath[:59] + '$'
         fp.write(
-          '  %8d %-60s%s\n' %
-          (len(contents), subpathstr, ' map' if mapfile else ''))
+          '  %2d %8d %-60s%s\n' %
+          (i, len(contents), subpathstr, ' map' if mapfile else ''))
         if verbose:
           fill = '   |'
           assert contents[-1] == '\n'
@@ -1111,10 +1180,15 @@ scope:
       The contents of the file.
     scope:
       accessor get lazy:
-        bytes = self.bytes()
-        contents = bytes.getvalue() if bytes else None
-        print 'NOTE: Acquired %d bytes from implicit bytes for %s' % (
-          len(contents), self.subpath())
+        link = self.link()
+        if link:
+          /# TODO(wmh): Is this the right way to handle symlinks when inmemory?
+          contents = link.contents()
+        else:
+          bytes = self.bytes()
+          contents = bytes.getvalue() if bytes else None
+        /# print 'NOTE: Acquired %d bytes from implicit bytes for %s' % (
+        /#   len(contents), self.subpath())
         -> contents
       end;
     end field contents;
@@ -1135,7 +1209,7 @@ scope:
     field mode : int #:
       The mode to be associated with this file.
 
-    field link : str #:
+    field link : BaseFile #:
       If not null, indicates this file is a symlink to the file
       in this field.
 

@@ -20,3 +20,6 @@ Pressing issues:
     test:
     end method list;
 
+ - In schema.meta, when relying on a contruct defiend in an abstract
+   construct parent, inheritance only works for constructs defined in the
+   immediate parent, not in arbitrary ancestors.

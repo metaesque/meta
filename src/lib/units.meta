@@ -14,7 +14,7 @@ scope:
       https://en.wikipedia.org/wiki/SI_derived_unit
     For both base and derived units, conversion from non-SI units are also
     supported.
-  assocs:
+  assocs<py>:
     std assoc logging;
     std assoc re;
   scope:
@@ -33,7 +33,7 @@ scope:
     scope:
       /# Establish how many bits are used to represent the unit exponent for
       /# each dimension.
-      PowerBits = cls.PowerBits
+      PowerBits = cls.PowerBits()
       PB2 = 1 << (PowerBits - 1)
 
       /# Split the string representation into groups of unit specs separated
@@ -44,7 +44,7 @@ scope:
       /#      1. base unit str (may be None)
       /#      2. power indicator (may be None)
       /#      3. operator ('*', '' or '/'  with spaces removed)
-      nre = cls.RE
+      nre = cls.Re()
       parts = nre.split(repr)
       if debug: print parts
       n = len(parts)
@@ -90,6 +90,13 @@ scope:
           if scale:
             val *= udata['scale']
           else:
+            /# The only time we should get here is for 'temperature'. In
+            /# python, we could store a 'to' key in the udata that contains
+            /# a lambda to convert. However, that is more messy in C++, having
+            /# keys with different types forcing use of 'any' or variant.
+            /# They also do not work when initializing via constant field expr
+            /# (which is very useful for C++).
+            print 'here with unit=%s' % unit
             val = udata['to'](val)
           /# We need to remember the non-si unit.
           /# print 'HERE with nonsi %s = %s' % (udata['unit'], udata['suffix'])
@@ -159,359 +166,7 @@ scope:
       test.isapprox(0.523599, q4.value())
     end method New;
 
-    meta
-    lifecycle scope:
-      /# A unit representation is a collection of unit specs separated by
-      /# separators.
-      /#  - unit specs are [<value>]<base_unit>[unit_power] and uniquely
-      /#    identify the associated dimension.
-      /#  - legal separators are '*', '', and '/' (spaces allowed before/after)
-      cls.RE = re.compile(
-        /# The numeric part (significant notation allowed, and can be empty).
-        r'([0-9]*(?:\.\d+)?(?:e[+-]?\d+)?)'
-        /# The base unit part (optional)
-        /#  - We could improve this by enumerating all the legal units, but that
-        /#    would produce a more inefficient regexp
-        /#  - we do not allow '*' or '/' because they are "unit operators" that
-        /#    can appear in the separators between units.
-        r'([^\d\s^*/]+)?'
-        /# The unit power part (optional)
-        r'(?:\^(-?\d+))?'
-      )
-
-      /# The number of bits reserved for each base unit to express powers.
-      /#   2 --> -2 to 1       can fit 32 in 64bit
-      /#   3 --> -4 to 3       can fit 21
-      /#   4 --> -8 to 7       can fit 16
-      /#   5 --> -16 to 15     can fit 12
-      /#   6 --> -32 to 31     can fit 10
-      /#   7 --> -64 to 63     can fit  9
-      cls.PowerBits = 4
-
-      /# The number of bits reserved for each base dimension to express unit
-      /# kind (e.g. kg or pound or stone, meter or foot, etc.)
-      cls.UnitBits = 4
-
-      cls.Dimensions = {
-        /# Base dimensions: https://en.wikipedia.org/wiki/International_System_of_Units
-        /# https://en.wikipedia.org/wiki/International_System_of_Quantities
-
-        /# See the unix command 'units' and in particular the data file
-        /# /usr/share/misc/units.lib
-        'length': {
-          'index': 0,
-          'si': 'meter',
-          'quantity': 'l',
-          'dim': 'L',
-          'units': {
-            'meter': {'suffix': 'm', 'scale': 1.0, 'num': 0},
-            'kilometer':  {'suffix': 'km', 'scale': 1000.0, 'num': 1},
-            'centimeter': {'suffix': 'cm', 'scale': 0.01, 'num': 2},
-            'millimeter': {'suffix': 'mm', 'scale': 0.001, 'num': 3},
-            'micrometer': {'suffix': 'um', 'scale': 0.000001, 'num': 4},
-            'nanometer':  {'suffix': 'nm', 'scale': 0.000000001, 'num': 5},
-            'inch': {'suffix': 'in', 'scale': 0.0254, 'num': 6},
-            'foot': {'suffix': 'ft', 'scale': 0.3048, 'num': 7},
-            'yard': {'suffix': 'yd', 'scale': 0.9144, 'num': 8},
-            'mile': {'suffix': 'mi', 'scale': 1609.34, 'num': 9},
-            'nautical_mile': {'suffix': 'M', 'suffix2': 'NM', 'scale': 1852, 'num': 10},
-          },
-        },
-        'mass': {
-          'index': 1,
-          'si': 'kilogram',
-          'quantity': 'm',
-          'dim': 'M',
-          'units': {
-            'kilogram': {'suffix': 'kg', 'scale': 1.0, 'num': 0},
-            'gram': {'suffix': 'g', 'scale': 0.001, 'num': 1},
-            'milligram': {'suffix': 'mg', 'scale': 0.000001, 'num': 2},
-            'microgram': {'suffix': 'ug', 'scale': 0.000000001, 'num': 3},
-            'tonne': {'aliases': ['metric_ton'], 'suffix': 't', 'scale': 1000.0, 'num': 4},
-            'long_ton': {'aliases': ['imperial_ton'], 'suffix': 'longton', 'scale': 1016.05, 'num': 5},
-            'ton': {'aliases': ['us_ton'], 'suffix': 'ton', 'scale': 907.185, 'num': 6},
-            'pound': {'suffix': 'lb', 'scale': 0.453592, 'num': 7},
-            'ounce': {'suffix': 'oz', 'scale': 0.0283495, 'num': 8},
-            'stone': {'suffix': 'st', 'scale': 6.35029, 'num': 9},
-          },
-        },
-        'time': {
-          'index': 2,
-          'si': 'second',
-          'quantity': 't',
-          'dim': 'T',
-          'units': {
-            'second': {'suffix': 's', 'scale': 1.0, 'num': 0},
-            'millisecond': {'suffix': 'ms', 'scale': 0.001, 'num': 1},
-            'microsecond': {'suffix': 'us', 'scale': 0.000001, 'num': 2},
-            'nanosecond':  {'suffix': 'ns', 'scale': 0.000000001, 'num': 3},
-            'minute': {'suffix': 'min', 'scale': 60.0, 'num': 4},
-            'hour': {'suffix': 'hr', 'scale': 3600.0, 'num': 5},
-            'day': {'suffix': 'dy', 'scale': 86400.0, 'num': 6},
-            'week': {'suffix': 'wk', 'scale': 604800.0, 'num': 7},
-          },
-        },
-        'current': {
-          'index': 3,
-          'si': 'ampere',
-          'quantity': 'I',
-          'dim': 'I',
-          'units': {
-            /# https://en.wikipedia.org/wiki/Ampere
-            'ampere': {'suffix': 'A', 'scale': 1.0, 'num': 0},
-          },
-        },
-        'temperature': {
-          'index': 4,
-          'si': 'kelvin',
-          'quantity': 'T',
-          'dim': 'O',  # TODO(wmh): Theta, not O.
-          'units': {
-            'kelvin': {'suffix': 'K', 'num': 0},
-            'celsius': {
-              'suffix': 'C',
-              'to': lambda v: v + 273.15,
-              'from': lambda v: v - 273.15,
-              'num': 1,
-            },
-            'fahrenheit': {
-              'suffix': 'F',
-              'to': lambda v: (v + 459.67) * (5.0/9.0),
-              'from': lambda v: (v * 1.8) - 459.67,
-              'num': 2,
-            },
-          },
-        },
-        'amount': {
-          'index': 5,
-          'si': 'mole',
-          'quantity': 'n',
-          'dim': 'N',
-          'units': {
-            'mole': {'suffix': 'mol', 'scale': 1.0, 'num': 0},
-          },
-        },
-        'intensity': {
-          'index': 6,
-          'si': 'candela',
-          'quantity': 'Iv',
-          'dim': 'J',
-          'units': {
-            /# https://en.wikipedia.org/wiki/Candela
-            'candela': {'suffix': 'cd', 'scale': 1.0, 'num': 0},
-          },
-        },
-
-        /# Not parted of the SI standard.
-        'bit': {
-          'index': 7,
-          'si': 'bit',
-          'quantity': '',
-          'dim': 'B',
-          'units': {
-            'bit': {'suffix': 'bits', 'scale': 1.0, 'num': 0},
-            'byte': {'suffix': 'B', 'scale': 8.0, 'num': 1},
-          },
-        },
-      }
-
-      /# Initialize PowerMap
-      /#   If we use k bits to represent each power, we can represent (2^k)-1
-      /#   numbers. To represent both positive and negative numbers we want to
-      /#   have 0 be represented by 2^(k-1). Thus, if k = 6, a power of 0 is
-      /#   represented by 2^5 = 32. A bitstream that encodes 7 chunks of 6 bits
-      /#   in which each chunk has conceptual value 0 means we need bit stream
-      /#   100000100000100000100000100000100000100000 which is 0x20820820820 in
-      /#   hex. The following initializes PowerMap with the appropriate integer
-      /#   values to initialize N chunks of P bits, keyed by P (where N is
-      /#   len(BaseDimensions)
-      powermap = {}
-      numdim = len(cls.Dimensions)
-      for P in range(2, 8):
-        bstr = '1' + '0' * (P-1)
-        bitstr = bstr * numdim
-        intval = int(bitstr, 2)
-        powermap[P] = intval
-      cls.PowerMap = powermap
-
-      /# ZeroPowers is an int64 representing a powers value of all zeros.
-      cls.ZeroPowers = powermap[cls.PowerBits]
-
-      cls.DerivedUnits = {
-        /# https://en.wikipedia.org/wiki/SI_derived_unit
-        /# Name      Sym. Quantity                 Equivalents    base unit
-        /# hertz     Hz   frequency                1/s            s-1
-        /# radian    rad  angle                    m/m            1
-        /# steradian sr   solid angle              m2/m2          1
-        /# newton    N    force, weight            kg*m/s2        kg*m*s−2
-        /# pascal    Pa   pressure, stress         N/m2           kg*m−1*s−2
-        /# joule     J    energy, work, heat       N*m;C*V;W*s    kg*m2*s−2
-        /# watt      W    power,radiant flux       J/s;V*A        kg*m2*s−3
-        /# coulomb   C    electric charge          s*A;F*V        s*A
-        /#                quantity of electricity
-        /# volt      V    voltage                  W/A;J/C        kg*m2*s−3*A−1
-        /#                electrical pot. diff.
-        /#                electromotive force
-        /# farad     F    electrical capacitance   C/V;s/Ω        kg−1*m−2*s4*A2
-        /# ohm       Ω    electrical resistance    1/S;V/A        kg*m2*s−3*A−2
-        /#                impedance, reactance
-        /# siemens   S    electrical conductance   1/Ω;A/V        kg−1*m−2*s3*A2
-        /# weber     Wb   magnetic flux            J/A;T*m2       kg*m2*s−2*A−1
-        /# tesla     T    magnetic field strength  V*s/m2;Wb/m2   kg*s−2*A−1
-        /#                magnetic flux density    ;N/(A*m)
-        /# henry     H    electrical inductance    V*s/A;Ω*s;Wb/A kg*m2*s−2*A−2
-        /# degree C  °C   temp rel. to 273.15 K    K              K
-        /# lumen     lm   luminous flux            cd*sr          cd
-        /# lux       lx   illuminance              lm/m2          m−2*cd
-        /# becquerel Bq   radioactivity            1/s            s−1
-        /#                (decays per unit time)
-        /# gray      Gy   absorbed dose            J/kg           m2*s−2
-        /#                (of ionizing radiation)
-        /# sievert   Sv   equivalent dose          J/kg           m2*s−2
-        /#                (of ionizing radiation)
-        /# katal     kat  catalytic activity       mol/s          s−1*mol
-        'frequency': {
-          'si': 'hertz',
-          'powers': {'s': -1},
-          'units': {
-            'hertz': {'suffix': 'Hz', 'scale': 1.0, 'num': 0},
-          }
-        },
-        'angle': {
-          'si': 'radian',
-          'powers': {},
-          'units': {
-            'radian': {'suffix': 'rad', 'scale': 1.0, 'num': 0},
-            'degree': {'suffix': 'o', 'suffix2': 'degs', 'scale': 0.0174533, 'num': 1},
-            'gradian': {'suffix': 'gon', 'scale': 0.015708, 'num': 2},
-            'milliradian': {'suffix': 'mil', 'scale': 0.001, 'num': 3},
-            'arc_minute': {'suffix': "\'", 'suffix2': 'arcmin', 'scale': 0.000290888, 'num': 4},
-            'arc_second': {'suffix': '\"', 'suffix2': 'arcsec', 'scale': 4.84813681e-6, 'num': 5},
-          },
-        },
-        'force': {
-          'si': 'newton',
-          'powers': {'kg': 1, 'm': 1, 's': -2},
-          'units': {
-            'newton': {'suffix': 'N', 'scale': 1.0, 'num': 0},
-          },
-        },
-      }
-
-      /# Verify some invariants and create unitmap
-      unitmap = {}
-      num_units = 2 ** cls.UnitBits
-      items = cls.Dimensions.items()
-      items.extend(cls.DerivedUnits.items())
-      for dimension, data in items:
-        data['name'] = dimension
-        /# There must be a units key in data.
-        units = data['units']
-        /# There will be an index for base dimensions, but not for derived units
-        /# (and a powers for derived units but not for base dimensions).
-        index = data.get('index', None)
-        powers = data.get('powers', None)
-        /# There must be an si value, which must exist in units with num 0.
-        si = data['si']
-        siunit = units[si]
-        num = siunit['num']
-        assert num == 0, 'dimension %s has si %s and unitnum %d != 0' % (dimension, si, num)
-        /# There must be no more than num_units units.
-        assert len(units) <= num_units, 'dimension %s has %d units > max %d' % (dimension, len(units), num_units)
-
-        /# Iterate over units.
-        /#  - add some additional keys ('unit' and 'dimension')
-        /#  - register each unit in unitmap with various keys, ensuring uniqueness.
-        for unit, kdata in units.iteritems():
-          kdata['dimension'] = dimension
-          kdata['unit'] = unit
-          if index is not None:
-            kdata['index'] = index
-          if powers is not None:
-            kdata['powers'] = powers
-          suffix = kdata['suffix']
-          suffix2 = kdata.get('suffix2', None)
-          keys = [unit, suffix]
-          if suffix2:
-            keys.append(suffix2)
-          aliases = kdata.get('aliases', None)
-          if aliases:
-            keys.extend(aliases)
-          for key in keys:
-            if key is not None:
-              existing = unitmap.get(key, None)
-              if existing and kdata is not existing:
-                raise Error(
-                  'Found conflict for %s:\n%s vs\n%s' %
-                  (key, existing, kdata))
-              unitmap[key] = kdata
-        /# We also allow one to specify a unit by the generic dimension name.
-        unitmap[dimension] = siunit
-      /# We add a special None unitmap to support "no unit".
-      unitmap[None] = {'unit': None, 'num': 0, 'power': 0}
-
-      /# Debuggging
-      if False:
-        for key in sorted(unitmap):
-          unitdata = unitmap[key]
-          print '%-20s = %s' % (key, unitdata.get('suffix', None))
-
-      cls.UnitMap = unitmap
-
-      cls.Unicode = {
-        1: '\u00b9',
-        2: '\u00b2',
-        3: '\u00b3',
-        4: '\u2074',
-        5: '\u2075',
-        6: '\2076',
-        7: '\2077',
-        8: '\2078',
-        9: '\2079',
-        0: '\2070',
-        -1: '\u207b\u00b9',
-        -2: '\u207b\u00b2',
-        -3: '\u207b\u00b3',
-        -4: '\u207b\u2074',
-        -5: '\u207b\u2075',
-        -6: '\u207b\2076',
-        -7: '\u207b\2077',
-        -8: '\u207b\2078',
-        -9: '\u207b\2079',
-        'times': '\u00b7',
-      }
-
-      cls.Str = {
-        1: '',
-        2: '^2',
-        3: '^3',
-        4: '^4',
-        5: '^5',
-        6: '^6',
-        7: '^7',
-        8: '^8',
-        9: '^9',
-        0: '^0',
-        -1: '^-1',
-        -2: '^-2',
-        -3: '^-3',
-        -4: '^-4',
-        -5: '^-5',
-        -6: '^-6',
-        -7: '^-7',
-        -8: '^-8',
-        -9: '^-9',
-        'times': '*',
-      }
-
-      cls.Subclasses = None
-
-      /# Parsing this implicitly breaks WAE code, which does not yet contain
-      /# a copy of /usr/share/misc/units.lib.
-      /# cls.ParseUnits()
-    end lifecycle;
-
-    meta
+    static
     method ParseUnits : map #:
       Parse the data file associated with the unix 'units' command:
         /usr/share/misc/units.lib
@@ -565,13 +220,13 @@ scope:
                 umap[name] = {'scale': fscale, 'other': expr}
             else:
               print 'Line %4d unknown: %s' % (ln, line)
-      cls.Aliases = aliases
-      cls.Units = umap
+      Quantity.Aliases = aliases
+      Quantity.Units = umap
     test:
       metax.units.Quantity.ParseUnits()
     end method ParseUnits;
 
-    meta
+    static
     method Encode : int #:
       Set or increment an encoded bit-sequence within a bit-stream
     params:
@@ -644,7 +299,7 @@ scope:
       test.iseq(0x31, Encode(0x33, 0, 2, -2, incr=True))
     end method Encode;
 
-    meta
+    static
     method DimensionEncoding : int #:
       Return an encoding of powers of units.
     params:
@@ -652,7 +307,7 @@ scope:
         Maps unit names/aliases/abbrevs to integer powers (positive or negative)
     scope:
       Quantity = metax.units.Quantity
-      nb = Quantity.PowerBits
+      nb = Quantity.PowerBits()
       result = Quantity.ZeroPowers
       unitmap = Quantity.UnitMap
       for unit, power in units.iteritems():
@@ -663,8 +318,8 @@ scope:
       return result
     test:
       UE = metax.units.Quantity.DimensionEncoding
-      PB = metax.units.Quantity.PowerBits
-      N = len(metax.units.Quantity.Dimensions)
+      PB = metax.units.Quantity.PowerBits()
+      N = len(metax.units.Quantity.Dimensions())
       val0 = '1' + '0' * (PB-1)
       valm2 = '0' + '1' * (PB-2) + '0'
       val1 = '1' + '0' * (PB-2) + '1'
@@ -678,7 +333,7 @@ scope:
         bin(UE({'length': 1, 'time': -2})))
     end method DimensionEncoding;
 
-    meta
+    static
     method AddDimensionEncodings : int #:
       Add two encodings together.
     params:
@@ -689,8 +344,8 @@ scope:
       var negate : bool = false #:
         If true, subtract encoding2 rather than add.
     scope:
-      PowerBits = cls.PowerBits
-      N = len(cls.Dimensions)
+      PowerBits = Quantity.PowerBits()
+      N = len(Quantity.Dimensions())
       PB2 = 1 << (PowerBits - 1)
       mask = (1 << PowerBits) - 1
       result = encoding
@@ -701,11 +356,28 @@ scope:
         if dim_power:
           if negate:
             dim_power = -dim_power
-          result = cls.Encode(result, start, PowerBits, dim_power, incr=True)
+          result = Quantity.Encode(result, start, PowerBits, dim_power, incr=True)
         start += PowerBits
       return result
     test:
     end method AddDimensionEncodings;
+
+    static field Re : regexp #:
+      A unit representation is a collection of unit specs separated by
+      separators.
+       - unit specs are [<value>]<base_unit>[unit_power] and uniquely
+         identify the associated dimension.
+       - legal separators are '*', '', and '/' (spaces allowed before/after)
+
+    static field Str : map<int,str> #:
+      Maps integer powers to ascii string representations.
+      TODO(wmh): Convert the keys to strings (also contains 'times': '*', which
+      won't fly in C++).                                              
+
+    static field Unicode : map<int,str> #:
+      Maps integer powers to unicode string representations.
+      TODO(wmh): Convert the keys to strings (also contains 'times': '*', which
+      won't fly in C++).                                              
 
     field value : double #:
       The value of the unit.
@@ -744,6 +416,139 @@ scope:
       where -16 <= p <= 15 and 0 <= q <= 15. This would require 7*5 + 7*4 = 59
       less than 64 bits, so it would be encodable in a single int64.
 
+    meta field PowerBits : int = 4 #:
+      The number of bits reserved for each base unit to express powers.
+        2 --> -2 to 1       can fit 32 in 64bit
+        3 --> -4 to 3       can fit 21
+        4 --> -8 to 7       can fit 16
+        5 --> -16 to 15     can fit 12
+        6 --> -32 to 31     can fit 10
+        7 --> -64 to 63     can fit  9
+
+    meta field UnitBits : int = 4 #:
+      The number of bits reserved for each base dimension to express unit
+      kind (e.g. kg or pound or stone, meter or foot, etc.)
+
+    meta field Dimensions : map #:
+      Base dimensions: https://en.wikipedia.org/wiki/International_System_of_Units
+      https://en.wikipedia.org/wiki/International_System_of_Quantities
+      See the unix command 'units' and in particular the data file
+      /usr/share/misc/units.lib
+    default {
+      'length': {
+      },
+    };
+
+    field testit : map = {
+      'length': {
+        'index': 0,
+        'si': 'meter',
+        'quantity': 'l',
+        'dim': 'L',
+        'units': {
+          'meter': {'suffix': 'm', 'scale': 1.0, 'num': 0},
+          'kilometer':  {'suffix': 'km', 'scale': 1000.0, 'num': 1},
+          'centimeter': {'suffix': 'cm', 'scale': 0.01, 'num': 2},
+          'millimeter': {'suffix': 'mm', 'scale': 0.001, 'num': 3},
+          'micrometer': {'suffix': 'um', 'scale': 0.000001, 'num': 4},
+          'nanometer':  {'suffix': 'nm', 'scale': 0.000000001, 'num': 5},
+          'inch': {'suffix': 'in', 'scale': 0.0254, 'num': 6},
+          'foot': {'suffix': 'ft', 'scale': 0.3048, 'num': 7},
+          'yard': {'suffix': 'yd', 'scale': 0.9144, 'num': 8},
+          'mile': {'suffix': 'mi', 'scale': 1609.34, 'num': 9},
+          'nautical_mile': {'suffix': 'M', 'suffix2': 'NM', 'scale': 1852, 'num': 10},
+        },
+      },
+      'mass': {
+        'index': 1,
+        'si': 'kilogram',
+        'quantity': 'm',
+        'dim': 'M',
+        'units': {
+          'kilogram': {'suffix': 'kg', 'scale': 1.0, 'num': 0},
+          'gram': {'suffix': 'g', 'scale': 0.001, 'num': 1},
+          'milligram': {'suffix': 'mg', 'scale': 0.000001, 'num': 2},
+          'microgram': {'suffix': 'ug', 'scale': 0.000000001, 'num': 3},
+          'tonne': {'aliases': ['metric_ton'], 'suffix': 't', 'scale': 1000.0, 'num': 4},
+          'long_ton': {'aliases': ['imperial_ton'], 'suffix': 'longton', 'scale': 1016.05, 'num': 5},
+          'ton': {'aliases': ['us_ton'], 'suffix': 'ton', 'scale': 907.185, 'num': 6},
+          'pound': {'suffix': 'lb', 'scale': 0.453592, 'num': 7},
+          'ounce': {'suffix': 'oz', 'scale': 0.0283495, 'num': 8},
+          'stone': {'suffix': 'st', 'scale': 6.35029, 'num': 9},
+        },
+      },
+      'time': {
+        'index': 2,
+        'si': 'second',
+        'quantity': 't',
+        'dim': 'T',
+        'units': {
+          'second': {'suffix': 's', 'scale': 1.0, 'num': 0},
+          'millisecond': {'suffix': 'ms', 'scale': 0.001, 'num': 1},
+          'microsecond': {'suffix': 'us', 'scale': 0.000001, 'num': 2},
+          'nanosecond':  {'suffix': 'ns', 'scale': 0.000000001, 'num': 3},
+          'minute': {'suffix': 'min', 'scale': 60.0, 'num': 4},
+          'hour': {'suffix': 'hr', 'scale': 3600.0, 'num': 5},
+          'day': {'suffix': 'dy', 'scale': 86400.0, 'num': 6},
+          'week': {'suffix': 'wk', 'scale': 604800.0, 'num': 7},
+        },
+      },
+      'current': {
+        'index': 3,
+        'si': 'ampere',
+        'quantity': 'I',
+        'dim': 'I',
+        'units': {
+          'ampere': {'suffix': 'A', 'scale': 1.0, 'num': 0},
+        },
+      },
+      'temperature': {
+        'index': 4,
+        'si': 'kelvin',
+        'quantity': 'T',
+        'dim': 'O',
+        'units': {
+          'kelvin': {'suffix': 'K', 'scale': 0.0, 'num': 0},
+          'celsius': {
+            'suffix': 'C',
+            'num': 1,
+          },
+          'fahrenheit': {
+            'suffix': 'F',
+            'num': 2,
+          },
+        },
+      },
+      'amount': {
+        'index': 5,
+        'si': 'mole',
+        'quantity': 'n',
+        'dim': 'N',
+        'units': {
+          'mole': {'suffix': 'mol', 'scale': 1.0, 'num': 0},
+        },
+      },
+      'intensity': {
+        'index': 6,
+        'si': 'candela',
+        'quantity': 'Iv',
+        'dim': 'J',
+        'units': {
+          'candela': {'suffix': 'cd', 'scale': 1.0, 'num': 0},
+        },
+      },
+      'bit': {
+        'index': 7,
+        'si': 'bit',
+        'quantity': '',
+        'dim': 'B',
+        'units': {
+          'bit': {'suffix': 'bits', 'scale': 1.0, 'num': 0},
+          'byte': {'suffix': 'B', 'scale': 8.0, 'num': 1},
+        },
+      },
+    };
+
     lifecycle #:
       Normally one uses Quantity.New() which computes the correct
       parameters to pass to this initializer.
@@ -751,6 +556,335 @@ scope:
       var value -> value;
       var powers -> powers;
     scope:
+    metainit:
+      cls.DimensionsIs({
+        'length': {
+          'index': 0,
+          'si': 'meter',
+          'quantity': 'l',
+          'dim': 'L',
+          'units': {
+            'meter': {'suffix': 'm', 'scale': 1.0, 'num': 0},
+            'kilometer':  {'suffix': 'km', 'scale': 1000.0, 'num': 1},
+            'centimeter': {'suffix': 'cm', 'scale': 0.01, 'num': 2},
+            'millimeter': {'suffix': 'mm', 'scale': 0.001, 'num': 3},
+            'micrometer': {'suffix': 'um', 'scale': 0.000001, 'num': 4},
+            'nanometer':  {'suffix': 'nm', 'scale': 0.000000001, 'num': 5},
+            'inch': {'suffix': 'in', 'scale': 0.0254, 'num': 6},
+            'foot': {'suffix': 'ft', 'scale': 0.3048, 'num': 7},
+            'yard': {'suffix': 'yd', 'scale': 0.9144, 'num': 8},
+            'mile': {'suffix': 'mi', 'scale': 1609.34, 'num': 9},
+            'nautical_mile': {'suffix': 'M', 'suffix2': 'NM', 'scale': 1852, 'num': 10},
+          },
+        },
+        'mass': {
+          'index': 1,
+          'si': 'kilogram',
+          'quantity': 'm',
+          'dim': 'M',
+          'units': {
+            'kilogram': {'suffix': 'kg', 'scale': 1.0, 'num': 0},
+            'gram': {'suffix': 'g', 'scale': 0.001, 'num': 1},
+            'milligram': {'suffix': 'mg', 'scale': 0.000001, 'num': 2},
+            'microgram': {'suffix': 'ug', 'scale': 0.000000001, 'num': 3},
+            'tonne': {'aliases': ['metric_ton'], 'suffix': 't', 'scale': 1000.0, 'num': 4},
+            'long_ton': {'aliases': ['imperial_ton'], 'suffix': 'longton', 'scale': 1016.05, 'num': 5},
+            'ton': {'aliases': ['us_ton'], 'suffix': 'ton', 'scale': 907.185, 'num': 6},
+            'pound': {'suffix': 'lb', 'scale': 0.453592, 'num': 7},
+            'ounce': {'suffix': 'oz', 'scale': 0.0283495, 'num': 8},
+            'stone': {'suffix': 'st', 'scale': 6.35029, 'num': 9},
+          },
+        },
+        'time': {
+          'index': 2,
+          'si': 'second',
+          'quantity': 't',
+          'dim': 'T',
+          'units': {
+            'second': {'suffix': 's', 'scale': 1.0, 'num': 0},
+            'millisecond': {'suffix': 'ms', 'scale': 0.001, 'num': 1},
+            'microsecond': {'suffix': 'us', 'scale': 0.000001, 'num': 2},
+            'nanosecond':  {'suffix': 'ns', 'scale': 0.000000001, 'num': 3},
+            'minute': {'suffix': 'min', 'scale': 60.0, 'num': 4},
+            'hour': {'suffix': 'hr', 'scale': 3600.0, 'num': 5},
+            'day': {'suffix': 'dy', 'scale': 86400.0, 'num': 6},
+            'week': {'suffix': 'wk', 'scale': 604800.0, 'num': 7},
+          },
+        },
+        'current': {
+          'index': 3,
+          'si': 'ampere',
+          'quantity': 'I',
+          'dim': 'I',
+          'units': {
+            /# https://en.wikipedia.org/wiki/Ampere
+            'ampere': {'suffix': 'A', 'scale': 1.0, 'num': 0},
+          },
+        },
+        'temperature': {
+          'index': 4,
+          'si': 'kelvin',
+          'quantity': 'T',
+          'dim': 'O',  # TODO(wmh): Theta, not O.
+          'units': {
+            'kelvin': {'suffix': 'K', 'scale': 0.0, 'num': 0},
+            'celsius': {
+              'suffix': 'C',
+              'scale': 0.0,
+              /#'to': lambda v: v + 273.15,
+              /#'from': lambda v: v - 273.15,
+              'num': 1,
+            },
+            'fahrenheit': {
+              'suffix': 'F',
+              'scale': 0.0,
+              /#'to': lambda v: (v + 459.67) * (5.0/9.0),
+              /#'from': lambda v: (v * 1.8) - 459.67,
+              'num': 2,
+            },
+          },
+        },
+        'amount': {
+          'index': 5,
+          'si': 'mole',
+          'quantity': 'n',
+          'dim': 'N',
+          'units': {
+            'mole': {'suffix': 'mol', 'scale': 1.0, 'num': 0},
+          },
+        },
+        'intensity': {
+          'index': 6,
+          'si': 'candela',
+          'quantity': 'Iv',
+          'dim': 'J',
+          'units': {
+            /# https://en.wikipedia.org/wiki/Candela
+            'candela': {'suffix': 'cd', 'scale': 1.0, 'num': 0},
+          },
+        },
+
+        /# Not parted of the SI standard.
+        'bit': {
+          'index': 7,
+          'si': 'bit',
+          'quantity': '',
+          'dim': 'B',
+          'units': {
+            'bit': {'suffix': 'bits', 'scale': 1.0, 'num': 0},
+            'byte': {'suffix': 'B', 'scale': 8.0, 'num': 1},
+          },
+        },
+      })
+
+      /# Initialize PowerMap
+      /#   If we use k bits to represent each power, we can represent (2^k)-1
+      /#   numbers. To represent both positive and negative numbers we want to
+      /#   have 0 be represented by 2^(k-1). Thus, if k = 6, a power of 0 is
+      /#   represented by 2^5 = 32. A bitstream that encodes 7 chunks of 6 bits
+      /#   in which each chunk has conceptual value 0 means we need bit stream
+      /#   100000100000100000100000100000100000100000 which is 0x20820820820 in
+      /#   hex. The following initializes PowerMap with the appropriate integer
+      /#   values to initialize N chunks of P bits, keyed by P (where N is
+      /#   len(BaseDimensions)
+      powermap = {}
+      numdim = len(cls.Dimensions())
+      for P in range(2, 8):
+        bstr = '1' + '0' * (P-1)
+        bitstr = bstr * numdim
+        intval = int(bitstr, 2)
+        powermap[P] = intval
+      cls.PowerMap = powermap
+
+      /# ZeroPowers is an int64 representing a powers value of all zeros.
+      cls.ZeroPowers = powermap[cls.PowerBits()]
+
+      cls.DerivedUnits = {
+        /# https://en.wikipedia.org/wiki/SI_derived_unit
+        /# Name      Sym. Quantity                 Equivalents    base unit
+        /# hertz     Hz   frequency                1/s            s-1
+        /# radian    rad  angle                    m/m            1
+        /# steradian sr   solid angle              m2/m2          1
+        /# newton    N    force, weight            kg*m/s2        kg*m*s−2
+        /# pascal    Pa   pressure, stress         N/m2           kg*m−1*s−2
+        /# joule     J    energy, work, heat       N*m;C*V;W*s    kg*m2*s−2
+        /# watt      W    power,radiant flux       J/s;V*A        kg*m2*s−3
+        /# coulomb   C    electric charge          s*A;F*V        s*A
+        /#                quantity of electricity
+        /# volt      V    voltage                  W/A;J/C        kg*m2*s−3*A−1
+        /#                electrical pot. diff.
+        /#                electromotive force
+        /# farad     F    electrical capacitance   C/V;s/Ω        kg−1*m−2*s4*A2
+        /# ohm       Ω    electrical resistance    1/S;V/A        kg*m2*s−3*A−2
+        /#                impedance, reactance
+        /# siemens   S    electrical conductance   1/Ω;A/V        kg−1*m−2*s3*A2
+        /# weber     Wb   magnetic flux            J/A;T*m2       kg*m2*s−2*A−1
+        /# tesla     T    magnetic field strength  V*s/m2;Wb/m2   kg*s−2*A−1
+        /#                magnetic flux density    ;N/(A*m)
+        /# henry     H    electrical inductance    V*s/A;Ω*s;Wb/A kg*m2*s−2*A−2
+        /# degree C  °C   temp rel. to 273.15 K    K              K
+        /# lumen     lm   luminous flux            cd*sr          cd
+        /# lux       lx   illuminance              lm/m2          m−2*cd
+        /# becquerel Bq   radioactivity            1/s            s−1
+        /#                (decays per unit time)
+        /# gray      Gy   absorbed dose            J/kg           m2*s−2
+        /#                (of ionizing radiation)
+        /# sievert   Sv   equivalent dose          J/kg           m2*s−2
+        /#                (of ionizing radiation)
+        /# katal     kat  catalytic activity       mol/s          s−1*mol
+        'frequency': {
+          'si': 'hertz',
+          'powers': {'s': -1},
+          'units': {
+            'hertz': {'suffix': 'Hz', 'scale': 1.0, 'num': 0},
+          }
+        },
+        'angle': {
+          'si': 'radian',
+          'powers': {},
+          'units': {
+            'radian': {'suffix': 'rad', 'scale': 1.0, 'num': 0},
+            'degree': {'suffix': 'o', 'suffix2': 'degs', 'scale': 0.0174533, 'num': 1},
+            'gradian': {'suffix': 'gon', 'scale': 0.015708, 'num': 2},
+            'milliradian': {'suffix': 'mil', 'scale': 0.001, 'num': 3},
+            'arc_minute': {'suffix': "\'", 'suffix2': 'arcmin', 'scale': 0.000290888, 'num': 4},
+            'arc_second': {'suffix': '\"', 'suffix2': 'arcsec', 'scale': 4.84813681e-6, 'num': 5},
+          },
+        },
+        'force': {
+          'si': 'newton',
+          'powers': {'kg': 1, 'm': 1, 's': -2},
+          'units': {
+            'newton': {'suffix': 'N', 'scale': 1.0, 'num': 0},
+          },
+        },
+      }
+
+      /# Verify some invariants and create unitmap
+      unitmap = {}
+      num_units = 2 ** cls.UnitBits()
+      items = cls.Dimensions().items()
+      items.extend(cls.DerivedUnits.items())
+      for dimension, data in items:
+        data['name'] = dimension
+        /# There must be a units key in data.
+        units = data['units']
+        /# There will be an index for base dimensions, but not for derived units
+        /# (and a powers for derived units but not for base dimensions).
+        index = data.get('index', None)
+        powers = data.get('powers', None)
+        /# There must be an si value, which must exist in units with num 0.
+        si = data['si']
+        siunit = units[si]
+        num = siunit['num']
+        assert num == 0, 'dimension %s has si %s and unitnum %d != 0' % (dimension, si, num)
+        /# There must be no more than num_units units.
+        assert len(units) <= num_units, 'dimension %s has %d units > max %d' % (dimension, len(units), num_units)
+
+        /# Iterate over units.
+        /#  - add some additional keys ('unit' and 'dimension')
+        /#  - register each unit in unitmap with various keys, ensuring uniqueness.
+        for unit, kdata in units.iteritems():
+          kdata['dimension'] = dimension
+          kdata['unit'] = unit
+          if index is not None:
+            kdata['index'] = index
+          if powers is not None:
+            kdata['powers'] = powers
+          suffix = kdata['suffix']
+          suffix2 = kdata.get('suffix2', None)
+          keys = [unit, suffix]
+          if suffix2:
+            keys.append(suffix2)
+          aliases = kdata.get('aliases', None)
+          if aliases:
+            keys.extend(aliases)
+          for key in keys:
+            if key is not None:
+              existing = unitmap.get(key, None)
+              if existing and kdata is not existing:
+                raise Error(
+                  'Found conflict for %s:\n%s vs\n%s' %
+                  (key, existing, kdata))
+              unitmap[key] = kdata
+        /# We also allow one to specify a unit by the generic dimension name.
+        unitmap[dimension] = siunit
+      /# We add a special None unitmap to support "no unit".
+      unitmap[None] = {'unit': None, 'num': 0, 'power': 0}
+
+      /# Debuggging
+      if False:
+        for key in sorted(unitmap):
+          unitdata = unitmap[key]
+          print '%-20s = %s' % (key, unitdata.get('suffix', None))
+
+      cls.UnitMap = unitmap
+
+      /# Parsing this implicitly breaks WAE code, which does not yet contain
+      /# a copy of /usr/share/misc/units.lib.
+      /# cls.ParseUnits()
+    clinit:
+      cls.ReIs(re.compile(
+        /# The numeric part (significant notation allowed, and can be empty).
+        r'([0-9]*(?:\.\d+)?(?:e[+-]?\d+)?)'
+        /# The base unit part (optional)
+        /#  - We could improve this by enumerating all the legal units, but that
+        /#    would produce a more inefficient regexp
+        /#  - we do not allow '*' or '/' because they are "unit operators" that
+        /#    can appear in the separators between units.
+        r'([^\d\s^*/]+)?'
+        /# The unit power part (optional)
+        r'(?:\^(-?\d+))?'
+      ))
+
+
+      cls.UnicodeIs({
+        1: '\u00b9',
+        2: '\u00b2',
+        3: '\u00b3',
+        4: '\u2074',
+        5: '\u2075',
+        6: '\2076',
+        7: '\2077',
+        8: '\2078',
+        9: '\2079',
+        0: '\2070',
+        -1: '\u207b\u00b9',
+        -2: '\u207b\u00b2',
+        -3: '\u207b\u00b3',
+        -4: '\u207b\u2074',
+        -5: '\u207b\u2075',
+        -6: '\u207b\2076',
+        -7: '\u207b\2077',
+        -8: '\u207b\2078',
+        -9: '\u207b\2079',
+        'times': '\u00b7',
+      })
+
+      cls.StrIs({
+        1: '',
+        2: '^2',
+        3: '^3',
+        4: '^4',
+        5: '^5',
+        6: '^6',
+        7: '^7',
+        8: '^8',
+        9: '^9',
+        0: '^0',
+        -1: '^-1',
+        -2: '^-2',
+        -3: '^-3',
+        -4: '^-4',
+        -5: '^-5',
+        -6: '^-6',
+        -7: '^-7',
+        -8: '^-8',
+        -9: '^-9',
+        'times': '*',
+      })
+
+      cls.Subclasses = None
     end;
 
     method clone : Quantity #:
@@ -853,13 +987,13 @@ scope:
       if units is None:
         units = {}
       cls = self.__class__
-      PowerBits = cls.PowerBits
+      PowerBits = cls.PowerBits()
       HalfPB = 1 << (PowerBits-1)
       mask = (1 << PowerBits) - 1
-      dimensions = cls.Dimensions
+      dimensions = cls.Dimensions()
       powers = self.powers()
       suffixes = []
-      cmap = cls.Unicode if unicode else cls.Str
+      cmap = cls.Unicode() if unicode else cls.Str()
       times_char = cmap['times']
       for dimension_data in sorted(
         dimensions.values(), key=lambda unit: unit['index']
@@ -1128,6 +1262,13 @@ scope:
       test.q6 = Quantity.New('1 / 3s')
     end;
 
+    test
+    method test_v1 scope:
+      Quantity = metax.units.Quantity
+      /# TODO(wmh): Fix temperature (deleted 'to' and 'from' ... need better
+      /# solution).
+      /#q = Quantity.New('273.15C')
+      /# print q
 
   end class Quantity;
 

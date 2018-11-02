@@ -1,0 +1,308 @@
+MetaLanguage doc name Doc parent meta toplevel <presentation|document|spreadsheet> #:
+  Augmentation and unification of object-oriented programming languages.
+config:
+
+  abstract
+  Construct _doc_ #:
+    Abstract construct from which all Meta(Doc) constructs inheret.
+
+    All constructs in Meta(Doc) inherit from this abstract construct,
+    so the Attribute definitions here are available in subconstructs.
+    However, note that the existence of an Attribute here does NOT mean it
+    is automatically included in the subconstruct ... the subconstruct
+    must specify the primary attribute (and any customization of other
+    values).
+  config:
+
+    secondary
+    Attribute comment: : simple = <empty> aliases <#:> #:
+      Arbitrary multi-line text describing the purpose of the construct.
+
+    secondary
+    Attribute notes: : simple = <empty> #:
+      Visible comments. Will be added to as a title on the HTML version of the
+      construct.
+
+    secondary
+    Attribute config: : complex = <empty> children <Construct> #:
+      The complex block that defines/modifies Construct/Attribute instances.
+
+    secondary
+    Attribute scope: : complex = <empty> aliases <::> #:
+      The collection of subconstructs.
+
+  end Construct _doc_;
+
+  Construct document < _doc_ #:
+    The document construct.
+  config:
+
+    primary
+    Attribute document : word = <required> #:
+      The name of the document
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: children <native>;
+
+  end Construct document;
+
+  Construct presentation < _doc_ #:
+    The presentation construct.
+  config:
+
+    primary
+    Attribute presentation : word = <required> #:
+      The name of the namespace.
+
+    secondary
+    Attribute width : num = 1000 #:
+      The width (in pixels) of each slide.
+
+    secondary
+    Attribute height : num = 800 #:
+      The height (in pixels) of each slide.
+
+    secondary
+    Attribute padding : num = 10 #:
+      The padding (in pixels, all sides) for each slide. The active area to
+      write into should take this padding into account.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: children <slide|native|style|script|filter>;
+
+  end Construct presentation;
+
+  Construct slide < _doc_ #:
+    The slide construct.
+  config:
+
+    primary
+    Attribute slide : word = <auto> #:
+      The name of the class.
+
+    secondary
+    Attribute repeat : word = <empty> #:
+      Insert a copy of a named slide (value is id of slide to insert).
+
+    secondary
+    Attribute animate : str = <empty> #:
+      Space-or-commad-separated list of subids to animate (hide initially, and
+      incrementally show when up/down arrows are used).
+
+    Attribute notes:;
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: children <native|panel>;
+
+  end Construct slide;
+
+  Construct panel < _doc_ #:
+    The panel construct.
+  config:
+
+    feature
+    Attribute side : <top|left|right|bottom> = left #:
+      Identifies which side of the current bounding box this panel consumes.
+    config:
+      FeatureValue left #:
+        Consume the entire available height on the left side.
+      FeatureValue right #:
+        Consume the entire avaiable height on the right side.
+      FeatureValue top #:
+        Consume the entire available width on the top side.
+      FeatureValue bottom #:
+        Consume the entire available width on the bottom side.
+    end Attribute side;
+
+    primary
+    Attribute panel : id = <auto> #:
+      The name of the class.
+
+    secondary
+    Attribute style : str = <empty> #:
+      Explicit CSS style to add to the <div>.
+
+    secondary
+    Attribute color : word = <empty> aliases <fg> #:
+      The foreground colo
+
+    secondary
+    Attribute background : word = <empty> aliases <bg> #:
+      The foreground color.
+
+    secondary
+    Attribute border : str = <empty> #:
+      Describes the border. Format:
+        <spec>    ::- <subspec> (';' <subspec>)?
+        <subspec> ::- [<pos>]<num>[<color>]['/'<style>]
+        <pos>     ::- [lrtb]+         (indicates which borders ... if empty, all)
+        <num>     ::- \d+             (width of border in pixels)
+        <color>   ::- named color or #hex, etc.  Default is black
+        <style>   ::- 'none' | 'hidden' | 'dotted' | 'dashed' | 'solid' |
+                      'double' | 'groove' | 'ridge' | 'inset' | 'outset'
+      Examples:
+        1             = border: 1px black solid;
+        l2            = border-left: 2px black solid;
+        t3blue/dashed = border-top: 3px blue dashed;
+
+    secondary
+    Attribute size : num = 1.0 #:
+      If 'side' is 'left' or 'right', this refers to the desired width of the
+      panel.  If 'side' is 'top', this refers to the desired height of the
+      panel.  If it is a value greater than 1, it is assumed to be pixels. If
+      it is a float between 0.0 and 1.0 inclusive, it is assumed to be a
+      fractional amount of existing space in appropriate dimension. A value
+      of 0.5 means 50%, and a value of 1.0 means consume all remaining space
+      (the default).
+
+    secondary
+    Attribute font : num = 100 #:
+      The size of text within this panel relative to the parent container.
+      Thus, 100 means same size, 80 means 80% of parent, 150 means 150% of
+      parent, etc.
+
+    secondary
+    Attribute top : num = 0 #:
+      A pixel adjustment margin-top for this panel.
+
+    Attribute notes:;
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: : simplex children <list>;
+
+  end Construct panel;
+
+  Construct style < _doc_ #:
+    The style construct.
+  config:
+
+    primary
+    Attribute style : id = <auto> #:
+      The name of the style construct.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: : simple;
+
+  end Construct style;
+
+  Construct script < _doc_ #:
+    The script construct.
+  config:
+
+    primary
+    Attribute script : id = <auto> #:
+      The name of the script construct.
+
+    secondary
+    Attribute path : str = <empty> #:
+      An explicit path to a script.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: : simple;
+
+  end Construct script;
+
+  Construct list < _doc_ #:
+    The list construct.
+  config:
+
+    feature
+    Attribute kind : <ordered|ol|unordered|ul> = unordered #:
+      What kind of list.
+    config:
+      FeatureValue unordered aliases <ul> #:
+        The list is unordered.
+      FeatureValue ordered aliases <ol> #:
+        The list is ordered.
+    end Attribute kind;
+
+    primary
+    Attribute list : id = <auto> #:
+      The name of the list construct.
+
+    secondary
+    Attribute path : str = <empty> #:
+      An explicit path to a list.
+
+    secondary
+    Attribute style : str = <empty> #:
+      Explicit CSS style to add to the <div>.
+
+    secondary
+    Attribute font : num = 100 #:
+      The size of text within this list relative to the parent container.
+      Thus, 100 means same size, 80 means 80% of parent, 150 means 150% of
+      parent, etc.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: : complex children <item>;
+
+  end Construct list;
+
+  Construct item < _doc_ #:
+    The item construct.
+  config:
+
+    primary
+    Attribute item : id = <auto> #:
+      The name of the item construct.
+
+    secondary
+    Attribute style : str = <empty> #:
+      Explicit CSS style to add to the <div>.
+
+    secondary
+    Attribute font : num = 100 #:
+      The size of text within this list relative to the parent container.
+      Thus, 100 means same size, 80 means 80% of parent, 150 means 150% of
+      parent, etc.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: : simple;
+
+  end Construct item;
+
+  Construct filter < _doc_ #:
+    The filter construct.
+  config:
+
+    primary
+    Attribute filter : id = <auto> #:
+      The name of the class.
+
+    secondary
+    Attribute re : str = <required> #:
+      The regexp to filter
+
+    secondary
+    Attribute replacement : str = <required> aliases <=> #:
+      The replacement.
+
+    Attribute comment:;
+
+  end Construct filter;
+
+  Construct native < _doc_ #:
+    The native construct.
+  config:
+
+    primary
+    Attribute native : id = <auto> #:
+      The name of the native.
+
+    Attribute comment:;
+    Attribute scope: : simple;
+
+  end Construct native;
+
+  BaseLanguage html name Html suffixes <html>;
+  BaseLanguage tex name TeX suffixes <tex>;
+  BaseLanguage markdown name Markdown suffixes <md>;
+
+end MetaLanguage doc;
