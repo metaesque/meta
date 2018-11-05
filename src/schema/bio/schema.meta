@@ -1,0 +1,306 @@
+MetaLanguage bio name Bio parent meta toplevel <person> #:
+  The constructs in Meta(Bio).
+config:
+
+  abstract
+  Construct _bioroot_ clsname BioConstruct #:
+    All constructs in Meta(Bio) inherit from this abstract construct,
+    so the Attribute definitions here are available in subconstructs.
+    However, note that the existence of an Attribute here does NOT mean it
+    is automatically included in the subconstruct ... the subconstruct
+    must specify the primary attribute (and any customization of other
+    values).
+  config:
+    
+    secondary
+    Attribute comment: : simple = <empty> aliases <#:> #:
+      An arbitrary multi-line comment used to describe the purpose of the
+      construct.
+
+    secondary
+    Attribute config: : complex = <empty> children <Construct> #:
+      The complex block within which Construct/Attribute instances can be
+      modified.
+
+    secondary
+    Attribute scope: : complex = <empty> aliases <::> #:
+      The collection of subconstructs.
+    
+  scope:
+  end Construct _bioroot_;
+
+  Construct person < _bioroot_ #:
+    A person for whom a bio is being defined.
+  config:
+
+    primary
+    Attribute person : word = <auto> #:
+      The day, in format YYYY-mm-dd or YYYYmmdd
+
+    secondary
+    Attribute given : word = <empty> #:
+      First name
+
+    secondary
+    Attribute surname : word = <empty> #:
+      Last name
+
+    secondary
+    Attribute dob : word = <empty> #:
+      YYYY-mm-dd
+      YYYY-mm
+      YYYY
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: children <video>;
+
+    Template default scope:
+      >|<!DOCTYPE html>
+      >|<html>
+      >| <head>
+      >|  <meta charset="UTF-8">
+      >|  <title>${name}</title>
+      >|  <!-- https://developer.mozilla.org/en-US/docs/Web/HTML/Element/style -->
+      >|  <style>
+      >|    .sources {
+      >|       display: none;
+      >|    }
+      >|  </style>
+      >|  <!-- https://developer.mozilla.org/en-US/docs/Web/HTML/Element/script -->
+      >|  <script>
+      >|    function toggleDisplay(id) {
+      >|      var elem = document.getElementById(id);
+      >|      if (elem) {
+      >|        var display = elem.style.display;
+      >|        // console.log('Here with id=' + id + ' display=' + display);
+      >|        elem.style.display = ((!display) || (display == 'none')) ? 'block': 'none';
+      >|      } else {
+      >|        console.log('ERROR: Failed to find ' + id);
+      >|      }
+      >|    }
+      >|  </script>
+      >| </head>
+      >| <body>
+      >|  <h1>${name}</h1>
+      >|
+      >|  <h2>Summary</h2>
+      >|    ${summary}
+      >|
+      >|  <h2>Filmography</h2>
+      >|    ${filmography}
+      >|
+      >| </body>
+      >|</html>
+    end Template;
+
+  translate:
+    metac = self.compiler()
+    metafile = self.metafile()
+
+    /# Process child constructs.
+    streams = metafile.streams()
+    streams.initStreams('summary', 'filmography')
+    children = self.attrval('scope:', default=None) or []
+    for child in children:
+      child.translateMeta()
+
+    /# Merge streams into a single .html file
+    context = self.context()
+    consinfo = context.consinfo('person')
+    template = consinfo.templateNamed('default')
+
+    name = '%s %s' % (
+      self.attrval('given') or '?', self.attrval('surname') or '?')
+    comment = self.attrval('comment:') or []
+
+    varset = metax.c.VarSet()
+    varset.addVar('name', name)
+    varset.addVar('summary', comment)
+    varset.addVar('filmography', streams.stream('filmography'))
+
+    segment = metax.c.BaseSegment(self.primary())
+    segment.instantiate(template, varset, self.kind(), self.fqn())
+
+    path = metafile.path()
+    assert path.endswith('.bio')
+    outpath = path.replace('.bio', '.html')
+    mappath = path.replace('.bio', '.map')
+    mapfile = metax.c.MapFile(mappath, path)
+
+    lines = []
+    segment.flattenLines(lines, mapfile, strip_special=True)
+    text = '\n'.join(lines)
+
+    with open(outpath, 'w') as fp:
+      fp.write(text)
+    print 'Wrote ' + outpath
+  scope:
+  end Construct person;
+
+  Construct video < _bioroot_ #:
+    A video that the person participates in.
+  config:
+
+    primary
+    Attribute video : id = <auto> #:
+      Some identifier for the video. Not strictly needed.
+
+    secondary
+    Attribute title : str = <empty> #:
+      The official title for the video.
+
+    secondary
+    Attribute brand : str = <empty> #:
+      Who produced the video.
+
+    secondary
+    Attribute date : word = <empty> #:
+      When the video was created.
+        YYYY-mm-dd
+        YYYY-mm
+        YYYY
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: children <source>;
+
+    Template default scope:
+      >|
+      >|<li id="${id}"><span onclick="toggleDisplay('${id}-sources');">[${date}] ${title} [${brand}]</span><sup>${numsrc}</sup></li>
+      >|<div id="${id}-sources" class="sources">
+      >|  <ul>
+      >|    ${sources}
+      >|  </ul>
+      >|</div>
+    end Template;
+
+  translate:
+    metafile = self.metafile()
+
+    /# Process child constructs.
+    streams = metafile.streams()
+    streams.initStreams('sources')
+    children = self.attrval('scope:', default=None) or []
+    for child in children:
+      child.translateMeta()
+
+    /# Merge streams into a single .html file
+    context = self.context()
+    consinfo = context.consinfo('video')
+    template = consinfo.templateNamed('default')
+
+    id = self.fqn(terminal='person', noauto=True)
+    title_expr = self.attrval('title', default=None)
+    title = title_expr.asStr(unquote=True) if title_expr else '?'
+    brand_expr = self.attrval('brand', default=None)
+    brand = brand_expr.asStr(unquote=True) if brand_expr else '?'
+    sources = streams.stream('sources')
+
+    varset = metax.c.VarSet()
+    varset.addVar('id', id)
+    varset.addVar('date', self.attrval('date', default=None) or '?')
+    varset.addVar('title', title)
+    varset.addVar('brand', brand)
+    varset.addVar('numsrc', str(len(sources)) if sources else '')
+    varset.addVar('sources', sources)
+
+    segment = metax.c.BaseSegment(None)
+    segment.instantiate(template, varset, self.kind(), self.fqn())
+    streams.addSegment('filmography', segment)
+
+  scope:
+  end Construct video;
+
+  Construct source < _bioroot_ #:
+    A video source.
+  config:
+
+    primary
+    Attribute source : id = <auto> #:
+      Some identifier for the source. Not strictly needed.
+
+    secondary
+    Attribute uri : str = <empty> #:
+      The public uri of the video.
+
+    secondary
+    Attribute rawuri : str = <empty> #:
+      The raw uri of the video. May be url or path.
+
+    secondary
+    Attribute duration : word = <empty> #:
+      SS
+      MM:SS
+      HH:MM:SS
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: children <source>;
+
+    Template full scope:
+      >|<li><a href="${rawurl}" target="metabio-video">raw</a> from <a href="${url}" target="metabio-page">${source}</a></li>
+    end Template;
+
+    Template video scope:
+      >|<li><a href="${rawurl}" target="metabio-video">${source}</a></li>
+    end Template;
+
+    Template page scope:
+      >|<li><a href="${url}" target="metabio-page">${source}</a></li>
+    end Template;
+
+    Template empty scope:
+      >|<li>${source}</li>
+    end Template;
+
+  translate:
+    metafile = self.metafile()
+    streams = metafile.streams()
+
+    /# This construct has no children.
+    source = self.id()
+    if metax.c.Context.IsAutoId(source): source = '?'
+    duration = self.attrval('duration')
+    uri_expr = self.attrval('uri', default=None)
+    uri = uri_expr.asStr(unquote=True) if uri_expr else None
+    rawuri_expr = self.attrval('rawuri', default=None)
+    rawuri = rawuri_expr.asStr(unquote=True) if rawuri_expr else None
+
+    /# Add a <li> to the 'sources' stream representing this source.
+    /#  - which template we use depends on which attributes are available.
+    context = self.context()
+    consinfo = context.consinfo('source')
+    if uri:
+      template_name = 'full' if rawuri else 'page'
+    elif rawuri:
+      template_name = 'video'
+    else:
+      template_name = 'empty'
+    template = consinfo.templateNamed(template_name)
+    
+    varset = metax.c.VarSet()
+    varset.addVar('source', source)
+    varset.addVar('duration', duration)
+    varset.addVar('url', uri)
+    varset.addVar('rawurl', rawuri)
+
+    segment = metax.c.BaseSegment(None)
+    segment.instantiate(template, varset, self.kind(), self.fqn())
+    streams.addSegment('sources', segment)
+    
+  scope:
+  end Construct source;
+
+  abstract
+  BaseLanguage _root_ clsname BaseLanguageBio #:
+    Abstract superclass of all baselangs in Meta(Bio).
+  scope:
+  end;
+
+  BaseLanguage dummy < _root_ suffixes <dy> #:
+    Meta(Bio) does not have any existing baselangs, so we create a dummy.
+  scope:
+  end;
+
+end MetaLanguage bio;

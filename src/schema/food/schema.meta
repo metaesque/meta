@@ -3,7 +3,7 @@ MetaLanguage food name Food parent meta toplevel <day> #:
 config:
 
   abstract
-  Construct _foodroot_ #:
+  Construct _foodroot_ clsname FoodRootConstruct #:
     All constructs in Meta(Food) inherit from this abstract construct,
     so the Attribute definitions here are available in subconstructs.
     However, note that the existence of an Attribute here does NOT mean it
@@ -26,6 +26,8 @@ config:
     Attribute scope: : complex = <empty> aliases <::> #:
       The collection of subconstructs.
 
+  scope:
+    abstract method kind : str;
   end Construct _foodroot_;
 
   Construct day < _foodroot_ #:
@@ -48,6 +50,10 @@ config:
     Attribute config:;
     Attribute scope: children <meal|exercise>;
 
+  expand:
+    for child in self.attrval('scope:'):
+      child.expandMeta()
+  scope:
   end Construct day;
 
   Construct meal < _foodroot_ #:
@@ -74,7 +80,10 @@ config:
     Attribute comment:;
     Attribute config:;
     Attribute scope: children <food>;
-
+  expand:
+    for child in self.attrval('scope:'):
+      child.expandMeta()
+  scope:
   end Construct meal;
 
   Construct food < _foodroot_ #:
@@ -110,7 +119,7 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    
+  scope:
   end Construct food;
 
   Construct exercise < _foodroot_ #:
@@ -138,7 +147,18 @@ config:
     Attribute comment:;
     Attribute config:;
     Attribute scope:;
-    
+  scope:    
   end Construct exercise;
+
+  abstract
+  BaseLanguage _root_ clsname BaseLanguageBio #:
+    Abstract superclass of all baselangs in Meta(Food).
+  scope:
+  end;
+
+  BaseLanguage dummy < _root_ suffixes <dy> #:
+    Meta(Bio) does not have any existing baselangs, so we create a dummy.
+  scope:
+  end;
 
 end MetaLanguage food;

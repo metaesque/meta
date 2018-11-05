@@ -1639,7 +1639,7 @@ scope:
     Any such child directories must be specified in the generator.
   assocs:
     usertest std assoc datetime;
-    test std assoc time;
+    usertest std assoc time;
   scope:
 
     field generator : method #:

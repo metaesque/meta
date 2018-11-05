@@ -20,31 +20,45 @@ METAROOT=$(metac config src_root)
 
 3. Define the classes
  % cd $METAROOT/src/kernel
- % $EDITOR parser.meta
- - Define a subclass ${name}Construct of Construct as abstract superclass of
-   all constructs for metalang $name.
- - For each construct defined in the new metalanguage, define a subclass
-   ${basename}Construct of ${name}Construct:
-    - must define kind(), expandMeta() and translateMeta()
-    - examples:
-        SlideConstruct < DocConstruct
+ % metac schema $id
+ - The above generates meta$id.meta in local directory
+   - contains classes for each Construct and BaseLanguage defined
+     in the schema
+   - you can add 'clsname' attributes to constructs if the default
+     class names aren't what are desired.
+   - add 'expand:', 'import:' (optional), 'translate:', and 'compile:' (optional)
+     blocks to each construct in schema.meta and reinvoke 'metac schema $id'
+     to see the effect.
+   - the end result should be a hierarchy of classes under Construct:
+      - ${Id}Construct < metax.c.Construct
+        - ${construct}Construct, for each construct in the metalang
+      - BaseLanguage$Id < metax.c.BaseLanguageConstruct
+        - ${Id}${baselang}, for each baselang in the metalang     
+        - example: for Meta(Doc) we have Id=Doc id=doc, and for baselang markdown
+          we have baselang=Markdown baseid=markdown.  So we are creating subclass
+          DocMarkdown of BaseLanguageDoc.
+      - remember that the baselang classes are Construct subclasses, but are
+        special in that there is a separate class for each baselang id
+        (all other constructs have one class per construct, not per id).
 
- - Define a subclass BaseLanguage$Name of BaseLanguageConstruct
- - Define subclasses $name$basename of BaseLanguage$name for each baselang
-   - example: for Meta(Doc) we have name=Doc id=doc, and for baselang markdown
-     we have basename=Markdown baseid=markdown.  So we are creating subclass
-     DocMarkdown of BaseLanguageDoc.
-   - lifecycle specifies four args (id, parent, context, precount) and passes
-     them to parent.
-   - lifecycle initializes id, name and suffixes
-   - TODO(wmh): This can be done automatically from the BaseLanguageConstruct
-     instances.  
+4. Create an emacs major mode:
+ % metac -L $id emacs
+ - $EDITOR ~/.r/home/lib/emacs/wmh.el
+   - in wmh-reload-meta, add a cond entry for the new metalang
+   - in wmh-initialize-keymaps, define a key in mymeta-map under "r" for new metalang
+   - in wmh-initialize, add
+        (add-to-list 'auto-mode-alist '("\\.<some-suffix>$" . meta<id>2-mode))
+   - M-x M-x (wmh-initialize-keymaps t)
+   - C-@ r <key> (in a buffer containing a file written in the new metalang)
 
- - Update Compiler.METADATA, defining the metalang, toplevel constructs, all
-   known constructs (with mapping to associated class), and all known baselangs
-   (with mapping to associated class)
-   - NOTE: This will be automated when we move the implementation of
-     constructs and baselangs into the schema.
+5. Create code to interact with the new schema
+ % cd $WMH/lib/python/wmh
+ % $EDITOR $id.meta
+ - Define a 'Env' class that inherits from metax.c.MetaEnv
+    - the lifecycle should pass metal and basel up to parent lifecycle
+    - See $WMH/lib/python/wmh/bio.meta for an example structure.
+ - Define a 'command' that provides access to functionality related to the
+   metalang.
 
 # The Implementation of Meta
 

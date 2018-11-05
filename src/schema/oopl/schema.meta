@@ -3,7 +3,7 @@ MetaLanguage oopl name Oopl parent meta toplevel <namespace|class> #:
 config:
 
   abstract
-  Construct _oopl_ #:
+  Construct _oopl_ clsname OoplConstruct #:
     Abstract construct from which all Meta(Oopl) constructs inheret.
 
     All constructs in Meta(Oopl) inherit from this abstract construct,
@@ -1375,7 +1375,7 @@ config:
   end Construct flag;
 
   abstract
-  Construct _statement_ < _oopl_ #:
+  Construct _statement_ < _oopl_ clsname StatementConstruct #:
     The abstract superconstruct for all constructs that can appear within
     complex blocks representing statement level code.
   config:

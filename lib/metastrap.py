@@ -8,6 +8,7 @@
 #  - provides conditional support for auto-compilation of code.
 
 # up python paths to find meta source code.
+import logging
 import os
 import re
 import sys
@@ -20,7 +21,7 @@ Verbose = False
 _Config = None
 
 # Version: str
-#   The version of Meta being used, as established by ConfigureVersion().
+#   The version of Meta being used, as established by Setup().
 Version = None
 
 def Config(verbose=Verbose):
@@ -40,7 +41,6 @@ def Config(verbose=Verbose):
   # be the right place to store this information.  In which case we would
   # NOT provide metameta2.Config() ... or would otherwise ensure that
   # Meta.Config() returns the same thing as metameta2.Config().
-
   global _Config
   result = _Config
   if result is None:
@@ -76,10 +76,12 @@ def Config(verbose=Verbose):
       print 'PWD: %s' % os.getcwd()
       print 'DIR: %s' % str(os.listdir(os.getcwd()))
       result['config_path'] = configpath
+  logging.info('metastrap.Config() returns %s' % result)
   return result
 
 
 def ConfigureVersion(verbose=Verbose):
+  # TODO(wmh): Remove when all references are renamed to Setup()
   return Setup(verbose=verbose)
 
 
@@ -93,7 +95,7 @@ def Setup(verbose=Verbose, auto=False):
 
   SideEffect:
    - removes any element of sys.argv starting with '--meta_version='
-   - removes any element of sys.argv matching '--meta_version' and also
+   - removes any element of sys.argv equal to '--meta_version' and also
      removes the next element.
 
   Returns: tuple<str,str>
@@ -221,24 +223,24 @@ def ImportMeta(argv=None):
       (note that the wrapped command in (3) is usually NOT the same as (2) ...
       it will usually be a sub-command of (2)).
   """
-  if argv is None:
-    argv = sys.argv
   # Issues this method addresses:
   #  - in order to create a metax.c.Compiler instance, we must first
-  #    establish which version of the meta2 code is desired.
+  #    establish which version of the Meta code is desired.
   #     - the beta version is available in <<repository_path>>/oopl/python/metax
   #     - named versions are available in <<src_root>>/lib/versions/v<version>
   #     - sys.path will always include <<repository_path>>/oopl/python
   #     - if a version other than beta is desired, we insert
-  #       <<src_root>>/lib/versions/v<version>
-  #    sys.path to use the user-specified version of the meta compiler
+  #         <<src_root>>/lib/versions/v<version>
+  #       into sys.path to use the user-specified version of the meta compiler.
+  if argv is None:
+    argv = sys.argv
 
-  # ConfigureVersion
-  #   - modifies argv by removing --meta_version
-  #   - modifies sys.path by adding <<repository_path>>/oopl/python and, if
-  #     a version other than 'beta' was specified, another path BEFORE
-  #     the above path, which provides access to metax.
-  version, expected_metax_dir = ConfigureVersion()
+  # Setup
+  #  - modifies argv by removing --meta_version
+  #  - modifies sys.path by adding <<repository_path>>/oopl/python and, if
+  #    a version other than 'beta' was specified, another path BEFORE
+  #    the above path, which provides access to metax.
+  version, expected_metax_dir = Setup()
   expected_metax_path = os.path.join(expected_metax_dir, 'metax', 'c')
 
   # Import some core metax modules and verify they have the desired version.
@@ -250,11 +252,25 @@ def ImportMeta(argv=None):
       (expected_metax_path, metax.c.__path__[0]))
   import metax.root
   import metax.cli
+  compiler_class = metax.c.Compiler
 
-  command, cli = ParseArgv(argv, metax.cli, root_module=metax.root)
-  
-  return metax.c.Compiler, command, cli
+  # As of 2018-11-03, the ParseArgv code is deprated in favor of Compiler.MetaxCLI.
+  # command, cli = ParseArgv(argv, metax.cli, root_module=metax.root)
+  command, instcmd, cli = compiler_class.MetaxCLI(argv=argv)
+  return compiler_class, command, cli
 
+def DynamicCompiler(metal, basel):
+  orig_argv = sys.argv
+  sys.argv = [metal, '-L', metal]
+  Compiler, command, metacli = ImportMeta()
+  Compiler.Initialize()
+  # TODO(wmh): Should we only be initializing object cli to metacli if
+  # metal is oopl?
+  import metax.root
+  metax.root.Object.Init(cli=metacli)
+  result = Compiler(metal=metacli.metalang, basel=basel)
+  sys.argv = orig_argv
+  return result
 
 def ParseArgv(argv, cli_module, root_module=None):
   """Parse low-level command-line args into a metax.cli.Command instance.
@@ -272,6 +288,11 @@ def ParseArgv(argv, cli_module, root_module=None):
    1. The top-level Command instance. Never null.
    2. The Values wrapper around the instantiated Command instance. Null on error.
   """
+  # TODO(wmh): Delete this method after 2018-11-15.
+  raise Error(
+    'metastrap.ParseArgv() is deprecated in favor of '
+    'metax.c.Compiler.MetaxCLI()')
+  
   # Define the metax.cli.Command instance that describes top-level Meta compiler
   # flags. These are the only flags that general Metax compiler code will rely
   # on.
@@ -281,45 +302,30 @@ def ParseArgv(argv, cli_module, root_module=None):
     summary='The baselang to compile into.',
     desc='If this is <special>, a metalang-specific default is used')
   command.newFlag(
-    'debug', 'int', default=0, aliases='A',
-    summary='Controls meta parsing debug level.')
-  command.newFlag(
-    'implicit_scopes', 'bool', default='false',
-    summary='If true, methods without scopes are given a default body.',
-    desc='By default, methods without scopes produce an error.')
-  command.newFlag(
-    'inmemory', 'bool', default='false',
-    summary='If true, use memory filesystem instead of disk filesystem.')
-  command.newFlag(
-    'metadir', 'str', default='.meta2',
-    summary='The subdir to write code to.',
-    desc="A value of .meta2 is treated specially (is symlinked to repo)")
-  command.newFlag(
     'metalang', 'str', default='oopl', aliases='L',
     summary='The metalang the code is defined in.')
-  command.newFlag(
-    'metasrcfile', 'str', default='',
-    summary=(
-      'A specially formatted file specifying meta source files to compile.\n'
-      'Each line contains <title>: <metafile>...'))
   command.newFlag(
     'optimize_level', 'enum<off|low|avg|high|max>', default='high', aliases='O',
     summary='The amount of optimization to enable compiled files.',
     desc='')
   command.newFlag(
-    'raw', 'bool', default='false',
+    'metadir', 'str', default='.meta2',
+    summary='The subdir to write code to.',
+    desc="A value of .meta2 is treated specially (is symlinked to repo)")
+  command.newFlag(
+    'inmemory', 'bool', default='false',
+    summary='If true, use memory filesystem instead of disk filesystem.')
+  command.newFlag(
+    'metasrcfile', 'str', default='',
     summary=(
-      'If True, do not convert file references to meta '
-      '(keep baselang paths).'))
+      'A specially formatted file specifying meta source files to compile. '
+      'Each line contains <title>: <metafile>...'))
   command.newFlag(
-    'rawtests', 'bool', default='false', aliases='r',
-    summary='If true, do not use bazel to run tests.',
-    desc=(
-      'Some baselangs can invoke the test harness without bazel, and for such\n'
-      'baselangs this flag disables bazel.'))
+    'debug', 'int', default=0, aliases='A',
+    summary='Controls meta parsing debug level.')
   command.newFlag(
-    'showfs', 'bool', default='false',
-    summary='If true, print out filesystem after compilation.')
+    'disable_imports', 'bool', default='false', 
+    summary='If true, do not invoke importMeta during compilation.')
   command.newFlag(
     'summary_counts', 'bool', default='false',
     summary='If true, show construct counts in compilation summaries.')
@@ -339,6 +345,26 @@ def ParseArgv(argv, cli_module, root_module=None):
     'test', 'bool', default='false', aliases='t',
     summary='If true, invoke unit tests on all namespaces in all metafiles processed.')
   command.newFlag(
+    'showfs', 'bool', default='false',
+    summary='If true, print out filesystem after compilation.')
+
+  
+  command.newFlag(
+    'implicit_scopes', 'bool', default='false',
+    summary='If true, methods without scopes are given a default body.',
+    desc='By default, methods without scopes produce an error.')
+  command.newFlag(
+    'raw', 'bool', default='false',
+    summary=(
+      'If True, do not convert file references to meta '
+      '(keep baselang paths).'))
+  command.newFlag(
+    'rawtests', 'bool', default='false', aliases='r',
+    summary='If true, do not use bazel to run tests.',
+    desc=(
+      'Some baselangs can invoke the test harness without bazel, and for such\n'
+      'baselangs this flag disables bazel.'))
+  command.newFlag(
     'verbose', 'bool', default='false', aliases='v',
     summary='If true, print out additional diagnostics.')
   command.newFlag(
@@ -347,9 +373,6 @@ def ParseArgv(argv, cli_module, root_module=None):
   command.newFlag(
     'write_goldens', 'bool', default='false', aliases='W',
     summary='If true, tests involving goldens write instead of compare.')
-  command.newFlag(
-    'disable_imports', 'bool', default='false', 
-    summary='If true, do not invoke importMeta during compilation.')
   command.newFlag(
     'hack', 'bool', default='false', 
     summary='If true, enable some special code (used during prototyping)')

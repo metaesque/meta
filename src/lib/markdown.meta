@@ -3890,7 +3890,10 @@ scope:
   test
   class TestCase < metax.test.TestCase
   assocs:
-    std assoc os #:
+    std assoc os;
+    std assoc metastrap #:
+      /# TODO(wmh): This is not actually std, but rather lib ... we need to
+      /# establish an appropriate build target for it.
     resource simple.md path "testdata/markdown/simple.md";
     resource markdown.md path "testdata/markdown/markdown.md";
     resource simple_golden path "testdata/markdown/simple.md.golden";
@@ -3915,6 +3918,10 @@ scope:
         'title (the first one is not titled)')
       /# NOTE: Intentionally have NOT added p1 and p2 to subsection yet,
       /# although they know they are children of subsection.
+    clsetup:
+      /# TODO(wmh): Introduce a nmspsetup that performs namespace-level
+      /# setup. We only need to invoke metastrap.Setup() once.
+      metastrap.Setup()
     end lifecycle;
 
     method parseMarkdown params:
