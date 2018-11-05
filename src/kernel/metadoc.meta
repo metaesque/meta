@@ -1,0 +1,857 @@
+namespace metax.doc scope:
+
+  abstract
+  class DocConstruct < metax.c.Construct #:
+    Abstract construct from which all Meta(Doc) constructs inherit.
+
+    All constructs in Meta(Doc) inherit from this abstract construct,
+    so the Attribute definitions here are available in subconstructs.
+    However, note that the existence of an Attribute here does NOT mean it
+    is automatically included in the subconstruct ... the subconstruct
+    must specify the primary attribute (and any customization of other
+    values).
+  scope:
+    abstract method kind : str;
+
+    method streamLine #:
+      Add a single line to a stream, handling indenting.
+    params:
+      var line : str #:
+        The line to add
+      var stream : str = 'body' #:
+        The stream to add to.
+      var indent : str = '' #:
+        What to add before each line.
+    scope:
+      streams = self.metafile().streams()
+      if line:
+        streams.addLine(stream, indent + line)
+      else:
+        streams.addLine(stream, '')
+    test:
+    end method streamLine;
+
+    method streamLines #:
+      Add lines to a stream, handling >| syntax, initerpolation and indenting.
+    params:
+      var lines : vec<str> #:
+        The lines to add
+      var stream : str = 'body' #:
+        The stream to add to.
+      var indent : str = '' #:
+        What to add before each line.
+    scope:
+      def VarSub(m):
+        /# Convert a variable to a value.
+        /#  - if the variable is a kind name like panel or slide, we replace
+        /#    the var with the id of that construct.
+        /#  - what other vars do we want to support?
+        var = m.group('var')
+        if var in ('panel', 'slide'):
+          cons = self.ancestor(var)
+          result = cons.id() if cons else '?'
+        else:
+          result = '?'
+        return result
+
+      def Interpolate(m):
+        /# Handle an entire specialized variable interpolation request.
+        varstr = m.group('varstr')
+        result = metax.c.VAR_RE.sub(VarSub, varstr)
+        return '"' + result + '"'
+
+      prefix_re = metax.c.SPECIAL_PREFIX_RE2
+      interpolation_re = metax.c.INTERPOLATION_RE
+      streams = self.metafile().streams()
+      for line in lines:
+        m = prefix_re.match(line)
+        if m:
+          line = m.group('line')
+        elif line:
+          line = indent + line
+        line = interpolation_re.sub(Interpolate, line)
+        streams.addLine(stream, line)
+    test:
+    end method streamLines;
+
+    method tagStr : tuple<str,str> #:
+      Determine an html start tag with html attributes from this Meta construct.
+    params:
+      var tag : str #:
+        The tag to use.
+    scope:
+      id = self.id()
+      attrs = []
+      if not Context.IsAutoId(id) and id[0] != '_':
+        fqn = self.fqn(terminal='slide', noauto=True)
+        attrs.append('id="%s"' % fqn)
+
+      style_expr = self.attrval('style', default=None)
+      style = style_expr.asStr(unquote=True).strip() if style_expr else ''
+
+      font = self.attrval('font', default=None)
+      if font is not None:
+        if style and style[-1] != ';': 
+          style += '; '
+        style += 'font-size: %s%%;' % font
+
+      if style:
+        attrs.append('style="%s"' % style)
+
+      astr = ' '.join(attrs)
+      start = '<%s %s>' % (tag, astr) if astr else '<%s>' % tag
+      end = '</%s>' % tag
+
+      return start, end
+    test:
+    end method tagStr;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      /# TODO(wmh): Switch this to be abstract to force children to
+      /# define the method.
+      print '%s: %sConstruct.expandMeta() should be defined' % (
+        self.kindid(), self.kind().capitalize())
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      /# TODO(wmh): Switch this to be abstract to force children to
+      /# define the method.
+      print '%s: %sConstruct.translateMeta() should be defined' % (
+        self.kindid(), self.kind().capitalize())
+    end method translateMeta;
+
+  end class DocConstruct;
+
+  class DocumentConstruct < DocConstruct #:
+    The document construct.
+  scope:
+
+    method kind : str scope:
+      return 'document'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      return (None, None)
+    end method translateMeta;
+
+  end class DocumentConstruct;
+
+  class PresentationConstruct < DocConstruct #:
+    The presentation construct.
+  scope:
+
+    method kind : str scope:
+      return 'presentation'
+    end method kind;
+
+    field slides : @vec<SlideConstruct> #:
+      The slides, in order.  Populated in SlideConstruct.expandMeta().
+
+    field width : int #:
+      The width (in pixels) of each slide.
+    scope:
+      accessor get lazy:
+        res = int(self.attrval('width', default=metax.c.LOOKUP))
+        -> res
+    end;
+
+    field height : int #:
+      The height (in pixels) of each slide.
+    scope:
+      accessor get lazy:
+        res = int(self.attrval('height', default=metax.c.LOOKUP))
+        -> res
+    end;
+
+    field padding : int #:
+      The padding (in pixels) of each slide.
+    scope:
+      accessor get lazy:
+        res = int(self.attrval('padding', default=metax.c.LOOKUP))
+        -> res
+    end;
+
+    field animations : @map #:
+      Maps slide index to list of slide subids.  The subids do not have the
+      slide id prefix on them.
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      scope, children = self.attrpair('scope:')
+      for construct in children:
+        construct.expandMeta()
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      /# TODO(wmh): Add assocs to constructs
+      import json
+
+      metafile = self.metafile()
+      streams = metafile.streams()
+      streams.initStreams('style', 'jslibs', 'body')
+
+      /# NOTE: We do NOT process scope, and instead do slides(), so that
+      /# we don't have to process tags again.  If we introduce constructs
+      /# within presentations other than slides, we'll need to fix this.
+      slides = self.slides()
+      for child in self.attrval('scope:'):
+        if child.kind() == 'slide':
+          if child in self.slides():
+            child.translateMeta()
+        else:
+          child.translateMeta()
+
+      fs = self.compiler().fs()
+      path = '%s.html' % self.id()
+      with fs.open(path, 'w') as fp:
+        /# TODO(wmh): Use a template!
+        fp.write('{% extends "base.html" %}\n')
+
+        /###
+        /# Now the CSS from style constructs.
+        fp.write('\n')
+        fp.write('{% block css %}\n')
+        for line in streams.stream('style'):
+          fp.write(line + '\n')
+        fp.write('{% endblock %}\n')
+
+        /###
+        /# Now the javascript libraries
+        fp.write('\n')
+        fp.write('{% block jslibs %}\n')
+        fp.write(
+          '<script type="text/javascript" src="/static/js/metadoc.js"></script>\n')
+        /# All script constructs inserted first
+        for line in streams.stream('jslibs'):
+          fp.write(line + '\n')
+        /# Now the javascript relied upon by Meta(Doc).
+        slides = self.slides()
+        nums = len(slides)
+        animations = self.animations()
+        fp.write('<script type="text/javascript">\n')
+        fp.write('  var numSlides = %d;\n' % nums)
+        fp.write('  var SlideInfo = {\n')
+        for i in range(nums):
+          slide = slides[i]
+          sdata = {'id': slide.id()}
+          anims = animations.get(i, None)
+          if anims:
+            sdata['subids'] = anims
+          fp.write('    %d: %s,\n' % (i, json.dumps(sdata)))
+        fp.write('  };\n')
+        fp.write('</script>\n')
+        /# Close javascript.
+        fp.write('{% endblock %}\n')
+
+        /###
+        /# Now the slide content
+        fp.write('\n')
+        fp.write('{% block content %}\n')
+        for line in streams.stream('body'):
+          fp.write(line + '\n')
+        fp.write('{% endblock %}\n')
+      print 'Wrote %s' % path
+
+      return (None, None)
+    end method translateMeta;
+
+  end class PresentationConstruct;
+
+  class SlideConstruct < DocConstruct #:
+    The slide construct.
+  scope:
+
+    method kind : str scope:
+      return 'slide'
+    end method kind;
+
+    field index : int #:
+      The position of this slide in its parent.  Assigned in
+      SlideConstruct.expandMeta().
+
+    field bbox : vec<int> #:
+      The left-top-right-bottom points of the available bounding box.
+
+    field tags : vec<str> #:
+      Tags associated with this slide.
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      /# TODO(wmh): Add assocs to constructs!
+      import re
+
+      preso = self.ancestor('presentation')
+      assert preso
+      width = preso.width()
+      height = preso.height()
+      padding = preso.padding()
+
+      /# Establish if this slide is to be processed or not, based on tags.
+      tags = []
+      tagstr = self.attrval('tags', default=None)
+      if tagstr:
+        tags = tagstr.asStr(unquote=True).strip().split()
+      self.tagsIs(tags)
+
+      if 'disabled' in tags:
+        /# This slide is treated as if it doesn't exist at all.
+        /# It is not added to Presentation.slides(), etc.
+        /# TODO(wmh): Generalize how slides are disabled.
+        pass
+
+      else:
+        /# Note that the absolute position of .panel divs within relative relative
+        /# position .slide are from the top-left of margin, not from the top-left
+        /# of border.
+        self.bboxIs([0, 0, width, height])
+        slides = preso.slides()
+        index = len(slides)
+        self.indexIs(index)
+        slides.append(self)
+
+        /# If there are animations specified, record them with the preso.
+        animate = self.attrval('animate', default=None)
+        if animate:
+          parts = re.split(r'\s*,?\s*', animate.asStr(unquote=True))
+          preso.animations()[index] = parts
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      /# TODO(wmh): Add assocs to constructs!
+      import re
+
+      metafile = self.metafile()
+      preso = self.ancestor('presentation')
+      slides = preso.slides()
+      width = preso.width()
+      height = preso.height()
+      animate = self.attrval('animate', default=None)
+
+      self.streamLine('')
+      self.streamLine('<div id="%s" class="slide">' % self.id())
+
+      title = self.attrval('title', default=None)
+      if title:
+        tstr = title.asStr(unquote=True)
+        self.streamLine('  <h1>%s</h1>' % tstr)
+        /# We consume some space at the top for the title.
+        self.bbox()[1] += 100
+
+      repeat_attr, repeat = self.attrpair('repeat', default=None)
+
+      /# The scope: of a slide is a complex block.
+      /#  - native constructs are dumped verbatim
+      /#  - panels are where the real power lies.
+      scope = self.attrval('scope:', default=None) or []
+      if scope and repeat:
+        metafile.warning(
+          'repeat is ignored when scope: provided',
+          line=repeat_attr.line())
+      elif not scope and repeat:
+        parent = self.parent()
+        other = parent.cons(repeat, default=None)
+        if other is None:
+          metafile.error(
+            '%s references unknown %s' % (self.id(), repeat),
+            line=repeat_attr.line())
+        else:
+          /# We clone the 'scope:' attribute of the referred to construct,
+          /# adding the new clone as the 'scope:' attribute of self.
+          /#  - this ensures that variable interpolation in the cited slide
+          /#    are re-evaluated within the context of this new slide,
+          /#    especially important if variable interpolation is used to
+          /#    establish ids for html elements (we don't want the same ids
+          /#    in different slides).
+          other_scope = other.attr('scope:', default=None)
+          new_scope = other_scope.clone(self)
+          self.registerAttribute(new_scope)
+          scope = new_scope.value()
+          /# TODO(wmh): Is the following still needed? Should this be for
+          /# self.bbox instead??
+          other.bboxIs([0, 0, width, height])
+
+      for construct in scope:
+        construct.translateMeta()
+
+      csize = 20
+
+      if self is slides[0]:
+        /# First slide, no left arrow
+        /# TODO(wmh): This does not properly account for slide 0 being disabled!
+        cleft = ''
+      else:
+        /# CODOETANGLE(leftarrow)
+        cleft = '&nbsp;&nbsp;<span onclick="slideStep(-1);">&#x21e6;</span>'
+
+      if self is slides[-1]:
+        /# Last slide, no right arrow
+        /# TODO(wmh): This does not properly account for slide 0 being disabled!
+        cright = ''
+      else:
+        /# CODOETANGLE(rightarrow)
+        cright = '<span onclick="oneStep(1);">&#x21e8;</span>'
+
+      if animate:
+        /# There are animations in this slide, so we show up/down arrows.
+        ccenter = '<span onclick="animateStep(-1);">&#x21e7;</span> <span onclick="animateStep(1);">&#x21e9;</span>'
+      else:
+        ccenter = ''
+
+      clines = [
+        '<div class="panel" style="height: %dpx; left: 0px; top: %dpx; width: %dpx;">' % (csize, height-csize, width),
+        '  <table style="color: #999; font-size: %dpt; width: %dpx;"><tr>'
+        '<td style="text-align: left; width: 33%%;">%s</td>'
+        '<td style="text-align: center; width: 34%%;">%s</td>'
+        '<td style="text-align: right; width: 33%%;">%s</td>'
+        '</tr></table>' % (csize, width, cleft, ccenter, cright),
+        '</div>',
+      ]
+      self.streamLines(clines, indent='  ') 
+
+      self.streamLine('</div>')
+
+      /# If there is a 'classes' attribute, we add some javascript.
+      cssinfo = self.attrval('classes', default=None)
+      if cssinfo:
+        self.streamLine('<script type="text/javascript">')
+        parts = re.split(r'\s*;\s*', cssinfo.asStr(unquote=True).strip())
+        for part in parts:
+          /# TODO(wmh): Handle errors instead of crashing python.
+          subid, css = part.split('=')
+          id = '%s-%s' % (self.id(), subid)
+          for csscls in css.split():
+            self.streamLine('  addClass("%s", "%s");' % (id, csscls))
+        self.streamLine('</script>')
+      return (None, None)
+    end method translateMeta;
+
+  end class SlideConstruct;
+
+  class PanelConstruct < DocConstruct #:
+    The panel construct.
+  scope:
+
+    method kind : str scope:
+      return 'panel'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      scope_attr, scope = self.attrpair('scope:', default=None)
+      if scope_attr:
+        if scope_attr.isComplexBlock():
+          /# expand children.
+          for child in scope:
+            child.expandMeta(output=output)
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      /# TODO(wmh): Add assocs to constructs!
+      import re
+
+      /# A panel provides the core formatting mechanism. It is a <div> with
+      /# support for sizing, etc.
+      metafile = self.metafile()
+      streams = metafile.streams()
+      slide = self.ancestor('slide')
+      preso = self.ancestor('presentation')
+      padding = preso.padding()
+      bbox = slide.bbox()
+      left, top, right, bottom = bbox
+      width = right - left
+      height = bottom - top
+
+      title = self.attrval('title', default=None) or ''
+      side = self.attrval('side')
+      /# TODO(wmh): As of 2018-10-25, attribute values of type 'num' are
+      /# represented as strings when they should be ints/floats. Fix this.
+      size = float(self.attrval('size'))
+      font = int(self.attrval('font'))
+      fgcolor = self.attrval('color')
+      bgcolor = self.attrval('background')
+      border_attr, border_str = self.attrpair('border', default=None)
+      border = border_str.asStr(unquote=True) if border_str else ''
+      style_str = self.attrval('style', default=metax.c.LOOKUP)
+      top_margin_adj = int(self.attrval('top'))
+      notes = self.attrval('notes:', default=None) or []
+
+      style_data = {}
+      if bgcolor:
+        style_data['background-color'] = bgcolor
+      if fgcolor:
+        style_data['color'] = fgcolor
+      if font and font != 100:
+        style_data['font-size'] = '%d%%' % font
+      if top_margin_adj:
+        style_data['margin-top'] = '%dpx' % top_margin_adj
+
+      bre = re.compile(
+        r'^(?P<pos>[lrtb]*)'
+        r'(?P<num>\d+)'
+        r'(?P<color>[^/\t ]*)'
+        r'(?:/(?P<style>\S+))?$'
+      )
+      if border:
+        bmap = {
+          'a': 'border',
+          't': 'border-top',
+          'b': 'border-bottom',
+          'l': 'border-left',
+          'r': 'border-right'
+        }
+        for spec in border.split(';'):
+          m = bre.match(spec)
+          if m:
+            pos = m.group('pos') or 'a'
+            px = int(m.group('num'))
+            color = m.group('color') or 'black'
+            style = m.group('style') or 'solid'
+            for c in list(pos):
+              style_data[bmap[c]] = '%dpx %s %s' % (px, color, style)
+          else:
+            metafile.error(
+              'Invalid border spec "%s"' % spec, line=border_attr.line())
+
+      /# If size is between 0 and 1, it is a fractional value. If it is greater
+      /# than 1, it is a number of pixels.
+      if size >= 0.0 and size <= 1.0:
+        /# We convert to pixels.
+        if side in ('left', 'right'):
+          /# size is a fraction of current width
+          pixels = int(size * width + 0.5)
+        else:
+          /# size is a fraction of current height
+          pixels = int(size * height + 0.5)
+      else:
+        pixels = int(size + 0.5)
+
+      if side in ('left', 'right'):
+        /# pixels refers to the width of this panel.
+        if pixels > width:
+          /# Request to consume more pixels than we have available.
+          raise Error('fix me')
+        style_data['width'] = '%dpx' % pixels
+        style_data['height'] = '%dpx' % height
+        style_data['top'] = '%dpx' % (top + padding)
+        if side == 'left':
+          style_data['left'] = '%dpx' % (left + padding)
+          bbox[0] += pixels
+        else:
+          style_data['left'] = '%dpx' % (right - pixels)
+          bbox[2] -= pixels
+      else:
+        /# pixels refers to the height of this panel.
+        if pixels > height:
+          /# Request to consume more pixels than we have available.
+          raise Error('fix me')
+        style_data['height'] = '%dpx' % pixels
+        style_data['width'] = '%dpx' % width
+        style_data['left'] = '%dpx' % (left + padding)
+        if side == 'top':
+          style_data['top'] = '%dpx' % (top + padding)
+          bbox[1] += pixels
+        else:
+          style_data['top'] = '%dpx' % (bottom - pixels)
+          bbox[3] -= pixels
+
+      /# TODO(wmh): Do indentation properly, using MetaSegments and
+      /# template instantiation.
+      style = '; '.join(
+        ['%s: %s' % (k, style_data[k]) for k in sorted(style_data)]) + ';'
+      style += style_str.asStr(unquote=True)
+      titlestr = ''
+      if notes:
+        titlestr = ' title="%s"' % (
+          '\n'.join(notes).replace('\"', '&quot;'))
+        /# We insert an indicator into the HTML (small red square in top left
+        /# corner of the slide).
+        /#  - note that top left corner of slide isn't appropriate for all
+        /#    panels (really only for the title panel). Need to find a better
+        /#    way of indicating per-panel notes.
+        streams.addLine(
+          'body',
+          '<img class="panel" src="/static/demo/turquoise.png" style="top: 0px; left: 0px;"/>')
+
+      divstr = '  <div class="panel" style="%s"%s>' % (style, titlestr)
+      streams.addLine('body', divstr)
+
+      scope_attr, scope = self.attrpair('scope:', default=None)
+      if scope_attr:
+        if scope_attr.isComplexBlock():
+          /# The scope is a complex block ... subconstructs write into 
+          /# appropriate streams.
+          for child in scope:
+            child.translateMeta()
+        else:
+          /# The scope is a simple block ... we write it verbatim.
+          self.streamLines(scope, indent='    ')
+
+      streams.addLine('body', '  </div>')
+
+      return (None, None)
+    end method translateMeta;
+
+  end class PanelConstruct;
+
+  class StyleConstruct < DocConstruct #:
+    The style construct.
+  scope:
+
+    method kind : str scope:
+      return 'style'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      /# TODO(wmh): Add assocs to Construct and copy over to classes.
+      import re
+
+      metafile = self.metafile()
+      preso = self.ancestor('presentation')
+      streams = metafile.streams()
+      scope = self.attrval('scope:', default=None) or []
+      vre = re.compile(r'\${([a-zA-Z0-9]+)}')
+      vmap = {
+        'width': preso.width(),
+        'height': preso.height(),
+        'padding': preso.padding(),
+      }
+
+      def Repl(m):
+        var = m.group(1)
+        val = vmap.get(var, None)
+        return str(val)
+
+      /# Hardcoded CSS for class 'slide' and 'panel'.
+      style_code = """
+       >|.slide {
+       >|  display: none;
+       >|  width: ${width}px;
+       >|  height: ${height}px;
+       >|  margin-left: auto;
+       >|  margin-right: auto;
+       >|  padding: ${padding}px;
+       >|  /* border-left: 1px solid black; */
+       >|  /* border-right: 1px solid black; */
+       >|  background-color: #fdf7ef;
+       >|  /*
+       >|   * relative position is crucial to allowing panels to specify themselves
+       >|   * absolutely within this parent div.
+       >|   */
+       >|  position: relative; 
+       >|}
+       >|
+       >|.panel {
+       >|  position: absolute;
+       >|  margin: 0px;
+       >|  padding: 0px;
+       >|}
+       >|"""
+      style_code = vre.sub(Repl, style_code)
+      streams.addLines('style', style_code.split('\n'))
+
+      for line in scope:
+        line = vre.sub(Repl, line)
+        streams.addLine('style', line)
+
+      return (None, None)
+    end method translateMeta;
+
+  end class StyleConstruct;
+
+  class ScriptConstruct < DocConstruct #:
+    The script construct.
+  scope:
+
+    method kind : str scope:
+      return 'script'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      metafile = self.metafile()
+      streams = metafile.streams()
+      scope = self.attrval('scope:', default=None)
+      if scope:
+        streams.addLine('jslibs', '<script type="text/javascript">')
+        streams.addLines('jslibs', scope)
+        streams.addLine('jslibs', '</script>')
+      else:
+        path = self.attrval('path', default=None)
+        if path:
+          streams.addLine(
+            '<script type="text/javascript" src="%s"/>' % path)
+
+      return (None, None)
+    end method translateMeta;
+
+  end class ScriptConstruct;
+
+  class ListConstruct < DocConstruct #:
+    The list construct.
+  scope:
+
+    method kind : str scope:
+      return 'list'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      metafile = self.metafile()
+      kind = self.attrval('kind')
+      indent = '  ' * (self.distance('panel')+1)
+      subindent = indent + '  '
+      start, end = self.tagStr('ol' if kind == 'ordered' else 'ul')
+
+      /# start
+      self.streamLine(start, indent=indent)
+
+      /# body
+      scope_attr, scope = self.attrpair('scope:', default=None)
+      if scope_attr:
+        if scope_attr.isComplexBlock():
+          for child in scope:
+            child.translateMeta()
+        else:
+          self.streamLines(scope, indent=subindent)
+
+      /# end
+      self.streamLine(end, indent=indent)
+
+      return (None, None)
+    end method translateMeta;
+
+  end class ListConstruct;
+
+  class ItemConstruct < DocConstruct #:
+    The item construct.
+  scope:
+
+    method kind : str scope:
+      return 'item'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      metafile = self.metafile()
+
+      indent = '  ' * (self.distance('panel')+1)
+      subindent = indent + '  '
+      start, end = self.tagStr('li')
+
+      /# start
+      self.streamLine(start, indent=indent)
+
+      /# body
+      isval = self.attrval('is', default=None)
+      if isval:
+        self.streamLine(isval.asStr(unquote=True), indent=subindent)
+
+      scope_attr, scope = self.attrpair('scope:', default=None)
+      if scope_attr:
+        if scope_attr.isComplexBlock():
+          for child in scope:
+            child.translateMeta()
+        else:
+          self.streamLines(scope, indent=subindent)
+
+      /# end
+      self.streamLine(end, indent=indent)
+
+      return (None, None)
+    end method translateMeta;
+
+  end class ItemConstruct;
+
+  class DocNativeConstruct < DocConstruct #:
+    The native construct.
+  scope:
+
+    method kind : str scope:
+      return 'native'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      metafile = self.metafile()
+      streams = metafile.streams()
+      scope = self.attrval('scope:', default=None) or []
+      parent = self.parentConstruct()
+      indent = '  ' if parent.kind() == 'slide' else ''
+      self.streamLines(scope, indent=indent)
+      return (None, None)
+    end method translateMeta;
+
+  end class DocNativeConstruct;
+
+end namespace metax.doc;

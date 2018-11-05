@@ -65,6 +65,11 @@ refresh_repo:
 	done
 	find repo | xargs chmod -w
 
+# target err:
+#   Generates data useful for testing method Compiler.filterMetaOutput
+err: .FORCE
+	metac err.meta
+	cp $(shell metac config repository_path)/oopl/python/demo/err/* err
 
 
-
+.FORCE:

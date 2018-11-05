@@ -1,2 +1,2 @@
-kernel: cli.meta fs.meta logs.meta parser.meta root.meta shell.meta test.meta
+kernel: cli.meta fs.meta logs.meta parser.meta root.meta shell.meta test.meta metameta.meta metadoc.meta metafood.meta metabio.meta
 lib: ../lib/markdown.meta ../lib/shell.meta ../lib/units.meta

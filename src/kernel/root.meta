@@ -125,9 +125,10 @@ scope:
         import metastrap
         /# print 'NOTE: Initializing metax.root.Config!'
         result = metastrap.Config()
+        logging.info('metax.root.Object.Config: initialized to %s' % str(result))
         -> result
       lazy<cc>:
-        std::cerr << "metax.c.ObjectMeta.Config() not yet implemented" << std::endl;
+        std::cerr << "metax.root.ObjectMeta.Config() not yet implemented" << std::endl;
     end field Config;
 
     static
@@ -164,8 +165,10 @@ scope:
     scope<py>:
       if cli is not None:
         Object.CLIIs(cli)
+        logging.info('metax.root.Object.Init: CLI initialized.')
       if resources is not None:
         Object.ResourceMapIs(resources)
+        logging.info('metax.root.Object.Init: ResourceMap initialized.')
     scope<cc>:
       if (cli != nullptr) {
         Object::CLIIs(cli);

@@ -1,0 +1,531 @@
+namespace metax.meta scope:
+
+  class MetaLanguageConstruct < metax.c.MetaConstruct #:
+    The MetaLanguage construct defines the collection of constructs making up
+    a Meta Language.
+  assocs:
+    resource metameta path "../schema/meta/schema.meta";
+    resource metaoopl path "../schema/oopl/schema.meta";
+    resource metadoc path "../schema/doc/schema.meta";
+  scope:
+
+    method kind : str scope:
+      return 'MetaLanguage'
+    end method kind;
+
+    field name : str #:
+      The human-presentable name of this Meta language. It is what is inserted
+      for X in Meta(X).
+
+    field metalangparent : *metax.meta.MetaLanguageConstruct #:
+      The parent MetaLanguage of this MetaLanguage. Only null for Meta(Meta).
+
+    field toplevel : vec<str> #:
+      The list of construct kinds that are legal at top-level within .meta files
+      implemented in this MetaLanguage. The toplevel kinds of ancestor languages
+      are also legal and do not need to be explicitly specified here.
+
+    field baselangs : @map<str,BaseLanguage> #:
+      The collection of BaseLanguage instances supported by this
+      MetaLanguage.  A key is added for the id, name, aliases and
+      suffix(es) of the language.
+
+    field baselist : @vec<BaseLanguage> #:
+      The collection of BaseLanguage instances in this MetaLanguage.
+
+    field basesels : @map<str,str> #:
+      Maps suffix to BaseLanguage for legal suffixes that can appear in
+      attribute key selectors. Only the first suffix associated with each
+      BaseLanguage is allowed here.
+
+    field consmap : @map<str,class> #:
+      Maps construct kind to subclass of Construct.  If a particular
+      construct id is not present, GenericConstruct is assumed.
+
+    lifecycle  params:
+      var id : str;
+      var parent : *metax.meta.ComplexBlock #:
+        Should always be null.  Required so that the MetaLanguage initializer
+        matches the Construct initializer.
+      var context : *metax.meta.Context #:
+        Should always be null.  Required so that the MetaLanguage initializer
+        matches the Construct initializer.
+      var precount : int = 0 #:
+        Should always be zero. Required so that the MetaLanguage initializer
+        matches the Construct initializer.
+    super (id, parent, context, precount=precount)
+    scope:
+      /# The special Meta* baselang suffix is always legal.
+      self.basesels()['*'] = None
+
+      /# IMPORTANT: This construct is not properly initialized until
+      /# postCreationInitialization() is invoked, which cannot be invoked
+      /# until the name, toplevel and metalangparent fields have been
+      /# initialized.
+    end lifecycle;
+
+    method postCreationInitialization #:
+      Perform post-creation initialization
+    scope:
+      name = self.name()
+      assert name is not None
+      toplevel = self.toplevel()
+      assert toplevel is not None
+      uid = self.id()
+
+      metalangparent = self.metalangparent()
+      if uid != 'meta':
+        assert metalangparent is not None
+
+      if metalangparent:
+        toplevel = metalangparent.toplevel() + toplevel
+        self.toplevelIs(toplevel)
+
+        /# Inherit parent constructs into self.
+        pmap = metalangparent.consmap()
+        for kind, ccls in pmap.iteritems():
+          self.registerConstructClass(kind, ccls)
+    end method postCreationInitialization;
+
+    method registerConstructClass #:
+      Associate a construct with a subclass of Construct.
+    params:
+      var kind : str #:
+        A construct kind.
+      var cls : class<Construct> #:
+        The subclass of Construct to use to represent instances of
+        construct 'kind'.
+    scope:
+      /# print 'Registering %s %s for %s' % (kind, cls.__name__, self.id())
+      assert issubclass(cls, metax.c.Construct)
+      self._consmap[kind] = cls
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      test.iseqvec(test.metaoopl_consids, sorted(metaoopl._consmap))
+    end method registerConstructClass;
+
+    method getConstructClass : class<Construct> #:
+      Obtain the construct class to use for instances of constructs of
+      kind 'kind'.
+    params:
+      var kind : str #:
+        A construct kind.
+    scope:
+      return self._consmap.get(kind, None)
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      conscls = metaoopl.getConstructClass('Construct')
+      test.issame(metax.meta.ConstructConstruct, conscls)
+    end method getConstructClass;
+
+    method registerBase #:
+      Add a BaseLanguage to this MetaLanguage
+    params:
+      var base : *metax.meta.BaseLanguage #:
+        The baselanguage to add.
+    scope:
+      bases = self.baselangs()
+      suffixes = base.suffixes()
+      name = base.name()
+      for key in [base.id(), base.name(), base.name().lower()] + list(suffixes):
+        current = bases.get(key, None)
+        if current and current is not base:
+          raise InternalError(
+            "Attempt to register base %s with key '%s' already used by %s"
+            % (base.id(), key, current.id()))
+        bases[key] = base
+      if suffixes:
+        self.basesels()[suffixes[0]] = base
+      self.baselist().append(base)
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      test.iseqvec(
+        ['C++', 'Javascript', 'Python'],
+        sorted([baselang.name() for baselang in metaoopl.baselist()]))
+    end method registerBase;
+
+    method baselangNamed : *metax.meta.BaseLanguage #:
+      The BaseLanguage instance associated with a given name.
+    params:
+      var nora : str #:
+        The name, alias, suffix or id of the baselang desired.
+    scope:
+      return self.baselangs().get(nora, None)
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      ooplpy = metaoopl.baselangNamed('Python')
+      test.isinst(ooplpy, metax.c.OoplPython)
+    end method baselangNamed;
+
+    method toplevelConstructKinds : vec<str> #:
+      The list of construct kinds that can appear at top-level within a
+      meta file implemented in this meta language.
+    scope:
+      return self.toplevel()
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      test.iseqvec(
+        ['MetaLanguage', 'File', 'namespace', 'class'],
+        metaoopl.toplevelConstructKinds())
+    end method toplevelConstructKinds;
+
+    method isValidBase : bool #:
+      Determine if a given string is a valid string to appear within a
+      attribute key selector to identify a baselang.
+    params:
+      var basesel : str #:
+        The baselang selector found within an attribute key.
+    scope:
+      return basesel in self.basesels()
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      test.istrue(metaoopl.isValidBase('py'))
+      test.istrue(metaoopl.isValidBase('js'))
+      test.isfalse(metaoopl.isValidBase('xx'))
+    end method isValidBase;
+
+    method preExpandFileConstruct #:
+      Perform pre-expand actions on FileConstruct.
+    params:
+      var file_construct : metax.meta.FileConstruct;
+    scope:
+      children = file_construct.attrval('scope:')
+
+      /# We perform a special analysis to move file-level class constructs into
+      /# implicit namespaces.
+      /#  - IMPORTANT: I initially planned to implement this insert-class-into-namespace
+      /#    logic in NamespaceConstruct.expandMeta() and ClassConstruct.expandMeta().
+      /#    Unfortunately, doing so causes NamespaceConstruct.expandMeta() to
+      /#    be invoked on the test namespace before the test methods from the
+      /#    implicit class are added to it, meaning no test methods are
+      /#    produced and state is uninitialized causing the compiler to crash.
+      /#    By performing the operation here, we can get the constructs into
+      /#    the expected state before we do any expansion. As an added benefit,
+      /#    the logic is in one place instead of scattered across two methods.
+      /#  - NOTE: it would be nice if FileConstruct was meta-langugage-agnostic,
+      /#    but this code is inherently Meta(Oopl)-centric. Move it into a
+      /#    metalanguage template method and invoke the method on the metalang.
+      current_namespace = None
+      for child in children:
+        ckind = child.kind()
+        if ckind == 'namespace':
+          current_namespace = child
+          namespace_scope = child.attr('scope:', default=None)
+          if namespace_scope is None:
+            /# TODO(wmh): How to indicate that this attribute is implicitly
+            /# added, and should not be used during canonicalization?
+            /#  - do we add an implicit field to ComplexBlock? Or to NamespaceConstruct?
+            scope = metax.c.ComplexBlock(None, 'scope:', [])
+            /# print 'Added new scope to %s' % child.kindfqn()
+            child.registerAttribute(scope)
+        elif ckind == 'class':
+          /# We have a File-level class ... move it into namespace.
+          if current_namespace is None:
+            metafile.error(
+              'Must specify a namespace before a class can be defined',
+              line=file_construct.primary().line())
+            /# TODO(wmh): Is it safe to return so early?
+            return
+          else:
+            child.namespaceIs(current_namespace)
+            nmsp_scope = current_namespace.attr('scope:')
+            child.changeParent(nmsp_scope)
+            /# print 'Implicitly added %s to %s' % (
+            /#   child.kindfqn(), current_namespace.kindfqn())
+            current_namespace._setClassVariant(child)
+    test:
+    end method preExpandFileConstruct;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      return (None, None)
+    end method translateMeta;
+
+  end class MetaLanguageConstruct;
+
+  class ConstructConstruct < metax.c.MetaConstruct #:
+    The construct used to define new constructs within a MetaLanguage config block,
+    and the construct used to modify/augment a pre-existing construct within
+    the complex blocks of constructs that define a 'config' block.
+
+    Any construct that contains one or more complex blocks should always provide
+    a complex-valued 'config' attribute within which Construct instances can
+    appear to change aspects of the construct within all complex blocks of
+    the construct.
+  scope:
+
+    method kind : str scope:
+      return 'Construct'
+    end method kind;
+
+    method className : str #:
+      The fully qualified name of the class implementing this construct.
+    scope:
+      result = self.attrval('clsname', default=None)
+      if result is None:
+        cid = self.id()
+        result = cid[0].capitalize() + cid[1:] + 'Construct'
+      return result
+    test:
+      _, _, _, compiler = self.cachedInfo(metal='oopl')
+      metalang = compiler.metalang()
+      config = metalang.attr('config:')
+      namespace = config.cons('namespace')
+      test.iseq('NamespaceConstruct', namespace.className())
+      root = config.cons('_oopl_')
+      test.iseq('OoplConstruct', root.className())
+    end method className;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      return (None, None)
+    end method translateMeta;
+
+  end class ConstructConstruct;
+
+  class TemplateConstruct < metax.c.MetaConstruct #:
+    A template for use in compiling a construct into a base language.
+  scope:
+
+    method kind : str scope:
+      return 'Template'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      return (None, None)
+    end method translateMeta;
+
+  end class TemplateConstruct;
+
+  class AttributeConstruct < metax.c.MetaConstruct #:
+    An attribute defined on a construct.  Key/value pair.
+  scope:
+
+    method kind : str scope:
+      return 'Attribute'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      return (None, None)
+    end method translateMeta;
+
+  end class AttributeConstruct;
+
+  class FeatureValueConstruct < metax.c.MetaConstruct #:
+    Each Construct can have zero or more feature attributes (which appear before
+    the primary key). Each feature attribute has a feature key whose value comes
+    from a pre-defined set of string values. The FeatureValue construct allows
+    one to define an individual value, provide documentation for its semantics,
+    allows for aliases to be introduced (useful when wanting to perform
+    renamings), etc.
+  scope:
+
+    method kind : str scope:
+      return 'FeatureValue'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      return (None, None)
+    end method translateMeta;
+
+  end class FeatureValueConstruct;
+
+  class FileConstruct < metax.c.MetaConstruct #:
+    A construct containing all constructs within a .meta file. This construct is
+    often NOT explicitly provided (in which case it is implicitly defined). It
+    can, however, be useful to explicit define this construct in situations
+    where one wants to customize constructs and attributes appearing anywhere in
+    the file.
+  scope:
+
+    method kind : str scope:
+      return 'File'
+    end method kind;
+
+    field current : *metax.meta.Construct #:
+      The current top-level construct.
+      Exact semantics depends on the Meta language being parsed. In Meta(Oopl),
+      this is a NamespaceConstruct, and is used to establish which namespace
+      to add a class that is a file level.
+
+    method path : str #:
+      The path to this construct within the metafile.
+    scope:
+      return ''
+    test:
+    end method path;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      metax.c.D.expand.sinfo(self.id())
+      metafile = self.metafile()
+      metalang = self.metalang()
+
+      metalang.preExpandFileConstruct(self)
+      children = self.attrval('scope:')
+
+      /# Now expand all children.
+      /#  - It is EXTREMELY important that we make a copy of children to
+      /#    iterate over, because the scope is dynamically modified during
+      /#    iteration!
+      for child in list(children):
+        child.expandMeta()
+
+      metax.c.D.expand.end()
+
+    end method expandMeta;
+
+    override
+    method importMeta
+    scope:
+      metax.c.D.imports.sinfo(self.id())
+
+      debug = False
+
+      /# We obtain the set of metafiles that this metafile depends on that
+      /# have not already been parsed.
+      metapaths = set()
+      metafile = self.metafile()
+      metac = metafile.compiler()
+      existing_classes = metac.classes()
+      existing_metafiles = metac.metafiles()
+      fs = metac.fs()
+      baselang = metac.baselang()
+      if debug:
+        print 'HERE in FileConstruct.importMeta for %s' % metafile.path()
+      for fqn in metafile.classdeps():
+        if fqn in existing_classes:
+          /# We already have the class parsed, so we do not need to check its
+          /# meta file.
+          pass
+        else:
+          class_path = fs.join(metac.repositoryPath(), baselang.classPath(fqn))
+          meta_path = metac.basePathToMeta(class_path)
+
+          /# Canonicalize path
+          if meta_path is None:
+            /# This can happen, for example, when a user specifies 
+            /#   cls assoc <class>;
+            /# when <class> is not a legal class.
+            klass = metac.classes().get(fqn, None)
+
+            /# TODO(wmh): Decide how to enable/disable this.
+            if False:
+              metafile.warning(
+                'Failed to find class %s' % fqn,
+                line=klass.primary().line() if klass else -1)
+          elif fs.exists(meta_path):
+            meta_path = fs.realpath(meta_path)
+
+          /# Register metafile
+          if debug:
+            print '  %s = %s' % (fqn, meta_path)
+          if meta_path in existing_metafiles:
+            pass
+          elif meta_path:
+            metapaths.add(meta_path)
+
+      /# We import all of the dependent metafiles.
+      for meta_path in metapaths:
+        if debug:
+          print '  *** Loading %s' % meta_path
+        metafile = metac.getMeta(
+          meta_path, expand=True,
+          /# I suspect there are times where we will need to perform a
+          /# recursive invocation of imports, but am not yet clear whether it
+          /# is better to do it depth-first (here) or breadth-first (by
+          /# iterating within this method until no more metafiles exist).
+          /# Prelminary experiments with setting this to True were causing us
+          /# to load the same file multiple times, but that may be fixed
+          /# (and if not, can be fixed).
+          imports=False,
+          /# We definitely don't need to translate or compile these classes.
+          translate=False, compile=False)
+        if debug:
+          print '  *** Loaded %s' % metafile.path()
+
+      /# Establish which metafiles need to be transitively loaded due to
+      /# additional unresolved dependencies in the above code.
+      /#  - TODO(wmh): what needs to be done here?
+
+      /# Now we have our children perform post-import actions.
+      scope, children = self.attrpair('scope:')
+      user_children = list(children)
+      for child in user_children:
+        child.importMeta()
+
+      metax.c.D.imports.end()
+
+    end method importMeta;
+
+    override
+    method translateMeta
+    scope:
+      metax.c.D.translate.sinfo(self.id())
+      scope, children = self.attrpair('scope:')
+      for child in children:
+        child.translateMeta()
+      metax.c.D.translate.end()
+
+    end method translateMeta;
+
+    override
+    method compileMeta
+    scope:
+      metax.c.D.compile.sinfo(self.id())
+      scope, children = self.attrpair('scope:')
+      for child in children:
+        child.compileMeta()
+      metax.c.D.compile.end()
+
+    end method compileMeta;
+
+  end class FileConstruct;
+
+end namespace metax.meta;

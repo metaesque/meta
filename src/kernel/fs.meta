@@ -609,7 +609,8 @@ scope:
           self.makedirs(dirpath, mode=0755)
         link = basefile.link()
         if link:
-          self.symlink(link, fullpath)
+          linkpath, _ = self.basefilePath(link)
+          self.symlink(linkpath, fullpath)
         else:
           with self.open(fullpath, 'w') as fp:
             fp.write(basefile.contents())
@@ -1292,8 +1293,13 @@ scope:
   end class StrStream;
 
   test
-  class TestCase < metax.test.TestCase scope:
-    lifecycle setup:
+  class TestCase < metax.test.TestCase assocs:
+    std assoc metastrap #:
+      /# TODO(wmh): This is not actually std, but rather lib ... we need to
+      /# establish an appropriate build target for it.
+  scope:
+    lifecycle clsetup:
+      metastrap.Setup()
     end lifecycle;
 
     method hier : Directory #:

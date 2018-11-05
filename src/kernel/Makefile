@@ -13,12 +13,29 @@ default:
 # target test:
 #   Run tests on the Meta implementation of Meta.
 test: fullmeta-py
-	metac -b py -r metax.fs metax.logs metax.c metax.root metax.cli metax.test
+	metac -b py -r metax.fs metax.logs metax.c metax.root metax.cli metax.test metax.lib.markdown metax.lib.shell metax.units
 
 # target vtest:
 #   Run tests on the Meta implementation of Meta.
 vtest: fullmeta-py
 	metac -b py -rv metax.fs metax.logs metax.c metax.root metax.cli metax.test
+
+# target diff-%:
+#   Compare beta *.meta with current *.meta
+diff-%: .FORCE
+	diff --width=160 --recursive --suppress-common-lines -y \
+	  $*.meta \
+	  ../../lib/versions/current/src/$*.meta
+
+# target pdiff-%:
+#   Compare beta *.py with current *.py
+#   Currently only works for $* equal to immediate child namespace within metax
+#   e.g. make pdiff-c diffs metax.c
+#   e.g. make pdiff-fs diffs metax.fs
+pdiff-%: .FORCE
+	diff --width=160 --recursive --suppress-common-lines -y \
+	  $(shell metac config repository_path)/oopl/python/metax/$*/__init__.py \
+	  ../../lib/versions/current/lib/metax/$*/__init__.py
 
 # target slowtest:
 #   Run tests on the Meta implementation of Meta.
@@ -44,10 +61,15 @@ slowtest: fullmeta-py
 meta-%:
 	metac -b $* root.meta test.meta
 
+full: fullmeta-py
+
 # target fullmeta-%:
 #   Compile all code needed to compile Meta in the specified baselang.
 fullmeta-%:
-	metac -b $* *.meta
+	metac schema metax
+	metac schema doc
+	metac -b $* $(METAFILES)
+	@echo "================================================================================"
 
 # target oopl:
 #   Ensure that ${METAREP}${NEWSUFFIX}/oopl is bazel-ready by overlaying
@@ -96,5 +118,8 @@ snapshot: .FORCE
 #   Create a release (e.g. v0.7.1, with .tgz files)
 release: .FORCE
 	metac snapshot --release
+
+status:
+	metac --metasrcfile=SRC --summary_counts
 
 .FORCE:

@@ -376,6 +376,9 @@ scope:
     std assoc unittest #:
       TODO(wmh): Why isn't this being implicitly included due to being a
       parent? Because it is '^'?
+    std usertest assoc metastrap #:
+      /# TODO(wmh): This is not actually std, but rather lib ... we need to
+      /# establish an appropriate build target for it.
 
     resource cipherfile path "testdata/testing/cipherfile";
     resource entry_mre path "testdata/testing/entry.mre";
@@ -595,6 +598,9 @@ scope:
       /# NOTE: Most fields have been initialized to their default values within
       /# the initializer.
       self._stubs = StubHolder()
+      /# CODETANGLE(badfs): hacks introduced 2018-11-03 to deal with failure
+      /# of the code to properly revert fake filesytem module 'os'.
+      self._hacks = {}
       self.maxDiff = None
     setup<js>:
       this.deblog('Invoking ' + this.name() + ' setUp for ' + this.methname());
@@ -1104,21 +1110,17 @@ scope:
         os.unlink(tmpfile)
       return tmpfile
     test<py>:
-      /# TODO(wmh): There is some other test method in TestCase that is causing
-      /# this test to fail (works fine by itself).
-      print 'fix TestCase.tmpFile'
-      if False:
-        self._tc.setUp()
-        self.assertEqual([], self._tc._tmpfiles)
-        tmpfile = self._tc.tmpFile()
-        self.assertEqual([tmpfile], self._tc._tmpfiles)
-        self.assertTrue(os.path.exists(tmpfile))
-        tmpfile2 = self._tc.tmpFile(create=False)
-        self.assertEqual([tmpfile, tmpfile2], self._tc._tmpfiles)
-        self.assertFalse(os.path.exists(tmpfile2))
-        self._tc.tearDown()
-        self.assertFalse(os.path.exists(tmpfile))
-        self.assertFalse(os.path.exists(tmpfile2))
+      self._tc.setUp()
+      self.assertEqual([], self._tc._tmpfiles)
+      tmpfile = self._tc.tmpFile()
+      self.assertEqual([tmpfile], self._tc._tmpfiles)
+      self.assertTrue(os.path.exists(tmpfile))
+      tmpfile2 = self._tc.tmpFile(create=False)
+      self.assertEqual([tmpfile, tmpfile2], self._tc._tmpfiles)
+      self.assertFalse(os.path.exists(tmpfile2))
+      self._tc.tearDown()
+      self.assertFalse(os.path.exists(tmpfile))
+      self.assertFalse(os.path.exists(tmpfile2))
     scope<js>:
       throw new Error('TestCase.tmpFile() not yet implemented');
     scope<cc>:
@@ -1139,8 +1141,7 @@ scope:
     test<py>:
       /# TODO(wmh): There is some other test method in TestCase that is causing
       /# this test to fail (works fine by itself).
-      print 'fix TestCase.tmpDir'
-      if False:
+      if True:
         self._tc.setUp()
         self.assertEqual([], self._tc._tmpdirs)
         tmpdir = self._tc.tmpDir()
@@ -1172,15 +1173,9 @@ scope:
         result = None
       return result
     test<py>:
-      /# TODO(wmh): There is some other test method in TestCase that is causing
-      /# this test to fail (works fine by itself).
-      print 'fix TestCase.fileContents'
-      if False:
-        /# path = os.path.join(
-        /#   os.path.dirname(__metafile__), './testdata/testing/cipherfile')
-        path = metax.root.Object.Resource(
-          'cipherfile', fqn='metax.test.TestCase')
-        self.assertEqual('aes-128-cbc\ntesting\n', self._tc.fileContents(path))
+      path = metax.root.Object.Resource(
+        'cipherfile', fqn='metax.test.TestCase')
+      test.endswith('/testdata/testing/cipherfile', path)
     scope<js>:
       throw new Error('TestCase.fileContents() not yet implemented');
     scope<cc>:
@@ -1242,18 +1237,22 @@ scope:
 
       self.assertEqual(None, tc._fs)
 
-      modules = [metax.test, sys.modules[__name__]]
-      tc.setupSharedFilesystem(
-          modules, [('/a/b/c', {'contents': 'blah'})])
+      try:
+        modules = [metax.test, sys.modules[__name__]]
+        tc.setupSharedFilesystem(
+            modules, [('/a/b/c', {'contents': 'blah'})])
 
-      fsinfo = tc._fsinfo
-      self.assertEqual(
-          ['__main__', 'metax.test'],
-          sorted(fsinfo.keys()))
-      self.assertTrue(
-        fsinfo['__main__']['objs'] is
-        fsinfo['metax.test']['objs'])
-      self.assertNotEqual(None, tc._fs)
+        fsinfo = tc._fsinfo
+        self.assertEqual(
+            ['__main__', 'metax.test'],
+            sorted(fsinfo.keys()))
+        self.assertTrue(
+          fsinfo['__main__']['objs'] is
+          fsinfo['metax.test']['objs'])
+        self.assertNotEqual(None, tc._fs)
+      finally:
+        for mod in modules:
+          tc.revertFilesystem(mod)
     end method setupSharedFilesystem;
 
     new specific
@@ -1288,8 +1287,8 @@ scope:
             'Attempt to setupFilesystem on %s when it is already setup' %
             mname)
 
-      fsinfo[mname] = {'module': module, 'objs': {}}
-      info = fsinfo[mname]
+      info = {'module': module, 'objs': {}}
+      fsinfo[mname] = info
 
       if from_module:
         oname = from_module.__name__
@@ -1310,8 +1309,17 @@ scope:
 
       module.open = objs['open']
       for modname in ('os', 'fcntl'):
-        if hasattr(module, modname):
-          self._stubs.Set(module, modname, objs[modname])
+        origmod = getattr(module, modname, None)
+        if origmod:
+          /# Problem: Setting these in _stubs is problematic because there may
+          /# be other stubs set. If we revert all stubs in revertFilesystem(),
+          /# we can break other code.
+          if False:
+            self._stubs.Set(module, modname, objs[modname])
+          else:
+            /# CODETANGLE(badfs): this code should be rewritten to be cleaner.
+            self._hacks[modname] = origmod
+            setattr(module, modname, objs[modname])
       if path_specs:
         self.populateFilesystem(fs, path_specs)
       return fs
@@ -1345,6 +1353,8 @@ scope:
       self.assertEqual(0, stat_info.st_size)
       self.assertEqual('100666', '%o' % stat_info.st_mode)
       self.assertEqual(None, tc._fs)
+
+      tc.revertFilesystem(metax.test)
     end method setupFilesystem;
 
     new specific
@@ -1474,63 +1484,66 @@ scope:
 
       /# Calling SetupFilesystem() will call PopulateFileSystem(), and it is
       /# easier to test after fully initializing than to test in isolation.
-      tc.setupFilesystem(
-          metax.test,
-          path_specs=[
-              '/home/bob/file1',
-              ('/home/bob/file2',
-               {'contents': 'hello world\n', 'perms': 0640}),
-              ('/home/bob/dir1', 'dir'),
-              ('/home/bob/dir2', {'type': 'dir', 'perms': 0755}),
-              ('/home/bob/link1',
-               {'type': 'link', 'srcpath': '/home/bob/file1'}),
-              ('/home/bob/file3',
-               {'contents_path': epath}),
-          ])
-      package = 'metax.test'
-      self.assertTrue(package in tc._fsinfo)
-      self.assertTrue(metax.test is tc._fsinfo[package]['module'])
-      for k in ('fs', 'open', 'os', 'fcntl'):
-        self.assertTrue(k in tc._fsinfo[package]['objs'])
+      try:
+        tc.setupFilesystem(
+            metax.test,
+            path_specs=[
+                '/home/bob/file1',
+                ('/home/bob/file2',
+                 {'contents': 'hello world\n', 'perms': 0640}),
+                ('/home/bob/dir1', 'dir'),
+                ('/home/bob/dir2', {'type': 'dir', 'perms': 0755}),
+                ('/home/bob/link1',
+                 {'type': 'link', 'srcpath': '/home/bob/file1'}),
+                ('/home/bob/file3',
+                 {'contents_path': epath}),
+            ])
+        package = 'metax.test'
+        self.assertTrue(package in tc._fsinfo)
+        self.assertTrue(metax.test is tc._fsinfo[package]['module'])
+        for k in ('fs', 'open', 'os', 'fcntl'):
+          self.assertTrue(k in tc._fsinfo[package]['objs'])
 
-      /# file1 is a file with no content.
-      self.assertEqual(
-          True, metax.test.os.path.exists('/home/bob/file1'))
-      stat_info = metax.test.os.stat('/home/bob/file1')
-      self.assertEqual(0, stat_info.st_size)
-      self.assertEqual('100666', '%o' % stat_info.st_mode)
+        /# file1 is a file with no content.
+        self.assertEqual(
+            True, metax.test.os.path.exists('/home/bob/file1'))
+        stat_info = metax.test.os.stat('/home/bob/file1')
+        self.assertEqual(0, stat_info.st_size)
+        self.assertEqual('100666', '%o' % stat_info.st_mode)
 
-      /# file2 is a file with content.
-      fp = metax.test.open('/home/bob/file2', 'r')
-      self.assertEqual('hello world\n', fp.read())
-      fp.close()
-      stat_info = metax.test.os.stat('/home/bob/file2')
-      self.assertEqual('100640', '%o' % stat_info.st_mode)
+        /# file2 is a file with content.
+        fp = metax.test.open('/home/bob/file2', 'r')
+        self.assertEqual('hello world\n', fp.read())
+        fp.close()
+        stat_info = metax.test.os.stat('/home/bob/file2')
+        self.assertEqual('100640', '%o' % stat_info.st_mode)
 
-      /# dir1 is a directory with default permissions.
-      self.assertEqual(
-          True, metax.test.os.path.isdir('/home/bob/dir1'))
-      stat_info = metax.test.os.stat('/home/bob/dir1')
-      self.assertEqual('40777', '%o' % stat_info.st_mode)
+        /# dir1 is a directory with default permissions.
+        self.assertEqual(
+            True, metax.test.os.path.isdir('/home/bob/dir1'))
+        stat_info = metax.test.os.stat('/home/bob/dir1')
+        self.assertEqual('40777', '%o' % stat_info.st_mode)
 
-      /# dir2 is a directory with specific permissions.
-      self.assertEqual(
-          True, metax.test.os.path.isdir('/home/bob/dir2'))
-      stat_info = metax.test.os.stat('/home/bob/dir2')
-      self.assertEqual('40755', '%o' % stat_info.st_mode)
+        /# dir2 is a directory with specific permissions.
+        self.assertEqual(
+            True, metax.test.os.path.isdir('/home/bob/dir2'))
+        stat_info = metax.test.os.stat('/home/bob/dir2')
+        self.assertEqual('40755', '%o' % stat_info.st_mode)
 
-      /# link1 is a symlink to file1
-      stat_info = metax.test.os.stat('/home/bob/link1')
-      self.assertEqual('100666', '%o' % stat_info.st_mode)
+        /# link1 is a symlink to file1
+        stat_info = metax.test.os.stat('/home/bob/link1')
+        self.assertEqual('100666', '%o' % stat_info.st_mode)
 
-      /# file3 has content initialized from a file.
-      self.assertEqual(
-          True, metax.test.os.path.exists('/home/bob/file3'))
-      stat_info = metax.test.os.stat('/home/bob/file3')
-      self.assertEqual(28, stat_info.st_size)
-      self.assertEqual('100666', '%o' % stat_info.st_mode)
+        /# file3 has content initialized from a file.
+        self.assertEqual(
+            True, metax.test.os.path.exists('/home/bob/file3'))
+        stat_info = metax.test.os.stat('/home/bob/file3')
+        self.assertEqual(28, stat_info.st_size)
+        self.assertEqual('100666', '%o' % stat_info.st_mode)
 
-      m.VerifyAll()
+        m.VerifyAll()
+      finally:
+        tc.revertFilesystem(metax.test)
     end method populateFilesystem;
 
     new specific
@@ -1560,11 +1573,14 @@ scope:
       /# If we don't first call SetupSharedFilesystem, FakeFile() is an error.
       self.assertRaises(metax.root.Error, tc.fakeFile, '/any/path')
 
-      fs = tc.setupSharedFilesystem(
-          [metax.test], [('/a/b/c', {'contents': 'blah'})])
-      fake = tc.fakeFile('/a/b/c')
-      self.assertTrue(isinstance(fake, fake_filesystem.FakeFile))
-      self.assertEqual('blah', fake.contents)
+      try:
+        fs = tc.setupSharedFilesystem(
+            [metax.test], [('/a/b/c', {'contents': 'blah'})])
+        fake = tc.fakeFile('/a/b/c')
+        self.assertTrue(isinstance(fake, fake_filesystem.FakeFile))
+        self.assertEqual('blah', fake.contents)
+      finally:
+        tc.revertFilesystem(metax.test)
     end method fakeFile;
 
     new specific
@@ -1600,9 +1616,12 @@ scope:
       /# If we don't first call SetupSharedFilesystem, FakeContent() is an error.
       self.assertRaises(metax.root.Error, tc.fakeContents, '/any/path')
 
-      fs = tc.setupSharedFilesystem(
+      try:
+        fs = tc.setupSharedFilesystem(
           [metax.test], [('/a/b/c', {'contents': 'blah'})])
-      self.assertEqual('blah', tc.fakeContents('/a/b/c'))
+        self.assertEqual('blah', tc.fakeContents('/a/b/c'))
+      finally:
+        tc.revertFilesystem(metax.test)
     end method fakeContents;
 
     new specific
@@ -1634,6 +1653,12 @@ scope:
             % mname)
       del module.open
       del fsinfo[mname]
+      
+      /# Revert fake-filesystem-related modules
+      for modname, mod in self._hacks.iteritems():
+        /# print 'Here with %s = %s vs %s' % (modname, getattr(module, modname, None), mod)
+        setattr(module, modname, mod)
+
     test<py>:
       tc = self._tc
       tc.setUp()
@@ -2268,6 +2293,8 @@ scope:
       /# This is important to stop various tests from printing out output
       /# that confuses the python parsing scripts.
       self._tc.silentIs(True)
+    clsetup:
+      metastrap.Setup()
     end;
 
   end class TestCase;  

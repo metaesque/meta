@@ -1,0 +1,217 @@
+namespace metax.bio scope:
+
+  abstract
+  class BioConstruct < metax.c.Construct #:
+    All constructs in Meta(Bio) inherit from this abstract construct,
+    so the Attribute definitions here are available in subconstructs.
+    However, note that the existence of an Attribute here does NOT mean it
+    is automatically included in the subconstruct ... the subconstruct
+    must specify the primary attribute (and any customization of other
+    values).
+  scope:
+
+    method kind : str scope:
+      return '_bioroot_'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      return (None, None)
+    end method translateMeta;
+
+  end class BioConstruct;
+
+  class PersonConstruct < BioConstruct #:
+    A person for whom a bio is being defined.
+  scope:
+
+    method kind : str scope:
+      return 'person'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      metac = self.compiler()
+      metafile = self.metafile()
+
+      /# Process child constructs.
+      streams = metafile.streams()
+      streams.initStreams('summary', 'filmography')
+      children = self.attrval('scope:', default=None) or []
+      for child in children:
+        child.translateMeta()
+
+      /# Merge streams into a single .html file
+      context = self.context()
+      consinfo = context.consinfo('person')
+      template = consinfo.templateNamed('default')
+
+      name = '%s %s' % (
+        self.attrval('given') or '?', self.attrval('surname') or '?')
+      comment = self.attrval('comment:') or []
+
+      varset = metax.c.VarSet()
+      varset.addVar('name', name)
+      varset.addVar('summary', comment)
+      varset.addVar('filmography', streams.stream('filmography'))
+
+      segment = metax.c.BaseSegment(self.primary())
+      segment.instantiate(template, varset, self.kind(), self.fqn())
+
+      path = metafile.path()
+      assert path.endswith('.bio')
+      outpath = path.replace('.bio', '.html')
+      mappath = path.replace('.bio', '.map')
+      mapfile = metax.c.MapFile(mappath, path)
+
+      lines = []
+      segment.flattenLines(lines, mapfile, strip_special=True)
+      text = '\n'.join(lines)
+
+      with open(outpath, 'w') as fp:
+        fp.write(text)
+      print 'Wrote ' + outpath
+    end method translateMeta;
+
+  end class PersonConstruct;
+
+  class VideoConstruct < BioConstruct #:
+    A video that the person participates in.
+  scope:
+
+    method kind : str scope:
+      return 'video'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      metafile = self.metafile()
+
+      /# Process child constructs.
+      streams = metafile.streams()
+      streams.initStreams('sources')
+      children = self.attrval('scope:', default=None) or []
+      for child in children:
+        child.translateMeta()
+
+      /# Merge streams into a single .html file
+      context = self.context()
+      consinfo = context.consinfo('video')
+      template = consinfo.templateNamed('default')
+
+      id = self.fqn(terminal='person', noauto=True)
+      title_expr = self.attrval('title', default=None)
+      title = title_expr.asStr(unquote=True) if title_expr else '?'
+      brand_expr = self.attrval('brand', default=None)
+      brand = brand_expr.asStr(unquote=True) if brand_expr else '?'
+      sources = streams.stream('sources')
+
+      varset = metax.c.VarSet()
+      varset.addVar('id', id)
+      varset.addVar('date', self.attrval('date', default=None) or '?')
+      varset.addVar('title', title)
+      varset.addVar('brand', brand)
+      varset.addVar('numsrc', str(len(sources)) if sources else '')
+      varset.addVar('sources', sources)
+
+      segment = metax.c.BaseSegment(None)
+      segment.instantiate(template, varset, self.kind(), self.fqn())
+      streams.addSegment('filmography', segment)
+
+    end method translateMeta;
+
+  end class VideoConstruct;
+
+  class SourceConstruct < BioConstruct #:
+    A video source.
+  scope:
+
+    method kind : str scope:
+      return 'source'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      metafile = self.metafile()
+      streams = metafile.streams()
+
+      /# This construct has no children.
+      source = self.id()
+      if metax.c.Context.IsAutoId(source): source = '?'
+      duration = self.attrval('duration')
+      uri_expr = self.attrval('uri', default=None)
+      uri = uri_expr.asStr(unquote=True) if uri_expr else None
+      rawuri_expr = self.attrval('rawuri', default=None)
+      rawuri = rawuri_expr.asStr(unquote=True) if rawuri_expr else None
+
+      /# Add a <li> to the 'sources' stream representing this source.
+      /#  - which template we use depends on which attributes are available.
+      context = self.context()
+      consinfo = context.consinfo('source')
+      if uri:
+        template_name = 'full' if rawuri else 'page'
+      elif rawuri:
+        template_name = 'video'
+      else:
+        template_name = 'empty'
+      template = consinfo.templateNamed(template_name)
+
+      varset = metax.c.VarSet()
+      varset.addVar('source', source)
+      varset.addVar('duration', duration)
+      varset.addVar('url', uri)
+      varset.addVar('rawurl', rawuri)
+
+      segment = metax.c.BaseSegment(None)
+      segment.instantiate(template, varset, self.kind(), self.fqn())
+      streams.addSegment('sources', segment)
+
+    end method translateMeta;
+
+  end class SourceConstruct;
+
+  class BaseLanguageBio < metax.c.BaseLanguageConstruct #:
+    Abstract superclass of all baselangs in Meta(Bio).
+  scope:
+
+  end class BaseLanguageBio;
+
+  class BioDummy < BaseLanguageBio #:
+    Meta(Bio) does not have any existing baselangs, so we create a dummy.
+  scope:
+
+  end class BioDummy;
+
+end namespace metax.bio;

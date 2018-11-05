@@ -1,0 +1,20 @@
+namespace demo.err #:
+  An intentionally broken codebase.
+scope:
+  class A assocs:
+    std assoc sys;
+  scope:
+    lifecycle scope:
+    end;
+
+    method f scope:
+      self.g()
+    test:
+      a = demo.err.A()
+      a.f()
+
+    method g scope:
+      self.h()
+
+    method h scope:
+      raise Exception()

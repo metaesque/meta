@@ -27,9 +27,6 @@ def main():
   # metax.c yields the same module as compiler_class is in.
   import metax.c
   assert metax.c is sys.modules[compiler_class.__module__]
-
-  # Initialize the compiler class.
-  compiler_class.Initialize()
   
   argv = ['main'] + cli.args
 
