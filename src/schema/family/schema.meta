@@ -3,7 +3,7 @@ MetaLanguage family name Family parent meta toplevel <family> #:
 config:
 
   abstract
-  Construct _familyroot_ #:
+  Construct _familyroot_ clsname FamilyRootConstruct #:
     All constructs in Meta(Family) inherit from this abstract construct,
     so the Attribute definitions here are available in subconstructs.
     However, note that the existence of an Attribute here does NOT mean it
@@ -26,10 +26,13 @@ config:
     Attribute scope: : complex = <empty> aliases <::> #:
       The collection of subconstructs.
 
+  scope:
   end Construct _familyroot_;
 
   Construct family < _familyroot_ #:
     Each family is defined by a family construct.
+  assocs:
+    cls assoc wmh.family.Person;
   config:
 
     primary
@@ -38,11 +41,28 @@ config:
 
     Attribute comment:;
     Attribute config:;
-    Attribute scope: children <person>;
+    Attribute scope: children <person|mating>;
+
+  expand:
+    env = wmh.family.Env.Instance
+    if env is None:
+      raise Error('wmh.family.Env.Instance not initialized')
+    self.envIs(env)
+    for child in self.attrval('scope:'):
+      child.expandMeta()
+  translate:
+  scope:
+
+    field env : Env;
 
   end Construct family;
 
-  Construct person < _familyroot_ config:
+  Construct person < _familyroot_ #:
+    A person within a family.
+  assocs:
+    cls assoc wmh.family.Person;
+    cls assoc wmh.date.Date;
+  config:
 
     feature
     Attribute gender : <female|male|trans|nongendered> = nongendered #:
@@ -84,9 +104,79 @@ config:
     Attribute config:;
     Attribute scope: children <person|event|link>;
 
+  expand:
+    pcons = self.parentConstruct()
+    parent = pcons.person() if pcons.kind() == 'person' else None
+    fcons = self.ancestor('family')
+    env = fcons.env()
+    gender = self.attrval('gender')
+    dobattr, dobstr = self.attrpair('dob')
+    cid = self.attrval('cid') or None
+    dob = wmh.date.Date.FromStr(dobstr)
+    key = self.id()
+
+    parent2 = None
+    mother = None
+    father = None
+    if parent:
+      /# We see if we can find a second parent based on marriage events on the
+      /# parent. Note that this fails to capture out-of-marriage conceptions,
+      /# and thus a better mechanism is needed (see the 'mating' construct for a
+      /# possibility).
+      for event in parent.events():
+        if event.kind() == 'marriage':
+          other = event.pair(parent)
+          if parent2:
+            print 'WARNING: Assuming %s conceived by %s not %s' % (
+              parent2.name(), other.name())
+          else:
+            parent2 = other
+      if parent2:
+        /# print 'NOTE: Identified %s as implicit parent of %s' % (parent2.name(), key)
+        mother = parent if parent.gender() == 'female' else parent2 if parent2.gender() == 'female' else None
+        father = parent if parent.gender() == 'male' else parent2 if parent2.gender() == 'male' else None
+      else:
+        mother = parent if parent.gender() == 'female' else None
+        father = parent if parent.gender() == 'male' else None
+
+    if dob is None:
+      self.metafile().error('Invalid dob "%s"' % dobstr, line=dobattr.line())
+    else:
+      person = env.person(key)
+      if person:
+        if not person.gender():
+          person.genderIs(gender)
+        if not person.dob():
+          person.dobIs(dob)
+        if not person.mother():
+          person.motherIs(mother)
+        if not person.father():
+          person.fatherIs(father)
+      else:
+        person = wmh.family.Person(
+          env, key, gender, dob, mother=mother, father=father, cid=cid)
+        env.register(person)
+      self.personIs(person)
+      if parent:
+        parent.addChild(person)
+      if parent2:
+        parent2.addChild(person)
+
+      for child in self.attrval('scope:'):
+        child.expandMeta()
+
+      /# We ensure that all events in the person are sorted ascending by date.
+      person.events().sort(key=lambda e: e.date())
+  translate:
+  scope:
+
+    field person : Person;
+
   end Construct person;
 
-  Construct event < _familyroot_ config:
+  Construct event < _familyroot_ #:
+    An event that occurs in a person's life (marriage, death, etc.)
+  config:
 
     feature
     Attribute kind : <marriage|divorce|death|unknown> = unknown #:
@@ -111,6 +201,34 @@ config:
     Attribute comment:;
     Attribute config:;
 
+  expand:
+    pcons = self.parentConstruct()
+    person = pcons.person()
+    assert person
+    env = person.env()
+    when_attr, when = self.attrpair('when')
+    where = self.attrval('where', default=None)
+    who = self.attrval('who')
+    kind = self.attrval('kind')
+
+    date = wmh.date.Date.FromStr(when)
+    if date is None:
+      self.metafile().error('Invalid date "%s"' % when)
+    else:
+      other = None
+      if kind == 'marriage':
+        other = env.person(who)
+        if other is None:
+          /# We create a Person instance.
+          /#  - we assume het marriage ... if this is a FF or MM marriage,
+          /#    define the spouse beforehand with the proper gender so that
+          /#    we won't get into this block of code.
+          ogender = 'female' if person.gender() == 'male' else 'male'
+          other = wmh.family.Person(env, who, ogender, None)
+          env.register(other)
+      event = wmh.family.Event(person, kind, date, other)
+      person.addEvent(event)
+  scope:
   end Construct event;
 
   Construct link < _familyroot_ #:
@@ -135,7 +253,43 @@ config:
 
     Attribute comment:;
     Attribute config:;
-
+  expand:
+  translate:
+  scope:
   end Construct link;
+
+  Construct mating < _familyroot_ #:
+    An alternative experimental way of characterizing families.
+    
+    The current mechanism, whereby one side a family is selected as primary and
+    others are secondary, is not intuitive. This new model explores a different
+    mechanism whereby children are provided within mating scopes. However, the
+    downside of this new approach is the inherit requirement that there be
+    exactly one female and one male in the pairing. This is technically true
+    biologically, but isn't useful for capturing the complexity of human
+    dynamics. Need to consider more whether this is the right way to
+    characterize things.
+  config:
+
+    primary
+    Attribute mating = <auto> : id #:
+      The id of the mating (often auto-assigned)
+
+    secondary
+    Attribute female = <required> : word #:
+      The id of the female person in the mating.
+
+    secondary
+    Attribute male = <required> : word #:
+      The id of the male person in the mating.
+
+    Attribute comment:;
+    Attribute config:;
+    Attribute scope: children <person|event|link>;
+
+  expand:
+  translate:
+  scope:
+  end Construct mating;
 
 end MetaLanguage family;

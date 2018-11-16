@@ -1,7 +1,7 @@
 namespace metax.bio scope:
 
   abstract
-  class BioConstruct < metax.c.Construct #:
+  class BioConstruct < metax.meta.Construct #:
     All constructs in Meta(Bio) inherit from this abstract construct,
     so the Attribute definitions here are available in subconstructs.
     However, note that the existence of an Attribute here does NOT mean it
@@ -14,19 +14,6 @@ namespace metax.bio scope:
       return '_bioroot_'
     end method kind;
 
-    override
-    method expandMeta params:
-      var output : vec<metax.c.Construct> = null #:
-        Where to write constructs created during expansion.
-    scope:
-    end method expandMeta;
-
-    override
-    method translateMeta
-    scope:
-      return (None, None)
-    end method translateMeta;
-
   end class BioConstruct;
 
   class PersonConstruct < BioConstruct #:
@@ -36,13 +23,6 @@ namespace metax.bio scope:
     method kind : str scope:
       return 'person'
     end method kind;
-
-    override
-    method expandMeta params:
-      var output : vec<metax.c.Construct> = null #:
-        Where to write constructs created during expansion.
-    scope:
-    end method expandMeta;
 
     override
     method translateMeta
@@ -100,13 +80,6 @@ namespace metax.bio scope:
     end method kind;
 
     override
-    method expandMeta params:
-      var output : vec<metax.c.Construct> = null #:
-        Where to write constructs created during expansion.
-    scope:
-    end method expandMeta;
-
-    override
     method translateMeta
     scope:
       metafile = self.metafile()
@@ -155,13 +128,6 @@ namespace metax.bio scope:
     end method kind;
 
     override
-    method expandMeta params:
-      var output : vec<metax.c.Construct> = null #:
-        Where to write constructs created during expansion.
-    scope:
-    end method expandMeta;
-
-    override
     method translateMeta
     scope:
       metafile = self.metafile()
@@ -202,7 +168,8 @@ namespace metax.bio scope:
 
   end class SourceConstruct;
 
-  class BaseLanguageBio < metax.c.BaseLanguageConstruct #:
+  abstract
+  class BaseLanguageBio < metax.meta.BaseLanguageConstruct #:
     Abstract superclass of all baselangs in Meta(Bio).
   scope:
 

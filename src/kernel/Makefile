@@ -1,7 +1,9 @@
 DIFF_FLAGS = -y --suppress-common-lines -W 160
 
 METAGROUP = "Meta"
-METAFILES = $(shell ls *.meta ../lib/*.meta)
+METAFILES = parser.meta attr.meta fs.meta cli.meta shell.meta logs.meta \
+	    metameta.meta metaoopl.meta metadoc.meta \
+	    root.meta test.meta
 
 include $(WMH)/Makefile.meta
 
@@ -10,10 +12,17 @@ include $(WMH)/Makefile.meta
 default:
 	@echo "Specify a target."""
 
+t:
+	@echo $(METAFILES)
+
+# target full:
+#   Compile the meta source (including meta files from schemas if changed)
+full: fullmeta-py
+
 # target test:
 #   Run tests on the Meta implementation of Meta.
 test: fullmeta-py
-	metac -b py -r metax.fs metax.logs metax.c metax.root metax.cli metax.test metax.lib.markdown metax.lib.shell metax.units
+	metac -b py -r metax.c metax.attr metax.fs metax.logs metax.root metax.cli metax.test metax.lib.markdown metax.lib.shell metax.units
 
 # target vtest:
 #   Run tests on the Meta implementation of Meta.
@@ -25,7 +34,7 @@ vtest: fullmeta-py
 diff-%: .FORCE
 	diff --width=160 --recursive --suppress-common-lines -y \
 	  $*.meta \
-	  ../../lib/versions/current/src/$*.meta
+	  ../../lib/versions/current/src/kernel/$*.meta
 
 # target pdiff-%:
 #   Compare beta *.py with current *.py
@@ -34,7 +43,7 @@ diff-%: .FORCE
 #   e.g. make pdiff-fs diffs metax.fs
 pdiff-%: .FORCE
 	diff --width=160 --recursive --suppress-common-lines -y \
-	  $(shell metac config repository_path)/oopl/python/metax/$*/__init__.py \
+	  $(shell metac --meta_version=current config repository_path)/oopl/python/metax/$*/__init__.py \
 	  ../../lib/versions/current/lib/metax/$*/__init__.py
 
 # target slowtest:
@@ -61,14 +70,22 @@ slowtest: fullmeta-py
 meta-%:
 	metac -b $* root.meta test.meta
 
-full: fullmeta-py
+up%: meta%.meta
+	@a=1
+
+meta%.meta: ../schema/%/schema.meta
+	metac schema $*
+	metac meta$*.meta
 
 # target fullmeta-%:
 #   Compile all code needed to compile Meta in the specified baselang.
 fullmeta-%:
-	metac schema metax
-	metac schema doc
-	metac -b $* $(METAFILES)
+	echo "HHHHHHHHHHHHHHHHHEEEEEEEEEEEEEERRRRRRRRRRRRREEE"
+	echo metac -b $* $(METAFILES)
+	@echo "================================================================================"
+
+fullmeta-py: metameta.meta metaoopl.meta metadoc.meta metafood.meta metabio.meta .FORCE
+	metac -b py $(METAFILES)
 	@echo "================================================================================"
 
 # target oopl:
@@ -106,7 +123,8 @@ html-%: fullmeta-py
 #   Perform an initial setup of code needed to get Meta working.
 setup: .FORCE
 	metac --meta_version current root.meta test.meta fs.meta logs.meta shell.meta
-	metac --meta_version current parser.meta shell.meta cli.meta
+	metac --meta_version current parser.meta attr.meta shell.meta cli.meta
+	metac --meta_version current metameta.meta metaoopl.meta metadoc.meta
 	cd ../lib; metac --meta_version current markdown.meta shell.meta
 
 # target snapshot:

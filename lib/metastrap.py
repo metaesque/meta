@@ -259,6 +259,31 @@ def ImportMeta(argv=None):
   command, instcmd, cli = compiler_class.MetaxCLI(argv=argv)
   return compiler_class, command, cli
 
+def RecoverMeta(e):
+  # Invoked if invocation of a meta-generated entry point (MetaxEntry) raises
+  # an exception.
+  import cStringIO
+  import traceback
+  import metax.c
+  import metax.root
+  # assert metax.c.Compiler.CONFIG
+  assert metax.root.MetaObject.Config()
+
+  # Note that the current metax.root.Object.CLI() is for the command that
+  # was invoked that is producing an exception. For the purposes of filtering
+  # output, we need to update the CLI to be one containing all the metac
+  # flags instead.
+  compiler_class, command, cli = ImportMeta()
+  metax.c.Compiler.Initialize()
+  metax.root.Object.Init(cli=cli)
+  metac = metax.c.Compiler(metal='oopl', basel='python')
+  metax.c.Compiler.CurrentIs(metac)
+  text = traceback.format_exc()
+  ifp = cStringIO.StringIO(text)
+  baselang = metac.metalang().baselangNamed('python')
+  metac.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)
+
+
 def DynamicCompiler(metal, basel):
   orig_argv = sys.argv
   sys.argv = [metal, '-L', metal]
@@ -440,6 +465,10 @@ class MetaImporter(object):
     Compiler, command, cli = ImportMeta(
       ['metac', '--metalang', 'oopl', '--baselang', 'python'])
     Compiler.Initialize()
+    # print '**** HERE with cli=%s' % cli
+    # command.show()
+    import metax.root
+    metax.root.Object.Init(cli=cli)
     metac = Compiler(metal=cli.metalang, basel='python')
     # print 'NOTE: Created %s' % str(metac)
 
@@ -504,6 +533,9 @@ class MetaImporter(object):
     if fullname in cache:
       pass
     else:
+      cli = self._metac.cli()
+      # print 'cli=%s' % id(cli)
+      # assert cli
       subpath = fullname.replace('.', '/')
       repdir = os.path.join(MetaImporter.METAREP, 'oopl', 'python')
       pyfile = os.path.join(repdir, subpath, '__init__.py')

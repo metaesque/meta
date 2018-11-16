@@ -99,7 +99,7 @@ scope:
     class that inherits from Object will have a metaclass that inherits
     from ObjectMetaRoot.  Any user-defined meta class by default inherits
     from ObjectMetaRoot (semantics implemented in
-    metax.c.ClassConstruct.metaClassInfo().
+    metax.oopl.ClassConstruct.metaClassInfo().
 
     Meta:suppress: JSC_UNKNOWN_EXPR_TYPE
   parent<py> ^object
@@ -177,6 +177,18 @@ scope:
         Object::ResourceMapIs(resources);
       }
     end method Init;
+
+    static
+    method RegisterResource #:
+      Add a resource to the resource map.
+    params:
+      var name : str #:
+        Name of the resource
+      var path : str #:
+        The value associated with the resource.
+    scope:
+      Object.ResourceMap()[name] = path
+    end;
 
     meta
     method Resource : str #:

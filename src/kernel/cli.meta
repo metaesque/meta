@@ -102,7 +102,7 @@ scope:
     scope<py>:
       if aliases:
         assert isinstance(aliases, str)
-        alist = re.split(r'\s*,\s*', aliases);
+        alist = re.split(r'\s*,\s*', aliases)
         self.aliasesIs(alist)
     scope<cc>:
     end lifecycle;

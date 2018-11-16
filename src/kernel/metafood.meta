@@ -1,7 +1,7 @@
 namespace metax.food scope:
 
   abstract
-  class FoodRootConstruct < metax.c.Construct #:
+  class FoodRootConstruct < metax.meta.Construct #:
     All constructs in Meta(Food) inherit from this abstract construct,
     so the Attribute definitions here are available in subconstructs.
     However, note that the existence of an Attribute here does NOT mean it
@@ -10,19 +10,6 @@ namespace metax.food scope:
     values).
   scope:
     abstract method kind : str;
-
-    override
-    method expandMeta params:
-      var output : vec<metax.c.Construct> = null #:
-        Where to write constructs created during expansion.
-    scope:
-    end method expandMeta;
-
-    override
-    method translateMeta
-    scope:
-      return (None, None)
-    end method translateMeta;
   end class FoodRootConstruct;
 
   class DayConstruct < FoodRootConstruct #:
@@ -41,12 +28,6 @@ namespace metax.food scope:
       for child in self.attrval('scope:'):
         child.expandMeta()
     end method expandMeta;
-
-    override
-    method translateMeta
-    scope:
-      return (None, None)
-    end method translateMeta;
 
   end class DayConstruct;
 
@@ -67,12 +48,6 @@ namespace metax.food scope:
         child.expandMeta()
     end method expandMeta;
 
-    override
-    method translateMeta
-    scope:
-      return (None, None)
-    end method translateMeta;
-
   end class MealConstruct;
 
   class FoodConstruct < FoodRootConstruct #:
@@ -82,19 +57,6 @@ namespace metax.food scope:
     method kind : str scope:
       return 'food'
     end method kind;
-
-    override
-    method expandMeta params:
-      var output : vec<metax.c.Construct> = null #:
-        Where to write constructs created during expansion.
-    scope:
-    end method expandMeta;
-
-    override
-    method translateMeta
-    scope:
-      return (None, None)
-    end method translateMeta;
 
   end class FoodConstruct;
 
@@ -106,22 +68,10 @@ namespace metax.food scope:
       return 'exercise'
     end method kind;
 
-    override
-    method expandMeta params:
-      var output : vec<metax.c.Construct> = null #:
-        Where to write constructs created during expansion.
-    scope:
-    end method expandMeta;
-
-    override
-    method translateMeta
-    scope:
-      return (None, None)
-    end method translateMeta;
-
   end class ExerciseConstruct;
 
-  class BaseLanguageBio < metax.c.BaseLanguageConstruct #:
+  abstract
+  class BaseLanguageBio < metax.meta.BaseLanguageConstruct #:
     Abstract superclass of all baselangs in Meta(Food).
   scope:
 

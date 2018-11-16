@@ -1,0 +1,1513 @@
+namespace metax.attr #:
+  The Meta Attribute hierarchy.
+scope:
+
+  abstract
+  class Attribute #:
+    Abstract superclass of all Attribute classes.
+
+    A parsed MetaFile contains Construct instances, which map attribute
+    keys to Attribute instances.
+
+    Attribute
+      SimpleAttribute         --> value is a string
+        FeatureAttribute      --> value comes from a pre-defined construct-specific list
+        IdAttribute           --> value is an identifier
+        WordAttribute         --> value is a string containing no whitespace
+        StrAttribute          --> value is an unquoted string (TODO(wmh): This implies free-form parsing ... do we want to support it?)
+      ExprAttribute           --> value is an Expr instance
+        LitStrAttribute       --> value is an Expr representing a literal string (e.g. single or double-quoted)
+        NumAttribute          --> value is an Expr representing a literal number
+      TypeAttribute           --> value is an Type instance
+      BlockAttribute          --> value is a list
+        SimpleBlock           --> value is a list of str
+        ComplexBlock          --> value is a list of Construct
+  assocs:
+    std assoc cStringIO;
+  scope:
+
+    field parent : Construct #:
+      The construct within which this attribute resides.
+
+    field key : str #:
+      The canonical key. See litkey for the actual key/abbrev used in the source.
+
+    field litkey : str #:
+      The key or an abbrev, as used in the input source.  A value of null means
+      the canonical key was used. A value of '' means the key was not explicitly
+      provided.
+
+      Initially, it was hoped that we could store only the canonical key in this
+      Attribute and use the litkey as the key in Construct.attributes(), but
+      that approach would allow two instances of the same attribute to appear in
+      a construct (by using the canonical key for one, abbrev 1 for another,
+      abbrev 2 for another, etc.). For now, we always store litkey, but it may
+      be worthwhile to mark it as optional.
+    end field litkey;
+
+    field line : int #:
+      The line number on which the attribute key appears (from 0)
+
+    field col : int #:
+      The column at which the attribute key starts (from 0)
+
+    optional
+    field basel : str #:
+      The baselang selector for this attribute.
+      TODO(wmh): Get optional fields working in meta or meta2
+
+    lifecycle params:
+      var parent -> parent;
+      var key -> key;
+      var litkey -> litkey = null;
+      var line -> line = -1;
+      var col -> col = -1;
+    scope:
+    end lifecycle;
+
+    abstract
+    method clone : Attribute #:
+      Make a copy of this Attribute that shares no intrinsic state but does
+      share extrinsic state.
+    params:
+      var cloned_parent : Construct #:
+        The construct within which the cloned Attribute resides.
+    end method clone;
+
+    method pos : str #:
+      The position of this attribute as a string in human units (1-indexed)
+    scope:
+      return 'L%dC%d' % (self.line() + 1, self.col() + 1)
+    test:
+      test.defineAttributes()
+      test.iseq('L11C3', test.feature.pos())
+      test.iseq('L11C10', test.id.pos())
+    end method pos;
+
+    method changeParent #:
+      Move myself out of my current parent into the new parent.
+    params:
+      var new_parent : Construct #:
+        The parent to move this attribute into.
+      var position : str = null #:
+        A string that starts with '+' or '-' followed optionally by the name of
+        a pre-existing attribute within the construct. If the position is '+' or
+        null, insert at end. If the position is '-', insert at beginning.
+        Otherwise, insert before (if first char is '-') or after (if first
+        char is '+') the attribute key identified by position.
+    scope:
+      parent = self.parent()
+      parent.unregisterAttribute(self)
+      new_parent.registerAttribute(self, position=position)
+    test:
+    end method changeParent;
+
+    method write : int #:
+      Write this attribute to a stream.
+
+      Returns:
+        The number of characters written. If the output contains multiple
+        lines, the return value is -1.
+    params:
+      var fp : ostream = out #:
+        Where to write output.
+      var indent : str = '' #:
+        What to write before each non-first line.  The first line
+        (containing the attribute key) is NOT indented (the caller, which
+        is printing out all attributes in a construct, is responsible for
+        providing the correct indentation before each attribute).
+      var mode : map = null #:
+        See Construct.write() for details on mode semantics.
+    scope:
+      if mode is None: mode = {}
+
+      /# Establish the kind of attribute.
+      /#  - TODO(wmh): can we do this more efficiently?
+      parent = self.parent()
+      if isinstance(self, FeatureAttribute):
+        kind = 'feature'
+      elif parent and parent.primary() is self:
+        kind = 'primary'
+      else:
+        kind = 'secondary'
+
+      /# Establish formatting variants
+      form = mode.get('form', 'code')
+      keykey = kind[0] + 'key'
+      valkey = kind[0] + 'val'
+      keyform, keyplus = Attribute.ModeFor(mode, keykey)
+      valform, valplus = Attribute.ModeFor(mode, valkey)
+
+      /# Determine how to format the attribute key.
+      if keyform == 'user':
+        /# Use whatever the user provided.
+        /#  - litkey() may be the empty string, to indicate that no explicit key
+        /#    was present from user.
+        key = self.litkey()
+        /# TODO(wmh): Unless we make litkey optional, consider storing the
+        /# key within litkey when litkey matches key so that we don't have
+        /# to do this kind of special casing.
+        if key is None: key = self.key()
+      elif keyform == 'no':
+        /# Do not show the value
+        key = ''
+      elif keyform == 'show':
+        /# Use canonical key
+        key = self.key()
+      elif keyform == 'alias':
+        /# Use first alias if present else canonical key.
+        /# TODO(wmh): Decide if this is worth implementing and if so, fix the
+        /# following.
+        key = self.key()
+      else:
+        raise Error('Invalid mode %s = %s' % (keykey, keyform))
+      if keyplus:
+        /# A request to show the object associated with the attribute. Useful
+        /# in validating clone code.
+        key += '[%s]' % id(self)
+
+      /# Handle htmlization of key
+      /#  - add a kind-specific class
+      /#  - if there is a construct-specific color, add a 'style'
+      /#  - make test HTML safe (keys can have selectors like 'scope<py>:')
+      if key and form == 'html':
+        style = ''
+        /# TODO(wmh): This color map should come from the current context!
+        color = Compiler.ConstructColorMap.get(kind, None)
+        spanparts = ['span']
+        spanparts.append('class="face-%s"' % kind)
+        if kind == 'primary' and color:
+          spanparts.append('style="color:%s;"' % color)
+        postamble = ''
+        if self.isBlock():
+          htmlid = self.htmlId()
+          spanparts.append(
+            'onclick="tv(\'%s\')"' % htmlid)
+          postamble = '<span id="%s:e" class="ellipsis">...</span>' % htmlid
+          out = mode.setdefault('out', {})
+          bout = out.setdefault('block', {})
+          bout.setdefault('all', []).append(htmlid)
+          bout.setdefault(self.key(), []).append(htmlid)
+          basel = self.basel()
+          if basel is None:
+            /# TODO(wmh): If the block has not explicitly specified a
+            /# baselanguage, we assume that it applies to whatever baselang
+            /# we're compiling into.
+            basel = self.parent().baselang().suffix()[1:]
+
+          if basel:
+            lout = out.setdefault('lang', {}).setdefault(basel, {})
+            lout.setdefault('all', []).append(htmlid)
+            lout.setdefault(self.key(), []).append(htmlid)
+
+        key = '<%s>%s%s</span>' % (
+          ' '.join(spanparts), HtmlSafe(key), postamble)
+
+      /# Render the key.
+      if key and not self.isBlock():
+        key += ' '
+      fp.write(key)
+      count = len(key)
+
+      /# Determine how to format the attribute value.
+      if valform == 'user':
+        /# Show the value as provided by user.
+        vcnt = self.writeValueLines(fp=fp, indent=indent, mode=mode)
+        result = -1 if vcnt < 0 else count + vcnt
+      elif valform == 'no':
+        /# Do not show the value.
+        result = count
+      else:
+        raise Error('Invalid mode %s = %s' % (valkey, valform))
+
+      return result
+    test:
+    end method write;
+
+    static
+    method ModeFor : tuple<str,bool> #:
+      Obtain mode info for a kind and part.
+
+      Returns:
+       0) one of 'no', 'user', 'show' or 'alias'
+       1) true if the value for key in mode ends in '+' (a request to
+          show an id).
+    params:
+      var mode : map #:
+        See Construct.write() for details on mode structure.
+      var key : str #:
+        [fps](key|val)
+    scope:
+      plus = False
+      val = mode.get(key, 'user')
+      if val[-1] == '+':
+        val = val[:-1]
+        plus = True
+      return (val, plus)
+    test:
+      test.iseq(('no', False), metax.attr.Attribute.ModeFor({'pkey': 'no'}, 'pkey'))
+      test.iseq(('user', False), metax.attr.Attribute.ModeFor({}, 'fkey'))
+      test.iseq(('show', True), metax.attr.Attribute.ModeFor({'skey': 'show+'}, 'skey'))
+    end method ModeFor;
+
+    method asStr : str #:
+      Produce the string representation.
+    params:
+      var mode : map = null #:
+        See Construct.write() for details on mode semantics.
+    scope:
+      fp = cStringIO.StringIO()
+      self.write(fp=fp, mode=mode)
+      return fp.getvalue()
+    test:
+      test.defineAttributes()
+      test.iseq('gender male', test.feature.asStr())
+      test.iseq('person bob', test.id.asStr())
+      test.iseq('count 42', test.num.asStr())
+
+      test.iseq('value "this is a test"', test.expr.asStr())
+      test.iseq('type vec<str>', test.type.asStr())
+
+      test.iseqtext(
+        'comment:\n'
+        '  this is a\n'
+        '  test of a simple block\n',
+        test.simple.asStr())
+
+      test.iseqtext(
+        'scope:\n',
+        test.complex.asStr())
+    end method asStr;
+
+    method path : str #:
+      The path to this attribute within the metafile.
+    scope:
+      parent = self.parent()
+      if isinstance(parent, metax.meta.FileConstruct):
+        result = ''
+      else:
+        result = self.parent().path()
+        /# TODO(wmh): We cannot strip the colon off the key if the parent
+        /# construct defines both block and nonblock versions of the key.
+        key = self.key().rstrip(':')
+        result += '@' + key
+      return result.replace('@scope/', '/')
+    test:
+      /# Tested in ComplexBlock.child()
+      pass
+    end method path;
+
+    method htmlId : str #:
+      A unique id by which this block can be identified in HTML.
+    scope:
+      return '%s.%s%s' % (self.parent().fqn(), self.key(), self.basel() or '')
+    test:
+    end method htmlId;
+
+    static
+    method BasedAttr : str #:
+      The baselang-annotated version of an attribute key.
+      TODO(wmh): Is this defined elsewhere? If so, merge.  If not, various
+      code can presumably use this.
+    params:
+      var key : str #:
+        The attribute key to modify.
+      var basel : str #:
+        The base-lang suffix to encode.
+    scope:
+      if key[-1] == ':':
+        result = key[:-1] + '<' + basel + '>:'
+      else:
+        result = key + '<' + basel + '>'
+      return result
+    end method BasedAttr;
+
+  end class Attribute;
+
+  abstract
+  class SimpleAttribute < Attribute #:
+    An attribute that has a string value.
+  scope:
+    field value : str #:
+      The value. Subclasses may place requirements on the format of the
+      string, but will always have a value of type string (even something
+      like NumAttribute).
+
+    lifecycle params:
+      var parent : Construct;
+      var key : str;
+      var value : str;
+      var litkey : str = null;
+      var line : int = -1;
+      var col : int = -1;
+    super (parent, key, litkey=litkey, line=line, col=col)
+    scope:
+      self.valueIs(value)
+    end;
+
+    method clone : Attribute #:
+      Make a copy of this Attribute.
+    params:
+      var cloned_parent : Construct #:
+        The construct within which the cloned Attribute resides.
+    scope:
+      cls = self.__class__
+      result = cls(
+        /# We do not need to copy the value since it is a readonly string.
+        cloned_parent, self.key(), self.value(),
+        litkey=self.litkey(), line=self.line(), col=self.col())
+      return result
+    test:
+      test.defineAttributes()
+      feature2 = test.feature.clone(None)
+      id2 = test.id.clone(None)
+      num2 = test.num.clone(None)
+    end method clone;
+
+  end class SimpleAttribute;
+
+  class FeatureAttribute < SimpleAttribute #:
+    An attribute that appears before the primary attribute.
+    The feature value comes from a pre-defined set of feature-key-specific
+    legal values.
+  scope:
+  end class FeatureAttribute;
+
+  class IdAttribute < SimpleAttribute #:
+    An attribute whose value is an identifier.
+  scope:
+  end class IdAttribute;
+
+  class WordAttribute < SimpleAttribute #:
+    An attribute whose value is a single word.
+  scope:
+  end class WordAttribute;
+
+  class NumAttribute < SimpleAttribute #:
+    An attribute whose value is an integer. Note that this is a subclass
+    of SimpleAttribute so its value is a string (but required to only contain
+    digits optionally preceeded by a sign)
+  scope:
+  end class NumAttribute;
+
+  class ExprAttribute < Attribute #:
+    An attribute whose value is an Expr.
+  scope:
+
+    field value : Expr #:
+      The value, as an Expr instance (which may or may not be pre-parsed).
+    scope:
+      accessor set scope:
+        /# Remember that we must support null values because
+        /# parseSecondaryAttribute() creates the Attribute instance before it has
+        /# parsed the value.
+        if value is None:
+          pass
+        /# elif value == '<special>':
+        /#  value = None
+        elif not isinstance(value, metax.c.Expr):
+          /# Temporary transitional code.
+          /# - while we convert the 'default' attribute of 'var', 'field' and
+          /#   'flag' from 'word' to 'expr', we implicitly convert some basic
+          /#   string values to Expr instances.
+          /# TODO(wmh): Remove this code when we are fully migrated!
+          print 'In ExprAttribute.valueIs() with non-expr "%s"' % value
+          if value == '""':
+            raise Error('here')
+          error = True
+          m = re.match(r'^[-+](\d+)(?:\.(\d+))?$', str(value))
+          if m:
+            /# We have an int or float
+            error = False
+            kind = 'num'
+            if m.group(2) is None:
+              val = int(value)
+            else:
+              val = float(value)
+          elif value == '<special>':
+            /# TODO(wmh): This is actually supposed to be a type-specific
+            /# default (so if the variable is of type 'int', we assign 0, if it
+            /# is a Ptr, we assign baselang null, if it is a str, we assign
+            /# baselang empty string, etc. We do not have enough info here in
+            /# this method to establish that default (needs Type instance), so
+            /# we set the value to None so that downstream clients can deals
+            /# with it.
+            /# CODETANGLE(special_expr): TODO(wmh): Decide whether <special> is
+            /# indicated by an Expr with value() None, or by an Expr that is
+            /# None.
+            if False:
+              val = None
+              kind = 'str'
+            else:
+              value = None
+            error = False
+          else:
+            /# The only other string-valued Expr's we handle are vars and
+            /# strings.  For now, we just always assume str.
+            error = False
+            kind = 'str'
+            val = value
+
+          if error:
+            raise Error(
+              'ExprAttribute value must be an Expr not %s (%s %s)' %
+              (type(value), self.litkey(), str(value)))
+          elif value is None:
+            /# CODETANGLE(special_expr): TODO(wmh): Decide whether <special> is
+            /# indicated by an Expr with value() None, or by an Expr that is
+            /# None.
+            print '******* HERE with value %s' % value
+            pass
+          else:
+            value = metax.c.Expr(kind, value, val)
+
+        /# NOTE(wmh): The user defining the accessor scope needs access to
+        /# both the receiver variable and the field name. If the scope is
+        /# implemented in <*>, both of these can be abstracted away, but if
+        /# the scope is baselang-specific (the common case), we need to provide
+        /# a baselang-independent receiver and some means of referring to
+        /# field and rawfield, maybe using ${field} and ${rawfield}?
+        self._value = value
+    end field value;
+
+    field code : str #:
+      The baselang code.
+
+    field codetype : Type #:
+      The metatype of the expr.
+
+    lifecycle params:
+      var parent : Construct;
+      var key : str;
+      var value : str;
+      var litkey : str = null;
+      var line : int = -1;
+      var col : int = -1;
+    super (parent, key, litkey=litkey, line=line, col=col)
+    scope:
+      self.valueIs(value)
+    clinit:
+      /# TODO(wmh): This is hacked up to get Construct.write() working. Should
+      /# be formalized. Note that it doesn't belong in MetaFile.AttrValueEmpty
+      /# because that is about lower-level entities, and we need ExprAttribute
+      /# instances. We should consider using MetaFile.AttrValueEmpty['str']
+      /# instead of creating empty_expr below, though. But using a '?' seems
+      /# better for indicating generic unknown value.
+      import metax.c
+      empty_expr = metax.c.Expr('str', '"?"', '"?"')
+      emap = {}
+      for key in ('super', 'default'):
+        emap[key] = ExprAttribute(None, key, empty_expr)
+      cls.EmptyMap = emap
+    end;
+
+    method clone : Attribute #:
+      Make a copy of this Attribute.
+    params:
+      var cloned_parent : Construct #:
+        The construct within which the cloned Attribute resides.
+    scope:
+      cls = self.__class__
+      result = cls(
+        /# NOTE: For now, we do not copy the Expr value, as it is presumably
+        /# read-only. If necessary, we can add Expr.clone().
+        cloned_parent, self.key(), self.value(),
+        litkey=self.litkey(), line=self.line(), col=self.col())
+      return result
+    test:
+      test.defineAttributes()
+      expr2 = test.expr.clone(None)
+    end method clone;
+
+    method cacheCompilationResults params:
+      var code : str;
+      var codetype : str;
+    scope:
+      self._code = code
+      self._codetype = codetype
+    end method cacheCompilationResults;
+
+    method getCompilationResults : tuple<str,str> scope:
+      return (self._code, self._codetype)
+    end method getCompilationResults;
+
+  end class ExprAttribute;
+
+  class TypeAttribute < Attribute #:
+    An attribute whose value is a Type.
+  scope:
+
+    field value : metax.c.Type #:
+      The type value.
+    scope:
+      accessor set scope:
+        assert value is None or isinstance(value, (metax.c.Type, metax.c.TypeWrapper)), (
+          'Expecting value of type Type but encountered %s (%s)' %
+          (value, value.__class__))
+        self._value = value
+      end accessor set;
+    end field value;
+
+    lifecycle params:
+      var parent : Construct;
+      var key : str;
+      var value : str;
+      var litkey : str = null;
+      var line : int = -1;
+      var col : int = -1;
+    super (parent, key, litkey=litkey, line=line, col=col)
+    scope:
+      self.valueIs(value)
+    end;
+
+    method clone : Attribute #:
+      Make a copy of this Attribute.
+    params:
+      var cloned_parent : Construct #:
+        The construct within which the cloned Attribute resides.
+    scope:
+      cls = self.__class__
+      result = cls(
+        /# We do NOT make a copy of the Type value because Type's are
+        /# interned and read-only.
+        cloned_parent, self.key(), self.value(),
+        litkey=self.litkey(), line=self.line(), col=self.col())
+      return result
+    test:
+      test.defineAttributes()
+      type2 = test.type.clone(None)
+    end method clone;
+
+  end class TypeAttribute;
+
+  abstract
+  class ListAttribute < Attribute #:
+    An attribute whose value is a list of strings.
+  scope:
+
+    field value : vec<str> #:
+      The list of legal words.
+
+    lifecycle params:
+      var parent : Construct;
+      var key : str;
+      var value : str;
+      var litkey : str = null;
+      var line : int = -1;
+      var col : int = -1;
+    super (parent, key, litkey=litkey, line=line, col=col)
+    scope:
+      self.valueIs(value)
+    test:
+      /# Test an EnumAttribute (a subclass of ListAttribute)
+      self.defineAttributes()
+      construct = test.construct
+      enum = metax.attr.EnumAttribute(
+        construct, 'children', '<field|method|native|category>')
+      test.iseqvec(['field', 'method', 'native', 'category'], enum.value())
+      enum2 = metax.attr.EnumAttribute(
+        construct, 'test', ',<a,bc,def>')
+      test.iseqvec(['a', 'bc', 'def'], enum2.value())
+      test.raises(TypeError, metax.attr.EnumAttribute, 'bad', 'blah')
+    end;
+
+  end class ListAttribute;
+
+  class EnumAttribute < ListAttribute #:
+    An attribute containing a list of words separated by '|' (by default) or
+    some other delimiter.  The normal format is <val1|val2|val3>, with
+    variants like ,<val1,val2,val3> or #<val1#val2#val3> or ... allowed.
+
+    NOTE: For now, we require the enum value to have no spaces (one word), but
+    we may generalize this in the future ... can easily consume chars
+    until we get to matching '>'.
+  scope:
+
+    method valueIs : EnumAttribute #:
+      Set the value of an EnumAttribute
+    params:
+      var value : any #:
+        A string or vec<str> or null.
+    scope:
+      if value is None:
+        /# Attribues are usually created with a null value before the
+        /# value is parsed, so we need to handle null.
+        pass
+      elif isinstance(value, basestring):
+        value = EnumAttribute.StrToEnum(value)
+      elif isinstance(value, (list, tuple)):
+        /# We support tuple so that CreateNewAttribute() can create an
+        /# empty attribute of type 'enum' using readonly tuple() instead
+        /# of writeable [].  We support list for the general case, but we
+        /# may want to make this case a tuple too.
+        pass
+      else:
+        raise TypeError('Invalid EnumAttribute value "%s"' % value)
+      self._value = value
+      return self
+    end method valueIs;
+
+    method clone : Attribute #:
+      Make a copy of this Attribute.
+    params:
+      var cloned_parent : Construct #:
+        The construct within which the cloned Attribute resides.
+    scope:
+      cls = self.__class__
+      result = cls(
+        /# The value is a list of legal enum values, which we copy.
+        cloned_parent, self.key(), self.value()[:],
+        litkey=self.litkey(), line=self.line(), col=self.col())
+      return result
+    test:
+      test.defineAttributes()
+      enum2 = test.enum.clone(None)
+    end method clone;
+
+    meta
+    method StrToEnum : vec<str> #:
+      Convert a string representation of an enum to a list of str.
+
+      Raises:
+        TypeError: if value is invalid
+    params:
+      var value : str #:
+        The string reprsentation of an enum: <val1|val2|val3>, #<val1#val2>, etc.
+    scope:
+      m = metax.c.ExprParser.ENUM_RE.match(value)
+      if not m:
+        raise TypeError('Invalid EnumAttribute value "%s"' % value)
+      delim = m.group(1) or '|'
+      value = m.group(2).split(delim)
+      return value
+    test:
+      test.iseqvec(
+        ['val1', 'val2', 'val3'],
+        metax.attr.EnumAttribute.StrToEnum('<val1|val2|val3>'))
+      test.iseqvec(
+        ['val1', 'val2', 'val3'],
+        metax.attr.EnumAttribute.StrToEnum('#<val1#val2#val3>'))
+      /# Test some esoteric enums.
+      test.iseqvec(['<'], metax.attr.EnumAttribute.StrToEnum('<<>'))
+      test.iseqvec(['<<'], metax.attr.EnumAttribute.StrToEnum('<<<>'))
+      test.iseqvec(['<<<'], metax.attr.EnumAttribute.StrToEnum('<<<<>'))
+      test.iseqvec(['->'], metax.attr.EnumAttribute.StrToEnum('<->>'))
+      test.iseqvec(['->:'], metax.attr.EnumAttribute.StrToEnum('<->:>'))
+    end method StrToEnum;
+
+  end class EnumAttribute;
+
+  class MultiFeatureAttribute < ListAttribute #:
+    An attribute that appears before the primary attribute. The feature value is
+    a list of strings, each of which comes from a pre-defined set of
+    feature-key-specific legal values
+  scope:
+  end class MultiFeatureAttribute;
+
+  class EndAttribute < Attribute #:
+    This is an experiment in reprsenting the termination syntax for a construct
+    using an Attribute instead of an integer termcode.  Pros and cons are:
+      + allows us to record the line and column of the 'end' syntax.
+      - incurs significantly more memory, especially if it is present for
+        every single construct.
+        # This may be amelioratable by not creating EndAttribute instances
+          during parsing, and only doing so during instantiation of templates.
+          This requires more effort to find the end-of-construct unless we
+          record end-of-construct during parsing (we could encode this inside
+          termcode!)
+
+    Things to do:
+     - Modify (at least) the MethodConstruct templates to introduce an ${end}
+       variable that stores an empty string and an instance of EndAttribute.
+     - Provide a mechanism for establishing the line number within meta source
+       code of the end of a construct (either the explicit 'end ...;' or ';',
+       or from implicit analysis).
+       - this can be done heuristically within ExecutableConstruct.translateMeta
+         while populating the varset (expensive) or can be made much more
+         efficient by encoding line number of end syntax within
+         MetaFile.parseSecondaryAttribute() ... for example by packing it within
+         termcode.
+  scope:
+  end class EndAttribute;
+
+  abstract
+  class BlockAttribute < Attribute #:
+    An attribute whose value is a list.
+  scope:
+
+    lifecycle params:
+      var parent : Construct;
+      var key : str;
+      var litkey : str = null;
+      var line : int = -1;
+      var col : int = -1;
+    super (parent, key, litkey=litkey, line=line, col=col)
+    scope:
+      if key[-1] != ':':
+        self.keyIs(key + ':')
+    end lifecycle;
+
+    method size : int #:
+      Return number of elements in value.
+    scope:
+      return len(self.value())
+    test:
+      test.defineAttributes()
+      test.iseq(2, test.simple.size())
+    end method size;
+
+  end class BlockAttribute;
+
+  class SimpleBlock < BlockAttribute #:
+    An attribute whose value is a list of str.
+  scope:
+
+    field value : vec<str> #:
+      A simple block is an ordered list of lines.
+
+    lifecycle params:
+      var parent : Construct;
+      var key : str;
+      var value : vec<str>;
+      var litkey : str = null;
+      var line : int = -1;
+      var col : int = -1;
+    super (parent, key, litkey=litkey, line=line, col=col)
+    scope:
+      assert key[-1] == ':'
+      self.valueIs(value)
+    end lifecycle;
+
+    method clone : Attribute #:
+      Make a copy of this Attribute.
+    params:
+      var cloned_parent : Construct #:
+        The construct within which the cloned Attribute resides.
+    scope:
+      cls = self.__class__
+      /# We make a copy of the lines in the simple block.
+      cloned_value = self.value()[:]
+      result = cls(
+        cloned_parent, self.key(), cloned_value,
+        litkey=self.litkey(), line=self.line(), col=self.col())
+      return result
+    test:
+      test.defineAttributes()
+      simple2 = test.simple.clone(None)
+    end method clone;
+
+    method valueAsStr : str #:
+      Convert value to multi-line string.  Handles special >| notation.
+      Always ends with newline.
+    scope:
+      /# NOTE: The handling of SPECIAL_PREFIX_RE is NOT being done to support
+      /# baselang code generation. Rather, it is done to strip off prefixes from
+      /# Template bodies, which use the |> syntax for readability. For the
+      /# baselang code stripping, see BaseSegment.flattenLines() and the
+      /# strip_special param.
+      r = metax.c.SPECIAL_PREFIX_RE
+      result = '\n'.join([r.sub('', line) for line in self.value()]) + '\n'
+      return result
+    test:
+      test.defineAttributes()
+
+      simple = test.simple
+      test.iseqtext(
+        'this is a\ntest of a simple block\n',
+        simple.valueAsStr())
+
+      return
+      simple2 = metax.attr.SimpleBlock(
+        test.construct, 'scope:',
+        ['  >|this is a', '  >|test of a simple block'],
+        line=11, col=2)
+      test.iseqtext(
+        'this is a\ntest of a simple block\n',
+        simple2.valueAsStr())
+    end method valueAsStr;
+
+  end class SimpleBlock;
+
+  class ComplexBlock < BlockAttribute #:
+    An attribute whose value is a list of Contruct.
+  scope:
+
+    field value : vec<str> #:
+      A complex block is an ordered list of Construct. May be null if the
+      value has not yet been initialized.
+      See the _map field for a per-id mapping.
+
+    field map : @map #:
+      Maps construct keys to Construct instances.  Keys must be unique.
+
+    field postcount : int #:
+      The number of blank lines after the last construct within this indent
+      level.
+
+    lifecycle params:
+      var parent : Construct;
+      var key : str;
+      var value : vec<Construct>;
+      var litkey : str = null;
+      var line : int = -1;
+      var col : int = -1;
+    super (parent, key, litkey=litkey, line=line, col=col)
+    scope:
+      assert key[-1] == ':'
+      self.valueIs(value)
+    end lifecycle;
+
+    method clone : Attribute #:
+      Make a copy of this Attribute.
+    params:
+      var cloned_parent : Construct #:
+        The construct within which the cloned Attribute resides.
+    scope:
+      cls = self.__class__
+
+      /# We create the clone with an empty value initially.
+      cloned_value = []
+      result = cls(
+        cloned_parent, self.key(), cloned_value,
+        litkey=self.litkey(), line=self.line(), col=self.col())
+
+      /# Now we register cloned versions of every construct within self.value()
+      /# into the cloned result.
+      for construct in self.value():
+        cloned_construct = construct.clone(result)
+        result.registerConstruct(cloned_construct)
+
+      /# Update the postcount of the clone.
+      result.postcountIs(self.postcount())
+
+      return result
+    test:
+      test.defineAttributes()
+      complex2 = test.complex.clone(None)
+    end method clone;
+
+    method cons : Construct #:
+      Obtain the construct with given id
+    params:
+      var id : str #:
+        The id of the desired construct.
+      var default : any = False #:
+        What to return if the id does not exist. If metax.c.REQUIRED, raises
+        MissingConstruct
+        TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issued.
+    scope:
+      if default is False:
+        default = metax.c.REQUIRED
+      result = self._map.get(id, default)
+      if result is metax.c.REQUIRED:
+        raise metax.c.MissingConstruct(
+          'Failed to find %s within complex block' % id)
+      return result
+    test:
+      test.defineAttributes()
+      block = test.complex
+      block._map['a'] = 1
+      test.iseq(1, block.cons('a'))
+      test.raises(metax.c.MissingConstruct, block.cons, 'b')
+      test.iseq(2, block.cons('c', default=2))
+    end method cons;
+
+    method findIndex : int #:
+      Obtain index of given construct within order.
+    params:
+      var cid : str #:
+        The construct id to search for.
+      var default : int = False;
+    scope:
+      if default is False:
+        default = metax.c.REQUIRED
+      cmap = self._map
+      if cid not in cmap:
+        if default is metax.c.REQUIRED:
+          raise Error('Failed to find %s in %s' % (cid, sorted(cmap)))
+          self.parent().metafile().error(
+            "Request for unknown construct '%s'" % cid)
+        else:
+          result = default
+      else:
+        construct = cmap[cid]
+        result = self._value.index(construct)
+      return result
+    test:
+    end method findIndex;
+
+    method registerConstruct #:
+      Add a construct to this block.
+    params:
+      var construct : Construct #:
+        The construct to add.
+      var position : str = null #:
+        The name of some construct in the new parent preceeded by '+'
+        (insert after) or '-' (insert before).  If the position is '+' or
+        null, insert at end.  If the position is '-', insert at beginning.
+      var postcount : int = 0 #:
+        Number of empty lines to insert after this construct in output stream.
+        This is implemented as an adjustment on the precount of the next
+        construct (or, if at the last construct, an adjustment on the
+        postcount of the block). Note that the adjustment postcount of block
+        is fragile in the face of subsequent insertions at the end, which
+        may not have wanted extra lines inserted after.
+    scope:
+      /# The construct into which we want to register
+      parent = self.parent()
+      /# The parent the construct is currently registered within
+      existing_parent = construct.parent()
+      /# Where to write errors, etc.
+      metafile = construct.metafile()
+
+      register_in_metafile = True
+
+      /# print 'registerConstruct: %s and %s' % (construct.kindfqn(), parent.kindfqn() if parent else None)
+      import metax.oopl
+      is_namespace = isinstance(construct, metax.oopl.NamespaceConstruct)
+
+      if is_namespace:
+        /# print 'Registering namespace %s in %s' % (construct.id(), parent.kindfqn())
+        pass
+
+      if existing_parent:
+        if existing_parent is not self:
+          print (
+            'ERROR: Attempting to register %s within %s when it is already '
+            'registered within %s' %
+            (construct.kindid(),
+             parent.path() if parent else ' unknown parent',
+             existing_parent.path()))
+          raise Error('here')
+      else:
+        /# D.parsing.info(
+        /#  'Registering %s (%d)' % (construct.path(), id(construct)),
+        /#  level=2)
+        pass
+
+      cid = construct.id()
+      if cid is None:
+        print '********** WARNING: Here with %s' % construct.kindid()
+        raise Error('Cannot register a construct before id is established')
+
+      cmap = self._map
+      value = self._value
+      if cid in cmap:
+        /# The construct already exists. This is an error unless it is the
+        /# same construct.
+        if cmap[cid] is construct:
+          register_in_metafile = False
+        else:
+          ppath = '' if parent.kind() == 'File' else parent.path()
+
+          primary = construct.primary()
+          current_construct = cmap[cid]
+          metafile.error(
+            "Attempt to register construct '%s'\n"
+            "      when a construct with that id already exists in\n"
+            "      %s as %s (%d vs %d)" %
+            (construct.kindid(), ppath, current_construct.kindid(),
+             id(construct), id(current_construct)),
+            line=primary.line() if primary else -1)
+      else:
+        construct.linkParent(self)
+
+        if position is None or position == '+':
+          /# The most common case ... add the construct at the end of the list.
+          value.append(construct)
+          cmap[cid] = construct
+
+        elif position == '-':
+          /# Insert the construct before all others.
+          value.insert(0, construct)
+          cmap[cid] = construct
+
+        elif position[0] == '+':
+          /# We are to insert after the construct identified by position.
+          /#  - TODO(wmh): adjust postcount.
+          /#    See old code ComplexBlockAttribute.registerConstruct
+          index = self.findIndex(position[1:], default=-1)
+          if index == -1:
+            value.append(construct)
+          else:
+            value.insert(index+1, construct)
+          cmap[cid] = construct
+
+        elif position[0] == '-':
+          /# We are to insert before the construct identified by position.
+          /#  - TODO(wmh): adjust postcount.
+          /#    See old code ComplexBlockAttribute.registerConstruct
+          index = self.findIndex(position[1:], default=-1)
+          if index == -1:
+            value.append(construct)
+          else:
+            value.insert(index, construct)
+          cmap[cid] = construct
+
+        else:
+          raise Error('Invalid position "%s"' % position)
+
+      /# TODO(wmh): We should check if parent.kind() == 'class', and if so,
+      /# invoke "construct.myclassIs(parent). See the code at the end of
+      /# Construct.NewFromData(), which does this as a special case. Should be
+      /# done always! Note that 'parent' here is a Construct, and self is a
+      /# ComplexBlock.
+      /#  if parent.kind() == 'class':
+      /#    construct.myclassIs(parent)
+      if register_in_metafile and metafile:
+        metafile.registerConstructInMetaFile(construct)
+    test:
+    end method registerConstruct;
+
+    method unregisterConstruct #:
+      Remove specified construct from myself.
+    params:
+      var construct : Construct;
+    scope:
+      cid = construct.id()
+      cmap = self._map
+      value = self._value
+      if cid in cmap:
+        del cmap[cid]
+        value.remove(construct)
+
+        metafile = construct.context().metafile()
+        if metafile:
+          metafile.unregisterConstructInMetaFile(construct)
+
+        if construct.parent() is not self:
+          raise Error('Something wacked')
+        construct.unlinkParent(self)
+
+      else:
+        raise Error(
+          'Attempt to unregister non-existent %s from %s' %
+          (construct.path(), self.keyStr()))
+    test:
+    end method unregisterConstruct;
+
+    method child : any #:
+      Obtain a Construct or Attribute descendent node
+    params:
+      var spec : str #:
+        Format is:
+          <term> ::- <id> ['@' <attr> ]
+          <spec> ::- <term> | <spec> '/' <term>
+      var fp : ostream = null #:
+        If non-null, where to write failure information.
+    scope:
+      parts = spec.split('/')
+
+      if parts[0] == '':
+        /# The path is relative to the File construct.
+        block = self.parent().metafile().construct().rawattr('scope:')
+        parts.pop(0)
+      else:
+        block = self
+
+      m = len(parts) - 1
+      for i, part in enumerate(parts):
+        idattr = part.split('@')
+        if len(idattr) == 1:
+          id = idattr[0]
+          attr = None if i == m else 'scope'
+        else:
+          id, attr = idattr
+        construct = block.cons(id, default=None)
+        if construct is None:
+          result = None
+          if fp:
+            fp.write('Failed to find child construct %s' % id)
+          break
+        if attr is None:
+          /# This is only allowed for the last part, and is a request
+          /# to return the current construct rather than an attribute on
+          /# the construct.
+          assert i == m
+          result = construct
+          break
+        block = (
+          construct.rawattr(attr, default=None)
+          or construct.rawattr(attr + ':', default=None))
+        if not block:
+          result = None
+          if fp:
+            fp.write('Failed to find attribute %s' % attr)
+          break
+        result = block
+
+      return result
+    test:
+      test.defineAttributes()
+      block = test.complex
+      /# TODO(wmh): Need to define a more complex attribute with
+      /# sub-constructs with attributes.
+    end method child;
+
+  end class ComplexBlock;
+
+  behavior isFeature #:
+    Convenience method for determining if an attribute is a FeatureAttribute.
+  scope:
+    receiver Attribute scope:
+      return False
+
+    receiver FeatureAttribute scope:
+      return True
+    test:
+      test.defineAttributes()
+      test.istrue(test.feature.isFeature())
+      test.isfalse(test.word.isFeature())
+      test.isfalse(test.simple.isFeature())
+      test.isfalse(test.complex.isFeature())
+    end receiver FeatureAttribute;
+
+  end behavior isFeature;
+
+  behavior isBlock #:
+    Convenience method for determining if an attribute is a BlockAttribute.
+  scope:
+    receiver Attribute scope:
+      return False
+
+    receiver BlockAttribute scope:
+      return True
+    test:
+      test.defineAttributes()
+      test.isfalse(test.feature.isBlock())
+      test.istrue(test.simple.isBlock())
+      test.istrue(test.complex.isBlock())
+    end receiver BlockAttribute;
+
+  end behavior isBlock;
+
+  behavior isSimpleBlock #:
+    Convenience method for determining if an attribute is a SimpleBlock
+  scope:
+    receiver Attribute scope:
+      return False
+
+    receiver SimpleBlock scope:
+      return True
+    test:
+      test.defineAttributes()
+      test.isfalse(test.complex.isSimpleBlock())
+      test.istrue(test.simple.isSimpleBlock())
+    end receiver SimpleBlock;
+
+  end behavior isSimpleBlock;
+
+  behavior isComplexBlock #:
+    Convenience method for determining if an attribute is a ComplexBlock
+  scope:
+    receiver Attribute scope:
+      return False
+
+    receiver ComplexBlock scope:
+      return True
+    test:
+      test.defineAttributes()
+      test.isfalse(test.simple.isComplexBlock())
+      test.istrue(test.complex.isComplexBlock())
+    end receiver ComplexBlock;
+
+  end behavior isComplexBlock;
+
+  behavior valueStr #:
+    A string representation of the value of an Attribute.
+
+    TODO(wmh): Decide if this will stay around or be subsumed by writeValueLines()
+     - valueStr() is problematic for values spanning multiple lines
+       (e.g. block-valued attributes)
+     - valueStr() is less efficient than writeValueLines() since it has to
+       form an in-memory string, which then gets written to a stream
+     + valueStr() allows us to know how many bytes a value takes up before
+       we write it, which can be used in determining whether to add
+       line breaks, etc.
+  params:
+    var mode : map = null #:
+      See Construct.write() for details on mode semantics.
+  scope:
+
+    receiver Attribute scope:
+      raise NotImplementedError
+
+    receiver IdAttribute scope:
+      return str(self.value())
+    test:
+      test.defineAttributes()
+      test.iseq('bob', test.id.valueStr())
+
+    receiver NumAttribute scope:
+      return str(self.value())
+    test:
+      test.defineAttributes()
+      test.iseq('42', test.num.valueStr())
+
+  end behavior valueStr;
+
+  behavior writeValueLines : int #:
+    Write the lines making up the attribute value.
+
+    TODO(wmh): Fix this.  Writing to a stream directly (instead of using
+    valueStr() to obtain a value string first) is more efficient, but poses
+    problems when we need to know the size of the value string before we
+    write it (to determine if newlines need adding, etc.).  I suspect we
+    need to move away from writeValueLines to valueStr().
+
+    Returns:
+      The number of characters written. If the output contains multiple
+      lines, the return value is -1.
+  params:
+    var fp : ostream = out #:
+      Where to write the lines.
+    var indent : str = '' #:
+      How much to indent each line.
+    var mode : map = null #:
+      See Construct.write() for details on mode semantics.
+  scope:
+
+    receiver Attribute scope:
+      /# This is a sensible default that can be used by various subclasses,
+      /# but certain subclasses will need to override.
+      value = self.value()
+      if isinstance(value, str) and metax.c.Context.IsAutoId(value):
+        /# We do not write out auto-assigned ids.
+        /# TODO(wmh): Add support to 'mode' for allowing these to be printed.
+        val = ''
+      else:
+        val = str(value)
+        if not val:
+          print '*********** HERE with %s' % self.__class__
+
+        fp.write(val)
+      return len(val)
+    test:
+      test.defineAttributes()
+      mode = {}
+      fp = test.newStr()
+      test.iseq(4, test.feature.writeValueLines(fp=fp, indent='..', mode=mode))
+      fp.write('\n')
+      test.iseq(3, test.id.writeValueLines(fp=fp, indent='..', mode=mode))
+      fp.write('\n')
+      test.iseq(2, test.num.writeValueLines(fp=fp, indent='..', mode=mode))
+      fp.write('\n')
+      test.iseqmap('male\nbob\n42\n', fp.getvalue())
+
+    receiver FeatureAttribute scope:
+      val = str(self.value())
+      if mode and mode.get('form', 'code') == 'html':
+        val = '<span class="face-featval">%s</span>' % val
+      fp.write(val)
+      return len(val)
+    test:
+      test.defineAttributes()
+
+      fp = test.fp()
+      test.iseq(
+        4, test.feature.writeValueLines(fp=fp, mode={}))
+      test.iseq('male', test.out())
+
+      fp = test.fp()
+      test.iseq(
+        38, test.feature.writeValueLines(fp=fp, mode={'form': 'html'}))
+      test.iseq('<span class="face-featval">male</span>', test.out())
+    end;
+
+    receiver WordAttribute scope:
+      val = str(self.value())
+      if mode and mode.get('form', 'code') == 'html':
+        val = metax.c.HtmlSafe(val)
+      fp.write(val)
+      return len(val)
+    test:
+      test.defineAttributes()
+      fp = test.fp()
+      test.iseq(
+        9, test.word.writeValueLines(fp=fp, indent='..', mode={}))
+      test.iseq('<special>', test.out())
+
+      fp = test.fp()
+      test.iseq(
+        15,
+        test.word.writeValueLines(fp=fp, indent='..', mode={'form': 'html'}))
+      test.iseq('&lt;special&gt;', test.out())
+
+    receiver ExprAttribute scope:
+      val = self.value().text()
+      fp.write(val)
+      return len(val)
+    test:
+      test.defineAttributes()
+      fp = test.newStr()
+      test.iseq(16, test.expr.writeValueLines(fp=fp, indent='..'))
+      test.iseq('"this is a test"', fp.getvalue())
+
+    receiver EnumAttribute scope:
+      val = '<%s>' % '|'.join(self.value())
+      fp.write(val)
+      return len(val)
+    test:
+      test.defineAttributes()
+      fp = test.newStr()
+      test.iseq(24, test.enum.writeValueLines(fp=fp, indent='..'))
+      test.iseq('<apple|banana|cantelope>', fp.getvalue())
+
+    receiver TypeAttribute scope:
+      val = self.value().raw()
+      if mode and mode.get('form', 'code') == 'html':
+        val = HtmlSafe(val)
+      fp.write(val)
+      return len(val)
+    test:
+      test.defineAttributes()
+      fp = test.newStr()
+      test.iseq(8, test.type.writeValueLines(fp=fp, indent='..', mode={}))
+      test.iseq('vec<str>', fp.getvalue())
+
+    receiver SimpleBlock scope:
+      form = mode.get('form', 'code') if mode else 'code'
+      ishtml = form == 'html'
+      construct = self.parent()
+      if construct:
+        context = construct.context()
+        blockdent = context.token('blockdent')
+        kind = construct.kind()
+      else:
+        /# The context may be null if this attribute is an "empty" block.
+        blockdent = 2
+        kind = '???'
+
+      /# Block always starts on new line.
+      fp.write('\n')
+
+      /# If this is html, we insert a special control line at start and end.
+      if ishtml:
+        basel = self.basel() or '?'
+        attrkey = self.key()
+        block_uid = self.htmlId()
+        control_line = (
+          ' simple %s %s %s %s ' %
+          (kind, block_uid, self.key(), basel))
+        fp.write(control_line + 'start\n')
+
+      indent += ' ' * blockdent
+      for line in self.value():
+        if line.strip():
+          /# The line isn't empty
+          fp.write(indent + line + '\n')
+        else:
+          /# The line is empty. We don't add indent either.
+          fp.write('\n')
+
+      if ishtml:
+        fp.write(control_line + 'end\n')
+
+      return -1
+    test:
+      test.defineAttributes()
+      fp = test.newStr()
+      test.simple.writeValueLines(fp=fp, indent='..', mode={})
+      out = fp.getvalue()
+      test.iseqtext(
+        '\n'
+        '..  this is a\n'
+        '..  test of a simple block\n',
+        out)
+
+    receiver ComplexBlock scope:
+      construct = self.parent()
+      blockdent = construct.context().token('blockdent') if construct else 2
+      subdent = indent + (' ' * blockdent)
+      form = mode.get('form', 'code') if mode else 'code'
+      ishtml = form == 'html'
+
+      /# The value of a complex block (for now) always starts on a new line.
+      fp.write('\n')
+
+      /# If this is html, we insert a special control line at start and end.
+      if ishtml:
+        basel = self.basel() or '?'
+        attrkey = self.key()
+        block_uid = self.htmlId()
+        control_line = (
+          ' complex %s %s %s %s ' %
+          (construct.kind(), block_uid, self.key(), basel))
+        fp.write(control_line + 'start\n')
+
+      /# Print each construct.
+      for construct in self.value():
+        construct.write(fp=fp, indent=subdent, mode=mode)
+
+      /# postcount records how many empty lines exist after the last construct
+      /# in the block.
+      for i in range(0, self.postcount()):
+        fp.write('\n')
+
+      if ishtml:
+        fp.write(control_line + 'end\n')
+
+      return -1
+    test:
+      test.defineAttributes()
+      fp = test.newStr()
+      test.complex.writeValueLines(fp=fp, indent='..')
+      /# Add some constructs to the complex block to test this properly.
+      test.iseqtext('\n', fp.getvalue())
+    end;
+  end behavior writeValueLines;
+
+
+  test
+  class TestCase < metax.test.TestCase assocs:
+    std assoc metastrap #:
+      /# TODO(wmh): This is not actually std, but rather lib ... we need to
+      /# establish an appropriate build target for it.
+    cls assoc metax.meta.GenericConstruct;
+  scope:
+
+    lifecycle clsetup:
+      metastrap.Setup()
+    setup:
+    end;
+
+    method defineAttributes #:
+      Create some test attribute instances.
+    scope:
+      context = metax.c.Context(None, {}, None, None)
+      parent = None
+      construct = metax.meta.AttributeConstruct(
+        'scope:', parent, context)
+      test.construct = construct
+
+      test.feature = metax.attr.FeatureAttribute(
+        construct, 'gender', 'male', line=10, col=2)
+      test.id = metax.attr.IdAttribute(
+        construct, 'person', 'bob', line=10, col=9)
+      test.num = metax.attr.NumAttribute(
+        construct, 'count', '42', line=10, col=40)
+      test.word = metax.attr.WordAttribute(
+        construct, 'default', '<special>', line=10, col=51)
+      test.simple = metax.attr.SimpleBlock(
+        construct, 'comment:',
+        ['this is a', 'test of a simple block'],
+        line=11, col=2)
+
+      /# TODO(wmh): Make some constructs to add to this complex block.
+      test.complex = metax.attr.ComplexBlock(
+        construct, 'scope:', [], line=14, col=2)
+
+      expr = metax.c.Expr('str', '"this is a test"', '"this is a test"')
+      test.expr = metax.attr.ExprAttribute(
+        construct, 'value', expr, line=10, col=50)
+
+      test.type = metax.attr.TypeAttribute(
+        construct, 'type', metax.c.Type.Instance('vec<str>'), line=20, col=42)
+
+      test.enum = metax.attr.EnumAttribute(
+        construct, 'fruit', '<apple|banana|cantelope>', line=30, col=17)
+    end method defineAttributes;
+
+  end class TestCase;
+
+end namespace metax.attr;

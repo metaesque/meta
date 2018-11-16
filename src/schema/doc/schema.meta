@@ -3,7 +3,7 @@ MetaLanguage doc name Doc parent meta toplevel <presentation|document|spreadshee
 config:
 
   abstract
-  Construct _doc_ clsname DocConstruct #:
+  Construct _doc_ clsname DocConstruct pclsname metax.meta.Construct #:
     Abstract construct from which all Meta(Doc) constructs inherit.
 
     All constructs in Meta(Doc) inherit from this abstract construct,
@@ -719,6 +719,7 @@ config:
     Attribute comment:;
     Attribute config:;
     Attribute scope: : simple;
+  expand:
   translate:
     /# TODO(wmh): Add assocs to Construct and copy over to classes.
     import re
@@ -959,6 +960,7 @@ config:
 
     Attribute comment:;
     Attribute scope: : simple;
+  expand:
   translate:
     metafile = self.metafile()
     streams = metafile.streams()
@@ -970,8 +972,64 @@ config:
   scope:
   end Construct native;
 
-  BaseLanguage html name Html suffixes <html>;
-  BaseLanguage tex name TeX suffixes <tex>;
-  BaseLanguage markdown name Markdown suffixes <md>;
+  abstract
+  BaseLanguage _root_ clsname BaseLanguageDoc #:
+    Abstract superclass of all baselangs in Meta(Doc).
+  scope:
+  end BaseLanguage _root_;
+
+  BaseLanguage html < _root_ name Html suffixes <html> #:
+    Functionality for compiling Meta(Doc) code in html.
+  scope:
+
+    lifecycle params:
+      var id : str;
+      var parent : metax.c.ComplexBlock;
+      var context : metax.c.Context;
+      var precount : int = 0;
+    super (id, parent, context, precount=precount)
+    scope:
+      self.idIs('html')
+      self.nameIs('Html')
+      self.suffixesIs(['html'])
+    end;
+
+  end BaseLanguage html;
+
+  BaseLanguage markdown < _root_ name Markdown suffixes <md> #:
+    Functionality for compiling Meta(Doc) code in markdown.    
+  scope:
+
+    lifecycle params:
+      var id : str;
+      var parent : metax.c.ComplexBlock;
+      var context : metax.c.Context;
+      var precount : int = 0;
+    super (id, parent, context, precount=precount)
+    scope:
+      self.idIs('markdown')
+      self.nameIs('Markdown')
+      self.suffixesIs(['markdown'])
+    end;
+
+  end BaseLanguage markdown;
+
+  BaseLanguage tex < _root_ name TeX suffixes <tex> #:
+    Functionality for compiling Meta(Doc) code in tex.
+  scope:
+
+    lifecycle params:
+      var id : str;
+      var parent : metax.c.ComplexBlock;
+      var context : metax.c.Context;
+      var precount : int = 0;
+    super (id, parent, context, precount=precount)
+    scope:
+      self.idIs('tex')
+      self.nameIs('Tex')
+      self.suffixesIs(['tex'])
+    end;
+
+  end BaseLanguage tex;
 
 end MetaLanguage doc;
