@@ -1,7 +1,7 @@
 namespace metax.c #:
   /# The implementation of Meta in Meta.
   /#  - This file is implemented itself
-  /#  - The meta2 compiler does for .meta2 code what metac does for .meta code,
+  /#  - The meta2 compiler does for .meta code what metac does for .meta code,
   /#    but writes to <<repository_path>>/<metalang>/<baselang> instead of
   /#     - by convention, the notation <<var>> means something obtained from
   /#       ~/.config/metameta, and the notation <var> means something obtained
@@ -13,7 +13,7 @@ namespace metax.c #:
   /#       as the top-level namespace for meta, so that we can use the 
   /#       pseudovar 'meta' to refer to metaclass instance without having
   /#       them hide the metax namespace.
-  /#  - If .meta2 needs to rely on bootstrapping, it should use metastrap, not
+  /#  - If .meta needs to rely on bootstrapping, it should use metastrap, not
   /#    metameta.  TODO(wmh): How to enforce this?
   /#
   /#  Life Of A MetaFile
@@ -72,13 +72,13 @@ namespace metax.c #:
   /#      - the file .${file}.${suffix}.files is created, containing all of the
   /#        files generated during compilation.  Used to detect old files that
   /#        should be deleted because of changes in the .meta file.
-  /#      - if ./.meta2 does not exist, it is made a symlink to <<repository_path>>
+  /#      - if ./.meta does not exist, it is made a symlink to <<repository_path>>
   /#      - for every namespace nm.sp defined within ${file}.meta
   /#         - for every class C defined within nm.sp
-  /#            - ./.meta2/oopl/${baselang}/nm/sp/${C}.${suff} is created
+  /#            - ./.meta/oopl/${baselang}/nm/sp/${C}.${suff} is created
   /#              (except when ${suff} is 'py', in which case
-  /#               ./.meta2/oopl/${baselang}/nm/sp/.${C}.py is created,
-  /#               and ./.meta2/oopl/${baselang}/nm/sp/__init__.py merges all
+  /#               ./.meta/oopl/${baselang}/nm/sp/.${C}.py is created,
+  /#               and ./.meta/oopl/${baselang}/nm/sp/__init__.py merges all
   /#               classes into a python module aka meta namespace).
   /#
   /#  VARIABLE CONVENTIONS:
@@ -211,11 +211,10 @@ scope:
     /#    supports negative numbers (if we decide to allow them in packed
     /#    fields).
     TERM_UNINIT = 16
-    NEWSUFFIX = '2'
-    SUFFIX = '.meta' + NEWSUFFIX
+    SUFFIX = '.meta'
     SPECIAL_PREFIX_RE = re.compile(r'^\s*>\|')
     SPECIAL_PREFIX_RE2 = re.compile(r'^\s*>\|(?P<line>.*)')
-    SPECIAL_CHILD_DIR = '.meta' + NEWSUFFIX  # change this to '.meta'!
+    SPECIAL_CHILD_DIR = '.meta'
     INTERPOLATION_RE = re.compile(r'\$\{\"(?P<varstr>[^\"]+)\"\}')
     VAR_RE = re.compile(r'\$\{(?P<var>[^\}]+)\}')
 
@@ -235,7 +234,7 @@ scope:
     /#  - group 'metasuffix' contains the portion of the suffix AFTER '.meta'.
     /#     - should be empty or a baselang name or abbrev
     /#     - may be legacy value '2'
-    SUFFIX_RE = re.compile('(?P<base>(?:\S+/)?[^.]+)\.meta2?(?P<metasuffix>\S*)$')
+    SUFFIX_RE = re.compile('(?P<base>(?:\S+/)?[^.]+)\.meta(?P<metasuffix>\S*)$')
 
     /# TODO(wmh): Move this someplace better!
     def PathFromMeta(metapath, suffix):
@@ -3095,7 +3094,7 @@ scope:
         segment.flattenStr())
 
       /####
-      /# Now we parse a real .meta2 file, obtain a method, and instantiate
+      /# Now we parse a real .meta file, obtain a method, and instantiate
       /# the method template to provide a more comprehensive test.
 
       /# Obtain the 'method' template for python.
@@ -8746,7 +8745,7 @@ scope:
       else:
         optimize_level = 'high'
         if metadir is None:
-          metadir = '.meta2'
+          metadir = '.meta'
         inmemory = False
 
       if resources:
@@ -8775,7 +8774,7 @@ scope:
       if metadir is None:
         metadir = metadir
         if metadir == '.meta':
-          metadir = '.meta' + metax.c.NEWSUFFIX
+          metadir = '.meta'
       if kind is None:
         kind = 'memory' if inmemory else 'disk'
       if kind == 'memory':
@@ -9357,7 +9356,7 @@ scope:
             if link != repository_path:
               Print(
                 'ERROR: %s must be a symlink to %s not %s' %
-                (metdir, repository_path, link))
+                (metadir, repository_path, link))
               result = False
         else:
           /# Note the special metadir ... must be a directory.
@@ -10135,7 +10134,7 @@ scope:
         /# However,in meta1, the first line contains
         /#   <baseline> <metaline> <fullid> <source>
         /# We support both variants while we are using meta1 to compile the
-        /# parser.meta code. When we have parser.meta2 implemented we can
+        /# parser.meta code. When we have parser.meta implemented we can
         /# remove the special case code.
         metapath = fp.readline().rstrip()
         parts = metapath.split()
@@ -10220,7 +10219,7 @@ scope:
       /# Determine a unique abbrev for this metafile.
       def AbbrevExists(abr):
         return abr in metafiles and metafiles[abr] is not metafile
-      abbrev = fs.basename(abspath).replace('.meta2', '').replace('.meta', '')
+      abbrev = fs.basename(abspath).replace('.meta', '')
       abbrev2 = fs.basename(fs.dirname(abspath)) + '_' + abbrev
       if not AbbrevExists(abbrev):
         pass
@@ -10741,7 +10740,7 @@ scope:
       var errors : bool = false #:
         If true, print out meta files that don't exist.
       var implicit : bool = false #:
-        If true, assume that no args means 'find all .meta2 files in current
+        If true, assume that no args means 'find all .meta files in current
         dir'
       var resolve : bool = false #:
         If true, a valid metafile or fqn is to be resolved into a construct
@@ -11104,7 +11103,7 @@ scope:
       /# or to abide by literal case-sensitivity.
       metaid = metalang.id().lower()
       MetaLang = metalang.name()
-      metaprefix = 'meta%s%s' % (metaid, metax.c.NEWSUFFIX)
+      metaprefix = 'meta%s' % metaid
 
       in_file = metax.root.Object.Resource(
         'emacs_template', fqn='metax.c.Compiler')
@@ -13566,12 +13565,12 @@ scope:
         If true, make a public release (creates .tgz file)
     scope:
       /###  
-      /# We first check if there are any .meta2 symlinks below the kernel dir.
+      /# We first check if there are any .meta symlinks below the kernel dir.
       /#  - such symlinks usually occur because of an accidental invocation of
-      /#    meta2 within a subdir.
-      /#  - if there is a .meta2 symlink inside a directory that is included
+      /#    meta within a subdir.
+      /#  - if there is a .meta symlink inside a directory that is included
       /#    as a resource, we will have a problem when we use 'tar czhf' to
-      /#    tar up files ... symlinks are followed, and having spurious .meta2
+      /#    tar up files ... symlinks are followed, and having spurious .meta
       /#    links around brings in a massive amount of additional unnecessary files.
       /#  - we'll need to loosen this up a bit in the future, but better safe than
       /#    broken.
@@ -13579,18 +13578,18 @@ scope:
       
       kerneldir = fs.join(config['src_root'], 'src', 'kernel')
       for path in (
-        fs.join(kerneldir, 'testdata', '.meta2'),
+        fs.join(kerneldir, 'testdata', '.meta'),
       ):
         if fs.exists(path):
           fs.unlink(path)
           if verbose:
             print 'NOTE: Removed ' + path
       problems = subprocess.check_output(
-        ['find', '.', '-type', 'l', '-a', '-name', '.meta2', '-a',
+        ['find', '.', '-type', 'l', '-a', '-name', '.meta', '-a',
          '-mindepth', '2',  '-print'],
         cwd=kerneldir)
       if problems:
-        print 'WARNING: Not produces snapshot because of spurious .meta2 links.'
+        print 'WARNING: Not producing snapshot because of spurious .meta links.'
         print problems
         sys.exit(1)
       bazel_links = subprocess.check_output(
@@ -13662,7 +13661,7 @@ scope:
         print 'NOTE: Copied %s to %s' % (metastrap_path, metastrap_dest)
 
       /###
-      /# Copy <<src_root>>/src/{kernel,lib}/*.meta2 to <newpath>/src/{kernel,lib}
+      /# Copy <<src_root>>/src/{kernel,lib}/*.meta to <newpath>/src/{kernel,lib}
       destsrcdir = fs.join(newpath, 'src')
       fs.mkdir(destsrcdir, 0755)  
       for srcsub in ('kernel', 'lib'):
@@ -13670,7 +13669,7 @@ scope:
         destpath = fs.join(destsrcdir, srcsub)
         fs.mkdir(destpath, 0755)  
         for base in fs.listdir(srcpath):
-          if '.meta' in base and base != '.meta' and base != '.meta2':
+          if '.meta' in base and base != '.meta':
             srcfile = fs.join(srcpath, base)
             destfile = fs.join(destpath, base)
             fs.copyfile(srcfile, destfile)
@@ -14229,7 +14228,7 @@ scope:
       metac = metax.c.Compiler(metal=cli.metalang, basel=basel)
       metax.c.Compiler.CurrentIs(metac)
       /# Ensure that the repository directory exists.
-      if not metac.verifyDirectory(metadir='.meta2'):
+      if not metac.verifyDirectory(metadir='.meta'):
         sys.exit(1)
 
       /# The MetaxEntry method is either a meta-method or a static method.
@@ -14252,9 +14251,9 @@ scope:
       flag optimize_level @ O : str = 'high' #:
         enum<off|low|avg|high|max>
         The amount of optimization to enable compiled files.
-      flag metadir : str = '.meta2' #:
+      flag metadir : str = '.meta' #:
         The subdir to write code to.
-        A value of .meta2 is treated specially (is symlinked to repo).
+        A value of .meta is treated specially (is symlinked to repo).
       flag inmemory : bool = false #:
         If true, use memory filesystem instead of disk filesystem.
       flag metasrcfile : str = '' #:
@@ -14528,7 +14527,7 @@ scope:
             pass
           else:
             newpath = path + '.exp'
-            newpath = newpath.replace('.meta2.exp', '.exp.meta2')
+            newpath = newpath.replace('.meta.exp', '.exp.meta')
             file_construct = metafile.construct()
             with fs.open(newpath, 'w') as fp:
               for construct in file_construct.attrval('scope:', default=None) or []:
@@ -14921,7 +14920,7 @@ scope:
           else:
             print 'ERROR: Invalid class ' + fqcn
         else:
-          print 'usage: meta2 run <fqcn> [arg]...'
+          print 'usage: metac run <fqcn> [arg]...'
       end command run;
 
       named
@@ -15091,7 +15090,7 @@ scope:
 
       named
       command shell #:
-        An interactive shell within which any meta2 command can be invoked.
+        An interactive shell within which any metac command can be invoked.
       scope:
         if True:
           /# New implementation based on metax.c.shell.Shell
@@ -15353,6 +15352,7 @@ scope:
             metafiles, dotpath, config=config, display=cli.display,
             show_user=cli.showuser, show_meta=cli.showmeta,
             show_test=cli.showtest, size=cli.size)
+          print 'Wrote ' + dotpath
         else:
           print 'Must provide metafile(s) to generate uml for'
       end command uml;
@@ -15379,7 +15379,7 @@ scope:
       command __default__ #:
         Compile specified .meta files.
       scope:
-        /# As a convenience, if all are .meta2 files or fqns, we assume the
+        /# As a convenience, if all are .meta files or fqns, we assume the
         /# action is a combination of 'compile' and 'test.
         allargs = cli.rest
         command = allargs[0] if allargs else None
@@ -15389,8 +15389,8 @@ scope:
           and not argmap['badfiles']
           and (argmap['metafiles'] or argmap['fqns'])
         ):
-          /# All args are .meta2. or fqns. We parse/expand/compile the
-          /# .meta2 files then invoke the blaze test targets associated with
+          /# All args are .meta. or fqns. We parse/expand/compile the
+          /# .meta files then invoke the blaze test targets associated with
           /# each fqn.
           metac.argmapIs(argmap)
           if metac._compile_command():
