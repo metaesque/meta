@@ -1593,6 +1593,10 @@ config:
       this MetaLanguage.
 
     secondary
+    Attribute nmsp : word = <empty> #:
+      The namespace that the construct classes associated with this metalanguage.
+
+    secondary
     Attribute color : word = <empty> #:
       Specifies a color to use when highlighting the primary key of this
       construct. The value is anything legal in CSS Color Module Level 3
@@ -1869,12 +1873,13 @@ config:
       /###
       /# Generate the .meta code.
       config_attr, config = self.attrpair('config:')
-      
+      nmsp = self.attrval('nmsp') or ('metax.%s' % metal)
+
       context = metaoopl.context()
       file = metax.meta.FileConstruct.NewFromData(
         'faux.meta', context, secondaries=[('scope:', [])])
       namespace = metax.oopl.NamespaceConstruct.NewFromData(
-        'metax.%s' % metal, context,
+        nmsp, context,
         parent=file.attr('scope:'), secondaries=[('scope:', [])])
       nscope = namespace.attr('scope:')
       nscope.postcountIs(1)

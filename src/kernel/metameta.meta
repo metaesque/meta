@@ -1834,12 +1834,13 @@ namespace metax.meta scope:
       /###
       /# Generate the .meta code.
       config_attr, config = self.attrpair('config:')
+      nmsp = self.attrval('nmsp') or ('metax.%s' % metal)
 
       context = metaoopl.context()
       file = metax.meta.FileConstruct.NewFromData(
         'faux.meta', context, secondaries=[('scope:', [])])
       namespace = metax.oopl.NamespaceConstruct.NewFromData(
-        'metax.%s' % metal, context,
+        nmsp, context,
         parent=file.attr('scope:'), secondaries=[('scope:', [])])
       nscope = namespace.attr('scope:')
       nscope.postcountIs(1)

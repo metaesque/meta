@@ -9458,6 +9458,7 @@ scope:
       metalanguage.registerSecondary('parent', 'xid', empty)
       metalanguage.registerSecondary('name', 'word', '<required>')
       metalanguage.registerSecondary('toplevel', 'enum', empty)
+      metalanguage.registerSecondary('nmsp', 'word', empty)
       metalanguage.registerSecondary('color', 'word', empty)
       metalanguage.registerSecondary('scope:', 'simple', empty, aliases=['::'])
 
@@ -9575,6 +9576,9 @@ scope:
     params:
       var nori : str #:
         The name (or id) of a Meta Language.
+      var schema_path : str = null #:
+        Where the schema file resides. Necessarily only if it is not in the standard
+        location (<src_root>/src/schema/<metal>/schema.meta).
     scope:
       debug = False
       cls = self.__class__
@@ -9589,18 +9593,16 @@ scope:
         for mod in modules:
           result = getattr(mod, clsname, None)
           if result:
-            if mod.__name__ != 'metax.c':
-              /# print 'Found %s in %s' % (clsname, mod.__name__)
-              pass
             break
         return result
 
       if result is None:
         /# Parse the schema file associated with the language.
         fs = self.fs()
-        metalang, metafile = self.metalangFromSchema(metal=id)
+        metalang, metafile = self.metalangFromSchema(metal=id, path=schema_path)
         name = metalang.attrval('name')
         toplevel = metalang.attrval('toplevel')
+        nmsp = metalang.attrval('nmsp')
         mlparent = metalang.attrval('parent', default=None)
 
         if debug:
@@ -9614,17 +9616,21 @@ scope:
         /#    file, but we will incrementally pull them out. The following
         /#    code supports this incremental approach, allowing us to
         /#    define some metalang clasess in metax.oopl and some in metax.c
+        mnames = []
+        if nmsp:
+          mnames.append(nmsp)
+        mnames.append('metax.%s' % id)
         modules = []
-        try:
-          module = importlib.import_module('metax.%s' % id)
-          modules.append(module)
-        except ImportError:
-          pass
-        except AttributeError:
-          /# This can happen if a previous attempt to generate a schema file
-          /# leads to corruption (for example).
-          pass
-        /# modules.append(importlib.import_module('metax.c'))
+        for mname in mnames:
+          try:
+            module = importlib.import_module(mname)
+            modules.append(module)
+          except ImportError:
+            pass
+          except AttributeError:
+            /# This can happen if a previous attempt to generate a schema file
+            /# leads to corruption (for example).
+            pass
 
         /# We obtain the mapping from construct name (and baselang name) to
         /# python class, via introspection.
@@ -10403,7 +10409,8 @@ scope:
       /# Canonicalize path.
       fs = self.fs()
       if not fs.exists(path):
-        raise Error('%s does not exist' % path)
+        print '************* WARNING: %s does not exist' % path
+        return None
       realpath = fs.realpath(path)
 
       /# We may have already obtained (and partially/fully process) the MetaFiile
@@ -14925,6 +14932,7 @@ scope:
 
       named
       command schema #:
+        Create a .meta file defining classes for each construct.
         Create an HTML file documenting the target schema.
       scope:
         cli = self.cli()
@@ -14945,11 +14953,15 @@ scope:
         /#     code.
         /#   - metalang is the Meta(<target>) metalanguage, used to obtain
         /#     the schema from which source code is obtained.
-        for metal in cli.rest:
-          metalang = self.metalangNamed(metal)
-          assert metalang.compiler() is self
-          metalang.generateMeta()
-    
+        metal = cli.rest.pop(0)
+        if cli.rest:
+          /# Second arg, if present, is the schema file defining the metalang.
+          schema_path = cli.rest[0]
+        else:
+          schema_path = None
+        metalang = self.metalangNamed(metal, schema_path=schema_path)
+        assert metalang.compiler() is self
+        metalang.generateMeta()
 
         /# TODO(wmh): Move the html generating code below someplace else
         /# (maybe it goes into MetaLanguage.generateMeta(), maybe it goes

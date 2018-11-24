@@ -84,7 +84,7 @@ fullmeta-%:
 	echo metac -b $* $(METAFILES)
 	@echo "================================================================================"
 
-fullmeta-py: metameta.meta metaoopl.meta metadoc.meta metafood.meta metabio.meta .FORCE
+fullmeta-py: metameta.meta metaoopl.meta metadoc.meta .FORCE
 	metac -b py $(METAFILES)
 	@echo "================================================================================"
 
