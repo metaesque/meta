@@ -146,7 +146,7 @@ scope:
       - TODO(wmh): Find a way to initialize this properly.
 
     static
-    field ResourceMap : map<@str,@str> #:
+    field ResourceMap : @map<@str,@str> #:
       Maps fully qualified resource names to explicit paths. The
       Object.Resource() method looks in this map before performing its
       default logic. Initialized by Object.Initialize().
@@ -167,7 +167,7 @@ scope:
         Object.CLIIs(cli)
         logging.info('metax.root.Object.Init: CLI initialized.')
       if resources is not None:
-        Object.ResourceMapIs(resources)
+        Object.ResourceMap().update(resources)
         logging.info('metax.root.Object.Init: ResourceMap initialized.')
     scope<cc>:
       if (cli != nullptr) {

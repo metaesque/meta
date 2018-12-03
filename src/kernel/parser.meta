@@ -234,7 +234,23 @@ scope:
     /#  - group 'metasuffix' contains the portion of the suffix AFTER '.meta'.
     /#     - should be empty or a baselang name or abbrev
     /#     - may be legacy value '2'
-    SUFFIX_RE = re.compile('(?P<base>(?:\S+/)?[^.]+)\.meta(?P<metasuffix>\S*)$')
+    /#     - using (?P<metasuffix>\S+) is problematic because it matches
+    /#       against something like wmh.metastr.Banner in a command like
+    /#         % metac run wmh.metastr.Banner
+    /#     - in general, we probably want the regexp to be very specific
+    /#       rather than being quite general.
+    /#     - we may want to provide a means of distinguishing between
+    /#         file.metacc   <--- baselang within Meta(Oopl)
+    /#         file.metadoc  <--- a generic file in Meta(Doc)
+    /#       we have been assuming that
+    /#         file.meta
+    /#       is a Meta(Oopl) doc, but do we want to support 
+    /#         file.metaoopl
+    /#       and what about
+    /#         file.metaooplpy
+    /#         file.metadochtml
+    SUFFIX_RE = re.compile(
+      '(?P<base>(?:\S+/)?[^.]+)\.meta(?P<metasuffix>[a-z]*)$')
 
     /# TODO(wmh): Move this someplace better!
     def PathFromMeta(metapath, suffix):
@@ -10596,7 +10612,7 @@ scope:
         if show_files:
           for kind, abbrev, kwidth in file_titles:  
             width += 1 + kwidth
-        sep = '-' * width + '\n'
+        sep = indent + '-' * width + '\n'
         /# fp.write(sep)
         fp.write('\n')
 
@@ -10617,7 +10633,7 @@ scope:
             parts.append(' ' + abbrev.rjust(kwidth))
             totals[kind] = 0
         line = ''.join(parts)
-        fp.write(line + '\n')
+        fp.write(indent + line + '\n')
         fp.write(sep)
 
         /# Compute (but do not yet print) the data rows.
@@ -10694,14 +10710,14 @@ scope:
         /# Print the data rows.
         for line in rows:
           if nofiles and line[0] == ' ': continue
-          fp.write(line + '\n')
+          fp.write(indent + line + '\n')
 
         /# Print total row.
         nmf = len(metafiles)
         if nmf > 1:
           /# fp.write(sep)
           line = TotalRow(totals, 'TOTAL', nmf)
-          fp.write(line + '\n')
+          fp.write(indent + line + '\n')
         fp.write(sep)
     end method writeSummary;
 
@@ -13845,6 +13861,31 @@ scope:
       return result
     end method maybeRecompileMeta;
 
+
+    method handleCompilationException : any #:
+      When an exception is used during compilation of .meta files, this method
+      performs baselang-to-metafile remapping of the exception stack trace.
+    params:
+      var e : Exception #:
+        The exception raised (currently unused).
+    scope:
+      text = traceback.format_exc()
+      if False:
+        print '#' * 70
+        print text
+        print '=' * 70
+      ifp = cStringIO.StringIO(text)
+      /# Note that the baselang being compiled is NOT what is important
+      /# when performing baseling-to-metaline conversions ... it is the
+      /# baselang being used to compile the code that is important!
+      /# This parser.meta code is currently assuming a python implementation,
+      /# so that is the baselang we use.
+      metaoopl = self.metalangNamed('oopl')
+      baselang = metaoopl.baselangNamed('python')
+      self.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)
+    test:
+    end method handleCompilationException;
+
     method generateHtml #:
       Generate a self-contained html file for a meta file specified by path.
     params:
@@ -14171,6 +14212,73 @@ scope:
     test:
     end method generateHtml;
 
+    method monitorMetaFiles : any #:
+      docstr
+    params:
+      var paths : vec<str> #:
+        The paths to monitor
+      var seconds_between_rounds : int = 60 #:
+        Number of seconds between checks.
+      var min_age : int = 300 #:
+        We do not recompile unless the difference between last change and
+        current time is at least this much.
+      var min_unchanged : int = 300 #:
+        A file must remain unchanged for this many seconds (after having
+        changed) before we recompile it.
+    scope:
+      fs = self.fs()
+      print 'NOTE: Monitoring %d files...' % len(paths)
+
+      def time2hms(ts):
+        return datetime.datetime.fromtimestamp(mtime).strftime('%H:%M:%S')
+      
+      /# Maps path to mtime, so we can detect changes.
+      pathmap = {}
+
+      while True:
+        start = time.time()
+        updated = {}
+        /# print '%s: Checking %d paths' % (datetime.datetime.now(), len(paths))
+
+        /# Find paths that have changed since last round
+        for path in paths:
+          mtime = fs.mtime(path)
+          if path in pathmap:
+            if mtime > pathmap[path]:
+              /# The path has been updated.
+              updated[path] = mtime  # this must be mtime, as we rely on it later
+              /# print 'NOTE: %s changed at %s (vs %s)' % (path, time2hms(mtime), time2hms(pathmap[path]))
+          else:
+            /# We don't have enough info about path yet, so we just add it for
+            /# the next round.
+            pathmap[path] = mtime
+
+        /# Compile all updated paths.
+        fp = sys.stdout
+        try:
+          metafiles, errors, warnings = self.getMetas(
+            sorted(updated), debug=False, fp=fp)
+        except Exception as e:
+          self.handleCompilationException(e)
+          sys.exit(1)
+        else:
+          if updated:
+            print '%s: Found changes in %d of %d files' % (
+              time2hms(start), len(updated), len(paths))
+            self.writeSummary(metafiles, indent='  ')
+
+        /# Update times of all compiled files.
+        for path, mtime in updated.iteritems():
+          pathmap[path] = mtime
+
+        /# Wait until next round
+        current = time.time()
+        round_seconds = current - start
+        if round_seconds < seconds_between_rounds:
+          time.sleep(seconds_between_rounds - round_seconds)
+    test:
+    end method monitorMetaFiles;
+
     command metac #:
       The public interface to the Meta compiler.
     scope:
@@ -14449,19 +14557,7 @@ scope:
           metafiles, errors, warnings = self.getMetas(
             metafile_paths, debug=debug, fp=fp)
         except Exception as e:
-          text = traceback.format_exc()
-          if False:
-            print '#' * 70
-            print text
-            print '=' * 70
-          ifp = cStringIO.StringIO(text)
-          /# Note that the baselang being compiled is NOT what is important
-          /# when performing baseling-to-metaline conversions ... it is the
-          /# baselang being used to compile the code that is important!
-          /# This parser.meta code is currently assuming a python implementation,
-          /# so that is the baselang we use.
-          baselang = self.metalang().baselangNamed('python')
-          self.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)
+          self.handleCompilationException(e)
 
           sys.exit(1)
         else:
@@ -14850,6 +14946,17 @@ scope:
           else:
             print 'WARNING: Ignoring arg "%s"' % details['arg']
       end command mirror;
+
+      named
+      command monitor #:
+        Monitor .meta files for changes, recompiling when they are detected.
+      interface:
+        flag cycle : int = 60 #:
+          Number of seconds between checks.
+      scope:
+        cli = self.cli()
+        self.monitorMetaFiles(cli.rest, seconds_between_rounds=cli.cycle)
+      end command monitor;
 
       named
       command parents #:
@@ -15410,7 +15517,7 @@ scope:
               metac._test_command()
         else:
           pprint.pprint(argmap)
-          print 'ERROR : Unknown command "%s"' % command
+          print 'ERROR: Unknown command "%s"' % command
         fs = metac.fs()
         if cli.showfs or fs.kind() == 'memory':
           fp = sys.stdout

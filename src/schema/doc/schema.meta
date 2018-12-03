@@ -12,6 +12,9 @@ config:
     is automatically included in the subconstruct ... the subconstruct
     must specify the primary attribute (and any customization of other
     values).
+  assocs:
+    std assoc json;
+    std assoc os;
   config:
 
     secondary
@@ -184,8 +187,10 @@ config:
     for construct in children:
       construct.expandMeta()
   translate:
-    /# TODO(wmh): Add assocs to constructs
-    import json
+    /# TODO(wmh): This must be changed to use templates!!
+    rawmode = os.getenv('METADOC_RAW', '') == 'true'
+    /# print 'NOTE: Here with rawmode %s' % rawmode    
+    metadoc_js_path = 'metadoc.js' if rawmode else '/static/js/metadocs.js'
 
     metafile = self.metafile()
     streams = metafile.streams()
@@ -201,27 +206,31 @@ config:
           child.translateMeta()
       else:
         child.translateMeta()
-        
+  
     fs = self.compiler().fs()
     path = '%s.html' % self.id()
     with fs.open(path, 'w') as fp:
       /# TODO(wmh): Use a template!
-      fp.write('{% extends "base.html" %}\n')
+      if rawmode:
+        fp.write('<html>\n')
+        fp.write('  <head>\n')
+      else:
+        fp.write('{% extends "base.html" %}\n')
 
       /###
       /# Now the CSS from style constructs.
       fp.write('\n')
-      fp.write('{% block css %}\n')
+      fp.write('  <style>\n' if rawmode else '{% block css %}\n')
       for line in streams.stream('style'):
         fp.write(line + '\n')
-      fp.write('{% endblock %}\n')
+      fp.write('  </style>\n' if rawmode else '{% endblock %}\n')
 
       /###
       /# Now the javascript libraries
       fp.write('\n')
-      fp.write('{% block jslibs %}\n')
+      fp.write('' if rawmode else '{% block jslibs %}\n')
       fp.write(
-        '<script type="text/javascript" src="/static/js/metadoc.js"></script>\n')
+        '<script type="text/javascript" src="%s"></script>\n' % metadoc_js_path)
       /# All script constructs inserted first
       for line in streams.stream('jslibs'):
         fp.write(line + '\n')
@@ -230,8 +239,14 @@ config:
       nums = len(slides)
       animations = self.animations()
       fp.write('<script type="text/javascript">\n')
-      fp.write('  var numSlides = %d;\n' % nums)
-      fp.write('  var SlideInfo = {\n')
+      fp.write('  // We do not use var here because they are declared in\n')
+      fp.write('  // metadoc.js\n')
+      if rawmode:
+        fp.write('  targetSlide = 0;\n')
+      else:
+        fp.write('  targetSlide = {{ targetSlide|default(0) }};\n')
+      fp.write('  numSlides = %d;\n' % nums)
+      fp.write('  SlideInfo = {\n')
       for i in range(nums):
         slide = slides[i]
         sdata = {'id': slide.id()}
@@ -242,15 +257,23 @@ config:
       fp.write('  };\n')
       fp.write('</script>\n')
       /# Close javascript.
-      fp.write('{% endblock %}\n')
+      fp.write('' if rawmode else '{% endblock %}\n')
+
+      if rawmode:
+        fp.write('  </head>\n')
 
       /###
       /# Now the slide content
       fp.write('\n')
-      fp.write('{% block content %}\n')
+      fp.write('  <body>\n' if rawmode else '{% block content %}\n')
       for line in streams.stream('body'):
         fp.write(line + '\n')
-      fp.write('{% endblock %}\n')
+
+
+      /# We start with the desired slide.
+      fp.write('<script>showSlide(targetSlide);</script>\n')
+
+      fp.write('  </body>\n<html>\n' if rawmode else '{% endblock %}\n')
     print 'Wrote %s' % path
 
     return (None, None)
@@ -792,6 +815,7 @@ config:
     Attribute config:;
     Attribute scope: : simple;
 
+  expand:
   translate:
     metafile = self.metafile()
     streams = metafile.streams()
@@ -801,10 +825,14 @@ config:
       streams.addLines('jslibs', scope)
       streams.addLine('jslibs', '</script>')
     else:
-      path = self.attrval('path', default=None)
-      if path:
+      path_expr = self.attrval('path', default=None)
+      if path_expr:
+        path = path_expr.asStr(unquote=True)
         streams.addLine(
-          '<script type="text/javascript" src="%s"/>' % path)
+          /# IMPORTANT: Side note about javascript ... must use <script></script>
+          /# not <script/> ... the latter doesn't get processed properly in
+          /# Chrome as of 2018-11-30.
+          'jslibs', '<script type="text/javascript" src="%s"></script>' % path)
 
     return (None, None)
   scope:

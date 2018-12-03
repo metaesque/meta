@@ -4112,7 +4112,7 @@ namespace metax.oopl scope:
           else:
             metafile.warning(
               '%s is general but missing scope<%s>' %
-              (self.fqn(), baselang.suffix()[1:]),
+              (self.kindfqn(), baselang.suffix()[1:]),
               line=self.primary().line())
       elif scope_attr.isSimpleBlock():
         /# We strip empty lines in case the user has added spurious emptiness.
@@ -5015,9 +5015,13 @@ namespace metax.oopl scope:
             secondaries.append(secondary)
 
         if scope:
-          /# If there is a scope: block, we create an explicit initializer,
-          /# and copy over many of the attributes from the lifecycle to the
-          /# initializier.
+          /# IMPORTANT: On 2018/11/26, code was changed to always create an
+          /# explicit initializer, even if a scope block does not exist. This
+          /# may break existing code, but the benefits (I think) outweight the
+          /# breakage.
+
+          /# We create an explicit initializer, and copy over many of the
+          /# attributes from the lifecycle to the initializier.
           features.append(('kind', 'initializer'))
           primary_line = self.primary().line()
           initializer = metax.oopl.MethodConstruct.NewFromData(
@@ -5035,6 +5039,8 @@ namespace metax.oopl scope:
           /# etc.)
           initializer.expandMeta()
         else:
+          /# raise Error('This code block is disabled/deprecated')
+
           /# IMPORTANT: If there is no scope block, we do NOT create an
           /# initializer construct here, which means the code in
           /# ClassConstruct.expandMeta() for creating a default initializer will
@@ -5250,6 +5256,7 @@ namespace metax.oopl scope:
       params_attr, params = self.attrpair('params:', default=None)
       returns_attr, mtype = self.attrpair('returns', default=None)
       parent_block = self.parent()
+      location = self.attrval('location')
 
       if False:
         print '#' * 70
@@ -5298,7 +5305,11 @@ namespace metax.oopl scope:
         /#    in a different namespace than the behavior.
         /#  - Easily accomplished because we have access to the entire
         /#    hierarchy by fqn.
-        receiver_class = parent_block.cons(clsname, default=None)
+        if location == 'meta':
+          receiver_class = parent_block.cons(
+            metax.oopl.ClassConstruct.MetaifyName(clsname), default=None)
+        else:
+          receiver_class = parent_block.cons(clsname, default=None)
         if receiver_class is None:
           print 'ERROR: Failed to find %s in %s' % (clsname, parent_block.parent().fqn())
         else:
@@ -5789,29 +5800,38 @@ namespace metax.oopl scope:
       /#     - if it does not link to the same thing as we expect, report warning, do nothing
       /#     - if it does link to same thing as we expect, do nothing
       /#  - else create ite.
+      /#  - we do the same thing for any aliases of the command.
       linkdir = fs.join(metac.repositoryPath(), 'bin')
       if not fs.exists(linkdir):
         fs.makedirs(linkdir, 0755)
-      linkpath = fs.join(linkdir, self.id())
-      relpath = fs.join('..', cmdpath)
 
-      if fs.exists(linkpath):
-        if not fs.islink(linkpath):
-          raise metax.c.Error('Expecting %s to be a symlink to %s' % (linkpath, relpath))
-        currpath = fs.readlink(linkpath)
-        f1 = fs.realpath(currpath)
-        f2 = fs.realpath(relpath)
-        if False and f1 != f2:
-          /# TODO(wmh): This is giving spurious warnings and is thus disabled.
-          /# May be useful sometimes, in which case it needs fixing.
-          metafile.warning(
-            'For %s we have\n  %s\n  %s' % (linkpath, f1, f2),
-            line=self.primary().line())
-      else:
-        linkfile = metax.fs.BaseFile(
-          linkpath, None, metafile=metafile, mapfile=None,
-          link=cmdfile)
-        metafile.registerFile(linkfile)
+      basenames = [self.id()]
+      aliases = self.attrval('aliases', default=None)
+      if aliases:
+        aval = aliases.asStr(unquote=True).split(',')
+        basenames.extend(aval)
+
+      for basename in basenames:
+        linkpath = fs.join(linkdir, basename)
+        relpath = fs.join('..', cmdpath)
+
+        if fs.exists(linkpath):
+          if not fs.islink(linkpath):
+            raise metax.c.Error('Expecting %s to be a symlink to %s' % (linkpath, relpath))
+          currpath = fs.readlink(linkpath)
+          f1 = fs.realpath(currpath)
+          f2 = fs.realpath(relpath)
+          if False and f1 != f2:
+            /# TODO(wmh): This is giving spurious warnings and is thus disabled.
+            /# May be useful sometimes, in which case it needs fixing.
+            metafile.warning(
+              'For %s we have\n  %s\n  %s' % (linkpath, f1, f2),
+              line=self.primary().line())
+        else:
+          linkfile = metax.fs.BaseFile(
+            linkpath, None, metafile=metafile, mapfile=None,
+            link=cmdfile)
+          metafile.registerFile(linkfile)
     test:
     end method createExecutableBinary;
 
