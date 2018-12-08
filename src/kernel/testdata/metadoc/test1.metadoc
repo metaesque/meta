@@ -1,0 +1,55 @@
+presentation preso1 width 1500 height 1000 padding 10 #:
+  For unit testing.
+scope:
+
+  style scope:
+    body { background: black; }
+
+  script scope:
+    var jsvar = 1;
+
+  native scope:
+    <div class="toplevel">
+
+  slide slide1 scope:
+    top panel size 70 ::
+      <h1>First Slide
+
+    left panel panel1 size 0.5 :<*>:
+
+      data data1 columns:
+        col time : hms;
+        col fruit : str;
+        col count : int;
+        col rating : real;
+      options:
+        showRowNumber: true,
+        width: '100%',
+        height: '100%',
+      scope:
+        /#  time | fruit     | count | rating |
+        | 13:30 | apple     |     1 |      3 |
+        | 13:35 | banana    |     3 |      4 |
+        | 13:45 | cantelope |     2 |      5 |
+      end data data1;
+
+    left panel panel2 :<*>:
+
+      table
+      chart table1 from data1 columns:
+        col time;
+        col fruit formula "cell + 's'";
+        col count formula "float(cell + 2) / 5";
+      options:
+        chart: {
+          title: 'Test Title',
+          subtitle: 'Test SubTitle'
+        },
+        width: 900,
+        height: 500
+      end chart1;
+
+  native scope:
+    </div>
+
+end presentation preso1;

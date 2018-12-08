@@ -182,7 +182,7 @@ scope:
         lines = fp.read().replace('\t', '    ').split('\n')
       return self.parseLines(lines, parent=parent, debug=debug)
     test:
-      simple = test.parseMarkdown('simple.md')
+      simple = test.parseMarkdown('simple_md')
       fp = test.newStr()
       simple.show(fp=fp)
       test.contains(
@@ -818,7 +818,7 @@ scope:
       test.maxDiff = None
 
       respath = metax.root.Object.Resource(
-        'simple.md', fqn='metax.lib.markdown_test.TestCase')
+        'simple_md', fqn='metax.lib.markdown_test.TestCase')
       with open(respath, 'r') as fp:
         content = fp.read()
 
@@ -1110,7 +1110,7 @@ scope:
       return book
     test:
       /# NOTE: test.parseBook() invokes test.md.loadBook()
-      book = test.parseBook(['simple.md'])
+      book = test.parseBook(['simple_md'])
       test.iseq(1, len(book.children()))
     end method loadBook;
 
@@ -3894,8 +3894,8 @@ scope:
     std assoc metastrap #:
       /# TODO(wmh): This is not actually std, but rather lib ... we need to
       /# establish an appropriate build target for it.
-    resource simple.md path "testdata/markdown/simple.md";
-    resource markdown.md path "testdata/markdown/markdown.md";
+    resource simple_md path "testdata/markdown/simple.md";
+    resource markdown_md path "testdata/markdown/markdown.md";
     resource simple_golden path "testdata/markdown/simple.md.golden";
     resource raw_txt_golden path "testdata/markdown/raw.txt.golden";
     resource raw_html_golden path "testdata/markdown/raw.html.golden";

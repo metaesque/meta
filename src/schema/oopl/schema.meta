@@ -6668,8 +6668,10 @@ config:
     Attribute location;
 
     primary
-    Attribute resource : word = <required> #:
+    Attribute resource : id = <required> #:
       The name of the resource.
+      This is intentionally an id to avoid allowing '.', since we want to be
+      able to treat dots as indicators of fqns in Object.Resource.
 
     secondary
     Attribute path : str = <empty> #:
@@ -10934,7 +10936,9 @@ scope:
           metac.repositoryPath(), metac.basePath(construct.fqn()), metax.c.RESOURCES_SUBDIR)
         if fs.exists(resource_dir):
           build['data'] = [
-          metax.c.RESOURCES_SUBDIR + '/' + f for f in fs.listdir(resource_dir)]
+            metax.c.RESOURCES_SUBDIR + '/' + f
+            for f in fs.listdir(resource_dir)
+          ]
 
         if kind == 'class':
           /# TODO(wmh): In Python, since we do not have per-class targets,

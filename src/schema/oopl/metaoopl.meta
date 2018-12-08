@@ -9798,7 +9798,9 @@ namespace metax.oopl scope:
           metac.repositoryPath(), metac.basePath(construct.fqn()), metax.c.RESOURCES_SUBDIR)
         if fs.exists(resource_dir):
           build['data'] = [
-          metax.c.RESOURCES_SUBDIR + '/' + f for f in fs.listdir(resource_dir)]
+            metax.c.RESOURCES_SUBDIR + '/' + f
+            for f in fs.listdir(resource_dir)
+          ]
 
         if kind == 'class':
           /# TODO(wmh): In Python, since we do not have per-class targets,

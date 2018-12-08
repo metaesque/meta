@@ -365,6 +365,7 @@ scope:
   assocs<py>:
     std assoc shutil;
     std assoc cStringIO;
+    std assoc io;
     std assoc logging;
     usertest std assoc os;
     std assoc re;
@@ -1918,28 +1919,9 @@ scope:
       var width : int = 30;
     scope<py>:
       if expected != data:
-        if msg is None:
-          msg = '%s != %s' % (expected, data)
-
-        def Trunc(val, width):
-          val = str(val)
-          if len(val) > width:
-            val = val[:width - 1] + '$'
-          return val
-
-        form = '%%-10s %%-2s %%-%ds %%-%ds' % (width, width)
-        notes = []
-        for k in sorted(set(expected.keys() + data.keys())):
-          expval = expected[k] if k in expected else '---'
-          dval = data[k] if k in data else '---'
-          sign = '  ' if (expval == dval) else '!='
-          notes.append(
-            form % (
-              Trunc(k, 10),
-              sign,
-              Trunc(expval, width + 2),
-              Trunc(dval, width + 2)))
-        self.fail(msg + '\n' + '\n'.join(notes))
+        fp = io.BytesIO()
+        self.recursiveCompare('', expected, data, 0, fp=fp)
+        self.fail(fp.getvalue())        
     scope<js>:
       if (msg) {
         assertHashEquals(msg, expected, data);
@@ -1949,6 +1931,165 @@ scope:
     scope<cc>:
       throw metax::root::Error("TestCase.iseqmap() not yet implemented");
     end method iseqmap;
+
+    static
+    method FormStr : str #:
+      Return a string of exactly width 'width' from val.
+    params:
+      var val : str;
+      var width : int;
+    scope:
+      vstr = str(val)
+      v = len(vstr)
+      if v < width:
+        result = vstr + ' ' * (width - v)
+      elif v > width:
+        result = vstr[:width-1] + '$'
+      else:
+        result = vstr
+      return result
+    end method FormStr;
+
+    method recursiveCompare #:
+      Compare two objects for similarity.
+    params:
+      var key : any #:
+        The key (within parent objects) that obj1 and obj2 are found within.
+      var obj1 : any;
+      var obj2 : any;
+      var depth : int #:
+        How much indentation to apply
+      var fp : ostream = out #:
+        Where to write output.
+      var keywidth : int = 20 #:
+        Width of key
+      var valwidth : int = 27 #:
+        Width of the two values.
+    scope:
+      formstr = TestCase.FormStr
+      indent = ' ' * depth
+
+      /# We print out the indented key (no newline ... values printed later).
+      fp.write('%s%s ' % (indent, formstr(key, keywidth-depth)))
+
+      if obj1 == obj2:
+        /# The two objects are equal, so we don't need to do anything more.
+        fp.write(
+          '  ' + formstr(obj1, valwidth) + ' ' + formstr(obj2, valwidth) + '\n')
+      else:
+        /# The two objects differ, so we analyze more carefully.
+        t1 = type(obj1)
+        t2 = type(obj2)
+        if t1 is t2:
+          /# The two types are the same, so we can meaningfully compare them,
+          /# including recursing into them if they are containers.
+          if isinstance(obj1, (list, tuple)):
+            fp.write('\n')
+            l1 = len(obj1)
+            l2 = len(obj2)
+            ml = max(l1, l2)
+            for i in range(0, ml):
+              self.recursiveCompare(
+                str(i),
+                obj1[i] if i < l1 else None,
+                obj2[i] if i < l2 else None,
+                depth+1,
+                fp=fp, keywidth=keywidth, valwidth=valwidth)
+          elif isinstance(obj1, dict):
+            fp.write('\n')
+            keys = set(obj1)
+            keys.update(set(obj2))
+            for key in sorted(keys):
+              self.recursiveCompare(
+                key,
+                obj1.get(key, None),
+                obj2.get(key, None),
+                depth+1,
+                fp=fp, keywidth=keywidth, valwidth=valwidth)
+          else:
+            fp.write(
+              '* ' + formstr(obj1, valwidth) +
+              ' ' + formstr(obj2, valwidth) + '\n')
+        else:
+          /# The two objects are different types so they are incomparable.
+          fp.write(
+            '* ' + formstr(t1, valwidth) + ' ' + formstr(t2, valwidth) + '\n')
+    test:
+      tc = metax.test.TestCase('run')
+
+      /# Equal ints
+      tc.recursiveCompare('', 1, 1, 0, test.fp())
+      test.iseq(
+        '                       1                           1                          \n',
+        test.out())
+
+      /# Unequal ints
+      tc.recursiveCompare('', 1, 2, 0, test.fp())
+      test.iseq(
+        '                     * 1                           2                          \n',
+        test.out())
+
+      /# Equal lists
+      tc.recursiveCompare(
+        '',
+        ['apple', 1, True],
+        ['apple', 1, True],
+        0, test.fp())
+      test.iseq(
+        "                       ['apple', 1, True]          ['apple', 1, True]         \n",
+        test.out())
+
+      /# Unequal lists
+      tc.recursiveCompare(
+        '',
+        ['apple', 1, True],
+        ['apple', 2, False],
+        0, test.fp())
+      test.iseq(
+        '                     \n'
+        ' 0                     apple                       apple                      \n'
+        ' 1                   * 1                           2                          \n'
+        ' 2                   * True                        False                      \n',
+        test.out())
+
+      /# Equal dicts
+      tc.recursiveCompare(
+        '',
+        {'apple': 1, 'banana': 2, 'cantelope': 3},
+        {'apple': 1, 'banana': 2, 'cantelope': 3},
+        0, test.fp())
+      test.iseq(
+        "                       {'cantelope': 3, 'apple': $ {'cantelope': 3, 'apple': $\n",
+        test.out())
+
+      /# Unequal dicts
+      tc.recursiveCompare(
+        '',
+        {'apple': 1, 'banana': 2, 'cantelope': 3},
+        {'apple': 1, 'banana': 3, 'cantelope': 2},
+        0, test.fp())
+      test.iseq(
+        '                     \n'
+        ' apple                 1                           1                          \n'
+        ' banana              * 2                           3                          \n'
+        ' cantelope           * 3                           2                          \n',
+        test.out())
+
+      tc.recursiveCompare(
+        '',
+        {'apple': [True, 1, 'more'], 'banana': [False, 3, 'here'], 'cantelope': [True, 7, 'cold']},
+        {'apple': [True, 1, 'more'], 'banana': [False, 4, 'here'], 'cantelope': [True, 7, 'cold']},
+        0, test.fp())
+      test.iseqtext(
+        '                     \n'
+        " apple                 [True, 1, 'more']           [True, 1, 'more']          \n"
+        ' banana              \n'
+        '  0                    False                       False                      \n'
+        '  1                  * 3                           4                          \n'
+        '  2                    here                        here                       \n'
+        " cantelope             [True, 7, 'cold']           [True, 7, 'cold']          \n",
+        test.out())
+    end method recursiveCompare;
 
     method iseqtext params:
       var first : str;

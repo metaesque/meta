@@ -10312,15 +10312,19 @@ scope:
     scope:
       errors = 0
       warnings = 0
+      fs = self.fs()
       metafiles = []
       for path in paths:
-        /# metafile, e, w = self.processMeta(
-        metafile = self.getMeta(
-          path, debug=debug, fp=fp,
-          expand=expand, imports=imports, translate=translate, compile=compile)
-        errors += len(metafile.errors())
-        warnings += len(metafile.warnings())
-        metafiles.append(metafile)
+        base = fs.basename(path)
+        if base == 'schema.meta':
+          print 'HERE in compile with %s' % path
+        else:
+          metafile = self.getMeta(
+            path, debug=debug, fp=fp,
+            expand=expand, imports=imports, translate=translate, compile=compile)
+          errors += len(metafile.errors())
+          warnings += len(metafile.warnings())
+          metafiles.append(metafile)
       return metafiles, errors, warnings
     end method getMetas;
 
@@ -11130,6 +11134,7 @@ scope:
 
       in_file = metax.root.Object.Resource(
         'emacs_template', fqn='metax.c.Compiler')
+
       out_file = self.metaPath(
         'src', 'schema', metaid, 'meta%s-mode.el' % metaid)
 
@@ -12920,7 +12925,7 @@ scope:
       fs = metaoopl.fs()
       path = fs.join(root, 'oopl', 'python', 'metax', 'root')
       res = metaoopl.parseRepositoryNamespace('metax.root', path)
-      test.iseq(
+      test.iseqmap(
         {
           'test': {
             'bld': '.__init__.bld',
@@ -12937,6 +12942,12 @@ scope:
                 'user': {
                   'defn': '.Error.py',
                   'map': '.Error.py.map',
+                }
+              },
+              'InternalError': {
+                'user': {
+                  'defn': '.InternalError.py',
+                  'map': '.InternalError.py.map',
                 }
               },
               'Object': {
@@ -15065,7 +15076,8 @@ scope:
           /# Second arg, if present, is the schema file defining the metalang.
           schema_path = cli.rest[0]
         else:
-          schema_path = None
+          print 'usage: metac schema <metalang> <schema_file>'
+          sys.exit(1)
         metalang = self.metalangNamed(metal, schema_path=schema_path)
         assert metalang.compiler() is self
         metalang.generateMeta()

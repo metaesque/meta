@@ -59,14 +59,14 @@
 ;;;   which block-valued attribute the current line is contained
 ;;;   within, and only perform the above indentation of that attribute
 ;;;   value is complex.  If simple, each line should be indented at
-;;;   least metalang2-indent-offset more than the start-of-block line, but
+;;;   least metalang-indent-offset more than the start-of-block line, but
 ;;;   if the line already has more indentation than that, it should be
 ;;;   left as-is.
 ;;;
 ;;; With respect to coloring, a simple set of rules is:
-;;;   1) All construct names are colored with font-lock-metalang2-construct-face
-;;;   2) All attribute keys are colored with font-lock-metalang2-attribute-key-face
-;;;   3) All feature values are colored with font-lock-metalang2-feature-value-face
+;;;   1) All construct names are colored with font-lock-metalang-construct-face
+;;;   2) All attribute keys are colored with font-lock-metalang-attribute-key-face
+;;;   3) All feature values are colored with font-lock-metalang-feature-value-face
 ;;;
 ;;;   However, this must be extended significantly.
 ;;;
@@ -156,32 +156,32 @@
 ;;;   - The values of these variables differ for each particular Meta language
 ;;;     (but not each Meta sub-language)
 
-; (defconst metalang2-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
-(defconst metalang2-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
+; (defconst metalang-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
+(defconst metalang-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
-(defconst metalang2-constructs     '(<CONSTRUCTS-HERE>))
-(defconst metalang2-attribute-keys '(<ATTRIBUTE-KEYS-HERE>))
-(defconst metalang2-feature-values '(<FEATURE-VALUES-HERE>))
-(defconst metalang2-keywords       '(<KEYWORDS-HERE>))
-(defconst metalang2-basewords      '(<BASEWORDS-HERE>))
+(defconst metalang-constructs     '(<CONSTRUCTS-HERE>))
+(defconst metalang-attribute-keys '(<ATTRIBUTE-KEYS-HERE>))
+(defconst metalang-feature-values '(<FEATURE-VALUES-HERE>))
+(defconst metalang-keywords       '(<KEYWORDS-HERE>))
+(defconst metalang-basewords      '(<BASEWORDS-HERE>))
 
-(defconst metalang2-constructs-re     (regexp-opt metalang2-constructs t))
-(defconst metalang2-attribute-keys-re (regexp-opt metalang2-attribute-keys t))
-(defconst metalang2-feature-values-re (regexp-opt metalang2-feature-values t))
-(defconst metalang2-keywords-re       (regexp-opt metalang2-keywords t))
-(defconst metalang2-basewords-re      (regexp-opt metalang2-basewords t))
+(defconst metalang-constructs-re     (regexp-opt metalang-constructs t))
+(defconst metalang-attribute-keys-re (regexp-opt metalang-attribute-keys t))
+(defconst metalang-feature-values-re (regexp-opt metalang-feature-values t))
+(defconst metalang-keywords-re       (regexp-opt metalang-keywords t))
+(defconst metalang-basewords-re      (regexp-opt metalang-basewords t))
 
 <CONS-RES-HERE>
 
-(defconst metalang2-comment-start-re "\\(?:comment\\|#\\):\n")
-(defconst metalang2-comment-re "\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\)*\\)")
+(defconst metalang-comment-start-re "\\(?:comment\\|#\\):\n")
+(defconst metalang-comment-re "\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\)*\\)")
 
 ; Various methods set these variables
-(setq metalang2-current-construct-kind nil)
-(if (not (boundp 'metalang2-meta-binary))
-  (setq metalang2-meta-binary "meta2"))
+(setq metalang-current-construct-kind nil)
+(if (not (boundp 'metalang-meta-binary))
+  (setq metalang-meta-binary "meta2"))
 
-(defun metalang2-goto-construct-line (&optional target-dent)
+(defun metalang-goto-construct-line (&optional target-dent)
   ;; Find the line defining the construct within which the current line
   ;; resides.  If not currently within a construct (e.g. between constructs),
   ;; find the nearest start-of-construct above point).
@@ -210,7 +210,7 @@
   (let* ((p (point))
          ; we skip the initial newline of our construct re since we will be
          ; doing per-line matching.
-         (cons-re (substring (gethash 'metalang2-construct-line RE) 1))
+         (cons-re (substring (gethash 'metalang-construct-line RE) 1))
          ; we ignore lines whose indentation is greater than the smallest
          ; indentation we've seen.
          (min-dent (if (null target-dent) (meta-current-indentation) target-dent))
@@ -248,14 +248,14 @@
            ((looking-at cons-re) (setq done t) (if debug (message "found cons-re")))
          )))
     )
-    (setq metalang2-current-construct-kind (match-string 3))
-    (message "Construct %s" metalang2-current-construct-kind)
+    (setq metalang-current-construct-kind (match-string 3))
+    (message "Construct %s" metalang-current-construct-kind)
     (forward-char dent)
     (point)
   )
 )
 
-(defun metalang2-current-block ()
+(defun metalang-current-block ()
   ;; Establish bounds of current block.
   ;; Returns (start . end) cons cell.
   (let* ((p (point))
@@ -265,13 +265,13 @@
          (orig-dent (meta-current-indentation))
          ; we find the construct line for the current line, which establishes
          ; the indentation we want.
-         (cons-start (metalang2-goto-construct-line))
+         (cons-start (metalang-goto-construct-line))
          ; we record the line number of the construct line
          (cons-line (line-number-at-pos cons-start))
          ; we record the indentation of the construct line (NOT for line of p)
          (dent (meta-current-indentation))
          ; we need to match against lines representing constructs.
-         (cons-re (substring (gethash 'metalang2-construct-line RE) 1))
+         (cons-re (substring (gethash 'metalang-construct-line RE) 1))
          ; debugging
          (debug t)
          ; an indication that there is no block at the current position
@@ -374,7 +374,7 @@
   )
 )
 
-(defun metalang2-toggle-block (region &optional force)
+(defun metalang-toggle-block (region &optional force)
   ;; If specified region is hidden, reveal it, else hide it.
   ;;
   ;; Args:
@@ -423,7 +423,7 @@
       (overlay-put result 'invisible t)
       result))))
 
-(defun metalang2-hide-blocks (key-pattern &optional lang-pattern)
+(defun metalang-hide-blocks (key-pattern &optional lang-pattern)
   ;; Hide all blocks in file whose secondary key matches pattern.
   ;;   key-pattern: re
   ;;     The secondary key to match
@@ -435,9 +435,9 @@
       ;(message "Here with '%s'" re)
       (goto-char (point-min))
       (while (re-search-forward re nil t)
-        (metalang2-toggle-current-block)))))
+        (metalang-toggle-current-block)))))
 
-(defun metalang2-hide-blocks-old (key-pattern &optional lang-pattern)
+(defun metalang-hide-blocks-old (key-pattern &optional lang-pattern)
   ;; Hide all blocks in file whose secondary key matches pattern.
   ;;   key-pattern: re
   ;;     The secondary key to match
@@ -450,9 +450,9 @@
       (goto-char (point-min))
       (while (re-search-forward re nil t)
         (forward-line)
-        (metalang2-toggle-current-block)))))
+        (metalang-toggle-current-block)))))
 
-(defun metalang2-hide-blocks-except (key-pattern lang-pattern)
+(defun metalang-hide-blocks-except (key-pattern lang-pattern)
   ;; Hide all blocks that match key-pattern that do NOT match lang-pattern.
   (save-excursion
     (goto-char (point-min))
@@ -468,7 +468,7 @@
             ; advance into the block and hide it
             (message "hidding block for %s<%s>" key-pattern lang)
             (forward-line)
-            (metalang2-toggle-current-block)))))))
+            (metalang-toggle-current-block)))))))
 
 (defun blank-line-p ()
   ;; t if current line consists solely of whitespace.
@@ -479,24 +479,24 @@
 ;; ----------------------------------------------------------------------
 ;; Interactive command
 
-(defun metalang2-toggle-current-block (&optional force)
+(defun metalang-toggle-current-block (&optional force)
   ;; If current block is hidden, reveal it, else hide it.
   ;; If force is t, always hide, do not toggle.
   (interactive)
-  (metalang2-toggle-block (metalang2-current-block) force))
+  (metalang-toggle-block (metalang-current-block) force))
 
-(defun metalang2-show-current-block ()
+(defun metalang-show-current-block ()
   (interactive)
   ; Establish bound of current block. If invoked on a line that ends with
   ; the block start char (':') and starts with $indent whitespace, it scans
   ; down for lines with MORE than $indent whitespace.  Mark is set to the
   ; end of the region (last character of last line with more $indent), and
   ; point is set to the newline after the ':' on the original line.
-  (let ((region (metalang2-current-block)))
+  (let ((region (metalang-current-block)))
     (goto-char (car region))
     (push-mark (cdr region) nil t)))
 
-(defun metalang2-remove-overlays ()
+(defun metalang-remove-overlays ()
   (interactive)
   (let ((overlays (overlays-in (point-min) (point-max))))
     (while overlays
@@ -504,11 +504,11 @@
         (delete-overlay overlay))
       (setq overlays (cdr overlays)))))
 
-(defun metalang2-next-construct (kind &optional backward)
+(defun metalang-next-construct (kind &optional backward)
   ;; Find the start/end of the next construct of give kind
   (if (null kind) (setq kind "construct"))
   (let* ((p (point))
-         (re (gethash (intern (concat "metalang2-" kind "-line")) RE))
+         (re (gethash (intern (concat "metalang-" kind "-line")) RE))
          (s (if backward (re-search-backward re nil t) (re-search-forward re nil t)))
          se)
     (cond
@@ -548,7 +548,7 @@
                 "\n"
                 indent
                 "\\([^ \t\n].*\\)?"
-                metalang2-constructs-re
+                metalang-constructs-re
                 " ")
                nil t))
         (cond
@@ -600,7 +600,7 @@
   )
 )
 
-(defun metalang2-narrow-to-current-construct (&optional kind)
+(defun metalang-narrow-to-current-construct (&optional kind)
   (interactive)
   (cond
    (kind
@@ -608,7 +608,7 @@
       ; line of a construct of kind 'kind', we will narrow this
       ; construct, not the previous one.
       (next-line 1)
-      (let ((data (metalang2-next-construct kind 'backward)))
+      (let ((data (metalang-next-construct kind 'backward)))
         (widen)
         (narrow-to-region
          (assoc-default 'start data) 
@@ -617,30 +617,30 @@
      ))
    (t
     ; kind is nil, so we narrow to whatever the current construct is.
-    (setq metalang2-current-construct-kind nil)
-    (metalang2-goto-construct-line)
-    (if metalang2-current-construct-kind
-        (metalang2-narrow-to-current-construct metalang2-current-construct-kind)))
+    (setq metalang-current-construct-kind nil)
+    (metalang-goto-construct-line)
+    (if metalang-current-construct-kind
+        (metalang-narrow-to-current-construct metalang-current-construct-kind)))
   )
 )
 
 ;; ---------------------------------------------------------------
-;; These are intentionally metaoopl2-specific
+;; These are intentionally metaoopl-specific
 
 ;; Construct class
-(defun metaoopl2-narrow-to-current-class ()
+(defun metaoopl-narrow-to-current-class ()
   (interactive)
-  (metaoopl2-narrow-to-current-construct "class"))
-(defun metaoopl2-next-class ()
+  (metaoopl-narrow-to-current-construct "class"))
+(defun metaoopl-next-class ()
   (interactive)
-  (metaoopl2-next-construct "class"))
-(defun metaoopl2-prev-class ()
+  (metaoopl-next-construct "class"))
+(defun metaoopl-prev-class ()
   (interactive)
-  (metaoopl2-next-construct "class" 'backward))
-(defun metaoopl2-current-class ()
+  (metaoopl-next-construct "class" 'backward))
+(defun metaoopl-current-class ()
   (interactive)
   (let ((p (point))
-        (data (metaoopl2-next-construct "class" 'backward))
+        (data (metaoopl-next-construct "class" 'backward))
         clsname)
     (setq clsname )
     (goto-char p)
@@ -652,70 +652,70 @@
 ;;    allow that to happen, as various methods are currently
 ;;    limited to a single construct at a time.
 ;;  - two options:
-;;     - In <CONS-RES-HERE>, add puthash entries for metaoopl2-methinit-*
-;;       that merge metaoopl2-method-* and metaoopl2-initializer-*, then
-;;       we can used methinit as an argument to metaoopl2-next-construct
-;;       and metaoopl2-narrow-to-current-construct, etc.
+;;     - In <CONS-RES-HERE>, add puthash entries for metaoopl-methinit-*
+;;       that merge metaoopl-method-* and metaoopl-initializer-*, then
+;;       we can used methinit as an argument to metaoopl-next-construct
+;;       and metaoopl-narrow-to-current-construct, etc.
 ;;     - Modify the above meta-related functions to handle lists of
 ;;       construct kinds instead of just a single kind.
-(defun metaoopl2-narrow-to-current-method ()
+(defun metaoopl-narrow-to-current-method ()
   (interactive)
-  (metaoopl2-narrow-to-current-construct "method"))
-(defun metaoopl2-next-method ()
+  (metaoopl-narrow-to-current-construct "method"))
+(defun metaoopl-next-method ()
   (interactive)
-  (metaoopl2-next-construct "method"))
-(defun metaoopl2-prev-method ()
+  (metaoopl-next-construct "method"))
+(defun metaoopl-prev-method ()
   (interactive)
-  (metaoopl2-next-construct "method" 'backward))
+  (metaoopl-next-construct "method" 'backward))
 
 ;; Construct initializer
-(defun metaoopl2-narrow-to-current-initializer ()
+(defun metaoopl-narrow-to-current-initializer ()
   (interactive)
-  (metaoopl2-narrow-to-current-construct "initializer"))
-(defun metaoopl2-next-initializer ()
+  (metaoopl-narrow-to-current-construct "initializer"))
+(defun metaoopl-next-initializer ()
   (interactive)
-  (metaoopl2-next-construct "initializer"))
-(defun metaoopl2-prev-initializer ()
+  (metaoopl-next-construct "initializer"))
+(defun metaoopl-prev-initializer ()
   (interactive)
-  (metaoopl2-next-construct "initializer" 'backward))
+  (metaoopl-next-construct "initializer" 'backward))
 
 ;; Construct field
-(defun metaoopl2-narrow-to-current-field ()
+(defun metaoopl-narrow-to-current-field ()
   (interactive)
-  (metaoopl2-narrow-to-current-construct "field"))
-(defun metaoopl2-next-field ()
+  (metaoopl-narrow-to-current-construct "field"))
+(defun metaoopl-next-field ()
   (interactive)
-  (metaoopl2-next-construct "field"))
-(defun metaoopl2-prev-field ()
+  (metaoopl-next-construct "field"))
+(defun metaoopl-prev-field ()
   (interactive)
-  (metaoopl2-next-construct "field" 'backward))
+  (metaoopl-next-construct "field" 'backward))
 
-(defun metaoopl2-python-only ()
+(defun metaoopl-python-only ()
   (interactive)
-  (metalang2-hide-blocks-except "scope" "py\\|python"))
+  (metalang-hide-blocks-except "scope" "py\\|python"))
 
-(defun metaoopl2-cpp-only ()
+(defun metaoopl-cpp-only ()
   (interactive)
-  (metalang2-hide-blocks-except "scope" "cpp\\|c\\+\\+"))
+  (metalang-hide-blocks-except "scope" "cpp\\|c\\+\\+"))
 
-;; Miscellaneous metaoopl2-specific
-(defun metaoopl2-hide-tests ()
+;; Miscellaneous metaoopl-specific
+(defun metaoopl-hide-tests ()
   (interactive)
-  (metaoopl2-hide-blocks "tests?"))
+  (metaoopl-hide-blocks "tests?"))
 
-(defun metaoopl2-hide-comments ()
+(defun metaoopl-hide-comments ()
   (interactive)
-  (metaoopl2-hide-blocks "comment\\|#"))
+  (metaoopl-hide-blocks "comment\\|#"))
 
-(defun metaoopl2-hide-params ()
+(defun metaoopl-hide-params ()
   (interactive)
-  (metaoopl2-hide-blocks "params"))
+  (metaoopl-hide-blocks "params"))
 
-(defun metaoopl2-hide-assocs ()
+(defun metaoopl-hide-assocs ()
   (interactive)
-  (metaoopl2-hide-blocks "assocs\\|associations"))
+  (metaoopl-hide-blocks "assocs\\|associations"))
 
-(defun metaoopl2-insert-method-template (method_name)
+(defun metaoopl-insert-method-template (method_name)
   (interactive "sMethod Name: ")
   (insert (format "
     method %s : any #:
@@ -728,7 +728,7 @@
     end method %s;
    " method_name method_name)))
 
-(defun metaoopl2-insert-class-template (class_name)
+(defun metaoopl-insert-class-template (class_name)
   (interactive "sClass Name: ")
   (insert (format "
   class %s #:
@@ -752,7 +752,7 @@
 
 ;;; **************************************************************
 ;; Service routines
-(defun metalang2-set-face (face foreground background font)
+(defun metalang-set-face (face foreground background font)
   (interactive "sFace: \nsForeground: \nsBackground: \n Font: ")
 
   (let ( (res (facep face)) )
@@ -771,33 +771,33 @@
 ;;; **************************************************************
 ;;; User customization:
 
-;; Users can call 'metalang2-set-face' to customize the colors
+;; Users can call 'metalang-set-face' to customize the colors
 ;; used for Meta programs. See http://raebear.net/comp/emacscolors.html
 ;; for a useful way to view background and foreground colors together.
-(metalang2-set-face 'font-lock-metaoopl2-class-face          "red"             nil  metalang2-default-font)
-(metalang2-set-face 'font-lock-metaoopl2-behavior-face       "red"             nil  metalang2-default-font)
-(metalang2-set-face 'font-lock-metaoopl2-method-face         "orange"          nil  metalang2-default-font)
-(metalang2-set-face 'font-lock-metaoopl2-field-face          "orange"          nil  metalang2-default-font)
-(metalang2-set-face 'font-lock-metalang2-construct-face      "darkgreen"       nil  metalang2-default-font)
-(metalang2-set-face 'font-lock-metalang2-attribute-key-face  "darkolivegreen"  nil  metalang2-default-font)
-(metalang2-set-face 'font-lock-metalang2-feature-value-face  "hotpink4"        nil  metalang2-default-font)
-(metalang2-set-face 'font-lock-metalang2-keyword-face        "deep pink"       nil  metalang2-default-font)
-(metalang2-set-face 'font-lock-metalang2-baseword-face       "purple"          nil  metalang2-default-font)
-(metalang2-set-face 'font-lock-metalang2-end-face            "ivory4"          nil  metalang2-default-font)
+(metalang-set-face 'font-lock-metaoopl-class-face          "red"             nil  metalang-default-font)
+(metalang-set-face 'font-lock-metaoopl-behavior-face       "red"             nil  metalang-default-font)
+(metalang-set-face 'font-lock-metaoopl-method-face         "orange"          nil  metalang-default-font)
+(metalang-set-face 'font-lock-metaoopl-field-face          "orange"          nil  metalang-default-font)
+(metalang-set-face 'font-lock-metalang-construct-face      "darkgreen"       nil  metalang-default-font)
+(metalang-set-face 'font-lock-metalang-attribute-key-face  "darkolivegreen"  nil  metalang-default-font)
+(metalang-set-face 'font-lock-metalang-feature-value-face  "hotpink4"        nil  metalang-default-font)
+(metalang-set-face 'font-lock-metalang-keyword-face        "deep pink"       nil  metalang-default-font)
+(metalang-set-face 'font-lock-metalang-baseword-face       "purple"          nil  metalang-default-font)
+(metalang-set-face 'font-lock-metalang-end-face            "ivory4"          nil  metalang-default-font)
 
-;; Users can define 'metalang2-mode-hook' to get special functionality
+;; Users can define 'metalang-mode-hook' to get special functionality
 ;; when this mode is invoked.
-(defvar metalang2-mode-hook nil
+(defvar metalang-mode-hook nil
   ""
 )
 
 ;; Users can specify the indentation at each level
-(defvar metalang2-indent-offset 2
+(defvar metalang-indent-offset 2
   "The amount of indentation to add to lines within a scope block.  It
 is also currently used for indentation within '(' ')' lists but this
 will be generalized later.")
 
-(defvar metalang2-wrap-collapsed-block-ends t
+(defvar metalang-wrap-collapsed-block-ends t
   "When a block attribute value is collapsed, the attribute that
 appears next will by default appear on the same line, which makes for
 very long single lines for fully collapsed constructs.  To address this,
@@ -806,21 +806,21 @@ indication string so that the next attribute appears to reside on the
 next line at the proper indentation level.  If this variable is true,
 such newline-indentation is provided.")
 ;:TEMP
-(setq metalang2-wrap-collapsed-block-ends t)
+(setq metalang-wrap-collapsed-block-ends t)
 ;:ENDTEMP
 
-(defun metalang2-make-map ()
-  (let ((metalang2-mode-map (make-keymap))
+(defun metalang-make-map ()
+  (let ((metalang-mode-map (make-keymap))
         (space-map (make-sparse-keymap))
         )
     ;; Add key bindings here
-    (define-key metalang2-mode-map "\C-j" 'newline-and-indent)
+    (define-key metalang-mode-map "\C-j" 'newline-and-indent)
 
     ;; Iniital bindings for \C-@
     ;;   some emacs versions don't bind \C-@ to Ctrl space, so we
     ;;   do both
-    (define-key metalang2-mode-map [?\C-\ ] space-map)
-    (define-key metalang2-mode-map "\C-@" space-map)
+    (define-key metalang-mode-map [?\C-\ ] space-map)
+    (define-key metalang-mode-map "\C-@" space-map)
     (define-key space-map [?\C-\ ] 'set-mark-command)
     (define-key space-map "\C-@" 'set-mark-command)
 
@@ -832,20 +832,20 @@ such newline-indentation is provided.")
     ;(define-key space-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
     ;(define-key space-map [(control \>)] 'meta-toggle-next-overlay-visibility)
     ;(define-key space-map "ro" 'meta-remove-all-overlays)
-    ;(define-key space-map "vm" (lambda () (interactive) (find-file (concat (getenv "METAROOT") "/root/lib/emacs/metalang2-mode.el"))))
-    ;(define-key space-map "lm" (lambda () (interactive) (load-file (concat (getenv "METAROOT") "/root/lib/emacs/metalang2-mode.el"))))
+    ;(define-key space-map "vm" (lambda () (interactive) (find-file (concat (getenv "METAROOT") "/root/lib/emacs/metalang-mode.el"))))
+    ;(define-key space-map "lm" (lambda () (interactive) (load-file (concat (getenv "METAROOT") "/root/lib/emacs/metalang-mode.el"))))
 
     ; construct-related macros
-    ;(define-key space-map "cm" 'metaoopl2-complete-construct)  ; intentional metaoopl
+    ;(define-key space-map "cm" 'metaoopl-complete-construct)  ; intentional metaoopl
     ;(define-key space-map "b<" 'meta-parent-block)
 
     ;(define-key space-map "c<" 'meta-construct-beginning)
     ;(define-key space-map "c>" 'meta-construct-end)
     ;(define-key space-map "c." 'meta-collapse-construct)
-    ;(define-key metalang2-mode-map [(control \,)] 'meta-toggle-prev-overlay-color)
-    ;(define-key metalang2-mode-map [(control \.)] 'meta-toggle-next-overlay-color)
-    ;(define-key metalang2-mode-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
-    ;(define-key metalang2-mode-map [(control \>)] 'meta-toggle-next-overlay-visibility)
+    ;(define-key metalang-mode-map [(control \,)] 'meta-toggle-prev-overlay-color)
+    ;(define-key metalang-mode-map [(control \.)] 'meta-toggle-next-overlay-color)
+    ;(define-key metalang-mode-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
+    ;(define-key metalang-mode-map [(control \>)] 'meta-toggle-next-overlay-visibility)
 
     ; Paragraph modifying functions
     ;(define-key space-map "pa" '(lambda (prefix) (interactive "p") (let ((s (region-beginning)) (e (region-end)) d) (goto-char s) (insert "[++===") (setq d (- (point) 3)) (goto-char (+ e 6)) (insert "--]") (goto-char d))))
@@ -853,46 +853,46 @@ such newline-indentation is provided.")
     ;(define-key space-map "pu" '(lambda () (interactive) (let (p) (re-search-forward "\\[\\+\\+" nil) (forward-char -3) (setq p (point)) (re-search-forward "===" nil)  (delete-region p (point)) (re-search-forward "--\\]") (delete-region (- (point) 3) (point)))))
 
     ; return the map!
-    metalang2-mode-map
+    metalang-mode-map
   )
 )
 
 ;; We establish the map
-(setq metalang2-mode-map
-;;(defvar metalang2-mode-map
-   (metalang2-make-map)
+(setq metalang-mode-map
+;;(defvar metalang-mode-map
+   (metalang-make-map)
    ;;"Keymap for Meta major mode"
 )
 
 ;; Establish a file-suffix to mode mapping
-(add-to-list 'auto-mode-alist '("\\.metalang" . metalang2-mode))
-(add-to-list 'auto-mode-alist '("\\.metaschema" . metaoopl2-mode))
+(add-to-list 'auto-mode-alist '("\\.metalang" . metalang-mode))
+(add-to-list 'auto-mode-alist '("\\.metaschema" . metaoopl-mode))
 
 ;; Establish which tokens get highlighted, and with which font.
-(defun metalang2-compute-font-lock-keywords ()
+(defun metalang-compute-font-lock-keywords ()
   (let ((executable-constructs '("method" "initializer" "finalizer" "function" "lifecycle" "behavior" "receiver" "command"))
      )
     (list
       ;; Color multi-line comment blocks
       '("\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\|\n\\)*\\)" 2 font-lock-comment-face)
       ;; Color the "end" token.
-      '("end\\( [^;\n]*\\)?;" . font-lock-metalang2-end-face)
+      '("end\\( [^;\n]*\\)?;" . font-lock-metalang-end-face)
       ;; Color literal strings.
       (cons "'[^'\n]*'" font-lock-string-face)
       ;'("#:\n\\([ \t]*.*\\)" 1 font-lock-comment-face)
       ;; constructs, attributes and feature values
 
       ;; These are intentionally only for Meta(Oopl)
-      (cons "\\<class\\>" font-lock-metaoopl2-class-face)
-      (cons "\\<behavior\\>" font-lock-metaoopl2-behavior-face)
-      (cons (concat "\\<" (regexp-opt executable-constructs) "\\>") font-lock-metaoopl2-method-face)
-      (cons "\\<field\\>" font-lock-metaoopl2-field-face)
+      (cons "\\<class\\>" font-lock-metaoopl-class-face)
+      (cons "\\<behavior\\>" font-lock-metaoopl-behavior-face)
+      (cons (concat "\\<" (regexp-opt executable-constructs) "\\>") font-lock-metaoopl-method-face)
+      (cons "\\<field\\>" font-lock-metaoopl-field-face)
       ;; End Meta(Oopl) code.
 
-      (cons (concat "\\<" metalang2-constructs-re     "\\>") font-lock-metalang2-construct-face)
-      (cons (concat "\\<" metalang2-attribute-keys-re "\\>") font-lock-metalang2-attribute-key-face)
-      (cons (concat "\\<" metalang2-feature-values-re "\\>") font-lock-metalang2-feature-value-face)
-      ;; metalang2-level keywords
+      (cons (concat "\\<" metalang-constructs-re     "\\>") font-lock-metalang-construct-face)
+      (cons (concat "\\<" metalang-attribute-keys-re "\\>") font-lock-metalang-attribute-key-face)
+      (cons (concat "\\<" metalang-feature-values-re "\\>") font-lock-metalang-feature-value-face)
+      ;; metalang-level keywords
       <SECONDARY-FONT-LOCK-HERE>
       ;; baselang-level keywords
       <TERTIARY-FONT-LOCK-HERE>
@@ -901,9 +901,9 @@ such newline-indentation is provided.")
         2 font-lock-function-name-face)
     )))
 
-(defvar metalang2-font-lock-keywords (metalang2-compute-font-lock-keywords))
+(defvar metalang-font-lock-keywords (metalang-compute-font-lock-keywords))
 ; TEMP - force changes to font info into the var
-(setq metalang2-font-lock-keywords (metalang2-compute-font-lock-keywords))
+(setq metalang-font-lock-keywords (metalang-compute-font-lock-keywords))
 ; ENDTEMP.
 
 
@@ -919,20 +919,20 @@ such newline-indentation is provided.")
 ;;  - meta has a 'comment' secondary attribute defined on most constructs
 ;;    that is a simple block of comments ... text indented to at least the
 ;;    same level as the first line in the comment should be marked as a comment.
-(setq metalang2-mode-syntax-table
-  (let ((metalang2-mode-syntax-table (make-syntax-table)))
+(setq metalang-mode-syntax-table
+  (let ((metalang-mode-syntax-table (make-syntax-table)))
 
-    (modify-syntax-entry ?- "w" metalang2-mode-syntax-table)
-    (modify-syntax-entry ?_ "w" metalang2-mode-syntax-table)
-    (modify-syntax-entry ?. "w" metalang2-mode-syntax-table)
+    (modify-syntax-entry ?- "w" metalang-mode-syntax-table)
+    (modify-syntax-entry ?_ "w" metalang-mode-syntax-table)
+    (modify-syntax-entry ?. "w" metalang-mode-syntax-table)
 
     ;; This gives C++-style comments (/* ... */ and //)
     ;; Do not yet know how to treat COMMENT { ... } as a comment
-    ;;;;;(modify-syntax-entry ?/  ". 124b" metalang2-mode-syntax-table)
-    ;;;;;(modify-syntax-entry ?*  ". 23" metalang2-mode-syntax-table)
-    ;;;;;(modify-syntax-entry ?\n "> b" metalang2-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?/  ". 124b" metalang-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?*  ". 23" metalang-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?\n "> b" metalang-mode-syntax-table)
     ;; This gives perl-style comments ('#').
-    ;;;;;(modify-syntax-entry ?#  "< b" metalang2-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?#  "< b" metalang-mode-syntax-table)
     ;; We need to extend this to provide meta-style comments ('/#')
     ;; but I do not yet know how to do this while still providing
     ;; perl-style comments.
@@ -943,28 +943,28 @@ such newline-indentation is provided.")
 
       )
      (t
-      (modify-syntax-entry ?/  ". 14" metalang2-mode-syntax-table)
-      (modify-syntax-entry ?#  ". 2b" metalang2-mode-syntax-table)
-      ;(modify-syntax-entry ?\n "> a" metalang2-mode-syntax-table)
-      (modify-syntax-entry ?\n "> b" metalang2-mode-syntax-table)
+      (modify-syntax-entry ?/  ". 14" metalang-mode-syntax-table)
+      (modify-syntax-entry ?#  ". 2b" metalang-mode-syntax-table)
+      ;(modify-syntax-entry ?\n "> a" metalang-mode-syntax-table)
+      (modify-syntax-entry ?\n "> b" metalang-mode-syntax-table)
 
       ;; Both single quote and double quote are string delimiters, but
       ;; we cannot use the syntax table to fontify them due to how comments
       ;; are defined.
-      ;;;;(modify-syntax-entry ?\' "\"" metalang2-mode-syntax-table)
-      ;;;;(modify-syntax-entry ?\" "\"" metalang2-mode-syntax-table)
+      ;;;;(modify-syntax-entry ?\' "\"" metalang-mode-syntax-table)
+      ;;;;(modify-syntax-entry ?\" "\"" metalang-mode-syntax-table)
 
       ;; This adds in C-style multiline comments --> /* ... */
-      ;; (modify-syntax-entry ?*  ". 23" metalang2-mode-syntax-table)
+      ;; (modify-syntax-entry ?*  ". 23" metalang-mode-syntax-table)
       )
      )
-    metalang2-mode-syntax-table
+    metalang-mode-syntax-table
   )
-  ;;"Syntax table for metalang2-mode"
+  ;;"Syntax table for metalang-mode"
 )
 
 ;; This method indents the current line as Meta code
-(defun metalang2-indent-line ()
+(defun metalang-indent-line ()
    "Indent current line as Meta code"
    (interactive)
    (beginning-of-line)
@@ -1016,7 +1016,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*{[ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metalang2-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metalang-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1028,7 +1028,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*([ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metalang2-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metalang-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1040,7 +1040,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*([ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metalang2-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metalang-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1064,19 +1064,19 @@ such newline-indentation is provided.")
                 ;; Check for rule 3
                 ((looking-at ".*{[ \t]*$")
                  (message "Rule 3")
-                 (setq cur-indent (+ (meta-current-indentation) metalang2-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metalang-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 3b
                 ((looking-at ".*([ \t]*$")
                  (message "Rule 3b")
-                 (setq cur-indent (+ (meta-current-indentation) metalang2-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metalang-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 3c
                 ((and (looking-at ".*:[ \t]*$") (not (looking-at "^[ \t]*\/\#")))
                  (message "Rule 3c")
-                 (setq cur-indent (+ (meta-current-indentation) metalang2-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metalang-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 4
@@ -1146,7 +1146,7 @@ such newline-indentation is provided.")
     (if (null list)
        (let ())
        (insert (car list))
-       (metalang2-indent-line)
+       (metalang-indent-line)
        (end-of-line)
        (insert "\n")
        (insert-lines-indented (cdr list))
@@ -1159,17 +1159,17 @@ such newline-indentation is provided.")
    (let ((str (if (null id) "" (concat " " id))))
 
      ;; Insert construct start at correct indentation
-     (metalang2-indent-line)
+     (metalang-indent-line)
      (insert (concat ctype str " {\n"))
 
      ;; Insert (empty) one line within the SCOPE
-     (metalang2-indent-line)
+     (metalang-indent-line)
      (insert "\n")
 
      ;; Insert the end-of-construct line
      (insert (concat "} " (downcase ctype) str ";\n"))
      (next-line -1)
-     (metalang2-indent-line)
+     (metalang-indent-line)
 
      ;; Move back up to original line and position cursor
      ;; after the construct primary key/value.
@@ -1180,21 +1180,21 @@ such newline-indentation is provided.")
 )
 
 ;; The mode method
-(defun metalang2-mode ()
+(defun metalang-mode ()
   "Major mode for editing MetaLang language files"
   (interactive)
   (kill-all-local-variables)
-  (set-syntax-table metalang2-mode-syntax-table)
+  (set-syntax-table metalang-mode-syntax-table)
 
   ;; We explicitly set the map here so that each time the mode
   ;; entry function is called we recompute - this is temporary
   ;; until the meta modes are stable (after which the setq
   ;; line can be removed for efficiency)
-  (setq metalang2-mode-map (metalang2-make-map))
-  (use-local-map metalang2-mode-map)
+  (setq metalang-mode-map (metalang-make-map))
+  (use-local-map metalang-mode-map)
 
-  (set (make-local-variable 'font-lock-defaults) '(metalang2-font-lock-keywords))
-  (set (make-local-variable 'indent-line-function) 'metalang2-indent-line)
+  (set (make-local-variable 'font-lock-defaults) '(metalang-font-lock-keywords))
+  (set (make-local-variable 'indent-line-function) 'metalang-indent-line)
   (set (make-local-variable 'parse-sexp-ignore-comments) t)
 
   ;; This ensures that multi-line fontification (e.g. comment blocks) are
@@ -1204,15 +1204,15 @@ such newline-indentation is provided.")
   ;; TODO(wmh): explore modifying the code so that every 1000 invocations we use
   ;; a longer min/max value.
   (make-local-variable 'font-lock-extend-region-functions)
-  (add-hook 'font-lock-extend-region-functions 'metalang2-font-lock-extend-region)
+  (add-hook 'font-lock-extend-region-functions 'metalang-font-lock-extend-region)
   
   ;; This sets up comment info
   (set (make-local-variable 'comment-start) "/#")
   (set (make-local-variable 'comment-style) 'multi-line)
 
-  (setq major-mode 'metalang2-mode)
+  (setq major-mode 'metalang-mode)
   (setq mode-name "MetaLang")
-  (run-hooks 'metalang2-mode-hook)
+  (run-hooks 'metalang-mode-hook)
 )
 
 (defun meta-current-indentation ()
@@ -1230,36 +1230,36 @@ we need its actual indentation to be reported)."
 ;;   https://www.gnu.org/software/emacs/manual/html_node/elisp/Multiline-Font-Lock.html
 ;; and 
 ;;   https://www.emacswiki.org/emacs/MultilineFontLock
-(defun metalang2-font-lock-extend-region ()
-  ; (message "Here in metalang2-font-lock-extend-region")
+(defun metalang-font-lock-extend-region ()
+  ; (message "Here in metalang-font-lock-extend-region")
   (save-excursion
     (goto-char font-lock-beg)
     (let* ((back-limit (- font-lock-beg 2000))
            (future-limit (+ font-lock-beg 2000))
-           (found-point (re-search-backward metalang2-comment-start-re back-limit t)))
+           (found-point (re-search-backward metalang-comment-start-re back-limit t)))
       (if found-point
-          (let ((last-point (re-search-forward metalang2-comment-re future-limit t)))
+          (let ((last-point (re-search-forward metalang-comment-re future-limit t)))
             (if (and last-point (> last-point font-lock-end))
                 (progn
                   (setq font-lock-end last-point)))
             (setq font-lock-beg found-point))))))
 
-(provide 'metalang2-mode)
+(provide 'metalang-mode)
 
 ;; The following is based on
 ;;    https://emacs.stackexchange.com/questions/519/key-bindings-specific-to-a-buffer
 ;; as a means of providing an "index" for meta files.
 
-(defvar metalang2-minor-mode-map (make-sparse-keymap)
-  "Keymap while metalang2-minor-mode is active.")
+(defvar metalang-minor-mode-map (make-sparse-keymap)
+  "Keymap while metalang-minor-mode is active.")
 
-(define-minor-mode metalang2-minor-mode
+(define-minor-mode metalang-minor-mode
   "A temporary minor mode to be activated."
   nil
   :lighter " MetaMinor"
-  metalang2-minor-mode-map)
+  metalang-minor-mode-map)
 
-(defun metalang2-index-to-line ()
+(defun metalang-index-to-line ()
   "Provides an index to file mapping features.
 
   This is to be used in a buffer that displays a mapping from meta construct
@@ -1299,19 +1299,19 @@ we need its actual indentation to be reported)."
       (t (message "failed")))
   )
 )
-(define-key metalang2-minor-mode-map (kbd "RET") 'metalang2-index-to-line)
+(define-key metalang-minor-mode-map (kbd "RET") 'metalang-index-to-line)
 
-(defun metalang2-create-index (&optional prefix)
+(defun metalang-create-index (&optional prefix)
   (interactive "P")
-  (metalang2-create-index-private nil prefix)
+  (metalang-create-index-private nil prefix)
 )
 
-(defun metalang2-create-filtered-index (&optional prefix filter)
+(defun metalang-create-filtered-index (&optional prefix filter)
   (interactive "PsRegexp: ")
-  (metalang2-create-index-private filter prefix)
+  (metalang-create-index-private filter prefix)
 )
 
-(defun metalang2-create-index-private (filter usenum)
+(defun metalang-create-index-private (filter usenum)
   "Create an index.
    
    Args:
@@ -1322,7 +1322,7 @@ we need its actual indentation to be reported)."
   "
   (let ((command
          (concat
-          metalang2-meta-binary 
+          metalang-meta-binary 
           " index "
           (if usenum
               "--kind=num --min=1 --adj=-1 "
@@ -1337,12 +1337,12 @@ we need its actual indentation to be reported)."
     (insert (format "buffer: %s\n" bufname))
     (message (format "COMMAND: %s" command))
     (insert (shell-command-to-string command))
-    (metalang2-mode)
+    (metalang-mode)
     (orgstruct-mode)
-    (metalang2-minor-mode 1)
+    (metalang-minor-mode 1)
     (goto-char (point-min))
     (next-line 1)
   )
 )
 
-(provide 'metalang2-minor-mode)
+(provide 'metalang-minor-mode)

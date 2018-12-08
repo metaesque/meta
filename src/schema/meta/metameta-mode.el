@@ -639,22 +639,22 @@
 )
 
 ;; ---------------------------------------------------------------
-;; These are intentionally metaoopl2-specific
+;; These are intentionally metaoopl-specific
 
 ;; Construct class
-(defun metaoopl2-narrow-to-current-class ()
+(defun metaoopl-narrow-to-current-class ()
   (interactive)
-  (metaoopl2-narrow-to-current-construct "class"))
-(defun metaoopl2-next-class ()
+  (metaoopl-narrow-to-current-construct "class"))
+(defun metaoopl-next-class ()
   (interactive)
-  (metaoopl2-next-construct "class"))
-(defun metaoopl2-prev-class ()
+  (metaoopl-next-construct "class"))
+(defun metaoopl-prev-class ()
   (interactive)
-  (metaoopl2-next-construct "class" 'backward))
-(defun metaoopl2-current-class ()
+  (metaoopl-next-construct "class" 'backward))
+(defun metaoopl-current-class ()
   (interactive)
   (let ((p (point))
-        (data (metaoopl2-next-construct "class" 'backward))
+        (data (metaoopl-next-construct "class" 'backward))
         clsname)
     (setq clsname )
     (goto-char p)
@@ -666,70 +666,70 @@
 ;;    allow that to happen, as various methods are currently
 ;;    limited to a single construct at a time.
 ;;  - two options:
-;;     - In <CONS-RES-HERE>, add puthash entries for metaoopl2-methinit-*
-;;       that merge metaoopl2-method-* and metaoopl2-initializer-*, then
-;;       we can used methinit as an argument to metaoopl2-next-construct
-;;       and metaoopl2-narrow-to-current-construct, etc.
+;;     - In <CONS-RES-HERE>, add puthash entries for metaoopl-methinit-*
+;;       that merge metaoopl-method-* and metaoopl-initializer-*, then
+;;       we can used methinit as an argument to metaoopl-next-construct
+;;       and metaoopl-narrow-to-current-construct, etc.
 ;;     - Modify the above meta-related functions to handle lists of
 ;;       construct kinds instead of just a single kind.
-(defun metaoopl2-narrow-to-current-method ()
+(defun metaoopl-narrow-to-current-method ()
   (interactive)
-  (metaoopl2-narrow-to-current-construct "method"))
-(defun metaoopl2-next-method ()
+  (metaoopl-narrow-to-current-construct "method"))
+(defun metaoopl-next-method ()
   (interactive)
-  (metaoopl2-next-construct "method"))
-(defun metaoopl2-prev-method ()
+  (metaoopl-next-construct "method"))
+(defun metaoopl-prev-method ()
   (interactive)
-  (metaoopl2-next-construct "method" 'backward))
+  (metaoopl-next-construct "method" 'backward))
 
 ;; Construct initializer
-(defun metaoopl2-narrow-to-current-initializer ()
+(defun metaoopl-narrow-to-current-initializer ()
   (interactive)
-  (metaoopl2-narrow-to-current-construct "initializer"))
-(defun metaoopl2-next-initializer ()
+  (metaoopl-narrow-to-current-construct "initializer"))
+(defun metaoopl-next-initializer ()
   (interactive)
-  (metaoopl2-next-construct "initializer"))
-(defun metaoopl2-prev-initializer ()
+  (metaoopl-next-construct "initializer"))
+(defun metaoopl-prev-initializer ()
   (interactive)
-  (metaoopl2-next-construct "initializer" 'backward))
+  (metaoopl-next-construct "initializer" 'backward))
 
 ;; Construct field
-(defun metaoopl2-narrow-to-current-field ()
+(defun metaoopl-narrow-to-current-field ()
   (interactive)
-  (metaoopl2-narrow-to-current-construct "field"))
-(defun metaoopl2-next-field ()
+  (metaoopl-narrow-to-current-construct "field"))
+(defun metaoopl-next-field ()
   (interactive)
-  (metaoopl2-next-construct "field"))
-(defun metaoopl2-prev-field ()
+  (metaoopl-next-construct "field"))
+(defun metaoopl-prev-field ()
   (interactive)
-  (metaoopl2-next-construct "field" 'backward))
+  (metaoopl-next-construct "field" 'backward))
 
-(defun metaoopl2-python-only ()
+(defun metaoopl-python-only ()
   (interactive)
   (metameta2-hide-blocks-except "scope" "py\\|python"))
 
-(defun metaoopl2-cpp-only ()
+(defun metaoopl-cpp-only ()
   (interactive)
   (metameta2-hide-blocks-except "scope" "cpp\\|c\\+\\+"))
 
-;; Miscellaneous metaoopl2-specific
-(defun metaoopl2-hide-tests ()
+;; Miscellaneous metaoopl-specific
+(defun metaoopl-hide-tests ()
   (interactive)
-  (metaoopl2-hide-blocks "tests?"))
+  (metaoopl-hide-blocks "tests?"))
 
-(defun metaoopl2-hide-comments ()
+(defun metaoopl-hide-comments ()
   (interactive)
-  (metaoopl2-hide-blocks "comment\\|#"))
+  (metaoopl-hide-blocks "comment\\|#"))
 
-(defun metaoopl2-hide-params ()
+(defun metaoopl-hide-params ()
   (interactive)
-  (metaoopl2-hide-blocks "params"))
+  (metaoopl-hide-blocks "params"))
 
-(defun metaoopl2-hide-assocs ()
+(defun metaoopl-hide-assocs ()
   (interactive)
-  (metaoopl2-hide-blocks "assocs\\|associations"))
+  (metaoopl-hide-blocks "assocs\\|associations"))
 
-(defun metaoopl2-insert-method-template (method_name)
+(defun metaoopl-insert-method-template (method_name)
   (interactive "sMethod Name: ")
   (insert (format "
     method %s : any #:
@@ -742,7 +742,7 @@
     end method %s;
    " method_name method_name)))
 
-(defun metaoopl2-insert-class-template (class_name)
+(defun metaoopl-insert-class-template (class_name)
   (interactive "sClass Name: ")
   (insert (format "
   class %s #:
@@ -788,10 +788,10 @@
 ;; Users can call 'metameta2-set-face' to customize the colors
 ;; used for Meta programs. See http://raebear.net/comp/emacscolors.html
 ;; for a useful way to view background and foreground colors together.
-(metameta2-set-face 'font-lock-metaoopl2-class-face          "red"             nil  metameta2-default-font)
-(metameta2-set-face 'font-lock-metaoopl2-behavior-face       "red"             nil  metameta2-default-font)
-(metameta2-set-face 'font-lock-metaoopl2-method-face         "orange"          nil  metameta2-default-font)
-(metameta2-set-face 'font-lock-metaoopl2-field-face          "orange"          nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metaoopl-class-face          "red"             nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metaoopl-behavior-face       "red"             nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metaoopl-method-face         "orange"          nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metaoopl-field-face          "orange"          nil  metameta2-default-font)
 (metameta2-set-face 'font-lock-metameta2-construct-face      "darkgreen"       nil  metameta2-default-font)
 (metameta2-set-face 'font-lock-metameta2-attribute-key-face  "darkolivegreen"  nil  metameta2-default-font)
 (metameta2-set-face 'font-lock-metameta2-feature-value-face  "hotpink4"        nil  metameta2-default-font)
@@ -850,7 +850,7 @@ such newline-indentation is provided.")
     ;(define-key space-map "lm" (lambda () (interactive) (load-file (concat (getenv "METAROOT") "/root/lib/emacs/metameta2-mode.el"))))
 
     ; construct-related macros
-    ;(define-key space-map "cm" 'metaoopl2-complete-construct)  ; intentional metaoopl
+    ;(define-key space-map "cm" 'metaoopl-complete-construct)  ; intentional metaoopl
     ;(define-key space-map "b<" 'meta-parent-block)
 
     ;(define-key space-map "c<" 'meta-construct-beginning)
@@ -880,7 +880,7 @@ such newline-indentation is provided.")
 
 ;; Establish a file-suffix to mode mapping
 (add-to-list 'auto-mode-alist '("\\.metameta" . metameta2-mode))
-(add-to-list 'auto-mode-alist '("\\.metaschema" . metaoopl2-mode))
+(add-to-list 'auto-mode-alist '("\\.metaschema" . metaoopl-mode))
 
 ;; Establish which tokens get highlighted, and with which font.
 (defun metameta2-compute-font-lock-keywords ()
@@ -897,10 +897,10 @@ such newline-indentation is provided.")
       ;; constructs, attributes and feature values
 
       ;; These are intentionally only for Meta(Oopl)
-      (cons "\\<class\\>" font-lock-metaoopl2-class-face)
-      (cons "\\<behavior\\>" font-lock-metaoopl2-behavior-face)
-      (cons (concat "\\<" (regexp-opt executable-constructs) "\\>") font-lock-metaoopl2-method-face)
-      (cons "\\<field\\>" font-lock-metaoopl2-field-face)
+      (cons "\\<class\\>" font-lock-metaoopl-class-face)
+      (cons "\\<behavior\\>" font-lock-metaoopl-behavior-face)
+      (cons (concat "\\<" (regexp-opt executable-constructs) "\\>") font-lock-metaoopl-method-face)
+      (cons "\\<field\\>" font-lock-metaoopl-field-face)
       ;; End Meta(Oopl) code.
 
       (cons (concat "\\<" metameta2-constructs-re     "\\>") font-lock-metameta2-construct-face)

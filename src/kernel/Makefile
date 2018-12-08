@@ -2,8 +2,10 @@ DIFF_FLAGS = -y --suppress-common-lines -W 160
 
 METAGROUP = "Meta"
 METAFILES = parser.meta attr.meta fs.meta cli.meta shell.meta logs.meta \
-	    metameta.meta metaoopl.meta metadoc.meta \
-	    root.meta test.meta
+	    root.meta test.meta \
+	    ../schema/meta/metameta.meta \
+	    ../schema/oopl/metaoopl.meta \
+	    ../schema/doc/metadoc.meta
 
 include $(WMH)/Makefile.meta
 
@@ -70,12 +72,8 @@ slowtest: fullmeta-py
 meta-%:
 	metac -b $* root.meta test.meta
 
-up%: meta%.meta
-	@a=1
-
-meta%.meta: ../schema/%/schema.meta
-	metac schema $*
-	metac meta$*.meta
+up%:
+	cd ../schema/$*; metac schema $* schema.meta; metac meta$*.meta
 
 # target fullmeta-%:
 #   Compile all code needed to compile Meta in the specified baselang.
@@ -84,7 +82,7 @@ fullmeta-%:
 	echo metac -b $* $(METAFILES)
 	@echo "================================================================================"
 
-fullmeta-py: metameta.meta metaoopl.meta metadoc.meta .FORCE
+fullmeta-py: ../schema/meta/metameta.meta ../schema/oopl/metaoopl.meta ../schema/doc/metadoc.meta .FORCE
 	metac -b py $(METAFILES)
 	@echo "================================================================================"
 
@@ -103,6 +101,15 @@ shell: fullmeta-py
 #   Create the emacs major mode for a given metalang, version 2
 emacs: fullmeta-py
 	metac emacs
+
+emacs-doc:
+	metac -L doc -b markdown emacs
+emacs-food:
+	metac -L food emacs
+emacs-family:
+	metac -L family emacs
+emacs-bio:
+	metac -L bio emacs
 
 # target cards1-%:
 #   Compile a very simple .meta file into a baselang.
@@ -139,5 +146,9 @@ release: .FORCE
 
 status:
 	metac --metasrcfile=SRC --summary_counts
+
+
+find-%:
+	grep $* *.meta ../schema/*/schema.meta
 
 .FORCE:

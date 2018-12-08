@@ -204,10 +204,12 @@ scope:
     params:
       var resource_id : str #:
         The id of the resource (that is, the value of the primary attribute
-        of the 'resource' construct that defines the resource.
+        of the 'resource' construct that defines the resource. This may be
+        a id or an xid.
       var fqn : str = null #:
         The fully qualified name of the class for which resources are
-        desired.  If null, uses the receiver cls to determine fqn.
+        desired.  If null, and resource_id is not an fqn, uses the receiver
+        cls to determine fqn.
       var test : bool = false #:
         If true, the resource is for a test class.
     scope<py>:
@@ -233,14 +235,16 @@ scope:
       /# if we don't apply the same rules here, we will fail to be able to
       /# provide a memory-only filesystem. Figure out how to handle this.
       import os
-      if fqn is None:
-        if '.' in resource_id:
-          fqn, resource_id = resource_id.rsplit('.', 1)
-        else:
-          fqn = cls.__module__ + '.' + cls.__name__
+      if '.' in resource_id:
+        if fqn:
+          raise Error(
+            'Do not specify both fqn (%s) and fully qualified resource_id (%s)'
+            % (fqn, resource_id))
+        fqn, resource_id = resource_id.rsplit('.', 1)
+      elif not fqn:
+        fqn = cls.__module__ + '.' + cls.__name__
       namespace_fqn, clsname = fqn.rsplit('.', 1)
       subparts = namespace_fqn.split('.')
-
       fqrn = fqn + '.' + resource_id
 
       result = None
@@ -355,5 +359,9 @@ scope:
     end;
 
   end class Error;
+
+  nometa
+  class InternalError < Error;
+
 
 end namespace metax.root;

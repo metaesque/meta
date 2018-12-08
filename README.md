@@ -1160,6 +1160,9 @@ baselangs) would provide the following benefits:
  - can properly identify whether fields are initialized in initializers
  - can establish whether a method returns before end
 
+Note that for javascript, we don't need Antlr because we have
+https://github.com/google/closure-compiler/wiki/Writing-Compiler-Pass
+
 ## C++ and Bazel
 
 C++17 offers many features that will be very useful in Meta<C++>, so we need

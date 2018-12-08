@@ -3,6 +3,7 @@ namespace metax.meta scope:
   abstract
   class Construct < metax.root.Object #:
     @root: The abstract superclass of all Construct classes.
+    class Construct
 
     Abstract root class of the Construct hierarchy. Each instance represents the
     parsed representation of a syntactic construct obtained from a user-provided
@@ -361,8 +362,17 @@ namespace metax.meta scope:
             if len(stup) > 2:
               secondary.lineIs(line)
           else:
+            if '<*>' in skey:
+              /# If the attribute type is simplex, we need to convert it to 
+              /# complex.
+              info = consinfo.secondaries().get(skey, None)
+              type = info['type']
+              if type == 'simplex': type = 'complex'
+            else:
+              type = None
             secondary = metax.c.MetaFile.CreateNewAttribute(
-              construct, consinfo, skey, value=sval, metafile=metafile, line=line)
+              construct, consinfo, skey, value=sval, metafile=metafile,
+              type=type, line=line)
           construct.registerAttribute(secondary)
 
       construct.termcodeIs(termcode)
@@ -525,7 +535,7 @@ namespace metax.meta scope:
       var default : any = False #:
         The value to return for the attribute if the key isn't present.
         - if None, returns None for attr and value.
-        - if metax.c.REQUIRED, raises MissingAttribute error.
+        - if False or metax.c.REQUIRED, raises MissingAttribute error.
         - if metax.c.LOOKUP, we perform lookup in the lexical context chain.
            - it is inefficient to make this the default (more efficient to
              use EMPTY or REQUIRED where they are valid).
@@ -1582,9 +1592,9 @@ namespace metax.meta scope:
   class MetaLanguageConstruct < MetaConstruct #:
     @MetaLanguage: defines the collection of constructs for the metalang.
   assocs:
-    resource metameta path "../schema/meta/schema.meta";
-    resource metaoopl path "../schema/oopl/schema.meta";
-    resource metadoc path "../schema/doc/schema.meta";
+    resource metameta path "../meta/schema.meta";
+    resource metaoopl path "../oopl/schema.meta";
+    resource metadoc path "../doc/schema.meta";
   scope:
 
     method kind : str scope:
@@ -2059,8 +2069,8 @@ namespace metax.meta scope:
           errors += 1
 
       /# Write the .meta file
+      outpath = outbase  # put this someplace more predicitably then current dir
       if not errors:
-        outpath = outbase  # put this someplace more predicitably then current dir
         if fs.exists(outpath):
           fs.chmod(outpath, 0600)
         with open(outpath, 'w') as cfp:

@@ -59,14 +59,14 @@
 ;;;   which block-valued attribute the current line is contained
 ;;;   within, and only perform the above indentation of that attribute
 ;;;   value is complex.  If simple, each line should be indented at
-;;;   least metadoc2-indent-offset more than the start-of-block line, but
+;;;   least metadoc-indent-offset more than the start-of-block line, but
 ;;;   if the line already has more indentation than that, it should be
 ;;;   left as-is.
 ;;;
 ;;; With respect to coloring, a simple set of rules is:
-;;;   1) All construct names are colored with font-lock-metadoc2-construct-face
-;;;   2) All attribute keys are colored with font-lock-metadoc2-attribute-key-face
-;;;   3) All feature values are colored with font-lock-metadoc2-feature-value-face
+;;;   1) All construct names are colored with font-lock-metadoc-construct-face
+;;;   2) All attribute keys are colored with font-lock-metadoc-attribute-key-face
+;;;   3) All feature values are colored with font-lock-metadoc-feature-value-face
 ;;;
 ;;;   However, this must be extended significantly.
 ;;;
@@ -156,68 +156,74 @@
 ;;;   - The values of these variables differ for each particular Meta language
 ;;;     (but not each Meta sub-language)
 
-; (defconst metadoc2-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
-(defconst metadoc2-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
+; (defconst metadoc-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
+(defconst metadoc-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
-(defconst metadoc2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "document" "filter" "item" "list" "native" "panel" "presentation" "script" "slide" "style"))
-(defconst metadoc2-attribute-keys '("#" "<" "=" "aliases" "animate" "autokey" "background" "bg" "border" "children" "color" "comment" "config" "default" "delim" "fg" "font" "height" "key" "kind" "name" "notes" "padding" "parent" "path" "presence" "re" "repeat" "replacement" "replacer" "scope" "side" "size" "style" "suffixes" "top" "toplevel" "type" "value" "width"))
-(defconst metadoc2-feature-values '("abstract" "aliaskey" "bottom" "concrete" "feature" "left" "nokey" "noval" "ol" "ordered" "primary" "right" "secondary" "showkey" "showval" "top" "ul" "undef" "unordered" "userval"))
-(defconst metadoc2-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
-(defconst metadoc2-basewords      '())
+(defconst metadoc-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "chart" "col" "column" "data" "document" "filter" "item" "list" "native" "panel" "presentation" "script" "slide" "style"))
+(defconst metadoc-attribute-keys '("#" "#<*>" "%" "%<*>" ":<*>" "<" "<*>" "<<*>" "=" "=<*>" "aliases" "aliases<*>" "animate" "animate<*>" "associations" "associations<*>" "assocs" "assocs<*>" "autokey" "autokey<*>" "background" "background<*>" "bg" "bg<*>" "border" "border<*>" "children" "children<*>" "classes" "classes<*>" "clsname" "clsname<*>" "color" "color<*>" "columns" "columns<*>" "comment" "comment<*>" "compile" "compile<*>" "config" "config<*>" "default" "default<*>" "delim" "delim<*>" "expand" "expand<*>" "fg" "fg<*>" "font" "font<*>" "formula" "formula<*>" "from" "from<*>" "height" "height<*>" "import" "import<*>" "is" "is<*>" "key" "key<*>" "kind" "label" "label<*>" "name" "name<*>" "nmsp" "nmsp<*>" "notes" "notes<*>" "options" "options<*>" "padding" "padding<*>" "parent" "parent<*>" "path" "path<*>" "pclsname" "pclsname<*>" "presence" "re" "re<*>" "repeat" "repeat<*>" "replacement" "replacement<*>" "replacer" "replacer<*>" "scope" "scope<*>" "side" "size" "size<*>" "startdate" "startdate<*>" "style" "style<*>" "suffixes" "suffixes<*>" "tags" "tags<*>" "top" "top<*>" "toplevel" "toplevel<*>" "translate" "translate<*>" "type" "type<*>" "value" "width" "width<*>"))
+(defconst metadoc-feature-values '("abstract" "aliaskey" "area" "bar" "bottom" "bubble" "calendar" "candlestick" "column" "concrete" "diff" "donut" "feature" "gantt" "gauge" "geo" "histogram" "left" "line" "map" "nokey" "noval" "ol" "ordered" "org" "pie" "primary" "right" "sankey" "scatter" "secondary" "showkey" "showval" "step" "table" "timeline" "top" "treemap" "trendline" "ul" "undef" "unordered" "userval" "waterfall" "word"))
+(defconst metadoc-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
+(defconst metadoc-basewords      '())
 
-(defconst metadoc2-constructs-re     (regexp-opt metadoc2-constructs t))
-(defconst metadoc2-attribute-keys-re (regexp-opt metadoc2-attribute-keys t))
-(defconst metadoc2-feature-values-re (regexp-opt metadoc2-feature-values t))
-(defconst metadoc2-keywords-re       (regexp-opt metadoc2-keywords t))
-(defconst metadoc2-basewords-re      (regexp-opt metadoc2-basewords t))
+(defconst metadoc-constructs-re     (regexp-opt metadoc-constructs t))
+(defconst metadoc-attribute-keys-re (regexp-opt metadoc-attribute-keys t))
+(defconst metadoc-feature-values-re (regexp-opt metadoc-feature-values t))
+(defconst metadoc-keywords-re       (regexp-opt metadoc-keywords t))
+(defconst metadoc-basewords-re      (regexp-opt metadoc-basewords t))
 
 (setq RE (make-hash-table))
-(puthash 'metadoc2-Attribute-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("aliaskey" "feature" "key" "kind" "nokey" "noval" "primary" "secondary" "showkey" "showval" "undef" "userval" "value")) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-Attribute-line (concat (gethash 'metadoc2-Attribute-kv RE) "\\(Attribute\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-BaseLanguage-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-BaseLanguage-line (concat (gethash 'metadoc2-BaseLanguage-kv RE) "\\(BaseLanguage\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-Construct-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "concrete" "presence")) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-Construct-line (concat (gethash 'metadoc2-Construct-kv RE) "\\(Construct\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-FeatureValue-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-FeatureValue-line (concat (gethash 'metadoc2-FeatureValue-kv RE) "\\(FeatureValue\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-File-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-File-line (concat (gethash 'metadoc2-File-kv RE) "\\(File\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-MetaLanguage-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-MetaLanguage-line (concat (gethash 'metadoc2-MetaLanguage-kv RE) "\\(MetaLanguage\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-Template-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-Template-line (concat (gethash 'metadoc2-Template-kv RE) "\\(Template\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-document-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-document-line (concat (gethash 'metadoc2-document-kv RE) "\\(document\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-filter-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-filter-line (concat (gethash 'metadoc2-filter-kv RE) "\\(filter\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-item-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-item-line (concat (gethash 'metadoc2-item-kv RE) "\\(item\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-list-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("kind" "ol" "ordered" "ul" "unordered")) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-list-line (concat (gethash 'metadoc2-list-kv RE) "\\(list\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-native-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-native-line (concat (gethash 'metadoc2-native-kv RE) "\\(native\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-panel-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("bottom" "left" "right" "side" "top")) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-panel-line (concat (gethash 'metadoc2-panel-kv RE) "\\(panel\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-presentation-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-presentation-line (concat (gethash 'metadoc2-presentation-kv RE) "\\(presentation\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-script-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-script-line (concat (gethash 'metadoc2-script-kv RE) "\\(script\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-slide-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-slide-line (concat (gethash 'metadoc2-slide-kv RE) "\\(slide\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-style-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-style-line (concat (gethash 'metadoc2-style-kv RE) "\\(style\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metadoc2-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "aliaskey" "bottom" "concrete" "feature" "key" "kind" "left" "nokey" "noval" "ol" "ordered" "presence" "primary" "right" "secondary" "showkey" "showval" "side" "top" "ul" "undef" "unordered" "userval" "value")) "\[ \t\]\\)*") RE)
-(puthash 'metadoc2-construct-line (concat (gethash 'metadoc2-all-kv RE) "\\(" metadoc2-constructs-re "\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-Attribute-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("aliaskey" "feature" "key" "kind" "nokey" "noval" "primary" "secondary" "showkey" "showval" "undef" "userval" "value")) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-Attribute-line (concat (gethash 'metadoc-Attribute-kv RE) "\\(Attribute\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-BaseLanguage-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "concrete" "presence")) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-BaseLanguage-line (concat (gethash 'metadoc-BaseLanguage-kv RE) "\\(BaseLanguage\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-Construct-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "concrete" "presence")) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-Construct-line (concat (gethash 'metadoc-Construct-kv RE) "\\(Construct\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-FeatureValue-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-FeatureValue-line (concat (gethash 'metadoc-FeatureValue-kv RE) "\\(FeatureValue\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-File-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-File-line (concat (gethash 'metadoc-File-kv RE) "\\(File\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-MetaLanguage-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-MetaLanguage-line (concat (gethash 'metadoc-MetaLanguage-kv RE) "\\(MetaLanguage\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-Template-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-Template-line (concat (gethash 'metadoc-Template-kv RE) "\\(Template\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-chart-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("area" "bar" "bubble" "calendar" "candlestick" "column" "diff" "donut" "gantt" "gauge" "geo" "histogram" "line" "map" "org" "pie" "sankey" "scatter" "step" "table" "timeline" "treemap" "trendline" "type" "waterfall" "word")) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-chart-line (concat (gethash 'metadoc-chart-kv RE) "\\(chart\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-column-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-column-line (concat (gethash 'metadoc-column-kv RE) "\\(column\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-data-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-data-line (concat (gethash 'metadoc-data-kv RE) "\\(data\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-document-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-document-line (concat (gethash 'metadoc-document-kv RE) "\\(document\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-filter-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-filter-line (concat (gethash 'metadoc-filter-kv RE) "\\(filter\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-item-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-item-line (concat (gethash 'metadoc-item-kv RE) "\\(item\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-list-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("kind" "ol" "ordered" "ul" "unordered")) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-list-line (concat (gethash 'metadoc-list-kv RE) "\\(list\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-native-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-native-line (concat (gethash 'metadoc-native-kv RE) "\\(native\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-panel-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("bottom" "left" "right" "side" "top")) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-panel-line (concat (gethash 'metadoc-panel-kv RE) "\\(panel\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-presentation-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-presentation-line (concat (gethash 'metadoc-presentation-kv RE) "\\(presentation\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-script-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-script-line (concat (gethash 'metadoc-script-kv RE) "\\(script\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-slide-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-slide-line (concat (gethash 'metadoc-slide-kv RE) "\\(slide\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-style-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-style-line (concat (gethash 'metadoc-style-kv RE) "\\(style\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metadoc-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "aliaskey" "area" "bar" "bottom" "bubble" "calendar" "candlestick" "column" "concrete" "diff" "donut" "feature" "gantt" "gauge" "geo" "histogram" "key" "kind" "left" "line" "map" "nokey" "noval" "ol" "ordered" "org" "pie" "presence" "primary" "right" "sankey" "scatter" "secondary" "showkey" "showval" "side" "step" "table" "timeline" "top" "treemap" "trendline" "type" "ul" "undef" "unordered" "userval" "value" "waterfall" "word")) "\[ \t\]\\)*") RE)
+(puthash 'metadoc-construct-line (concat (gethash 'metadoc-all-kv RE) "\\(" metadoc-constructs-re "\\)[ \t]+\\([^ \t]+\\)") RE)
 
-(defconst metadoc2-comment-start-re "\\(?:comment\\|#\\):\n")
-(defconst metadoc2-comment-re "\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\)*\\)")
+(defconst metadoc-comment-start-re "\\(?:comment\\|#\\):\n")
+(defconst metadoc-comment-re "\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\)*\\)")
 
 ; Various methods set these variables
-(setq metadoc2-current-construct-kind nil)
-(if (not (boundp 'metadoc2-meta-binary))
-  (setq metadoc2-meta-binary "meta2"))
+(setq metadoc-current-construct-kind nil)
+(if (not (boundp 'metadoc-meta-binary))
+  (setq metadoc-meta-binary "meta2"))
 
-(defun metadoc2-goto-construct-line (&optional target-dent)
+(defun metadoc-goto-construct-line (&optional target-dent)
   ;; Find the line defining the construct within which the current line
   ;; resides.  If not currently within a construct (e.g. between constructs),
   ;; find the nearest start-of-construct above point).
@@ -246,7 +252,7 @@
   (let* ((p (point))
          ; we skip the initial newline of our construct re since we will be
          ; doing per-line matching.
-         (cons-re (substring (gethash 'metadoc2-construct-line RE) 1))
+         (cons-re (substring (gethash 'metadoc-construct-line RE) 1))
          ; we ignore lines whose indentation is greater than the smallest
          ; indentation we've seen.
          (min-dent (if (null target-dent) (meta-current-indentation) target-dent))
@@ -284,14 +290,14 @@
            ((looking-at cons-re) (setq done t) (if debug (message "found cons-re")))
          )))
     )
-    (setq metadoc2-current-construct-kind (match-string 3))
-    (message "Construct %s" metadoc2-current-construct-kind)
+    (setq metadoc-current-construct-kind (match-string 3))
+    (message "Construct %s" metadoc-current-construct-kind)
     (forward-char dent)
     (point)
   )
 )
 
-(defun metadoc2-current-block ()
+(defun metadoc-current-block ()
   ;; Establish bounds of current block.
   ;; Returns (start . end) cons cell.
   (let* ((p (point))
@@ -301,13 +307,13 @@
          (orig-dent (meta-current-indentation))
          ; we find the construct line for the current line, which establishes
          ; the indentation we want.
-         (cons-start (metadoc2-goto-construct-line))
+         (cons-start (metadoc-goto-construct-line))
          ; we record the line number of the construct line
          (cons-line (line-number-at-pos cons-start))
          ; we record the indentation of the construct line (NOT for line of p)
          (dent (meta-current-indentation))
          ; we need to match against lines representing constructs.
-         (cons-re (substring (gethash 'metadoc2-construct-line RE) 1))
+         (cons-re (substring (gethash 'metadoc-construct-line RE) 1))
          ; debugging
          (debug t)
          ; an indication that there is no block at the current position
@@ -410,7 +416,7 @@
   )
 )
 
-(defun metadoc2-toggle-block (region &optional force)
+(defun metadoc-toggle-block (region &optional force)
   ;; If specified region is hidden, reveal it, else hide it.
   ;;
   ;; Args:
@@ -459,7 +465,7 @@
       (overlay-put result 'invisible t)
       result))))
 
-(defun metadoc2-hide-blocks (key-pattern &optional lang-pattern)
+(defun metadoc-hide-blocks (key-pattern &optional lang-pattern)
   ;; Hide all blocks in file whose secondary key matches pattern.
   ;;   key-pattern: re
   ;;     The secondary key to match
@@ -471,9 +477,9 @@
       ;(message "Here with '%s'" re)
       (goto-char (point-min))
       (while (re-search-forward re nil t)
-        (metadoc2-toggle-current-block)))))
+        (metadoc-toggle-current-block)))))
 
-(defun metadoc2-hide-blocks-old (key-pattern &optional lang-pattern)
+(defun metadoc-hide-blocks-old (key-pattern &optional lang-pattern)
   ;; Hide all blocks in file whose secondary key matches pattern.
   ;;   key-pattern: re
   ;;     The secondary key to match
@@ -486,9 +492,9 @@
       (goto-char (point-min))
       (while (re-search-forward re nil t)
         (forward-line)
-        (metadoc2-toggle-current-block)))))
+        (metadoc-toggle-current-block)))))
 
-(defun metadoc2-hide-blocks-except (key-pattern lang-pattern)
+(defun metadoc-hide-blocks-except (key-pattern lang-pattern)
   ;; Hide all blocks that match key-pattern that do NOT match lang-pattern.
   (save-excursion
     (goto-char (point-min))
@@ -504,7 +510,7 @@
             ; advance into the block and hide it
             (message "hidding block for %s<%s>" key-pattern lang)
             (forward-line)
-            (metadoc2-toggle-current-block)))))))
+            (metadoc-toggle-current-block)))))))
 
 (defun blank-line-p ()
   ;; t if current line consists solely of whitespace.
@@ -515,24 +521,24 @@
 ;; ----------------------------------------------------------------------
 ;; Interactive command
 
-(defun metadoc2-toggle-current-block (&optional force)
+(defun metadoc-toggle-current-block (&optional force)
   ;; If current block is hidden, reveal it, else hide it.
   ;; If force is t, always hide, do not toggle.
   (interactive)
-  (metadoc2-toggle-block (metadoc2-current-block) force))
+  (metadoc-toggle-block (metadoc-current-block) force))
 
-(defun metadoc2-show-current-block ()
+(defun metadoc-show-current-block ()
   (interactive)
   ; Establish bound of current block. If invoked on a line that ends with
   ; the block start char (':') and starts with $indent whitespace, it scans
   ; down for lines with MORE than $indent whitespace.  Mark is set to the
   ; end of the region (last character of last line with more $indent), and
   ; point is set to the newline after the ':' on the original line.
-  (let ((region (metadoc2-current-block)))
+  (let ((region (metadoc-current-block)))
     (goto-char (car region))
     (push-mark (cdr region) nil t)))
 
-(defun metadoc2-remove-overlays ()
+(defun metadoc-remove-overlays ()
   (interactive)
   (let ((overlays (overlays-in (point-min) (point-max))))
     (while overlays
@@ -540,11 +546,11 @@
         (delete-overlay overlay))
       (setq overlays (cdr overlays)))))
 
-(defun metadoc2-next-construct (kind &optional backward)
+(defun metadoc-next-construct (kind &optional backward)
   ;; Find the start/end of the next construct of give kind
   (if (null kind) (setq kind "construct"))
   (let* ((p (point))
-         (re (gethash (intern (concat "metadoc2-" kind "-line")) RE))
+         (re (gethash (intern (concat "metadoc-" kind "-line")) RE))
          (s (if backward (re-search-backward re nil t) (re-search-forward re nil t)))
          se)
     (cond
@@ -584,7 +590,7 @@
                 "\n"
                 indent
                 "\\([^ \t\n].*\\)?"
-                metadoc2-constructs-re
+                metadoc-constructs-re
                 " ")
                nil t))
         (cond
@@ -636,7 +642,7 @@
   )
 )
 
-(defun metadoc2-narrow-to-current-construct (&optional kind)
+(defun metadoc-narrow-to-current-construct (&optional kind)
   (interactive)
   (cond
    (kind
@@ -644,7 +650,7 @@
       ; line of a construct of kind 'kind', we will narrow this
       ; construct, not the previous one.
       (next-line 1)
-      (let ((data (metadoc2-next-construct kind 'backward)))
+      (let ((data (metadoc-next-construct kind 'backward)))
         (widen)
         (narrow-to-region
          (assoc-default 'start data) 
@@ -653,10 +659,10 @@
      ))
    (t
     ; kind is nil, so we narrow to whatever the current construct is.
-    (setq metadoc2-current-construct-kind nil)
-    (metadoc2-goto-construct-line)
-    (if metadoc2-current-construct-kind
-        (metadoc2-narrow-to-current-construct metadoc2-current-construct-kind)))
+    (setq metadoc-current-construct-kind nil)
+    (metadoc-goto-construct-line)
+    (if metadoc-current-construct-kind
+        (metadoc-narrow-to-current-construct metadoc-current-construct-kind)))
   )
 )
 
@@ -728,11 +734,11 @@
 
 (defun metaoopl2-python-only ()
   (interactive)
-  (metadoc2-hide-blocks-except "scope" "py\\|python"))
+  (metadoc-hide-blocks-except "scope" "py\\|python"))
 
 (defun metaoopl2-cpp-only ()
   (interactive)
-  (metadoc2-hide-blocks-except "scope" "cpp\\|c\\+\\+"))
+  (metadoc-hide-blocks-except "scope" "cpp\\|c\\+\\+"))
 
 ;; Miscellaneous metaoopl2-specific
 (defun metaoopl2-hide-tests ()
@@ -788,7 +794,7 @@
 
 ;;; **************************************************************
 ;; Service routines
-(defun metadoc2-set-face (face foreground background font)
+(defun metadoc-set-face (face foreground background font)
   (interactive "sFace: \nsForeground: \nsBackground: \n Font: ")
 
   (let ( (res (facep face)) )
@@ -807,33 +813,33 @@
 ;;; **************************************************************
 ;;; User customization:
 
-;; Users can call 'metadoc2-set-face' to customize the colors
+;; Users can call 'metadoc-set-face' to customize the colors
 ;; used for Meta programs. See http://raebear.net/comp/emacscolors.html
 ;; for a useful way to view background and foreground colors together.
-(metadoc2-set-face 'font-lock-metaoopl2-class-face          "red"             nil  metadoc2-default-font)
-(metadoc2-set-face 'font-lock-metaoopl2-behavior-face       "red"             nil  metadoc2-default-font)
-(metadoc2-set-face 'font-lock-metaoopl2-method-face         "orange"          nil  metadoc2-default-font)
-(metadoc2-set-face 'font-lock-metaoopl2-field-face          "orange"          nil  metadoc2-default-font)
-(metadoc2-set-face 'font-lock-metadoc2-construct-face      "darkgreen"       nil  metadoc2-default-font)
-(metadoc2-set-face 'font-lock-metadoc2-attribute-key-face  "darkolivegreen"  nil  metadoc2-default-font)
-(metadoc2-set-face 'font-lock-metadoc2-feature-value-face  "hotpink4"        nil  metadoc2-default-font)
-(metadoc2-set-face 'font-lock-metadoc2-keyword-face        "deep pink"       nil  metadoc2-default-font)
-(metadoc2-set-face 'font-lock-metadoc2-baseword-face       "purple"          nil  metadoc2-default-font)
-(metadoc2-set-face 'font-lock-metadoc2-end-face            "ivory4"          nil  metadoc2-default-font)
+(metadoc-set-face 'font-lock-metaoopl2-class-face          "red"             nil  metadoc-default-font)
+(metadoc-set-face 'font-lock-metaoopl2-behavior-face       "red"             nil  metadoc-default-font)
+(metadoc-set-face 'font-lock-metaoopl2-method-face         "orange"          nil  metadoc-default-font)
+(metadoc-set-face 'font-lock-metaoopl2-field-face          "orange"          nil  metadoc-default-font)
+(metadoc-set-face 'font-lock-metadoc-construct-face      "darkgreen"       nil  metadoc-default-font)
+(metadoc-set-face 'font-lock-metadoc-attribute-key-face  "darkolivegreen"  nil  metadoc-default-font)
+(metadoc-set-face 'font-lock-metadoc-feature-value-face  "hotpink4"        nil  metadoc-default-font)
+(metadoc-set-face 'font-lock-metadoc-keyword-face        "deep pink"       nil  metadoc-default-font)
+(metadoc-set-face 'font-lock-metadoc-baseword-face       "purple"          nil  metadoc-default-font)
+(metadoc-set-face 'font-lock-metadoc-end-face            "ivory4"          nil  metadoc-default-font)
 
-;; Users can define 'metadoc2-mode-hook' to get special functionality
+;; Users can define 'metadoc-mode-hook' to get special functionality
 ;; when this mode is invoked.
-(defvar metadoc2-mode-hook nil
+(defvar metadoc-mode-hook nil
   ""
 )
 
 ;; Users can specify the indentation at each level
-(defvar metadoc2-indent-offset 2
+(defvar metadoc-indent-offset 2
   "The amount of indentation to add to lines within a scope block.  It
 is also currently used for indentation within '(' ')' lists but this
 will be generalized later.")
 
-(defvar metadoc2-wrap-collapsed-block-ends t
+(defvar metadoc-wrap-collapsed-block-ends t
   "When a block attribute value is collapsed, the attribute that
 appears next will by default appear on the same line, which makes for
 very long single lines for fully collapsed constructs.  To address this,
@@ -842,21 +848,21 @@ indication string so that the next attribute appears to reside on the
 next line at the proper indentation level.  If this variable is true,
 such newline-indentation is provided.")
 ;:TEMP
-(setq metadoc2-wrap-collapsed-block-ends t)
+(setq metadoc-wrap-collapsed-block-ends t)
 ;:ENDTEMP
 
-(defun metadoc2-make-map ()
-  (let ((metadoc2-mode-map (make-keymap))
+(defun metadoc-make-map ()
+  (let ((metadoc-mode-map (make-keymap))
         (space-map (make-sparse-keymap))
         )
     ;; Add key bindings here
-    (define-key metadoc2-mode-map "\C-j" 'newline-and-indent)
+    (define-key metadoc-mode-map "\C-j" 'newline-and-indent)
 
     ;; Iniital bindings for \C-@
     ;;   some emacs versions don't bind \C-@ to Ctrl space, so we
     ;;   do both
-    (define-key metadoc2-mode-map [?\C-\ ] space-map)
-    (define-key metadoc2-mode-map "\C-@" space-map)
+    (define-key metadoc-mode-map [?\C-\ ] space-map)
+    (define-key metadoc-mode-map "\C-@" space-map)
     (define-key space-map [?\C-\ ] 'set-mark-command)
     (define-key space-map "\C-@" 'set-mark-command)
 
@@ -868,8 +874,8 @@ such newline-indentation is provided.")
     ;(define-key space-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
     ;(define-key space-map [(control \>)] 'meta-toggle-next-overlay-visibility)
     ;(define-key space-map "ro" 'meta-remove-all-overlays)
-    ;(define-key space-map "vm" (lambda () (interactive) (find-file (concat (getenv "METAROOT") "/root/lib/emacs/metadoc2-mode.el"))))
-    ;(define-key space-map "lm" (lambda () (interactive) (load-file (concat (getenv "METAROOT") "/root/lib/emacs/metadoc2-mode.el"))))
+    ;(define-key space-map "vm" (lambda () (interactive) (find-file (concat (getenv "METAROOT") "/root/lib/emacs/metadoc-mode.el"))))
+    ;(define-key space-map "lm" (lambda () (interactive) (load-file (concat (getenv "METAROOT") "/root/lib/emacs/metadoc-mode.el"))))
 
     ; construct-related macros
     ;(define-key space-map "cm" 'metaoopl2-complete-construct)  ; intentional metaoopl
@@ -878,10 +884,10 @@ such newline-indentation is provided.")
     ;(define-key space-map "c<" 'meta-construct-beginning)
     ;(define-key space-map "c>" 'meta-construct-end)
     ;(define-key space-map "c." 'meta-collapse-construct)
-    ;(define-key metadoc2-mode-map [(control \,)] 'meta-toggle-prev-overlay-color)
-    ;(define-key metadoc2-mode-map [(control \.)] 'meta-toggle-next-overlay-color)
-    ;(define-key metadoc2-mode-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
-    ;(define-key metadoc2-mode-map [(control \>)] 'meta-toggle-next-overlay-visibility)
+    ;(define-key metadoc-mode-map [(control \,)] 'meta-toggle-prev-overlay-color)
+    ;(define-key metadoc-mode-map [(control \.)] 'meta-toggle-next-overlay-color)
+    ;(define-key metadoc-mode-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
+    ;(define-key metadoc-mode-map [(control \>)] 'meta-toggle-next-overlay-visibility)
 
     ; Paragraph modifying functions
     ;(define-key space-map "pa" '(lambda (prefix) (interactive "p") (let ((s (region-beginning)) (e (region-end)) d) (goto-char s) (insert "[++===") (setq d (- (point) 3)) (goto-char (+ e 6)) (insert "--]") (goto-char d))))
@@ -889,30 +895,30 @@ such newline-indentation is provided.")
     ;(define-key space-map "pu" '(lambda () (interactive) (let (p) (re-search-forward "\\[\\+\\+" nil) (forward-char -3) (setq p (point)) (re-search-forward "===" nil)  (delete-region p (point)) (re-search-forward "--\\]") (delete-region (- (point) 3) (point)))))
 
     ; return the map!
-    metadoc2-mode-map
+    metadoc-mode-map
   )
 )
 
 ;; We establish the map
-(setq metadoc2-mode-map
-;;(defvar metadoc2-mode-map
-   (metadoc2-make-map)
+(setq metadoc-mode-map
+;;(defvar metadoc-mode-map
+   (metadoc-make-map)
    ;;"Keymap for Meta major mode"
 )
 
 ;; Establish a file-suffix to mode mapping
-(add-to-list 'auto-mode-alist '("\\.metadoc" . metadoc2-mode))
+(add-to-list 'auto-mode-alist '("\\.metadoc" . metadoc-mode))
 (add-to-list 'auto-mode-alist '("\\.metaschema" . metaoopl2-mode))
 
 ;; Establish which tokens get highlighted, and with which font.
-(defun metadoc2-compute-font-lock-keywords ()
+(defun metadoc-compute-font-lock-keywords ()
   (let ((executable-constructs '("method" "initializer" "finalizer" "function" "lifecycle" "behavior" "receiver" "command"))
      )
     (list
       ;; Color multi-line comment blocks
       '("\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\|\n\\)*\\)" 2 font-lock-comment-face)
       ;; Color the "end" token.
-      '("end\\( [^;\n]*\\)?;" . font-lock-metadoc2-end-face)
+      '("end\\( [^;\n]*\\)?;" . font-lock-metadoc-end-face)
       ;; Color literal strings.
       (cons "'[^'\n]*'" font-lock-string-face)
       ;'("#:\n\\([ \t]*.*\\)" 1 font-lock-comment-face)
@@ -925,21 +931,21 @@ such newline-indentation is provided.")
       (cons "\\<field\\>" font-lock-metaoopl2-field-face)
       ;; End Meta(Oopl) code.
 
-      (cons (concat "\\<" metadoc2-constructs-re     "\\>") font-lock-metadoc2-construct-face)
-      (cons (concat "\\<" metadoc2-attribute-keys-re "\\>") font-lock-metadoc2-attribute-key-face)
-      (cons (concat "\\<" metadoc2-feature-values-re "\\>") font-lock-metadoc2-feature-value-face)
-      ;; metadoc2-level keywords
-      (cons (concat "\\<" metadoc2-keywords-re "\\>") font-lock-metadoc2-keyword-face)
+      (cons (concat "\\<" metadoc-constructs-re     "\\>") font-lock-metadoc-construct-face)
+      (cons (concat "\\<" metadoc-attribute-keys-re "\\>") font-lock-metadoc-attribute-key-face)
+      (cons (concat "\\<" metadoc-feature-values-re "\\>") font-lock-metadoc-feature-value-face)
+      ;; metadoc-level keywords
+      (cons (concat "\\<" metadoc-keywords-re "\\>") font-lock-metadoc-keyword-face)
       ;; baselang-level keywords
-      (cons (concat "\\<" metadoc2-basewords-re "\\>") font-lock-metadoc2-baseword-face)
+      (cons (concat "\\<" metadoc-basewords-re "\\>") font-lock-metadoc-baseword-face)
       ;; construct ids (for now, only certain constructs).
       '("\\(class\\|method\\|function\\|closure\\|field\\|receiver\\|var\\|behavior\\)[ \t]+\\([a-zA-Z_]+[a-zA-Z0-9_]*\\)"
         2 font-lock-function-name-face)
     )))
 
-(defvar metadoc2-font-lock-keywords (metadoc2-compute-font-lock-keywords))
+(defvar metadoc-font-lock-keywords (metadoc-compute-font-lock-keywords))
 ; TEMP - force changes to font info into the var
-(setq metadoc2-font-lock-keywords (metadoc2-compute-font-lock-keywords))
+(setq metadoc-font-lock-keywords (metadoc-compute-font-lock-keywords))
 ; ENDTEMP.
 
 
@@ -955,20 +961,20 @@ such newline-indentation is provided.")
 ;;  - meta has a 'comment' secondary attribute defined on most constructs
 ;;    that is a simple block of comments ... text indented to at least the
 ;;    same level as the first line in the comment should be marked as a comment.
-(setq metadoc2-mode-syntax-table
-  (let ((metadoc2-mode-syntax-table (make-syntax-table)))
+(setq metadoc-mode-syntax-table
+  (let ((metadoc-mode-syntax-table (make-syntax-table)))
 
-    (modify-syntax-entry ?- "w" metadoc2-mode-syntax-table)
-    (modify-syntax-entry ?_ "w" metadoc2-mode-syntax-table)
-    (modify-syntax-entry ?. "w" metadoc2-mode-syntax-table)
+    (modify-syntax-entry ?- "w" metadoc-mode-syntax-table)
+    (modify-syntax-entry ?_ "w" metadoc-mode-syntax-table)
+    (modify-syntax-entry ?. "w" metadoc-mode-syntax-table)
 
     ;; This gives C++-style comments (/* ... */ and //)
     ;; Do not yet know how to treat COMMENT { ... } as a comment
-    ;;;;;(modify-syntax-entry ?/  ". 124b" metadoc2-mode-syntax-table)
-    ;;;;;(modify-syntax-entry ?*  ". 23" metadoc2-mode-syntax-table)
-    ;;;;;(modify-syntax-entry ?\n "> b" metadoc2-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?/  ". 124b" metadoc-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?*  ". 23" metadoc-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?\n "> b" metadoc-mode-syntax-table)
     ;; This gives perl-style comments ('#').
-    ;;;;;(modify-syntax-entry ?#  "< b" metadoc2-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?#  "< b" metadoc-mode-syntax-table)
     ;; We need to extend this to provide meta-style comments ('/#')
     ;; but I do not yet know how to do this while still providing
     ;; perl-style comments.
@@ -979,28 +985,28 @@ such newline-indentation is provided.")
 
       )
      (t
-      (modify-syntax-entry ?/  ". 14" metadoc2-mode-syntax-table)
-      (modify-syntax-entry ?#  ". 2b" metadoc2-mode-syntax-table)
-      ;(modify-syntax-entry ?\n "> a" metadoc2-mode-syntax-table)
-      (modify-syntax-entry ?\n "> b" metadoc2-mode-syntax-table)
+      (modify-syntax-entry ?/  ". 14" metadoc-mode-syntax-table)
+      (modify-syntax-entry ?#  ". 2b" metadoc-mode-syntax-table)
+      ;(modify-syntax-entry ?\n "> a" metadoc-mode-syntax-table)
+      (modify-syntax-entry ?\n "> b" metadoc-mode-syntax-table)
 
       ;; Both single quote and double quote are string delimiters, but
       ;; we cannot use the syntax table to fontify them due to how comments
       ;; are defined.
-      ;;;;(modify-syntax-entry ?\' "\"" metadoc2-mode-syntax-table)
-      ;;;;(modify-syntax-entry ?\" "\"" metadoc2-mode-syntax-table)
+      ;;;;(modify-syntax-entry ?\' "\"" metadoc-mode-syntax-table)
+      ;;;;(modify-syntax-entry ?\" "\"" metadoc-mode-syntax-table)
 
       ;; This adds in C-style multiline comments --> /* ... */
-      ;; (modify-syntax-entry ?*  ". 23" metadoc2-mode-syntax-table)
+      ;; (modify-syntax-entry ?*  ". 23" metadoc-mode-syntax-table)
       )
      )
-    metadoc2-mode-syntax-table
+    metadoc-mode-syntax-table
   )
-  ;;"Syntax table for metadoc2-mode"
+  ;;"Syntax table for metadoc-mode"
 )
 
 ;; This method indents the current line as Meta code
-(defun metadoc2-indent-line ()
+(defun metadoc-indent-line ()
    "Indent current line as Meta code"
    (interactive)
    (beginning-of-line)
@@ -1052,7 +1058,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*{[ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metadoc2-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metadoc-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1064,7 +1070,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*([ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metadoc2-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metadoc-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1076,7 +1082,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*([ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metadoc2-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metadoc-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1100,19 +1106,19 @@ such newline-indentation is provided.")
                 ;; Check for rule 3
                 ((looking-at ".*{[ \t]*$")
                  (message "Rule 3")
-                 (setq cur-indent (+ (meta-current-indentation) metadoc2-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metadoc-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 3b
                 ((looking-at ".*([ \t]*$")
                  (message "Rule 3b")
-                 (setq cur-indent (+ (meta-current-indentation) metadoc2-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metadoc-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 3c
                 ((and (looking-at ".*:[ \t]*$") (not (looking-at "^[ \t]*\/\#")))
                  (message "Rule 3c")
-                 (setq cur-indent (+ (meta-current-indentation) metadoc2-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metadoc-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 4
@@ -1182,7 +1188,7 @@ such newline-indentation is provided.")
     (if (null list)
        (let ())
        (insert (car list))
-       (metadoc2-indent-line)
+       (metadoc-indent-line)
        (end-of-line)
        (insert "\n")
        (insert-lines-indented (cdr list))
@@ -1195,17 +1201,17 @@ such newline-indentation is provided.")
    (let ((str (if (null id) "" (concat " " id))))
 
      ;; Insert construct start at correct indentation
-     (metadoc2-indent-line)
+     (metadoc-indent-line)
      (insert (concat ctype str " {\n"))
 
      ;; Insert (empty) one line within the SCOPE
-     (metadoc2-indent-line)
+     (metadoc-indent-line)
      (insert "\n")
 
      ;; Insert the end-of-construct line
      (insert (concat "} " (downcase ctype) str ";\n"))
      (next-line -1)
-     (metadoc2-indent-line)
+     (metadoc-indent-line)
 
      ;; Move back up to original line and position cursor
      ;; after the construct primary key/value.
@@ -1216,21 +1222,21 @@ such newline-indentation is provided.")
 )
 
 ;; The mode method
-(defun metadoc2-mode ()
+(defun metadoc-mode ()
   "Major mode for editing Meta(Doc) language files"
   (interactive)
   (kill-all-local-variables)
-  (set-syntax-table metadoc2-mode-syntax-table)
+  (set-syntax-table metadoc-mode-syntax-table)
 
   ;; We explicitly set the map here so that each time the mode
   ;; entry function is called we recompute - this is temporary
   ;; until the meta modes are stable (after which the setq
   ;; line can be removed for efficiency)
-  (setq metadoc2-mode-map (metadoc2-make-map))
-  (use-local-map metadoc2-mode-map)
+  (setq metadoc-mode-map (metadoc-make-map))
+  (use-local-map metadoc-mode-map)
 
-  (set (make-local-variable 'font-lock-defaults) '(metadoc2-font-lock-keywords))
-  (set (make-local-variable 'indent-line-function) 'metadoc2-indent-line)
+  (set (make-local-variable 'font-lock-defaults) '(metadoc-font-lock-keywords))
+  (set (make-local-variable 'indent-line-function) 'metadoc-indent-line)
   (set (make-local-variable 'parse-sexp-ignore-comments) t)
 
   ;; This ensures that multi-line fontification (e.g. comment blocks) are
@@ -1240,15 +1246,15 @@ such newline-indentation is provided.")
   ;; TODO(wmh): explore modifying the code so that every 1000 invocations we use
   ;; a longer min/max value.
   (make-local-variable 'font-lock-extend-region-functions)
-  (add-hook 'font-lock-extend-region-functions 'metadoc2-font-lock-extend-region)
+  (add-hook 'font-lock-extend-region-functions 'metadoc-font-lock-extend-region)
   
   ;; This sets up comment info
   (set (make-local-variable 'comment-start) "/#")
   (set (make-local-variable 'comment-style) 'multi-line)
 
-  (setq major-mode 'metadoc2-mode)
+  (setq major-mode 'metadoc-mode)
   (setq mode-name "Meta(Doc)")
-  (run-hooks 'metadoc2-mode-hook)
+  (run-hooks 'metadoc-mode-hook)
 )
 
 (defun meta-current-indentation ()
@@ -1266,36 +1272,36 @@ we need its actual indentation to be reported)."
 ;;   https://www.gnu.org/software/emacs/manual/html_node/elisp/Multiline-Font-Lock.html
 ;; and 
 ;;   https://www.emacswiki.org/emacs/MultilineFontLock
-(defun metadoc2-font-lock-extend-region ()
-  ; (message "Here in metadoc2-font-lock-extend-region")
+(defun metadoc-font-lock-extend-region ()
+  ; (message "Here in metadoc-font-lock-extend-region")
   (save-excursion
     (goto-char font-lock-beg)
     (let* ((back-limit (- font-lock-beg 2000))
            (future-limit (+ font-lock-beg 2000))
-           (found-point (re-search-backward metadoc2-comment-start-re back-limit t)))
+           (found-point (re-search-backward metadoc-comment-start-re back-limit t)))
       (if found-point
-          (let ((last-point (re-search-forward metadoc2-comment-re future-limit t)))
+          (let ((last-point (re-search-forward metadoc-comment-re future-limit t)))
             (if (and last-point (> last-point font-lock-end))
                 (progn
                   (setq font-lock-end last-point)))
             (setq font-lock-beg found-point))))))
 
-(provide 'metadoc2-mode)
+(provide 'metadoc-mode)
 
 ;; The following is based on
 ;;    https://emacs.stackexchange.com/questions/519/key-bindings-specific-to-a-buffer
 ;; as a means of providing an "index" for meta files.
 
-(defvar metadoc2-minor-mode-map (make-sparse-keymap)
-  "Keymap while metadoc2-minor-mode is active.")
+(defvar metadoc-minor-mode-map (make-sparse-keymap)
+  "Keymap while metadoc-minor-mode is active.")
 
-(define-minor-mode metadoc2-minor-mode
+(define-minor-mode metadoc-minor-mode
   "A temporary minor mode to be activated."
   nil
   :lighter " MetaMinor"
-  metadoc2-minor-mode-map)
+  metadoc-minor-mode-map)
 
-(defun metadoc2-index-to-line ()
+(defun metadoc-index-to-line ()
   "Provides an index to file mapping features.
 
   This is to be used in a buffer that displays a mapping from meta construct
@@ -1335,19 +1341,19 @@ we need its actual indentation to be reported)."
       (t (message "failed")))
   )
 )
-(define-key metadoc2-minor-mode-map (kbd "RET") 'metadoc2-index-to-line)
+(define-key metadoc-minor-mode-map (kbd "RET") 'metadoc-index-to-line)
 
-(defun metadoc2-create-index (&optional prefix)
+(defun metadoc-create-index (&optional prefix)
   (interactive "P")
-  (metadoc2-create-index-private nil prefix)
+  (metadoc-create-index-private nil prefix)
 )
 
-(defun metadoc2-create-filtered-index (&optional prefix filter)
+(defun metadoc-create-filtered-index (&optional prefix filter)
   (interactive "PsRegexp: ")
-  (metadoc2-create-index-private filter prefix)
+  (metadoc-create-index-private filter prefix)
 )
 
-(defun metadoc2-create-index-private (filter usenum)
+(defun metadoc-create-index-private (filter usenum)
   "Create an index.
    
    Args:
@@ -1358,7 +1364,7 @@ we need its actual indentation to be reported)."
   "
   (let ((command
          (concat
-          metadoc2-meta-binary 
+          metadoc-meta-binary 
           " index "
           (if usenum
               "--kind=num --min=1 --adj=-1 "
@@ -1373,12 +1379,12 @@ we need its actual indentation to be reported)."
     (insert (format "buffer: %s\n" bufname))
     (message (format "COMMAND: %s" command))
     (insert (shell-command-to-string command))
-    (metadoc2-mode)
+    (metadoc-mode)
     (orgstruct-mode)
-    (metadoc2-minor-mode 1)
+    (metadoc-minor-mode 1)
     (goto-char (point-min))
     (next-line 1)
   )
 )
 
-(provide 'metadoc2-minor-mode)
+(provide 'metadoc-minor-mode)

@@ -1,9 +1,7 @@
-MetaLanguage doc name Doc parent meta toplevel <presentation|document|spreadsheet> #:
-  Augmentation and unification of object-oriented programming languages.
-config:
+namespace metax.doc scope:
 
   abstract
-  Construct _doc_ clsname DocConstruct pclsname metax.meta.Construct #:
+  class DocConstruct < metax.meta.Construct #:
     Abstract construct from which all Meta(Doc) constructs inherit.
 
     All constructs in Meta(Doc) inherit from this abstract construct,
@@ -18,35 +16,6 @@ config:
     std assoc pprint;
     cls assoc metax.c.Compiler;
     resource testdoc1 path "../../kernel/testdata/metadoc/test1.metadoc";
-  config:
-
-    secondary
-    Attribute comment: : simple = <empty> aliases <#:> #:
-      Arbitrary multi-line text describing the purpose of the construct.
-
-    secondary
-    Attribute notes: : simple = <empty> #:
-      Visible comments. Will be added to as a title on the HTML version of the
-      construct.
-
-    secondary
-    Attribute config: : complex = <empty> children <Construct> #:
-      The complex block that defines/modifies Construct/Attribute instances.
-
-    secondary
-    Attribute scope: : complex = <empty> aliases <::> #:
-      The collection of subconstructs.
-
-  expand:
-    /# TODO(wmh): Switch this to be abstract to force children to
-    /# define the method.
-    print '%s: %sConstruct.expandMeta() should be defined' % (
-      self.kindid(), self.kind().capitalize())
-  translate:
-    /# TODO(wmh): Switch this to be abstract to force children to
-    /# define the method.
-    print '%s: %sConstruct.translateMeta() should be defined' % (
-      self.kindid(), self.kind().capitalize())
   scope:
 
     static
@@ -165,177 +134,45 @@ config:
       return DocConstruct.Compiler().parseMeta(path)
     end method Parse;
 
-  end Construct _doc_;
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      /# TODO(wmh): Switch this to be abstract to force children to
+      /# define the method.
+      print '%s: %sConstruct.expandMeta() should be defined' % (
+        self.kindid(), self.kind().capitalize())
+    end method expandMeta;
 
-  Construct document < _doc_ #:
+    override
+    method translateMeta
+    scope:
+      /# TODO(wmh): Switch this to be abstract to force children to
+      /# define the method.
+      print '%s: %sConstruct.translateMeta() should be defined' % (
+        self.kindid(), self.kind().capitalize())
+    end method translateMeta;
+
+  end class DocConstruct;
+
+  class DocumentConstruct < DocConstruct #:
     The document construct.
-  config:
-
-    primary
-    Attribute document : word = <required> #:
-      The name of the document
-
-    Attribute comment:;
-    Attribute config:;
-    Attribute scope: children <native>;
-
   scope:
-  end Construct document;
 
-  Construct presentation < _doc_ #:
+    method kind : str scope:
+      return 'document'
+    end method kind;
+
+  end class DocumentConstruct;
+
+  class PresentationConstruct < DocConstruct #:
     The presentation construct.
-  config:
-
-    primary
-    Attribute presentation : word = <required> #:
-      The name of the namespace.
-
-    secondary
-    Attribute width : num = 1000 #:
-      The width (in pixels) of each slide.
-
-    secondary
-    Attribute height : num = 800 #:
-      The height (in pixels) of each slide.
-
-    secondary
-    Attribute padding : num = 10 #:
-      The padding (in pixels, all sides) for each slide. The active area to
-      write into should take this padding into account.
-
-    Attribute comment:;
-    Attribute config:;
-    Attribute scope: children <slide|native|style|script|filter>;
-
-  expand:
-    scope, children = self.attrpair('scope:')
-    for construct in children:
-      construct.expandMeta()
-  translate:
-    /# TODO(wmh): This must be changed to use templates!!
-    rawmode = os.getenv('METADOC_RAW', '') == 'true'
-    /# print 'NOTE: Here with rawmode %s' % rawmode    
-    metadoc_js_path = 'metadoc.js' if rawmode else '/static/js/metadocs.js'
-
-    metafile = self.metafile()
-    streams = metafile.streams()
-    streams.initStreams(
-      /# A <style> to add CSS to.
-      'style',
-      /# A collection of javascript code (not including tag).
-      'script',
-      /# A collection of one or more <script> nodes (including the tags).
-      'jslibs',
-      /# The normal stream of content for the presentation.
-      'body'
-    )
-
-    /# NOTE: We do NOT process scope, and instead do slides(), so that
-    /# we don't have to process tags again.  If we introduce constructs
-    /# within presentations other than slides, we'll need to fix this.
-    slides = self.slides()
-    for child in self.attrval('scope:'):
-      if child.kind() == 'slide':
-        if child in self.slides():
-          child.translateMeta()
-      else:
-        child.translateMeta()
-  
-    fs = self.compiler().fs()
-    path = '%s.html' % self.id()
-    with fs.open(path, 'w') as fp:
-      /# TODO(wmh): Use a template!
-      if rawmode:
-        fp.write('<html>\n')
-        fp.write('  <head>\n')
-      else:
-        fp.write('{% extends "base.html" %}\n')
-
-      /###
-      /# Now the CSS from style constructs.
-      fp.write('\n')
-      fp.write('  <style>\n' if rawmode else '{% block css %}\n')
-      for line in streams.stream('style'):
-        fp.write('    ' + line + '\n')
-      fp.write('  </style>\n' if rawmode else '{% endblock %}\n')
-
-      /###
-      /# Now the javascript libraries
-      fp.write('\n')
-      fp.write('' if rawmode else '{% block jslibs %}\n')
-      fp.write(
-        '  <script type="text/javascript" src="%s"></script>\n' % metadoc_js_path)
-      /# All script constructs inserted first
-      for line in streams.stream('jslibs'):
-        fp.write(line + '\n')
-      /# The google visualization libraries.
-      charts = self.charts()
-      packages = set(charts.values())
-      packages.add('table')
-      if len(charts):
-        fp.write(
-          '  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>\n')
-        fp.write('  <script type="text/javascript">\n')
-        fp.write(
-          "    google.charts.load('current', {'packages': %s});\n"
-          % str(sorted(packages)))
-        fp.write('    google.charts.setOnLoadCallback(drawCharts);\n')
-        fp.write('    function drawCharts() {\n')
-        for chart_id in sorted(charts):
-          fp.write('      draw_%s();\n' % chart_id)
-        fp.write('    }\n')
-        fp.write('  </script>\n')
-      /# The implicit script next
-      script_lines = streams.stream('script')
-      if script_lines:
-        fp.write('  <script type="text/javascript">\n')
-        for line in script_lines:
-          fp.write('    ' + line + '\n')
-        fp.write('  </script>\n')
-      /# Now the javascript relied upon by Meta(Doc).
-      slides = self.slides()
-      nums = len(slides)
-      animations = self.animations()
-      fp.write('<script type="text/javascript">\n')
-      fp.write('  // We do not use var here because they are declared in\n')
-      fp.write('  // metadoc.js\n')
-      if rawmode:
-        fp.write('  targetSlide = 0;\n')
-      else:
-        fp.write('  targetSlide = {{ targetSlide|default(0) }};\n')
-      fp.write('  numSlides = %d;\n' % nums)
-      fp.write('  SlideInfo = {\n')
-      for i in range(nums):
-        slide = slides[i]
-        sdata = {'id': slide.id()}
-        anims = animations.get(i, None)
-        if anims:
-          sdata['subids'] = anims
-        fp.write('    %d: %s,\n' % (i, json.dumps(sdata)))
-      fp.write('  };\n')
-      fp.write('</script>\n')
-      /# Close javascript.
-      fp.write('' if rawmode else '{% endblock %}\n')
-
-      if rawmode:
-        fp.write('  </head>\n')
-
-      /###
-      /# Now the slide content
-      fp.write('\n')
-      fp.write('  <body>\n' if rawmode else '{% block content %}\n')
-      for line in streams.stream('body'):
-        fp.write(line + '\n')
-
-
-      /# We start with the desired slide.
-      fp.write('<script>showSlide(targetSlide);</script>\n')
-
-      fp.write('  </body>\n<html>\n' if rawmode else '{% endblock %}\n')
-    print 'Wrote %s' % path
-
-    return (None, None)
   scope:
+
+    method kind : str scope:
+      return 'presentation'
+    end method kind;
 
     field slides : @vec<SlideConstruct> #:
       The slides, in order.  Populated in SlideConstruct.expandMeta().
@@ -378,7 +215,7 @@ config:
     method registerData #:
       Register a 'data' construct, enforcing uniqueness.
     params:
-      var data : DataConstruct #:
+      var data : *metax.doc.DataConstruct #:
         The data construct to register.
     scope:
       name = data.id()
@@ -393,187 +230,153 @@ config:
     test:
     end method registerData;
 
-  end Construct presentation;
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      scope, children = self.attrpair('scope:')
+      for construct in children:
+        construct.expandMeta()
+    end method expandMeta;
 
-  Construct slide < _doc_ #:
+    override
+    method translateMeta
+    scope:
+      /# TODO(wmh): This must be changed to use templates!!
+      rawmode = os.getenv('METADOC_RAW', '') == 'true'
+      /# print 'NOTE: Here with rawmode %s' % rawmode    
+      metadoc_js_path = 'metadoc.js' if rawmode else '/static/js/metadocs.js'
+
+      metafile = self.metafile()
+      streams = metafile.streams()
+      streams.initStreams(
+        /# A <style> to add CSS to.
+        'style',
+        /# A collection of javascript code (not including tag).
+        'script',
+        /# A collection of one or more <script> nodes (including the tags).
+        'jslibs',
+        /# The normal stream of content for the presentation.
+        'body'
+      )
+
+      /# NOTE: We do NOT process scope, and instead do slides(), so that
+      /# we don't have to process tags again.  If we introduce constructs
+      /# within presentations other than slides, we'll need to fix this.
+      slides = self.slides()
+      for child in self.attrval('scope:'):
+        if child.kind() == 'slide':
+          if child in self.slides():
+            child.translateMeta()
+        else:
+          child.translateMeta()
+
+      fs = self.compiler().fs()
+      path = '%s.html' % self.id()
+      with fs.open(path, 'w') as fp:
+        /# TODO(wmh): Use a template!
+        if rawmode:
+          fp.write('<html>\n')
+          fp.write('  <head>\n')
+        else:
+          fp.write('{% extends "base.html" %}\n')
+
+        /###
+        /# Now the CSS from style constructs.
+        fp.write('\n')
+        fp.write('  <style>\n' if rawmode else '{% block css %}\n')
+        for line in streams.stream('style'):
+          fp.write('    ' + line + '\n')
+        fp.write('  </style>\n' if rawmode else '{% endblock %}\n')
+
+        /###
+        /# Now the javascript libraries
+        fp.write('\n')
+        fp.write('' if rawmode else '{% block jslibs %}\n')
+        fp.write(
+          '  <script type="text/javascript" src="%s"></script>\n' % metadoc_js_path)
+        /# All script constructs inserted first
+        for line in streams.stream('jslibs'):
+          fp.write(line + '\n')
+        /# The google visualization libraries.
+        charts = self.charts()
+        packages = set(charts.values())
+        packages.add('table')
+        if len(charts):
+          fp.write(
+            '  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>\n')
+          fp.write('  <script type="text/javascript">\n')
+          fp.write(
+            "    google.charts.load('current', {'packages': %s});\n"
+            % str(sorted(packages)))
+          fp.write('    google.charts.setOnLoadCallback(drawCharts);\n')
+          fp.write('    function drawCharts() {\n')
+          for chart_id in sorted(charts):
+            fp.write('      draw_%s();\n' % chart_id)
+          fp.write('    }\n')
+          fp.write('  </script>\n')
+        /# The implicit script next
+        script_lines = streams.stream('script')
+        if script_lines:
+          fp.write('  <script type="text/javascript">\n')
+          for line in script_lines:
+            fp.write('    ' + line + '\n')
+          fp.write('  </script>\n')
+        /# Now the javascript relied upon by Meta(Doc).
+        slides = self.slides()
+        nums = len(slides)
+        animations = self.animations()
+        fp.write('<script type="text/javascript">\n')
+        fp.write('  // We do not use var here because they are declared in\n')
+        fp.write('  // metadoc.js\n')
+        if rawmode:
+          fp.write('  targetSlide = 0;\n')
+        else:
+          fp.write('  targetSlide = {{ targetSlide|default(0) }};\n')
+        fp.write('  numSlides = %d;\n' % nums)
+        fp.write('  SlideInfo = {\n')
+        for i in range(nums):
+          slide = slides[i]
+          sdata = {'id': slide.id()}
+          anims = animations.get(i, None)
+          if anims:
+            sdata['subids'] = anims
+          fp.write('    %d: %s,\n' % (i, json.dumps(sdata)))
+        fp.write('  };\n')
+        fp.write('</script>\n')
+        /# Close javascript.
+        fp.write('' if rawmode else '{% endblock %}\n')
+
+        if rawmode:
+          fp.write('  </head>\n')
+
+        /###
+        /# Now the slide content
+        fp.write('\n')
+        fp.write('  <body>\n' if rawmode else '{% block content %}\n')
+        for line in streams.stream('body'):
+          fp.write(line + '\n')
+
+
+        /# We start with the desired slide.
+        fp.write('<script>showSlide(targetSlide);</script>\n')
+
+        fp.write('  </body>\n<html>\n' if rawmode else '{% endblock %}\n')
+      print 'Wrote %s' % path
+
+      return (None, None)
+    end method translateMeta;
+
+  end class PresentationConstruct;
+
+  class SlideConstruct < DocConstruct #:
     The slide construct.
-  config:
-
-    primary
-    Attribute slide : word = <auto> #:
-      The name of the class.
-
-    secondary
-    Attribute repeat : word = <empty> #:
-      Insert a copy of a named slide (value is id of slide to insert).
-
-    secondary
-    Attribute animate : str = <empty> #:
-      Space-or-commad-separated list of subids to animate (hide initially, and
-      incrementally show when up/down arrows are used).
-
-    secondary
-    Attribute tags : str = <empty> #:
-      A collection of tags marking this slide. During compilation, slides can
-      be selected or unselected based on tag matches.
-
-    secondary
-    Attribute classes : str = <empty> #:
-      A semicolon-separate list of key=value pairs where each key represents an
-      subid, and the value indicates one or more space-separated CSS classes to
-      add to the element identified by the subid.
-
-    Attribute notes:;
-    Attribute comment:;
-    Attribute config:;
-    Attribute scope: children <native|panel>;
-
-  expand:
-    /# TODO(wmh): Add assocs to constructs!
-    import re
-
-    preso = self.ancestor('presentation')
-    assert preso
-    width = preso.width()
-    height = preso.height()
-    padding = preso.padding()
-
-    /# Establish if this slide is to be processed or not, based on tags.
-    tags = []
-    tagstr = self.attrval('tags', default=None)
-    if tagstr:
-      tags = tagstr.asStr(unquote=True).strip().split()
-    self.tagsIs(tags)
-
-    if 'disabled' in tags:
-      /# This slide is treated as if it doesn't exist at all.
-      /# It is not added to Presentation.slides(), etc.
-      /# TODO(wmh): Generalize how slides are disabled.
-      pass
-
-    else:
-      /# Note that the absolute position of .panel divs within relative relative
-      /# position .slide are from the top-left of margin, not from the top-left
-      /# of border.
-      self.bboxIs([0, 0, width, height])
-      slides = preso.slides()
-      index = len(slides)
-      self.indexIs(index)
-      slides.append(self)
-
-      /# If there are animations specified, record them with the preso.
-      animate = self.attrval('animate', default=None)
-      if animate:
-        parts = re.split(r'\s*,?\s*', animate.asStr(unquote=True))
-        preso.animations()[index] = parts
-  translate:
-    /# TODO(wmh): Add assocs to constructs!
-    import re
-
-    metafile = self.metafile()
-    preso = self.ancestor('presentation')
-    slides = preso.slides()
-    width = preso.width()
-    height = preso.height()
-    animate = self.attrval('animate', default=None)
-
-    self.streamLine('')
-    self.streamLine('<div id="%s" class="slide">' % self.id())
-
-    title = self.attrval('title', default=None)
-    if title:
-      tstr = title.asStr(unquote=True)
-      self.streamLine('  <h1>%s</h1>' % tstr)
-      /# We consume some space at the top for the title.
-      self.bbox()[1] += 100
-
-    repeat_attr, repeat = self.attrpair('repeat', default=None)
-
-    /# The scope: of a slide is a complex block.
-    /#  - native constructs are dumped verbatim
-    /#  - panels are where the real power lies.
-    scope = self.attrval('scope:', default=None) or []
-    if scope and repeat:
-      metafile.warning(
-        'repeat is ignored when scope: provided',
-        line=repeat_attr.line())
-    elif not scope and repeat:
-      parent = self.parent()
-      other = parent.cons(repeat, default=None)
-      if other is None:
-        metafile.error(
-          '%s references unknown %s' % (self.id(), repeat),
-          line=repeat_attr.line())
-      else:
-        /# We clone the 'scope:' attribute of the referred to construct,
-        /# adding the new clone as the 'scope:' attribute of self.
-        /#  - this ensures that variable interpolation in the cited slide
-        /#    are re-evaluated within the context of this new slide,
-        /#    especially important if variable interpolation is used to
-        /#    establish ids for html elements (we don't want the same ids
-        /#    in different slides).
-        other_scope = other.attr('scope:', default=None)
-        new_scope = other_scope.clone(self)
-        self.registerAttribute(new_scope)
-        scope = new_scope.value()
-        /# TODO(wmh): Is the following still needed? Should this be for
-        /# self.bbox instead??
-        other.bboxIs([0, 0, width, height])
-        
-    for construct in scope:
-      construct.translateMeta()
-
-    csize = 20
-
-    if self is slides[0]:
-      /# First slide, no left arrow
-      /# TODO(wmh): This does not properly account for slide 0 being disabled!
-      cleft = ''
-    else:
-      /# CODOETANGLE(leftarrow)
-      cleft = '&nbsp;&nbsp;<span onclick="slideStep(-1);">&#x21e6;</span>'
-
-    if self is slides[-1]:
-      /# Last slide, no right arrow
-      /# TODO(wmh): This does not properly account for slide 0 being disabled!
-      cright = ''
-    else:
-      /# CODOETANGLE(rightarrow)
-      cright = '<span onclick="oneStep(1);">&#x21e8;</span>'
-
-    if animate:
-      /# There are animations in this slide, so we show up/down arrows.
-      ccenter = '<span onclick="animateStep(-1);">&#x21e7;</span> <span onclick="animateStep(1);">&#x21e9;</span>'
-    else:
-      ccenter = ''
-
-    clines = [
-      '<div class="panel" style="height: %dpx; left: 0px; top: %dpx; width: %dpx;">' % (csize, height-csize, width),
-      '  <table style="color: #999; font-size: %dpt; width: %dpx;"><tr>'
-      '<td style="text-align: left; width: 33%%;">%s</td>'
-      '<td style="text-align: center; width: 34%%;">%s</td>'
-      '<td style="text-align: right; width: 33%%;">%s</td>'
-      '</tr></table>' % (csize, width, cleft, ccenter, cright),
-      '</div>',
-    ]
-    self.streamLines(clines, indent='  ') 
-
-    self.streamLine('</div>')
-
-    /# If there is a 'classes' attribute, we add some javascript.
-    cssinfo = self.attrval('classes', default=None)
-    if cssinfo:
-      self.streamLine('<script type="text/javascript">')
-      parts = re.split(r'\s*;\s*', cssinfo.asStr(unquote=True).strip())
-      for part in parts:
-        /# TODO(wmh): Handle errors instead of crashing python.
-        subid, css = part.split('=')
-        id = '%s-%s' % (self.id(), subid)
-        for csscls in css.split():
-          self.streamLine('  addClass("%s", "%s");' % (id, csscls))
-      self.streamLine('</script>')
-    return (None, None)
   scope:
+
+    method kind : str scope:
+      return 'slide'
+    end method kind;
 
     field index : int #:
       The position of this slide in its parent.  Assigned in
@@ -585,256 +388,344 @@ config:
     field tags : vec<str> #:
       Tags associated with this slide.
 
-  end Construct slide;
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      /# TODO(wmh): Add assocs to constructs!
+      import re
 
-  Construct panel < _doc_ #:
-    The panel construct.
-  config:
+      preso = self.ancestor('presentation')
+      assert preso
+      width = preso.width()
+      height = preso.height()
+      padding = preso.padding()
 
-    feature
-    Attribute side : <top|left|right|bottom> = left #:
-      Identifies which side of the current bounding box this panel consumes.
-    config:
-      FeatureValue left #:
-        Consume the entire available height on the left side.
-      FeatureValue right #:
-        Consume the entire avaiable height on the right side.
-      FeatureValue top #:
-        Consume the entire available width on the top side.
-      FeatureValue bottom #:
-        Consume the entire available width on the bottom side.
-    end Attribute side;
+      /# Establish if this slide is to be processed or not, based on tags.
+      tags = []
+      tagstr = self.attrval('tags', default=None)
+      if tagstr:
+        tags = tagstr.asStr(unquote=True).strip().split()
+      self.tagsIs(tags)
 
-    primary
-    Attribute panel : id = <auto> #:
-      The name of the class.
+      if 'disabled' in tags:
+        /# This slide is treated as if it doesn't exist at all.
+        /# It is not added to Presentation.slides(), etc.
+        /# TODO(wmh): Generalize how slides are disabled.
+        pass
 
-    secondary
-    Attribute style : str = <empty> #:
-      Explicit CSS style to add to the <div>.
+      else:
+        /# Note that the absolute position of .panel divs within relative relative
+        /# position .slide are from the top-left of margin, not from the top-left
+        /# of border.
+        self.bboxIs([0, 0, width, height])
+        slides = preso.slides()
+        index = len(slides)
+        self.indexIs(index)
+        slides.append(self)
 
-    secondary
-    Attribute color : word = <empty> aliases <fg> #:
-      The foreground colo
+        /# If there are animations specified, record them with the preso.
+        animate = self.attrval('animate', default=None)
+        if animate:
+          parts = re.split(r'\s*,?\s*', animate.asStr(unquote=True))
+          preso.animations()[index] = parts
+    end method expandMeta;
 
-    secondary
-    Attribute background : word = <empty> aliases <bg> #:
-      The foreground color.
+    override
+    method translateMeta
+    scope:
+      /# TODO(wmh): Add assocs to constructs!
+      import re
 
-    secondary
-    Attribute border : str = <empty> #:
-      Describes the border. Format:
-        <spec>    ::- <subspec> (';' <subspec>)?
-        <subspec> ::- [<pos>]<num>[<color>]['/'<style>]
-        <pos>     ::- [lrtb]+         (indicates which borders ... if empty, all)
-        <num>     ::- \d+             (width of border in pixels)
-        <color>   ::- named color or #hex, etc.  Default is black
-        <style>   ::- 'none' | 'hidden' | 'dotted' | 'dashed' | 'solid' |
-                      'double' | 'groove' | 'ridge' | 'inset' | 'outset'
-      Examples:
-        1             = border: 1px black solid;
-        l2            = border-left: 2px black solid;
-        t3blue/dashed = border-top: 3px blue dashed;
+      metafile = self.metafile()
+      preso = self.ancestor('presentation')
+      slides = preso.slides()
+      width = preso.width()
+      height = preso.height()
+      animate = self.attrval('animate', default=None)
 
-    secondary
-    Attribute size : num = 1.0 #:
-      If 'side' is 'left' or 'right', this refers to the desired width of the
-      panel.  If 'side' is 'top', this refers to the desired height of the
-      panel.  If it is a value greater than 1, it is assumed to be pixels. If
-      it is a float between 0.0 and 1.0 inclusive, it is assumed to be a
-      fractional amount of existing space in appropriate dimension. A value
-      of 0.5 means 50%, and a value of 1.0 means consume all remaining space
-      (the default).
+      self.streamLine('')
+      self.streamLine('<div id="%s" class="slide">' % self.id())
 
-    secondary
-    Attribute font : num = 100 #:
-      The size of text within this panel relative to the parent container.
-      Thus, 100 means same size, 80 means 80% of parent, 150 means 150% of
-      parent, etc.
+      title = self.attrval('title', default=None)
+      if title:
+        tstr = title.asStr(unquote=True)
+        self.streamLine('  <h1>%s</h1>' % tstr)
+        /# We consume some space at the top for the title.
+        self.bbox()[1] += 100
 
-    secondary
-    Attribute top : num = 0 #:
-      A pixel adjustment margin-top for this panel.
+      repeat_attr, repeat = self.attrpair('repeat', default=None)
 
-    Attribute notes:;
-    Attribute comment:;
-    Attribute config:;
-    Attribute scope: : simplex children <list|chart|data>;
-
-  expand:
-    scope_attr, scope = self.attrpair('scope:', default=None)
-    if scope_attr:
-      if scope_attr.isComplexBlock():
-        /# expand children.
-        for child in scope:
-          child.expandMeta(output=output)
-  translate:
-    /# TODO(wmh): Add assocs to constructs!
-    import re
-
-    /# A panel provides the core formatting mechanism. It is a <div> with
-    /# support for sizing, etc.
-    metafile = self.metafile()
-    streams = metafile.streams()
-    slide = self.ancestor('slide')
-    preso = self.ancestor('presentation')
-    padding = preso.padding()
-    bbox = slide.bbox()
-    left, top, right, bottom = bbox
-    width = right - left
-    height = bottom - top
-
-    title = self.attrval('title', default=None) or ''
-    side = self.attrval('side')
-    /# TODO(wmh): As of 2018-10-25, attribute values of type 'num' are
-    /# represented as strings when they should be ints/floats. Fix this.
-    size = float(self.attrval('size'))
-    font = int(self.attrval('font'))
-    fgcolor = self.attrval('color')
-    bgcolor = self.attrval('background')
-    border_attr, border_str = self.attrpair('border', default=None)
-    border = border_str.asStr(unquote=True) if border_str else ''
-    style_str = self.attrval('style', default=metax.c.LOOKUP)
-    top_margin_adj = int(self.attrval('top'))
-    notes = self.attrval('notes:', default=None) or []
-
-    style_data = {}
-    if bgcolor:
-      style_data['background-color'] = bgcolor
-    if fgcolor:
-      style_data['color'] = fgcolor
-    if font and font != 100:
-      style_data['font-size'] = '%d%%' % font
-    if top_margin_adj:
-      style_data['margin-top'] = '%dpx' % top_margin_adj
-
-    bre = re.compile(
-      r'^(?P<pos>[lrtb]*)'
-      r'(?P<num>\d+)'
-      r'(?P<color>[^/\t ]*)'
-      r'(?:/(?P<style>\S+))?$'
-    )
-    if border:
-      bmap = {
-        'a': 'border',
-        't': 'border-top',
-        'b': 'border-bottom',
-        'l': 'border-left',
-        'r': 'border-right'
-      }
-      for spec in border.split(';'):
-        m = bre.match(spec)
-        if m:
-          pos = m.group('pos') or 'a'
-          px = int(m.group('num'))
-          color = m.group('color') or 'black'
-          style = m.group('style') or 'solid'
-          for c in list(pos):
-            style_data[bmap[c]] = '%dpx %s %s' % (px, color, style)
-        else:
+      /# The scope: of a slide is a complex block.
+      /#  - native constructs are dumped verbatim
+      /#  - panels are where the real power lies.
+      scope = self.attrval('scope:', default=None) or []
+      if scope and repeat:
+        metafile.warning(
+          'repeat is ignored when scope: provided',
+          line=repeat_attr.line())
+      elif not scope and repeat:
+        parent = self.parent()
+        other = parent.cons(repeat, default=None)
+        if other is None:
           metafile.error(
-            'Invalid border spec "%s"' % spec, line=border_attr.line())
+            '%s references unknown %s' % (self.id(), repeat),
+            line=repeat_attr.line())
+        else:
+          /# We clone the 'scope:' attribute of the referred to construct,
+          /# adding the new clone as the 'scope:' attribute of self.
+          /#  - this ensures that variable interpolation in the cited slide
+          /#    are re-evaluated within the context of this new slide,
+          /#    especially important if variable interpolation is used to
+          /#    establish ids for html elements (we don't want the same ids
+          /#    in different slides).
+          other_scope = other.attr('scope:', default=None)
+          new_scope = other_scope.clone(self)
+          self.registerAttribute(new_scope)
+          scope = new_scope.value()
+          /# TODO(wmh): Is the following still needed? Should this be for
+          /# self.bbox instead??
+          other.bboxIs([0, 0, width, height])
 
-    /# If size is between 0 and 1, it is a fractional value. If it is greater
-    /# than 1, it is a number of pixels.
-    if size >= 0.0 and size <= 1.0:
-      /# We convert to pixels.
-      if side in ('left', 'right'):
-        /# size is a fraction of current width
-        pixels = int(size * width + 0.5)
+      for construct in scope:
+        construct.translateMeta()
+
+      csize = 20
+
+      if self is slides[0]:
+        /# First slide, no left arrow
+        /# TODO(wmh): This does not properly account for slide 0 being disabled!
+        cleft = ''
       else:
-        /# size is a fraction of current height
-        pixels = int(size * height + 0.5)
-    else:
-      pixels = int(size + 0.5)
+        /# CODOETANGLE(leftarrow)
+        cleft = '&nbsp;&nbsp;<span onclick="slideStep(-1);">&#x21e6;</span>'
 
-    if side in ('left', 'right'):
-      /# pixels refers to the width of this panel.
-      if pixels > width:
-        /# Request to consume more pixels than we have available.
-        raise Error('fix me')
-      style_data['width'] = '%dpx' % pixels
-      style_data['height'] = '%dpx' % height
-      style_data['top'] = '%dpx' % (top + padding)
-      if side == 'left':
-        style_data['left'] = '%dpx' % (left + padding)
-        bbox[0] += pixels
+      if self is slides[-1]:
+        /# Last slide, no right arrow
+        /# TODO(wmh): This does not properly account for slide 0 being disabled!
+        cright = ''
       else:
-        style_data['left'] = '%dpx' % (right - pixels)
-        bbox[2] -= pixels
-    else:
-      /# pixels refers to the height of this panel.
-      if pixels > height:
-        /# Request to consume more pixels than we have available.
-        raise Error('fix me')
-      style_data['height'] = '%dpx' % pixels
-      style_data['width'] = '%dpx' % width
-      style_data['left'] = '%dpx' % (left + padding)
-      if side == 'top':
-        style_data['top'] = '%dpx' % (top + padding)
-        bbox[1] += pixels
+        /# CODOETANGLE(rightarrow)
+        cright = '<span onclick="oneStep(1);">&#x21e8;</span>'
+
+      if animate:
+        /# There are animations in this slide, so we show up/down arrows.
+        ccenter = '<span onclick="animateStep(-1);">&#x21e7;</span> <span onclick="animateStep(1);">&#x21e9;</span>'
       else:
-        style_data['top'] = '%dpx' % (bottom - pixels)
-        bbox[3] -= pixels
+        ccenter = ''
 
-    /# TODO(wmh): Do indentation properly, using MetaSegments and
-    /# template instantiation.
-    style = '; '.join(
-      ['%s: %s' % (k, style_data[k]) for k in sorted(style_data)]) + ';'
-    style += style_str.asStr(unquote=True)
-    titlestr = ''
-    if notes:
-      titlestr = ' title="%s"' % (
-        '\n'.join(notes).replace('\"', '&quot;'))
-      /# We insert an indicator into the HTML (small red square in top left
-      /# corner of the slide).
-      /#  - note that top left corner of slide isn't appropriate for all
-      /#    panels (really only for the title panel). Need to find a better
-      /#    way of indicating per-panel notes.
-      streams.addLine(
-        'body',
-        '<img class="panel" src="/static/demo/turquoise.png" style="top: 0px; left: 0px;"/>')
+      clines = [
+        '<div class="panel" style="height: %dpx; left: 0px; top: %dpx; width: %dpx;">' % (csize, height-csize, width),
+        '  <table style="color: #999; font-size: %dpt; width: %dpx;"><tr>'
+        '<td style="text-align: left; width: 33%%;">%s</td>'
+        '<td style="text-align: center; width: 34%%;">%s</td>'
+        '<td style="text-align: right; width: 33%%;">%s</td>'
+        '</tr></table>' % (csize, width, cleft, ccenter, cright),
+        '</div>',
+      ]
+      self.streamLines(clines, indent='  ') 
 
-    divstr = '  <div class="panel" style="%s"%s>' % (style, titlestr)
-    streams.addLine('body', divstr)
+      self.streamLine('</div>')
 
-    scope_attr, scope = self.attrpair('scope:', default=None)
-    if scope_attr:
-      if scope_attr.isComplexBlock():
-        /# The scope is a complex block ... subconstructs write into 
-        /# appropriate streams.
-        for child in scope:
-          child.translateMeta()
-      else:
-        /# The scope is a simple block ... we write it verbatim.
-        self.streamLines(scope, indent='    ')
+      /# If there is a 'classes' attribute, we add some javascript.
+      cssinfo = self.attrval('classes', default=None)
+      if cssinfo:
+        self.streamLine('<script type="text/javascript">')
+        parts = re.split(r'\s*;\s*', cssinfo.asStr(unquote=True).strip())
+        for part in parts:
+          /# TODO(wmh): Handle errors instead of crashing python.
+          subid, css = part.split('=')
+          id = '%s-%s' % (self.id(), subid)
+          for csscls in css.split():
+            self.streamLine('  addClass("%s", "%s");' % (id, csscls))
+        self.streamLine('</script>')
+      return (None, None)
+    end method translateMeta;
 
-    streams.addLine('body', '  </div>')
+  end class SlideConstruct;
 
-    return (None, None)
+  class PanelConstruct < DocConstruct #:
+    The panel construct.
   scope:
-  end Construct panel;
+
+    method kind : str scope:
+      return 'panel'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      scope_attr, scope = self.attrpair('scope:', default=None)
+      if scope_attr:
+        if scope_attr.isComplexBlock():
+          /# expand children.
+          for child in scope:
+            child.expandMeta(output=output)
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      /# TODO(wmh): Add assocs to constructs!
+      import re
+
+      /# A panel provides the core formatting mechanism. It is a <div> with
+      /# support for sizing, etc.
+      metafile = self.metafile()
+      streams = metafile.streams()
+      slide = self.ancestor('slide')
+      preso = self.ancestor('presentation')
+      padding = preso.padding()
+      bbox = slide.bbox()
+      left, top, right, bottom = bbox
+      width = right - left
+      height = bottom - top
+
+      title = self.attrval('title', default=None) or ''
+      side = self.attrval('side')
+      /# TODO(wmh): As of 2018-10-25, attribute values of type 'num' are
+      /# represented as strings when they should be ints/floats. Fix this.
+      size = float(self.attrval('size'))
+      font = int(self.attrval('font'))
+      fgcolor = self.attrval('color')
+      bgcolor = self.attrval('background')
+      border_attr, border_str = self.attrpair('border', default=None)
+      border = border_str.asStr(unquote=True) if border_str else ''
+      style_str = self.attrval('style', default=metax.c.LOOKUP)
+      top_margin_adj = int(self.attrval('top'))
+      notes = self.attrval('notes:', default=None) or []
+
+      style_data = {}
+      if bgcolor:
+        style_data['background-color'] = bgcolor
+      if fgcolor:
+        style_data['color'] = fgcolor
+      if font and font != 100:
+        style_data['font-size'] = '%d%%' % font
+      if top_margin_adj:
+        style_data['margin-top'] = '%dpx' % top_margin_adj
+
+      bre = re.compile(
+        r'^(?P<pos>[lrtb]*)'
+        r'(?P<num>\d+)'
+        r'(?P<color>[^/\t ]*)'
+        r'(?:/(?P<style>\S+))?$'
+      )
+      if border:
+        bmap = {
+          'a': 'border',
+          't': 'border-top',
+          'b': 'border-bottom',
+          'l': 'border-left',
+          'r': 'border-right'
+        }
+        for spec in border.split(';'):
+          m = bre.match(spec)
+          if m:
+            pos = m.group('pos') or 'a'
+            px = int(m.group('num'))
+            color = m.group('color') or 'black'
+            style = m.group('style') or 'solid'
+            for c in list(pos):
+              style_data[bmap[c]] = '%dpx %s %s' % (px, color, style)
+          else:
+            metafile.error(
+              'Invalid border spec "%s"' % spec, line=border_attr.line())
+
+      /# If size is between 0 and 1, it is a fractional value. If it is greater
+      /# than 1, it is a number of pixels.
+      if size >= 0.0 and size <= 1.0:
+        /# We convert to pixels.
+        if side in ('left', 'right'):
+          /# size is a fraction of current width
+          pixels = int(size * width + 0.5)
+        else:
+          /# size is a fraction of current height
+          pixels = int(size * height + 0.5)
+      else:
+        pixels = int(size + 0.5)
+
+      if side in ('left', 'right'):
+        /# pixels refers to the width of this panel.
+        if pixels > width:
+          /# Request to consume more pixels than we have available.
+          raise Error('fix me')
+        style_data['width'] = '%dpx' % pixels
+        style_data['height'] = '%dpx' % height
+        style_data['top'] = '%dpx' % (top + padding)
+        if side == 'left':
+          style_data['left'] = '%dpx' % (left + padding)
+          bbox[0] += pixels
+        else:
+          style_data['left'] = '%dpx' % (right - pixels)
+          bbox[2] -= pixels
+      else:
+        /# pixels refers to the height of this panel.
+        if pixels > height:
+          /# Request to consume more pixels than we have available.
+          raise Error('fix me')
+        style_data['height'] = '%dpx' % pixels
+        style_data['width'] = '%dpx' % width
+        style_data['left'] = '%dpx' % (left + padding)
+        if side == 'top':
+          style_data['top'] = '%dpx' % (top + padding)
+          bbox[1] += pixels
+        else:
+          style_data['top'] = '%dpx' % (bottom - pixels)
+          bbox[3] -= pixels
+
+      /# TODO(wmh): Do indentation properly, using MetaSegments and
+      /# template instantiation.
+      style = '; '.join(
+        ['%s: %s' % (k, style_data[k]) for k in sorted(style_data)]) + ';'
+      style += style_str.asStr(unquote=True)
+      titlestr = ''
+      if notes:
+        titlestr = ' title="%s"' % (
+          '\n'.join(notes).replace('\"', '&quot;'))
+        /# We insert an indicator into the HTML (small red square in top left
+        /# corner of the slide).
+        /#  - note that top left corner of slide isn't appropriate for all
+        /#    panels (really only for the title panel). Need to find a better
+        /#    way of indicating per-panel notes.
+        streams.addLine(
+          'body',
+          '<img class="panel" src="/static/demo/turquoise.png" style="top: 0px; left: 0px;"/>')
+
+      divstr = '  <div class="panel" style="%s"%s>' % (style, titlestr)
+      streams.addLine('body', divstr)
+
+      scope_attr, scope = self.attrpair('scope:', default=None)
+      if scope_attr:
+        if scope_attr.isComplexBlock():
+          /# The scope is a complex block ... subconstructs write into 
+          /# appropriate streams.
+          for child in scope:
+            child.translateMeta()
+        else:
+          /# The scope is a simple block ... we write it verbatim.
+          self.streamLines(scope, indent='    ')
+
+      streams.addLine('body', '  </div>')
+
+      return (None, None)
+    end method translateMeta;
+
+  end class PanelConstruct;
 
   abstract
-  Construct _data_ < _doc_ clsname AbstractDataConstruct #:
+  class AbstractDataConstruct < DocConstruct #:
     Abstract super-construct of table and chart.
-  config:
-
-    secondary
-    Attribute columns: : complex = <empty> children <column> #:
-      Contains the 'column' constructs defining the table data.
-
-    secondary
-    Attribute options: : simple = <empty> #:
-      The options of this table.
-
-    Attribute comment:;
-    Attribute config:;
-    Attribute scope: : simple;
-
   scope:
 
-    lifecycle clinit:
+    method kind : str scope:
+      return '_data_'
+    end method kind;
+
+    lifecycle  clinit:
       /# Converts metadoc cell types to google visualization cell types
       cls.JSTYPE_MAP = {
         'ymd': 'date',
@@ -999,7 +890,7 @@ config:
                   line=from_attr.line())
               else:
                 columninfo = data.columns()[datacol]
-                
+
             /# print 'fromstr="%s" dataname=%s datacol=%s data=%s' % (fromstr, dataname, datacol, data)
 
         type_attr, rawtype = column.attrpair('type', default=None)
@@ -1164,42 +1055,19 @@ config:
       return options
     end method optionInfo;
 
-  end Construct _data_;
+  end class AbstractDataConstruct;
 
-  Construct data < _data_ #:
+  class DataConstruct < AbstractDataConstruct #:
     Define a data.
 
     The scope block is a 2d data table.
   assocs:
     std assoc re;
-  config:
-
-    primary
-    Attribute data : id = <auto> #:
-      The name of the data. Used to generate a javascript function, so it
-      must be an identifier. Also used to generate the id of a <div>.
-
-    secondary
-    Attribute startdate : str = <empty> #:
-      A date from which time offsets can be calculated.
-
-    secondary
-    Attribute key : id = <empty> #:
-      The name of the column that has unique elements (used in populating
-      the 'data' field).  If empty, the first column is assumed. Use the
-      special value 'null' to indicate no key (and thus no recording in data()).
-
-    Attribute columns:
-    Attribute options:;
-
-    Attribute comment:;
-    Attribute config:;
-    Attribute scope: : simple;
-
-  expand:
-    /# Nothing to do for translate (so far).
-    pass
   scope:
+
+    method kind : str scope:
+      return 'data'
+    end method kind;
 
     field columns : vec<map> #:
       Maps column names to meta-info about the column.  This is just a caching
@@ -1400,7 +1268,7 @@ config:
 
             /# We add the parsed row dict to the in-order list of rows.
             rows.append(row)
-            
+
             /# Each row has some column value that is unique, which is used
             /# as a key so we can merge across rows.
             /#  - we create a mapping from unique row value to row dict
@@ -1513,46 +1381,29 @@ config:
         data.rows())
     end method translateMeta;
 
-  end Construct data;
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      /# Nothing to do for translate (so far).
+      pass
+    end method expandMeta;
 
-  Construct chart < _data_ #:
+  end class DataConstruct;
+
+  class ChartConstruct < AbstractDataConstruct #:
     Define a chart (a view of data).
   assocs:
     std assoc re;
     usertest std assoc datetime;
-  config:
-
-    feature
-    Attribute type : <area|bar|bubble|calendar|candlestick|column|diff|donut|gantt|gauge|geo|histogram|line|map|org|pie|sankey|scatter|step|table|timeline|treemap|trendline|waterfall|word> default line #:
-      The type of chart.  Not all charts are supported in all output modes.
-      Most are supported in Google Visualization, some are supported in
-      dygraph, etc.
-
-    primary
-    Attribute chart : id = <auto> #:
-      The name of the chart. Used to generate a javascript function, so it
-      must be an identifier. Also used to generate the id of a <div>.
-
-    secondary
-    Attribute from : word = <empty> #:
-      Within the 'columns:' attribute, 'column' constructs that do NOT specify
-      an explicit 'from' attribute will use this value instead. It is the
-      name of a data instance.
-
-    Attribute columns:
-    Attribute options:;
-
-    Attribute comment:;
-    Attribute config:;
-    Attribute scope: : simple;
-
-  expand:
-    /# Nothing to do for translate (so far).
-    pass
-
   scope:
 
-    lifecycle clsetup:
+    method kind : str scope:
+      return 'chart'
+    end method kind;
+
+    lifecycle  clsetup:
       cls.TestMetafile = metax.doc.DocConstruct.Parse(
         metax.root.Object.Resource('metax.doc.DataConstruct.testdoc1'))
       cls.Data1 = cls.TestMetafile.find('/preso1/slide1/panel1/data1')
@@ -1574,7 +1425,7 @@ config:
       presentation.charts()[self.id()] = chart_type
 
       jslines = []
-    
+
       /# Define the datatable and its columns.
       columns = self.columnInfo()
       /# pprint.pprint(columns)
@@ -1633,7 +1484,7 @@ config:
         rowlist = [row[k] for k in colnames]
         jslines.append('  [%s],' % ', '.join(rowlist))
       jslines.append(']);')
-    
+
       /# The options come from the 'options' seconary attribute.
       jslines.append('')
       jslines.append('var options = {')
@@ -1699,7 +1550,7 @@ config:
         >|  chart.draw(data, google.charts.Table.convertOptions(options));
         >|}""",
         '\n'.join(streams.stream('script')))
-      
+
     end method translateMeta;
 
     method py2js : str #:
@@ -1721,7 +1572,7 @@ config:
           value = '"%s"' % pyval
         else:
           value = "'%s'" % pyval
-      
+
       elif gvtype == 'number':
         /# TODO(wmh): Should we perform some formatting on this?
         value = str(pyval)
@@ -1754,325 +1605,271 @@ config:
       test.iseq('true', test.chart1.py2js('boolean', True))
     end method py2js;
 
-  end Construct chart;
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      /# Nothing to do for translate (so far).
+      pass
 
-  Construct column < _doc_ #:
+    end method expandMeta;
+
+  end class ChartConstruct;
+
+  class ColumnConstruct < DocConstruct #:
     Define a column (within any _data_ subconstruct).
-  config:
-
-    primary
-    Attribute column : id = <auto> aliases <col> #:
-      The name of the chart. Used to generate a javascript function, so it
-      must be an identifier. Also used to generate the id of a <div>.
-
-    secondary
-    Attribute type : word = str aliases <:> #:
-      The type of the column
-
-    secondary
-    Attribute label : str = <empty> aliases <%> #:
-      A label for the column.  If not present, some massaged version of
-      the column id will be used.
-
-    secondary
-    Attribute width : str = <empty> #:
-      A width specification for the column.
-      TODO(wmh): Is this relevant/useful?
-
-    secondary
-    Attribute from : word = <empty> #:
-      Used within chart constructs to specify which table (and column within
-      table) to use for this column of the chart).
-
-    secondary
-    Attribute formula : str = <empty> aliases <=> #:
-      The actual value of the cell is determined by evaluating this expression,
-      which should use variable 'cell' when wanting the (python) value of the
-      column.
-
   scope:
-  end Construct column;
 
-  Construct style < _doc_ #:
+    method kind : str scope:
+      return 'column'
+    end method kind;
+
+  end class ColumnConstruct;
+
+  class StyleConstruct < DocConstruct #:
     The style construct.
-  config:
-
-    primary
-    Attribute style : id = <auto> #:
-      The name of the style construct.
-
-    Attribute comment:;
-    Attribute config:;
-    Attribute scope: : simple;
-  expand:
-  translate:
-    /# TODO(wmh): Add assocs to Construct and copy over to classes.
-    import re
-
-    metafile = self.metafile()
-    preso = self.ancestor('presentation')
-    streams = metafile.streams()
-    scope = self.attrval('scope:', default=None) or []
-    vre = re.compile(r'\${([a-zA-Z0-9]+)}')
-    vmap = {
-      'width': preso.width(),
-      'height': preso.height(),
-      'padding': preso.padding(),
-    }
-
-    def Repl(m):
-      var = m.group(1)
-      val = vmap.get(var, None)
-      return str(val)
-
-    /# Hardcoded CSS for class 'slide' and 'panel'.
-    style_code = """
-     >|.slide {
-     >|  display: none;
-     >|  width: ${width}px;
-     >|  height: ${height}px;
-     >|  margin-left: auto;
-     >|  margin-right: auto;
-     >|  padding: ${padding}px;
-     >|  /* border-left: 1px solid black; */
-     >|  /* border-right: 1px solid black; */
-     >|  background-color: #fdf7ef;
-     >|  /*
-     >|   * relative position is crucial to allowing panels to specify themselves
-     >|   * absolutely within this parent div.
-     >|   */
-     >|  position: relative; 
-     >|}
-     >|
-     >|.panel {
-     >|  position: absolute;
-     >|  margin: 0px;
-     >|  padding: 0px;
-     >|}
-     >|"""
-    style_code = vre.sub(Repl, style_code)
-    streams.addLines('style', style_code.split('\n'))
-
-    for line in scope:
-      line = vre.sub(Repl, line)
-      streams.addLine('style', line)
-
-    return (None, None)
   scope:
-  end Construct style;
 
-  Construct script < _doc_ #:
+    method kind : str scope:
+      return 'style'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      /# TODO(wmh): Add assocs to Construct and copy over to classes.
+      import re
+
+      metafile = self.metafile()
+      preso = self.ancestor('presentation')
+      streams = metafile.streams()
+      scope = self.attrval('scope:', default=None) or []
+      vre = re.compile(r'\${([a-zA-Z0-9]+)}')
+      vmap = {
+        'width': preso.width(),
+        'height': preso.height(),
+        'padding': preso.padding(),
+      }
+
+      def Repl(m):
+        var = m.group(1)
+        val = vmap.get(var, None)
+        return str(val)
+
+      /# Hardcoded CSS for class 'slide' and 'panel'.
+      style_code = """
+       >|.slide {
+       >|  display: none;
+       >|  width: ${width}px;
+       >|  height: ${height}px;
+       >|  margin-left: auto;
+       >|  margin-right: auto;
+       >|  padding: ${padding}px;
+       >|  /* border-left: 1px solid black; */
+       >|  /* border-right: 1px solid black; */
+       >|  background-color: #fdf7ef;
+       >|  /*
+       >|   * relative position is crucial to allowing panels to specify themselves
+       >|   * absolutely within this parent div.
+       >|   */
+       >|  position: relative; 
+       >|}
+       >|
+       >|.panel {
+       >|  position: absolute;
+       >|  margin: 0px;
+       >|  padding: 0px;
+       >|}
+       >|"""
+      style_code = vre.sub(Repl, style_code)
+      streams.addLines('style', style_code.split('\n'))
+
+      for line in scope:
+        line = vre.sub(Repl, line)
+        streams.addLine('style', line)
+
+      return (None, None)
+    end method translateMeta;
+
+  end class StyleConstruct;
+
+  class ScriptConstruct < DocConstruct #:
     The script construct.
-  config:
-
-    primary
-    Attribute script : id = <auto> #:
-      The name of the script construct.
-
-    secondary
-    Attribute path : str = <empty> #:
-      An explicit path to a script.
-
-    Attribute comment:;
-    Attribute config:;
-    Attribute scope: : simple;
-
-  expand:
-  translate:
-    metafile = self.metafile()
-    streams = metafile.streams()
-    scope = self.attrval('scope:', default=None)
-    if scope:
-      streams.addLine('jslibs', '<script type="text/javascript">')
-      streams.addLines('jslibs', scope)
-      streams.addLine('jslibs', '</script>')
-    else:
-      path_expr = self.attrval('path', default=None)
-      if path_expr:
-        path = path_expr.asStr(unquote=True)
-        streams.addLine(
-          /# IMPORTANT: Side note about javascript ... must use <script></script>
-          /# not <script/> ... the latter doesn't get processed properly in
-          /# Chrome as of 2018-11-30.
-          'jslibs', '<script type="text/javascript" src="%s"></script>' % path)
-
-    return (None, None)
   scope:
-  end Construct script;
 
-  Construct list < _doc_ #:
+    method kind : str scope:
+      return 'script'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      metafile = self.metafile()
+      streams = metafile.streams()
+      scope = self.attrval('scope:', default=None)
+      if scope:
+        streams.addLine('jslibs', '<script type="text/javascript">')
+        streams.addLines('jslibs', scope)
+        streams.addLine('jslibs', '</script>')
+      else:
+        path_expr = self.attrval('path', default=None)
+        if path_expr:
+          path = path_expr.asStr(unquote=True)
+          streams.addLine(
+            /# IMPORTANT: Side note about javascript ... must use <script></script>
+            /# not <script/> ... the latter doesn't get processed properly in
+            /# Chrome as of 2018-11-30.
+            'jslibs', '<script type="text/javascript" src="%s"></script>' % path)
+
+      return (None, None)
+    end method translateMeta;
+
+  end class ScriptConstruct;
+
+  class ListConstruct < DocConstruct #:
     The list construct.
-  config:
-
-    feature
-    Attribute kind : <ordered|ol|unordered|ul> = unordered #:
-      What kind of list.
-    config:
-      FeatureValue unordered aliases <ul> #:
-        The list is unordered.
-      FeatureValue ordered aliases <ol> #:
-        The list is ordered.
-    end Attribute kind;
-
-    primary
-    Attribute list : id = <auto> #:
-      The name of the list construct.
-
-    secondary
-    Attribute path : str = <empty> #:
-      An explicit path to a list.
-
-    secondary
-    Attribute style : str = <empty> #:
-      Explicit CSS style to add to the <div>.
-
-    secondary
-    Attribute font : num = 100 #:
-      The size of text within this list relative to the parent container.
-      Thus, 100 means same size, 80 means 80% of parent, 150 means 150% of
-      parent, etc.
-
-    Attribute comment:;
-    Attribute config:;
-    Attribute scope: : simplex children <item>;
-
-  translate:
-    metafile = self.metafile()
-    kind = self.attrval('kind')
-    indent = '  ' * (self.distance('panel')+1)
-    subindent = indent + '  '
-    start, end = self.tagStr('ol' if kind == 'ordered' else 'ul')
-
-    /# start
-    self.streamLine(start, indent=indent)
-
-    /# body
-    scope_attr, scope = self.attrpair('scope:', default=None)
-    if scope_attr:
-      if scope_attr.isComplexBlock():
-        for child in scope:
-          child.translateMeta()
-      else:
-        self.streamLines(scope, indent=subindent)
-
-    /# end
-    self.streamLine(end, indent=indent)
-
-    return (None, None)
   scope:
-  end Construct list;
 
-  Construct item < _doc_ #:
+    method kind : str scope:
+      return 'list'
+    end method kind;
+
+    override
+    method translateMeta
+    scope:
+      metafile = self.metafile()
+      kind = self.attrval('kind')
+      indent = '  ' * (self.distance('panel')+1)
+      subindent = indent + '  '
+      start, end = self.tagStr('ol' if kind == 'ordered' else 'ul')
+
+      /# start
+      self.streamLine(start, indent=indent)
+
+      /# body
+      scope_attr, scope = self.attrpair('scope:', default=None)
+      if scope_attr:
+        if scope_attr.isComplexBlock():
+          for child in scope:
+            child.translateMeta()
+        else:
+          self.streamLines(scope, indent=subindent)
+
+      /# end
+      self.streamLine(end, indent=indent)
+
+      return (None, None)
+    end method translateMeta;
+
+  end class ListConstruct;
+
+  class ItemConstruct < DocConstruct #:
     The item construct.
-  config:
-
-    primary
-    Attribute item : id = <auto> #:
-      The name of the item construct.
-
-    secondary
-    Attribute is : str = <empty> #:
-      The title portion of this list item.
-
-    secondary
-    Attribute style : str = <empty> #:
-      Explicit CSS style to add to the <div>.
-
-    secondary
-    Attribute font : num = 100 #:
-      The size of text within this list relative to the parent container.
-      Thus, 100 means same size, 80 means 80% of parent, 150 means 150% of
-      parent, etc.
-
-    Attribute comment:;
-    Attribute config:;
-    Attribute scope: : simplex children <list> #:
-      If simple, it is raw text to place within the <li>. If complex, it is
-      a list or various other Meta construct we decide to create.
-
-  translate:
-    metafile = self.metafile()
-
-    indent = '  ' * (self.distance('panel')+1)
-    subindent = indent + '  '
-    start, end = self.tagStr('li')
-    
-    /# start
-    self.streamLine(start, indent=indent)
-
-    /# body
-    isval = self.attrval('is', default=None)
-    if isval:
-      self.streamLine(isval.asStr(unquote=True), indent=subindent)
-
-    scope_attr, scope = self.attrpair('scope:', default=None)
-    if scope_attr:
-      if scope_attr.isComplexBlock():
-        for child in scope:
-          child.translateMeta()
-      else:
-        self.streamLines(scope, indent=subindent)
-
-    /# end
-    self.streamLine(end, indent=indent)
-
-    return (None, None)
   scope:
-  end Construct item;
 
-  Construct filter < _doc_ #:
+    method kind : str scope:
+      return 'item'
+    end method kind;
+
+    override
+    method translateMeta
+    scope:
+      metafile = self.metafile()
+
+      indent = '  ' * (self.distance('panel')+1)
+      subindent = indent + '  '
+      start, end = self.tagStr('li')
+
+      /# start
+      self.streamLine(start, indent=indent)
+
+      /# body
+      isval = self.attrval('is', default=None)
+      if isval:
+        self.streamLine(isval.asStr(unquote=True), indent=subindent)
+
+      scope_attr, scope = self.attrpair('scope:', default=None)
+      if scope_attr:
+        if scope_attr.isComplexBlock():
+          for child in scope:
+            child.translateMeta()
+        else:
+          self.streamLines(scope, indent=subindent)
+
+      /# end
+      self.streamLine(end, indent=indent)
+
+      return (None, None)
+    end method translateMeta;
+
+  end class ItemConstruct;
+
+  class FilterConstruct < DocConstruct #:
     The filter construct.
-  config:
-
-    primary
-    Attribute filter : id = <auto> #:
-      The name of the class.
-
-    secondary
-    Attribute re : str = <required> #:
-      The regexp to filter
-
-    secondary
-    Attribute replacement : str = <required> aliases <=> #:
-      The replacement.
-
-    Attribute comment:;
   scope:
-  end Construct filter;
 
-  Construct native < _doc_ clsname DocNativeConstruct #:
+    method kind : str scope:
+      return 'filter'
+    end method kind;
+
+  end class FilterConstruct;
+
+  class DocNativeConstruct < DocConstruct #:
     The native construct.
-  config:
-
-    primary
-    Attribute native : id = <auto> #:
-      The name of the native.
-
-    Attribute comment:;
-    Attribute scope: : simple;
-  expand:
-  translate:
-    metafile = self.metafile()
-    streams = metafile.streams()
-    scope = self.attrval('scope:', default=None) or []
-    parent = self.parentConstruct()
-    indent = '  ' if parent.kind() == 'slide' else ''
-    self.streamLines(scope, indent=indent)
-    return (None, None)
   scope:
-  end Construct native;
+
+    method kind : str scope:
+      return 'native'
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+      metafile = self.metafile()
+      streams = metafile.streams()
+      scope = self.attrval('scope:', default=None) or []
+      parent = self.parentConstruct()
+      indent = '  ' if parent.kind() == 'slide' else ''
+      self.streamLines(scope, indent=indent)
+      return (None, None)
+    end method translateMeta;
+
+  end class DocNativeConstruct;
 
   abstract
-  BaseLanguage _root_ clsname BaseLanguageDoc #:
+  class BaseLanguageDoc < metax.meta.BaseLanguageConstruct #:
     Abstract superclass of all baselangs in Meta(Doc).
   scope:
-  end BaseLanguage _root_;
 
-  BaseLanguage html < _root_ name Html suffixes <html> #:
+  end class BaseLanguageDoc;
+
+  class DocHtml < BaseLanguageDoc #:
     Functionality for compiling Meta(Doc) code in html.
   scope:
 
-    lifecycle params:
+    lifecycle  params:
       var id : str;
       var parent : metax.c.ComplexBlock;
       var context : metax.c.Context;
@@ -2084,13 +1881,13 @@ config:
       self.suffixesIs(['html'])
     end;
 
-  end BaseLanguage html;
+  end class DocHtml;
 
-  BaseLanguage markdown < _root_ name Markdown suffixes <md> #:
+  class DocMarkdown < BaseLanguageDoc #:
     Functionality for compiling Meta(Doc) code in markdown.    
   scope:
 
-    lifecycle params:
+    lifecycle  params:
       var id : str;
       var parent : metax.c.ComplexBlock;
       var context : metax.c.Context;
@@ -2102,13 +1899,13 @@ config:
       self.suffixesIs(['markdown'])
     end;
 
-  end BaseLanguage markdown;
+  end class DocMarkdown;
 
-  BaseLanguage tex < _root_ name TeX suffixes <tex> #:
+  class DocTex < BaseLanguageDoc #:
     Functionality for compiling Meta(Doc) code in tex.
   scope:
 
-    lifecycle params:
+    lifecycle  params:
       var id : str;
       var parent : metax.c.ComplexBlock;
       var context : metax.c.Context;
@@ -2120,6 +1917,6 @@ config:
       self.suffixesIs(['tex'])
     end;
 
-  end BaseLanguage tex;
+  end class DocTex;
 
-end MetaLanguage doc;
+end namespace metax.doc;
