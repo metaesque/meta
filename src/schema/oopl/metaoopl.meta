@@ -6032,9 +6032,12 @@ namespace metax.oopl scope:
             /# This is the first subcommand ... insert an initial block that
             /# never gets executed (avoids special case code latter).
             command_body.append('')
-            command_body.append('%sif False:' % indent)
-            command_body.append('%s  pass' % indent)
-            /# command_body.append("%s  meta__command.help(full='ful' in cli.rest[0])" % indent)
+            if True:
+              command_body.append("%sif cli.rest and cli.rest[0].startswith('help'):" % indent)
+              command_body.append("%s  meta__command.help(full='ful' in cli.rest[0])" % indent)
+            else:
+              command_body.append('%sif False:\n' % indent)
+              command_body.append('%s  pass' % indent)
           elif default_encountered:
             /# We previously encountered the special default command, which
             /# must occur after all other commands, so the current one is

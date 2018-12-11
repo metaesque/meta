@@ -76,6 +76,35 @@ def Config(verbose=Verbose):
       print 'PWD: %s' % os.getcwd()
       print 'DIR: %s' % str(os.listdir(os.getcwd()))
       result['config_path'] = configpath
+
+  # TODO(wmh): Generalize the syntax of config.meta to support the
+  # initialization of dicts (either via default with literal dict value, or via
+  # a simple block that contains individual key/value pairs. Replace following
+  # hardcoded code with that more general solution, where the person specifies
+  # the mapping in their ~/.config/metaxy/config.meta file.
+  src_root = result['src_root'] 
+  result['metalangs'] = {
+    'meta': os.path.join(src_root, 'src', 'schema', 'meta', 'schema.meta'),
+    'oopl': os.path.join(src_root, 'src', 'schema', 'oopl', 'schema.meta'),
+    'doc': os.path.join(src_root, 'src', 'schema', 'doc', 'schema.meta'),
+
+    'bio': os.path.join(
+      os.getenv('HOME'), 'src', 'wmh', 'lib', 'python', 'wmh', 'meta', 'bio', 'schema.meta'),
+    'food': os.path.join(
+      os.getenv('HOME'), 'src', 'wmh', 'lib', 'python', 'wmh', 'meta', 'food', 'schema.meta'),
+    'family': os.path.join(
+      os.getenv('HOME'), 'src', 'wmh', 'lib', 'python', 'wmh', 'meta', 'family', 'schema.meta'),
+
+    'story': os.path.join(
+      os.getenv('HOME'), 'src', 'wmx', 'lib', 'python', 'metarotica', 'story', 'meta', 'schema.meta'),
+  }
+  for k, v in result['metalangs'].iteritems():
+    if not os.path.exists(v):
+      print 'ERROR: %s has non-existent path %s' % (k, v)
+      sys.exit(1)
+  #import pprint
+  # pprint.pprint(result)
+      
   logging.info('metastrap.Config() returns %s' % result)
   return result
 

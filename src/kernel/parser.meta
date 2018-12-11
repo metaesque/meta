@@ -9778,12 +9778,18 @@ scope:
         Where the schema path resides. One of metal or path is needed.
     scope:
       fs = self.fs()
-      if not path:
-        config = metax.root.MetaObject.Config()        
-        src_root = config.get('src_root', None)
-        if src_root is None:
-          raise Error('metax.root.MetaObject.Config() has no src_root: %s' % config)
-        path = fs.join(src_root, 'src', 'schema', metal, 'schema.meta')
+      if path:
+        /# Do we still want to support explicit path now that paths are in config?
+        pass
+      else:
+        config = metax.root.MetaObject.Config()
+        metalangs = config['metalangs']
+        path = metalangs.get(metal, None)
+        if path is None:
+          raise Error(
+            'Failed to find %s in config (%s)' %
+            (metal, ','.join(metalangs.keys())))
+        /# print 'FOUND %s for %s' % (path, metal)
       if not fs.exists(path):
         raise Error('%s does not exist' % path)
 
@@ -11113,6 +11119,10 @@ scope:
     method generateMajorMode : map #:
       Instantiate a major mode by parsing its schema and writing a .el file.
     params:
+      var metalang : MetaLanguage #:
+        The language to generate an emacs major-mode for.
+      var out_path : str = null #:
+        Where to write output. If not provided, a default location is used.
       var fp : ostream = out #:
         Where to write diagnostic information (NOT where the .el file is
         written).
@@ -11120,8 +11130,6 @@ scope:
         If True, compute but do not write. Useful for testing, where the
         real filesystem is read-only.
     scope:
-      metalang = self.metalang()
-
       fs = self.fs()
       context = metalang.context()
       consmap = context.consmap()
@@ -11135,12 +11143,13 @@ scope:
       in_file = metax.root.Object.Resource(
         'emacs_template', fqn='metax.c.Compiler')
 
-      out_file = self.metaPath(
-        'src', 'schema', metaid, 'meta%s-mode.el' % metaid)
+      if out_path is None:
+        out_path = self.metaPath(
+          'src', 'schema', metaid, 'meta%s-mode.el' % metaid)
 
       fp.write(
         'Creating major mode %s for %s (%s) from %s\n' % (
-          out_file, metaid, MetaLang, in_file))
+          out_path, metaid, MetaLang, in_file))
 
       featkeys = {}
       featvals = {}
@@ -11223,11 +11232,11 @@ scope:
       }
 
       if not dryrun:
-        dirname = fs.dirname(out_file)
+        dirname = fs.dirname(out_path)
         if not fs.exists(dirname):
           fs.makedirs(dirname)
 
-        ofp = fs.open(out_file, 'w')
+        ofp = fs.open(out_path, 'w')
         ifp = fs.open(in_file, 'r')
         replace = False
         for line in ifp:
@@ -14655,7 +14664,23 @@ scope:
       command emacs #:
         Generate an emacs major mode for the current meta language.
       scope:
-        self.generateMajorMode()
+        cli = self.cli()
+        fs = self.fs()
+        metal = self.metalang().id()
+        if metal != 'oopl':
+          print 'usage: metac emacs <metalang> [schema_path]   (i.e.g do NOT use -L)'
+        else:
+          metal = cli.rest[0]
+          schema_path = None
+          out_path = None
+          if len(cli.rest) > 1:
+            schema_path = cli.rest[1]
+            out_path = fs.join(
+              fs.dirname(fs.abspath(schema_path)), 'meta%s-mode.el' % metal)
+            print 'out_path = %s' % out_path
+          metalang = self.metalangNamed(metal, schema_path=schema_path)
+          assert metalang.compiler() is self
+          self.generateMajorMode(metalang, out_path=out_path)
       end command emacs;
 
       named
@@ -15572,7 +15597,7 @@ scope:
         The .metabio file to parse.
     scope:
       metac = self.metac()
-      metafile, errors, warnings = metac.processMeta(metapath)
+      metafile = metac.parseMeta(metapath)
       if metafile.hasErrors(show=True):
         result = None
       else:
