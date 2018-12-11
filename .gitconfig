@@ -1,0 +1,17 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+	ignorecase = true
+	precomposeunicode = true
+[remote "origin"]
+	url = https://metaesque@github.com/metaesque/meta.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "master"]
+	remote = origin
+	merge = refs/heads/master
+[github]
+	user = metaesque
+[ghi]
+	token = !security find-internet-password -a metaesque -s github.com -l 'ghi token' -w
