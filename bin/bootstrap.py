@@ -13,6 +13,7 @@ def ValidPath(path):
   epath = re.sub(r'\$([a-zA-Z_]+)', lambda m: os.getenv(m.group(1), ''), path)
   return os.path.exists(epath)
 
+
 VARS = collections.OrderedDict([
   ('default_metalang', {
     'desc': 'The default metalang (when -L aka --metalang is not specified)',
