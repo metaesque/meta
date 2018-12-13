@@ -7192,7 +7192,7 @@ config:
       python_binary = metac.Config()['python']
       cmdlines = [
         /# TODO(wmh): Use some template that is user-customizable
-        '#!%s   # -*- mode: python -*-' % python_binary,
+        '#!%s' % python_binary,
         'import metastrap',
         'metastrap.Setup(%s)' % ('auto=True' if auto else ''),
         /# TODO(wmh): How to allow for binary-specific imports?

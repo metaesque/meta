@@ -126,13 +126,24 @@ cards2-%: fullmeta-py
 html-%: fullmeta-py
 	cd testdata; metac -b $* html cards1.meta
 
-# target setup:
+# target bootstrap:
 #   Perform an initial setup of code needed to get Meta working.
-setup: .FORCE
-	metac --meta_version current root.meta test.meta fs.meta logs.meta shell.meta
-	metac --meta_version current parser.meta attr.meta shell.meta cli.meta
-	metac --meta_version current metameta.meta metaoopl.meta metadoc.meta
-	cd ../lib; metac --meta_version current markdown.meta shell.meta
+#   This target should work even if <repository_path>/oopl/python doesn't
+#   exist, as long as <src_root>/lib/versions/current points to a valid
+#   directory and <src_root>/src/bootstrap/metac.py exists.
+bootstrap: .FORCE
+	python ../bootstrap/metac.py --meta_version=current *.meta ../lib/*.meta
+	python ../bootstrap/metac.py --meta_version=current *.meta ../lib/*.meta
+	cd ../schema/meta; \
+	python ../../bootstrap/metac.py --meta_version=current schema meta schema.meta; \
+	python ../../bootstrap/metac.py --meta_version=current metameta.meta
+	cd ../schema/oopl; \
+	python ../../bootstrap/metac.py --meta_version=current schema oopl schema.meta; \
+	python ../../bootstrap/metac.py --meta_version=current metaoopl.meta
+	cd ../schema/doc; \
+	python ../../bootstrap/metac.py --meta_version=current schema doc schema.meta; \
+	python ../../bootstrap/metac.py --meta_version=current metadoc.meta
+
 
 # target snapshot:
 #   Create a snapshot (e.g. v0.7.0.12, with no .tgz files)

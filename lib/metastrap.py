@@ -47,7 +47,6 @@ def Config(verbose=Verbose):
     # CODETANGLE(parse_config): Similar code exists in
     # <<src_root/src/kernel/parser.meta2.
     vre = re.compile(r'var\s+(?P<var>\S+)\s+=\s+(?P<val>\S+)')
-    # TODO(wmh): Add a --config flag to metameta2.py!
     configpath = os.getenv('META_CONFIG')
     if not configpath:
       home = os.getenv('HOME')
