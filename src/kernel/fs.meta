@@ -540,7 +540,7 @@ scope:
       if False:
         env = os.environ
         faux_os.getenv = lambda var: env.get(var, None)
-        faux_os.makedirs(faux_os.getenv('METAROOT'), 0755)
+        faux_os.makedirs(faux_os.getenv('METAROOT'), 0o755)
 
       faux_open = fake_filesystem.FakeFileOpen(filesystem)
       faux_glob = fake_filesystem_glob.FakeGlobModule(filesystem)
@@ -561,7 +561,7 @@ scope:
         if not gae:
           module.tempfile = faux_tempfile
 
-      /# print '***** HERE in emulateIO with %s' % faux_os.getenv('METAROOT')
+      /# print('***** HERE in emulateIO with %s' % faux_os.getenv('METAROOT'))
     end method emulateIO;
 
     method undoMemory #:
@@ -605,8 +605,8 @@ scope:
         fullpath, mroot = self.basefilePath(basefile)
         dirpath = self.dirname(fullpath)
         if not self.exists(dirpath):
-          print 'NOTE: Creating %s' % dirpath
-          self.makedirs(dirpath, mode=0755)
+          print('NOTE: Creating %s' % dirpath)
+          self.makedirs(dirpath, mode=0o755)
         link = basefile.link()
         if link:
           linkpath, _ = self.basefilePath(link)
@@ -647,7 +647,7 @@ scope:
       if self.exists(mroot):
         /# TODO(wmh): Need to use self.flags.metadir
         fullpath = self.realpath(self.join(mroot, basefile.subpath()))
-        /# print 'metadir=%s mroot=%s subpath=%s fullpath=%s' % (metadir, mroot, basefile.subpath(), fullpath)
+        /# print('metadir=%s mroot=%s subpath=%s fullpath=%s' % (metadir, mroot, basefile.subpath(), fullpath))
       else:
         metafile = basefile.metafile()
         metac = metafile.compiler()
@@ -676,7 +676,7 @@ scope:
           raise Error('Failed to find "%s"' % mroot)
       /# TODO(wmh): Need to use self.flags.metadir
       fullpath = self.realpath(self.join(mroot, subpath))
-      /# print 'metadir=%s mroot=%s subpath=%s fullpath=%s' % (metadir, mroot, basefile.subpath(), fullpath)
+      /# print('metadir=%s mroot=%s subpath=%s fullpath=%s' % (metadir, mroot, basefile.subpath(), fullpath))
       return fullpath, mroot
     end method subfilePath;
 
@@ -783,7 +783,7 @@ scope:
       var path : str #:
         The path to check for existence.
       var mode : int #:
-        The mode (e.g. 0640, 0755, etc.)
+        The mode (e.g. 0o640, 0o755, etc.)
     scope:
       kind = self.kind()
       if kind == 'memory':
@@ -901,7 +901,7 @@ scope:
       var thedir : str;
       var mode : int = 493;
     scope:
-      /# print 'MKDIR: %s' % thedir
+      /# print('MKDIR: %s' % thedir)
       kind = self.kind()
       if kind == 'memory':
         raise Error('mkdir not implemented')
@@ -1013,7 +1013,7 @@ scope:
       if kind == 'memory':
         raise Error('rename not implemented')
       else:
-        print 'RENAME: %s %s' % (oldpath, newpath)
+        print('RENAME: %s %s' % (oldpath, newpath))
         os.rename(oldpath, newpath)
     end method rename;
 
@@ -1188,8 +1188,8 @@ scope:
         else:
           bytes = self.bytes()
           contents = bytes.getvalue() if bytes else None
-        /# print 'NOTE: Acquired %d bytes from implicit bytes for %s' % (
-        /#   len(contents), self.subpath())
+        /# print('NOTE: Acquired %d bytes from implicit bytes for %s' % (
+        /#   len(contents), self.subpath()))
         -> contents
       end;
     end field contents;
@@ -1228,19 +1228,19 @@ scope:
       /# and do not have any spurious trailing whitespace.
       if contents:
         if contents[-1] != '\n':
-          print '#' * 70
-          print subpath
-          print contents
+          print('#' * 70)
+          print(subpath)
+          print(contents)
           raise Error('contents must end with newline')
         if contents[-2] in (' ', '\n'):
-          print '=' * 70
-          print subpath
-          print contents
+          print('=' * 70)
+          print(subpath)
+          print(contents)
           raise Error('contents should not have spurious trailing whitespace')
       if False:
-        print '-' * 70
-        print subpath
-        print contents
+        print('-' * 70)
+        print(subpath)
+        print(contents)
     setup:
       contents = 'MetaLanguage Test config:\nend;\n'
       self.base = metax.fs.BaseFile('faux/path', contents)

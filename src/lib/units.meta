@@ -46,7 +46,7 @@ scope:
       /#      3. operator ('*', '' or '/'  with spaces removed)
       nre = cls.Re()
       parts = nre.split(repr)
-      if debug: print parts
+      if debug: print(parts)
       n = len(parts)
       assert (n - 1) % 4 == 0
 
@@ -96,16 +96,16 @@ scope:
             /# keys with different types forcing use of 'any' or variant.
             /# They also do not work when initializing via constant field expr
             /# (which is very useful for C++).
-            print 'here with unit=%s' % unit
+            print('here with unit=%s' % unit)
             val = udata['to'](val)
           /# We need to remember the non-si unit.
-          /# print 'HERE with nonsi %s = %s' % (udata['unit'], udata['suffix'])
+          /# print('HERE with nonsi %s = %s' % (udata['unit'], udata['suffix']))
 
         if debug:
-          print val
-          print unit
-          print power
-          print udata
+          print(val)
+          print(unit)
+          print(power)
+          print(udata)
 
         /# Modify the total value of the quantity appropriately based on whether
         /# we are currently multiplying or dividing.
@@ -216,10 +216,10 @@ scope:
                 if divisor:
                   fscale /= float(divisor)
                 sd = '%s / %s' % (scale, divisor) if divisor else scale
-                /# print '%-30s = %-30s = %10g = %s' % (name, sd, fscale, expr)
+                /# print('%-30s = %-30s = %10g = %s' % (name, sd, fscale, expr))
                 umap[name] = {'scale': fscale, 'other': expr}
             else:
-              print 'Line %4d unknown: %s' % (ln, line)
+              print('Line %4d unknown: %s' % (ln, line))
       Quantity.Aliases = aliases
       Quantity.Units = umap
     test:
@@ -254,15 +254,15 @@ scope:
       /#    - shifted = 'value << start'
       /#  - result = (bits & mask) | shifted
 
-      /# print '-' * 70
-      /# print 'bitstr   = ' + bin(bits)[2:]
-      /# print 'start=%d width=%d value=%d incr=%s' % (start, width, value, incr)
+      /# print('-' * 70)
+      /# print('bitstr   = ' + bin(bits)[2:])
+      /# print('start=%d width=%d value=%d incr=%s' % (start, width, value, incr))
 
       /# Create the mask for bits not affected by this call.
       fullmask = 0xfffffffffffffff  # intentionally 60 bits not 64
       smask = (1 << start) - 1
       unaffected_mask = (fullmask << (width + start)) | smask
-      /# print 'unaffect = ' + bin(unaffected_mask)[2:]
+      /# print('unaffect = ' + bin(unaffected_mask)[2:])
 
       /# Create the mask for bits affected by this call.
       max = (1 << width)
@@ -271,12 +271,12 @@ scope:
       /# adjust 'value' accordingly.
       if incr:
         affected_mask = (max - 1) << start
-        /# print 'affected = ' + bin(affected_mask)[2:]
+        /# print('affected = ' + bin(affected_mask)[2:])
         current = (bits & affected_mask) >> start
-        /# print 'current  = ' + bin(current)[2:]
+        /# print('current  = ' + bin(current)[2:])
         value += current
 
-      /# print 'value    = ' + bin(value)[2:]
+      /# print('value    = ' + bin(value)[2:])
 
       /# Verify that the value to be encoded within 'width' bits is non-negative
       /# and less than 2^width
@@ -286,7 +286,7 @@ scope:
       /# Form the result
       result = (bits & unaffected_mask) | (value << start)
       
-      /# print 'result   = ' + bin(result)[2:]
+      /# print('result   = ' + bin(result)[2:])
       return result
     test:
       Encode = metax.units.Quantity.Encode
@@ -816,7 +816,7 @@ scope:
       if False:
         for key in sorted(unitmap):
           unitdata = unitmap[key]
-          print '%-20s = %s' % (key, unitdata.get('suffix', None))
+          print('%-20s = %s' % (key, unitdata.get('suffix', None)))
 
       cls.UnitMap = unitmap
 
@@ -1247,7 +1247,7 @@ scope:
     scope:
       for line in cli.rest:
         q = Quantity.New(line)
-        print '%-40s = %s' % (line, q.asStr())
+        print('%-40s = %s' % (line, q.asStr()))
     end command wunits;
 
     test
@@ -1268,7 +1268,7 @@ scope:
       /# TODO(wmh): Fix temperature (deleted 'to' and 'from' ... need better
       /# solution).
       /#q = Quantity.New('273.15C')
-      /# print q
+      /# print(q)
 
   end class Quantity;
 

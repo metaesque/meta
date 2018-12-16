@@ -2003,6 +2003,46 @@ config:
       if output is not None:
         output.extend(newclasses)
 
+      /# If this class has any packed fields, we generate
+      /#  - a method for obtaining all unpacked values
+      /#  - a getter for the pack field itself???
+      /#  - a method for setting all packed fields???
+      packed = self.packed()
+      if packed:
+        recsepstr = 'self.'  # TODO(wmh): Fix this ... use baselang.receiverStr(method, style='base', sep=True)
+        stmtend = ''
+        for pack in packed:
+          rawpack = '_' + pack
+          packmap = packed[pack]
+          lines = []
+          lines.append('value = %s%s%s' % (recsepstr, rawpack, stmtend))
+          /# fields with pack are sorted ascending by bit position within pack.
+          fnames = sorted(packmap, key=lambda f: packmap[f][0])
+          tlist = []
+          for fld in fnames:
+            start_bit, bits, signed = packmap[fld]
+            mask = (1 << bits) - 1
+            if signed:
+              halfval = 1 << (bits-1)
+              lines.append(
+                '%s = (value & 0x%x) - %d%s' % (fld, mask, halfval, stmtend))
+            else:
+              lines.append('%s = value & 0x%x%s' % (fld, mask, stmtend))
+            lines.append('value >>= %d%s' % (bits, stmtend))
+            tlist.append('int' if signed else 'uint')
+          lines.append('return (%s)%s' % (', '.join(reversed(fnames)), stmtend))
+          /# TODO(wmh): Make this a tuple of ints and uints according to whether
+          /# each field above is signed or unsigned.
+          anytype = metax.c.Type.Instance('tuple<%s>' % ','.join(reversed(tlist)))
+          spreader = metax.oopl.MethodConstruct.NewFromData(
+            '%sSpread' % pack, context, parent=scope,
+            features=[],
+            secondaries=[
+              (':', anytype),
+              ('scope:', lines)
+            ])
+          spreader.myclassIs(self)
+
       context = self.context()
       initializer = self.initializer()
 
@@ -2810,8 +2850,9 @@ config:
       The list of field constructs in this class. Maintains order in which
       fields are defined. Use self.symbols() to obtain fields by name.
 
-    field packed : vec<meta.c.FieldConstruct> #:
-      The list of fields that are marked packed.
+    field packed : map<str,map<str,tuple<int,int>>> #:
+      Maps names of special 'packed' fields to field name to tuple
+      (starting bit position, num bits).
 
     field namespace : metax.oopl.NamespaceConstruct #:
       The namespace this class belongs to.
@@ -3446,6 +3487,38 @@ config:
     test:
     end method idfqn;
 
+    method registerPacked #:
+      Register a packed field
+    params:
+      var field : str #:
+        The id of the field being packed.
+      var pack : str #:
+        The name of the pack field.
+      var bits : int #:
+        The number of bits the field takes up.
+      var signed : bool = false #:
+        If true, the field is to be treated as a signed int rather than
+        an unsigned int.
+    scope:
+      packed = self.packed()
+      if packed is None:
+        packed = {}
+        self.packedIs(packed)
+      pdata = packed.setdefault(pack, {})
+      if field in pdata:
+        raise metax.c.InternalError('This is borked')
+      /# Obtain the fields in bit-position order.
+      if pdata:
+        keys = sorted(pdata, key=lambda k: pdata[k][0])
+        last_bit, last_size, _ = pdata[keys[-1]]
+        start_bit = last_bit + last_size
+      else:
+        start_bit = 0
+      result = (start_bit, bits, signed)
+      pdata[field] = result
+      return result
+    test:
+    end method registerPacked;
 
     method _autogenAll #:
       Autogenerate various methods on this class.
@@ -3974,17 +4047,6 @@ config:
     Attribute kind;
 
     feature
-    Attribute pack : <unpacked|packed> = unpacked #:
-      Whether the field is packed into a word with other fields or not.
-    config:
-      FeatureValue unpacked #:
-        No packing ... the field takes up 8+ bytes (on a 64bit machine).
-      FeatureValue packed #:
-        The field is packed with other fields. The type of the field specifies
-        how many bits are needed. For example, int<5>, real<32>, uint<17>, etc.
-    end Attribute pack;
-
-    feature
     Attribute inheritance : <new|override> = override #:
       Whether the accessors are defined in parents or not.
       TODO(wmh): We need to be able to specify this on a per-accessor
@@ -4021,6 +4083,11 @@ config:
         @vec    []
         @map    {}
     end Attribute default;
+
+    secondary
+    Attribute pack : word = <empty> #:
+      Indicates that this field is to be packed into the named field
+      (optionally at the specified bit position).
 
     secondary
     Attribute role : str = <empty> #:
@@ -4124,11 +4191,20 @@ config:
         myclass.fields().append(self)
 
       /# Establish the rawfield of this field
-      if pack == 'packed':
-        raise metax.c.Error('Not yet handling packed fields')
-      tokens = metax.c.Context.Tokens()
       /# CODETANGLE(fieldinit):
-      if tmpvis == 'tmppublic':
+      tokens = metax.c.Context.Tokens()
+      packinfo = None
+      if pack:
+        tbase = type.base()
+        tparams = type.params()
+        if tbase not in ('int', 'uint') or len(tparams) != 1:
+          metafile.error('Invalid packed field', line=typeattr.line())
+        else:
+          signed = tbase == 'int'
+          bits = int(tparams[0])
+          packinfo = myclass.registerPacked(name, pack, bits, signed)
+        rawfield = tokens['field_prefix'] + pack + tokens['field_suffix']
+      elif tmpvis == 'tmppublic':
         rawfield = name
       else:
         rawfield = tokens['field_prefix'] + name + tokens['field_suffix']
@@ -4141,14 +4217,35 @@ config:
       /#    a 'initBodyMap' behavior.
       field_code = '%s%s' % (receiver_code, rawfield)
       bodymap = {}
-      bodymap['get'] = ['return %s%s' % (field_code, stmtend)]
-      bodymap['set'] = [
-        '%s = value%s' % (field_code, stmtend),
+      if packinfo:
+        /# print '%s = %s' % (name, packinfo)
+        start_bit, bits, signed = packinfo
+        maxval = (1 << bits) - 1
+        mask = '0x%x' % maxval
+        smask = '0x%x' % (maxval << start_bit)
+        if signed:
+          halfval = (1 << (bits-1))
+          bodymap['get'] = [
+            'return ((%s >> %d) & %s) - %d%s' %
+            (field_code, start_bit, mask, halfval, stmtend)]
+          bodymap['set'] = [
+            '%s = (%s & ~%s) | ( (value + %d) << %d )%s' %
+            (field_code, field_code, smask, halfval, start_bit, stmtend)]
+        else:
+          bodymap['get'] = [
+            'return (%s >> %d) & %s%s' %
+            (field_code, start_bit, mask, stmtend)]
+          bodymap['set'] = [
+            '%s = (%s & ~%s) | ( value << %d )%s' %
+            (field_code, field_code, smask, start_bit, stmtend)]
+        bodymap['ref'] = ['raise Error("cannot ref packed field")']
+      else:
+        bodymap['get'] = ['return %s%s' % (field_code, stmtend)]
+        bodymap['ref'] = ['return %s%s' % (field_code, stmtend)]
         /# See ../../README.md section 'Accessors' for discussion of setter
-        /# return values.  Currently having setters return void.
-        /# 'return %s%s' % (receiver_code, stmtend)
-      ]
-      bodymap['ref'] = ['return %s%s' % (field_code, stmtend)]
+        /# return values. Currently having setters return void. 'return %s%s' %
+        /# (receiver_code, stmtend)
+        bodymap['set'] = ['%s = value%s' % (field_code, stmtend)]
       bodymap['format'] = []
       bodymap['write'] = []
       bodymap['size'] = []
@@ -4251,6 +4348,8 @@ config:
             gscope = getter.attrval('scope:')
             del gscope[:]
             gscope.extend(newlines)
+          else:
+            raise Error('Not yet handling lazy in %s' % baselang.id())
       else:
         getter = None
 
@@ -4542,7 +4641,7 @@ config:
 
     feature
     Attribute autogen : <std|notest> = std #:
-      Controls which a test method is auto-generated even when no
+      Controls whether a test method is auto-generated even when no
       test block exists.
     config:
       FeatureValue std #:
@@ -6738,6 +6837,11 @@ config:
     secondary
     Attribute interface: : complex = <empty> children <command|flag|arg> #:
       A comma-separated list of aliases for the command.
+
+    secondary
+    Attribute binary : str = <empty> #:
+      Only relevant for top-level command constructs. Specifies the binary to
+      use when the default is not suitable.
     
     Attribute comment:;
     Attribute scope: : simple;
@@ -7172,7 +7276,7 @@ config:
         last = lines.pop()
         for line in lines:
           output.append("%s    '%s\\n'" % (indent, line.replace("'", "\\'")))
-        output.append("%s    '%s'))" % (indent, last))
+        output.append("%s    '%s'))" % (indent, last.replace("'", "\\'")))
     end method generatePython;
 
     method createExecutableBinary : any #:
@@ -7187,9 +7291,12 @@ config:
       metac = klass.compiler()
       fs = metac.fs()
       nmsp = klass.namespace()
+      
+      /# Establish the binary to use.
+      binaryexpr = self.attrval('binary')
+      python_binary = binaryexpr.asStr(unquote=True) or metac.Config()['python']
 
       /# Create the content of the binary file.
-      python_binary = metac.Config()['python']
       cmdlines = [
         /# TODO(wmh): Use some template that is user-customizable
         '#!%s' % python_binary,
@@ -8794,6 +8901,16 @@ scope:
           pass
         else:
           code = '%s%s = %s%s' % (recsepstr, field.rawfield(), defval, stmtend)
+          output.append(code)
+
+      /# If this class has any packed fields, the underlying packs are
+      /# initialized to value 0. Furthermore, a method that efficiently
+      /# extracts all values within each pack is auto-generated.
+      packed = myclass.packed()
+      if packed:
+        for pack in packed:
+          rawpack = '_' + pack
+          code = '%s%s = 0%s' % (recsepstr, rawpack, stmtend)
           output.append(code)
     test:
       ooplpy, _, context, _ = test.cachedInfo(basel='python')
@@ -10611,7 +10728,7 @@ scope:
         'printMeta',
         context,
         parent=scope,
-        features=[],
+        features=[('autogen', 'notest')],
         secondaries=[
           (':', metax.c.Type.Instance('void')),
           ('#:',['Auto-generated human-readable summary of this object.']),
@@ -10690,7 +10807,7 @@ scope:
         'writeMeta',
         context,
         parent=scope,
-        features=[],
+        features=[('autogen', 'notest')],
         secondaries=[
           (':', metax.c.Type.Instance('void')),
           ('#:',['Auto-generated protobuf serializer of this object.']),
@@ -10743,7 +10860,7 @@ scope:
         'sizeMeta',
         context,
         parent=scope,
-        features=[],
+        features=[('autogen', 'notest')],
         secondaries=[
           (':', metax.c.Type.Instance('int')),
           ('#:',['Auto-generated sizeof method for this object.']),

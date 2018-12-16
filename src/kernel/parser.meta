@@ -932,7 +932,7 @@ scope:
       if row >= 0:
         self.rowIs(row)
         newline = self.source().lines()[row].line() + '\n'
-        /# print '***** HERE with %s and %s (%s)' % (self.source().__class__, newline, newline.__class__)
+        /# print('***** HERE with %s and %s (%s)' % (self.source().__class__, newline, newline.__class__))
         self.lineIs(newline)
         if col < 0:
           col = 0
@@ -1214,8 +1214,8 @@ scope:
           if col < 0:
             raise Error('Can this happen?')
           else:
-            /# print 'Here with kind=%s srow=%d scol=%d erow=%d ecol=%d' % (
-            /#   kind, srow, scol, self.row(), col)
+            /# print('Here with kind=%s srow=%d scol=%d erow=%d ecol=%d' % (
+            /#   kind, srow, scol, self.row(), col))
             text = self.text(srow, scol, self.row(), col)
           result = Expr(kind, text, expr)
 
@@ -2079,17 +2079,17 @@ scope:
       e2 = metax.c.Expr('str', '""', '""')
       e3 = metax.c.Expr('str', "''", "''")
 
-      print e1.asStr()
-      print e1.asStr(unquote=True)
-      print e1.asStr(quote="\"")
+      print(e1.asStr())
+      print(e1.asStr(unquote=True))
+      print(e1.asStr(quote="\""))
 
-      print e2.asStr()
-      print e2.asStr(unquote=True)
-      print e2.asStr(quote="\"")
+      print(e2.asStr())
+      print(e2.asStr(unquote=True))
+      print(e2.asStr(quote="\""))
 
-      print e3.asStr()
-      print e3.asStr(unquote=True)
-      print e3.asStr(quote="\"")
+      print(e3.asStr())
+      print(e3.asStr(unquote=True))
+      print(e3.asStr(quote="\""))
     end method asStr;
 
   end class Expr;
@@ -2470,7 +2470,7 @@ scope:
       stream = self.stream(name)
       stream.append(line)
       /#if name.endswith('classes'):
-      /#  print 'Adding "%s" to %s: %s' % (line, name, stream)
+      /#  print('Adding "%s" to %s: %s' % (line, name, stream))
     test:
       bs = test.bs2
       test.iseq([], bs.stream('a'))
@@ -2489,7 +2489,7 @@ scope:
       stream = self.stream(name)
       stream.extend(lines)
       /#if name.endswith('classes'):
-      /#  print 'Adding "%s" to %s: %s' % (line, name, stream)
+      /#  print('Adding "%s" to %s: %s' % (line, name, stream))
     test:
       bs = test.bs2
       test.iseq([], bs.stream('a'))
@@ -2511,7 +2511,7 @@ scope:
       stream = self.stream(name)
       stream.append(obj)
       /#if name.endswith('classes'):
-      /#  print 'Adding "%s" to %s: %s' % (obj, name, stream)
+      /#  print('Adding "%s" to %s: %s' % (obj, name, stream))
     test:
       bs = test.bs2
       test.iseq([], bs.stream('a'))
@@ -2825,7 +2825,7 @@ scope:
         if isinstance(chunk, BaseSegment):
           attribute = chunk.attribute()
           if attribute:
-            /# print 'ATTRIBUTE: %s (%d)' % (attribute.path(), attribute.line())
+            /# print('ATTRIBUTE: %s (%d)' % (attribute.path(), attribute.line()))
             fqn = attribute.parent().fqn()
             fullid = fqn + ':' + attribute.key()
             metaline = chunk.metaline()
@@ -2850,7 +2850,7 @@ scope:
             /# Record the baseline/metaline/fullid triplet.
             mapping.append((baseline, metaline, fullid))
           else:
-            /# print 'ATTRIBUTE: None'
+            /# print('ATTRIBUTE: None')
             pass
           chunk.flattenLines(lines, mapfile, indent=indent, debug=False)
         else:
@@ -2942,7 +2942,7 @@ scope:
       lines = template.split('\n')
       while not lines[-1]: lines.pop()
       for line in lines:
-        if debug: print 'LINE: %s' % line
+        if debug: print('LINE: %s' % line)
 
         m = r.search(line)
         if not m:
@@ -2979,17 +2979,17 @@ scope:
                 attributes.append(attribute)
 
             if debug:
-              print str({
+              print(str({
                 'count': count, 'pre': pre, 'post': post, 'var': var,
                 'join': join, 'value': value, 'attribute': attribute,
-                'elem_delim': elem_delim, 'width': line_width})
+                'elem_delim': elem_delim, 'width': line_width}))
 
             if count == 1 and not post and not pre.strip():
               /# There is a single variable on the line (preceeded by indentation
               /# stored in 'pre').
               if isinstance(value, (list, tuple)):
                 /# We have a variable that produces a BaseSegment.
-                if debug: print 'In multi with attribute=%s' % attribute
+                if debug: print('In multi with attribute=%s' % attribute)
                 if value:
                   /# Non-empty value.
                   chunk = cls(attribute, chunks=value, indent=pre)
@@ -3010,7 +3010,7 @@ scope:
               /# We have a variable that produces a str
               /#  - if the value is a list, it is turned into a string by
               /#    joining with join (which must exist).
-              if debug: print 'In simple'
+              if debug: print('In simple')
               chunk += pre
               if isinstance(value, (list, tuple)):
                 if join is None:
@@ -3164,7 +3164,7 @@ scope:
           '  return a',
         ],
         baselines)
-      /# print segment.flattenStr(linenum=1)
+      /# print(segment.flattenStr(linenum=1))
 
       /# Verify that the base/meta line mappings are correct.
       for bline, mline, fullid in mapping:
@@ -3468,7 +3468,7 @@ scope:
         smap = mapping[j]
         if len(smap) < 1:
           import pprint
-          print 'Here with %s, %s and j=%d' % (self.path(), self.metapath(), j)
+          print('Here with %s, %s and j=%d' % (self.path(), self.metapath(), j))
           pprint.pprint(smap)
 
         base_start = smap[0]
@@ -3477,13 +3477,13 @@ scope:
           meta_line = None
         else:
           diff = basenum - base_start
-          /# print 'diff=%d (%d - %d for meta_start %d)' % (diff, basenum, base_start, meta_start)
+          /# print('diff=%d (%d - %d for meta_start %d)' % (diff, basenum, base_start, meta_start))
           if diff < 0:
-            /#print metapath
-            /#print self.path()
+            /#print(metapath)
+            /#print(self.path())
             /#pprint.pprint(mapping)
             /#raise InternalError('Should not be possible for diff to be %d' % diff)
-            print 'ERROR: Should not be possible for diff to be %d' % diff
+            print('ERROR: Should not be possible for diff to be %d' % diff)
           meta_line = meta_start + diff
 
       return metapath, meta_line
@@ -4130,7 +4130,7 @@ scope:
         ['MetaLanguage', 'Construct', 'Attribute', 'FeatureValue'])
       fp = test.newStr()
       consgroup.show(fp=fp)
-      /# print fp.getvalue()
+      /# print(fp.getvalue())
     end method show;
 
   end class ConsGroup;
@@ -4714,9 +4714,9 @@ scope:
               raise Error('Must provide a namespace')
             namespace = namespace_function()
             if not isinstance(namespace, metax.oopl.NamespaceConstruct):
-              print 'ERROR: %s() = %s (%s) when resolving type "%s"' % (
+              print('ERROR: %s() = %s (%s) when resolving type "%s"' % (
                 namespace_function,
-                namespace, namespace.kindid() if namespace else None, base)
+                namespace, namespace.kindid() if namespace else None, base))
               
               raise Error(
                 'Failed to establish namespace ... cannot qualify %s' % raw)
@@ -6101,14 +6101,14 @@ scope:
       basefile = fs.basename(self._path)
       numwidth = int(math.ceil(math.log(len(self._lines), 10)))
       print
-      print '%s%s:' % (indent, self._path)
+      print('%s%s:' % (indent, self._path))
       for entry in self._logmap['order']:
         lnum = entry['line']
         kind = entry['kind']
         if exclude_kinds and kind in exclude_kinds: continue
         linestr = '' if lnum < 0 else str(lnum+1)
-        print '%s%s%s: %s' % (
-          indent, kind, linestr.rjust(numwidth), entry['message'])
+        print('%s%s%s: %s' % (
+          indent, kind, linestr.rjust(numwidth), entry['message']))
     test:
       mf = test.metafile
 
@@ -6161,7 +6161,7 @@ scope:
         The fully qualified name of the class depended upon.
     scope:
       self.classdeps().add(fqcn)
-      /# print 'Now have %d deps in %s' % (len(self.classdeps()), id(self))
+      /# print('Now have %d deps in %s' % (len(self.classdeps()), id(self)))
     test:
     end method registerDependentClass;
 
@@ -6192,14 +6192,14 @@ scope:
       var construct : Construct;
     scope:
       /#if construct.kind() in ('namespace', 'class', 'method', 'field'):
-      /#  print 'Registering %s in context %s path %s' % (
-      /#    construct.path(), id(self.context()), self.filename())
+      /#  print('Registering %s in context %s path %s' % (
+      /#    construct.path(), id(self.context()), self.filename()))
       kind = construct.kind()
       conset = self.constructs().setdefault(kind, set())
       if construct in conset:
         if FLAGS.lintfull:
-          print 'WARNING: Re-registering %s in MetaFile %s' % (
-            construct.path(), self.filename())
+          print('WARNING: Re-registering %s in MetaFile %s' % (
+            construct.path(), self.filename()))
       else:
         conset.add(construct)
         if self.state() == 'parsing':
@@ -6218,8 +6218,8 @@ scope:
     scope:
       conset = self.constructs().setdefault(construct.kind(), set())
       if construct not in conset:
-        print 'WARNING: Request to unregister non-registered construct %s within %s' % (
-          construct.path(), self.filename())
+        print('WARNING: Request to unregister non-registered construct %s within %s' % (
+          construct.path(), self.filename()))
       else:
         conset.remove(construct)
     test:
@@ -6278,7 +6278,7 @@ scope:
         info = consinfo.primary().get(thekey, None)
       if not info:
         consinfo.show()
-        print 'KEY: %s' % str(thekey)
+        print('KEY: %s' % str(thekey))
         raise Error(
           'Invalid attribute key %s for construct %s' %
           (thekey, consinfo.name()))
@@ -6288,7 +6288,7 @@ scope:
         key = info['cankey']
       else:
         if key != info['cankey']:
-          print '****** HERE with key=%s cankey=%s' % (key, info['cankey'])
+          print('****** HERE with key=%s cankey=%s' % (key, info['cankey']))
         assert key == info['cankey']
       type2 = info['type']
       if type is None:
@@ -6602,7 +6602,7 @@ scope:
       /# The value of an implicit-key secondary
       replacer_value = None
 
-      /#print 'HERE with litkey %s valopt %s' % (primary_litkey, valopt)
+      /#print('HERE with litkey %s valopt %s' % (primary_litkey, valopt))
 
       /# When this block is finished, we will have:
       /#  - identified the primary_value
@@ -6697,8 +6697,8 @@ scope:
         better_construct_class = getattr(metax_c_module, class_name, None)
         if better_construct_class:
           construct_class = better_construct_class
-        /# print 'MetaFile.parseSecondaryAttribute: metalang %s baselang %s = %s [%s]' % (
-        /#   metal, basel, class_name, construct_class)
+        /# print('MetaFile.parseSecondaryAttribute: metalang %s baselang %s = %s [%s]' % (
+        /#   metal, basel, class_name, construct_class))
 
       /# Create the construct
       if construct_class:
@@ -6766,8 +6766,8 @@ scope:
                 baselang = construct.baselang()
                 suffix = baselang.suffix()
                 if '.' + fsel != suffix:
-                  print '***** IGNORING %s = %s for %s (specific to %s)' % (
-                    featkey, featval, suffix, fsel)
+                  print('***** IGNORING %s = %s for %s (specific to %s)' % (
+                    featkey, featval, suffix, fsel))
                   featinfo = None
 
           else:
@@ -6828,7 +6828,7 @@ scope:
           attribute, errtok = self.parseSecondaryAttribute(
             construct, consinfo, indent)
         except ValueError as e:
-          print '**************** HERE with %s' % construct.kindfqn()
+          print('**************** HERE with %s' % construct.kindfqn())
           raise e
         if not attribute:
           /# There are two possible reasons for attribute to be null:
@@ -6862,7 +6862,7 @@ scope:
               emptyln += 1
               aval.pop()
             if emptyln:
-              /# print 'Found %d empty lines above %d in %s' % (emptyln, self.lnum(), self.path())
+              /# print('Found %d empty lines above %d in %s' % (emptyln, self.lnum(), self.path()))
               
               self.set(lnum=self.lnum() - emptyln)
         else:
@@ -6871,7 +6871,7 @@ scope:
             self.nextLine()
           else:
             /# When does this happen?
-            print text[index:index+30]
+            print(text[index:index+30])
             raise Error('How to handle this?')
       else:
         /# We have an error, and no recovery has yet been performed.
@@ -7148,7 +7148,7 @@ scope:
         /# A block marked as simplex is complex if the attribute selector is
         /# '*', and simple otherwise.
         type = 'complex' if basel == '*' else 'simple'
-        /# print 'SET type simplex to %s for %s %s' % (type, construct.kindfqn(), basel)
+        /# print('SET type simplex to %s for %s %s' % (type, construct.kindfqn(), basel))
         plex = True
 
       self.debug('  akey "%s" (%s : %s) [%s] %d' % (litkey, key, type, basel, value_start))
@@ -7251,9 +7251,9 @@ scope:
             /# in parseMeta(), which is executed *before* 
             /# metalang.preExpandFileConstruct(), where the class constructs
             /# are moved into their namespaces.
-            print '**** HERE with current %s' % self.current_namespace()
+            print('**** HERE with current %s' % self.current_namespace())
 
-            print '**** Failed to find namespace for %s' % construct.kindfqn()
+            print('**** Failed to find namespace for %s' % construct.kindfqn())
           return result
 
         namespace_function = NF
@@ -7467,7 +7467,7 @@ scope:
           '    scope<cc>:\n'
           '      cout << "hello" << endl;\n'
           '    scope<py>:\n'
-          '      print "hello"\n'
+          '      print("hello")\n'
           '    end;\n'
           '  end;\n'
           'end;\n'
@@ -7829,7 +7829,7 @@ scope:
       c = text[index]
       autokey = consinfo.autokeys().get(c, None)
 
-      /#print '**** HERE with c="%s"' % c
+      /#print('**** HERE with c="%s"' % c)
 
       if c == term:
         /# We have an explicit termination
@@ -7889,7 +7889,7 @@ scope:
           basetoken = token
           coretoken = token[:-1] if token[-1] == ':' else token
 
-        /# print 'token=%s basetoken=%s coretoken=%s' % (token, basetoken, coretoken)
+        /# print('token=%s basetoken=%s coretoken=%s' % (token, basetoken, coretoken))
 
         termend = context.token('end')
         if token == termend + term:
@@ -8345,9 +8345,9 @@ scope:
         for path in sorted(old_files.union(new_files)):
           nc = 'Y' if path in new_files else ' '
           oc = 'Y' if path in old_files else ' '
-          print '%s %s %s' % (nc, oc, path)
-        print 'Found %d old files and %d new files and %d obselete files' % (
-          len(old_files), len(new_files), len(del_files))
+          print('%s %s %s' % (nc, oc, path))
+        print('Found %d old files and %d new files and %d obselete files' % (
+          len(old_files), len(new_files), len(del_files)))
 
       /# Write the new set of files to disk for next time.
       self.writeFiles(logfile)
@@ -8355,7 +8355,7 @@ scope:
       /# Delete any obsolete files
       for path in del_files:
         if fs.exists(path):
-          print 'CLEANUP: Removed obsolete %s' % path
+          print('CLEANUP: Removed obsolete %s' % path)
           fs.unlink(path)
     end method cleanupFiles;
 
@@ -8467,7 +8467,7 @@ scope:
       parent = None
 
       fs = self.compiler().fs()
-      /# print '***** PARSING %s' % fs.realpath(self.path())
+      /# print('***** PARSING %s' % fs.realpath(self.path()))
 
       file_construct = metax.meta.FileConstruct(self.path(), parent, context)
       primary = metax.attr.IdAttribute(file_construct, 'File', self.path(), line=0, col=0)
@@ -8588,7 +8588,7 @@ scope:
   assocs:
     std assoc collections;
     std assoc copy;
-    std assoc cStringIO;
+    std assoc io;
     std assoc datetime;
     std assoc difflib;
     std assoc json;
@@ -8636,7 +8636,7 @@ scope:
     scope:
       if metadata:
         /# No longer needed, as we can obtain all data from the schema.meta file now.
-        print '*************** NOTE: Passing deprecated METADATA into Compiler!'
+        print('*************** NOTE: Passing deprecated METADATA into Compiler!')
         import pprint
         pprint.pprint(metadata)
         /# cls.METADATA.update(metadata)
@@ -8658,8 +8658,8 @@ scope:
         errors.append('Invalid repository_path %s (does not exist)' % config['repository_path'])
       if errors:
         for error in errors:
-          print 'ERROR: %s' % error
-        print 'Please edit %s and fix the above errors' % config['config_path']
+          print('ERROR: %s' % error)
+        print('Please edit %s and fix the above errors' % config['config_path'])
         sys.exit(1)
     end;
 
@@ -9238,9 +9238,9 @@ scope:
       classes = self.classes()
       if fqn in classes and classes[fqn] is not klass:
         /#raise Error(
-        print 'ERROR: ' + (
+        print('ERROR: ' + (
           'Attempt to double register class %s (%s vs %s)' %
-          (fqn, id(klass), id(classes[fqn])))
+          (fqn, id(klass), id(classes[fqn]))))
       classes[fqn] = klass
     test:
     end method registerClass;
@@ -9389,7 +9389,7 @@ scope:
         else:
           /# Create a directory
           Print('NOTE: Created %s' % metadir)
-          fs.mkdir(metadir, mode=0755)
+          fs.mkdir(metadir, mode=0o755)
 
       return result
     end method verifyDirectory;
@@ -9622,8 +9622,8 @@ scope:
         mlparent = metalang.attrval('parent', default=None)
 
         if debug:
-          print 'metalangNamed: name=%s mlparent=%s toplevel=%s' % (
-            name, mlparent, toplevel)
+          print('metalangNamed: name=%s mlparent=%s toplevel=%s' % (
+            name, mlparent, toplevel))
 
         /# Establish the modules to look for classes within.
         /#  - each meta language should have its own namespace, either
@@ -9668,11 +9668,11 @@ scope:
               else:
                 construct_classes[cid] = klass
             else:
-              /# print 'WARNING: Failed to find class %s for construct %s' % (
-              /#   clsname, cid)
+              /# print('WARNING: Failed to find class %s for construct %s' % (
+              /#   clsname, cid))
               pass
             if debug:
-              print '  %-15s = %-30s = %s' % (cid, clsname, klass)
+              print('  %-15s = %-30s = %s' % (cid, clsname, klass))
 
           elif construct.kind() == 'BaseLanguage':
             cid = construct.id()
@@ -9684,7 +9684,7 @@ scope:
               baselang_constructs[klass] = construct
               baselang_classes[cid] = klass
             if debug:
-              print '  %-15s = %-30s = %s' % (cid, clsname, klass)
+              print('  %-15s = %-30s = %s' % (cid, clsname, klass))
           else:
             raise InternalError('Invalid kind %s' % construct.kind())
         baselang_class_list = baselang_classes.values()
@@ -9699,7 +9699,7 @@ scope:
         else:
           metalangparent = None
 
-        /# print 'id=%s name=%s metalangparent=%s toplevel=%s' % (id, name, metalangparent, toplevel)
+        /# print('id=%s name=%s metalangparent=%s toplevel=%s' % (id, name, metalangparent, toplevel))
 
         metalang.nameIs(name)
         metalang.metalangparentIs(metalangparent)
@@ -9733,7 +9733,7 @@ scope:
         /#    instances.
         for baselang_class in baselang_class_list:
           if debug:
-            print '  baselang %s' % baselang_class
+            print('  baselang %s' % baselang_class)
           /# TODO(wmh): This code is creating a new instance when we already
           /# parsed instances of the constructs ... use them instead!
           /# baselang = baselang_class(None, None, context)
@@ -9742,7 +9742,7 @@ scope:
             baselang.postCreationInitialization(metalang=metalang)
             metalang.registerBase(baselang)
           else:
-            print '***** ERROR: Failed to find baselang for %s' % baselang_class
+            print('***** ERROR: Failed to find baselang for %s' % baselang_class)
 
         /# Register metalang in cache.
         metalangs[metalang.id()] = metalang
@@ -9789,7 +9789,7 @@ scope:
           raise Error(
             'Failed to find %s in config (%s)' %
             (metal, ','.join(metalangs.keys())))
-        /# print 'FOUND %s for %s' % (path, metal)
+        /# print('FOUND %s for %s' % (path, metal))
       if not fs.exists(path):
         raise Error('%s does not exist' % path)
 
@@ -9872,7 +9872,7 @@ scope:
       /# Meta class.
       metalang_parent = metalang.rawval('parent', default='meta')
       if metalang_parent != metalang_parent.lower():
-        print 'WARNING: metalang uid %s not %s' % (metalang_parent, metalang_parent.lower())
+        print('WARNING: metalang uid %s not %s' % (metalang_parent, metalang_parent.lower()))
 
       if metalang_parent == 'meta':
         /# We can add the ConsInfo instances from bootstrapContext instead of
@@ -9892,7 +9892,7 @@ scope:
       for construct in metalang.rawattr('config:').value():
 
         if debug:
-          print construct.kindid()
+          print(construct.kindid())
 
         if construct.kind() == 'Construct':
           kind = construct.id()
@@ -9941,12 +9941,12 @@ scope:
               consinfo.registerTemplate(attribute.id(), template)
             else:
               if debug:
-                print '  ' + attribute.kindid()
+                print('  ' + attribute.kindid())
               aconfig = attribute.rawattr('config:', default=None)
               if aconfig:
                 for featval in aconfig.value():
                   if debug:
-                    print '    ' + featval.kindid()
+                    print('    ' + featval.kindid())
 
               if parent_config:
                 parent_attribute = parent_config.cons(attribute.id(), default=None)
@@ -9968,14 +9968,14 @@ scope:
               comment  = AttrVal(attribute, 'comment',  default=None)
 
               if False and aliases:
-                print '%s is %s : %s = %s (%s) [%s]' % (construct.kindfqn(), akey, type, default, aliases, consinfo.primary())
+                print('%s is %s : %s = %s (%s) [%s]' % (construct.kindfqn(), akey, type, default, aliases, consinfo.primary()))
 
               keyopt = False
               valopt = False
               autokey = None
 
               if False and debug:
-                print (
+                print(
                   '    akind=%s key=%s type=%s default=%s aliases=%s keyopt=%s valopt=%s autokey=%s' %
                   (akind, akey, type, default, aliases, keyopt, valopt, autokey))
 
@@ -10007,7 +10007,7 @@ scope:
           pass
 
         else:
-          print '********* WARNING: Not processing %s' % construct.kindid()
+          print('********* WARNING: Not processing %s' % construct.kindid())
 
       context = Context(None, consmap, self, metafile)
 
@@ -10185,7 +10185,7 @@ scope:
           else:
             fs.close(fp)
             with fs.open(path, 'r') as fp:
-              print fp.read()
+              print(fp.read())
             raise Error('Invalid line "%s"' % line)
       result = MapFile(path, metapath, mapping)
       return result
@@ -10231,9 +10231,9 @@ scope:
       /# (Sometimes) print a warning if we are reparsing
       if True:
         if path in metafiles:
-          print 'WARNING: Reparsing %s (path)' % path
+          print('WARNING: Reparsing %s (path)' % path)
         elif realpath in metafiles:
-          print 'WARNING: Reparsing %s (realpath)' % path
+          print('WARNING: Reparsing %s (realpath)' % path)
 
       /# Unconditionally parse.
       if context is None:
@@ -10323,7 +10323,7 @@ scope:
       for path in paths:
         base = fs.basename(path)
         if base == 'schema.meta':
-          print 'HERE in compile with %s' % path
+          print('HERE in compile with %s' % path)
         else:
           metafile = self.getMeta(
             path, debug=debug, fp=fp,
@@ -10364,7 +10364,7 @@ scope:
       context = self.metalang().context()
       errors, warnings = (0, 0)
       if debug:
-        print 'processMeta: processing %s' % path
+        print('processMeta: processing %s' % path)
 
       /# Parse
       if metafile is None:
@@ -10378,7 +10378,7 @@ scope:
         /# Expand
         if 'expand' not in phases:
           if debug:
-            print 'processMeta: expanding %s' % path
+            print('processMeta: expanding %s' % path)
           metafile.expandMeta()
         if metafile.hasErrors(show=True):
           errors += 1
@@ -10386,7 +10386,7 @@ scope:
           /# Import
           if not flags.disable_imports and 'import' not in phases:
             if debug:
-              print 'processMeta: importing %s' % path
+              print('processMeta: importing %s' % path)
             metafile.importMeta()
           if metafile.hasErrors(show=True):
             errors += 1
@@ -10394,7 +10394,7 @@ scope:
             /# Translate
             if 'translate' not in phases:
               if debug:
-                print 'processMeta: translating %s' % path
+                print('processMeta: translating %s' % path)
               metafile.translateMeta()
             if metafile.hasErrors(show=True):
               errors += 1
@@ -10402,7 +10402,7 @@ scope:
               /# Compile
               if 'compile' not in phases:
                 if debug:
-                  print 'processMeta: compiling %s' % path
+                  print('processMeta: compiling %s' % path)
                 metafile.compileMeta()
               if metafile.hasErrors(show=True):
                 errors += 1
@@ -10435,7 +10435,7 @@ scope:
       /# Canonicalize path.
       fs = self.fs()
       if not fs.exists(path):
-        print '************* WARNING: %s does not exist' % path
+        print('************* WARNING: %s does not exist' % path)
         return None
       realpath = fs.realpath(path)
 
@@ -10570,8 +10570,8 @@ scope:
           for kind, abbrev in time_titles:
             parts.append(' %4.1f' % totals[kind])
         if show_files:
-          /# print 'lines: %d vs %d' % (totals['lines'], totals['Lines'])
-          /# print 'bytes: %d vs %d' % (totals['bytes'], totals['Bytes'])
+          /# print('lines: %d vs %d' % (totals['lines'], totals['Lines']))
+          /# print('bytes: %d vs %d' % (totals['bytes'], totals['Bytes']))
           totals['Files'] = nmf
           ComputePerc(totals)
           for kind, abbrev, kwidth in file_titles:
@@ -10696,7 +10696,7 @@ scope:
           if show_files:
             filestats = metafile.computeFileStats()
             ComputePerc(filestats)
-            /#print '%s = %s' % (name, filestats)
+            /#print('%s = %s' % (name, filestats))
             for kind, abbrev, kwidth in file_titles:
               val = filestats[kind]
               totals[kind] += val
@@ -10704,7 +10704,7 @@ scope:
                 gtotals.setdefault(kind, 0)
                 gtotals[kind] += val
               vstr = ValStr(filestats, kind, kwidth)
-              /# print '  %-20s %-20s %-20s' % (kind, val, vstr)
+              /# print('  %-20s %-20s %-20s' % (kind, val, vstr))
               parts.append(' ' + vstr)
           line = ''.join(parts)
           rows.append(line)
@@ -10831,7 +10831,7 @@ scope:
           metafile = self.getMeta(
             path, expand=False, translate=False, compile=False)
           if metafile.hasErrors(show=True):
-            print 'WARNING: Not returning construct from _parseArgs due to errors'
+            print('WARNING: Not returning construct from _parseArgs due to errors')
           else:
             construct = metafile.construct()
         return construct
@@ -10867,7 +10867,7 @@ scope:
               {'arg': abspath, 'kind': 'metafile', 'construct': construct})
           elif argmatch:
             if len(argmatch) > 1:
-              print 'WARNING: multiple matches for %s: %s' % (arg, ' '.join(argmatch))
+              print('WARNING: multiple matches for %s: %s' % (arg, ' '.join(argmatch)))
               details.append({
                 'arg': arg,
                 'path': None,
@@ -10888,7 +10888,7 @@ scope:
               })
           elif False and suffmatch:
             if errors:
-              print 'Meta file %s does not exist (ignored)' % arg
+              print('Meta file %s does not exist (ignored)' % arg)
             bad_paths.append(arg)
             details.append({
               'arg': arg,
@@ -10920,7 +10920,7 @@ scope:
               })
             elif suffmatch:
               if errors:
-                print 'Meta file %s does not exist (ignored)' % arg
+                print('Meta file %s does not exist (ignored)' % arg)
               bad_paths.append(arg)
               details.append({
                 'arg': arg,
@@ -11007,7 +11007,7 @@ scope:
         /# Parse the metafile.
         metafile = self.parseMeta(metafile_path, debuglevel=debuglevel)
         if metafile.errors():
-          print 'Found parse errors for ' + metafile_path
+          print('Found parse errors for ' + metafile_path)
           errors += 1
         else:
           /# Canonicalize the constructs in the MetaFile instance.
@@ -11016,9 +11016,9 @@ scope:
           m = metax.c.SUFFIX_RE.match(metafile_path)
           new_path2 = m.group('base') + '-new.meta' + m.group('metasuffix')
           if new_path != new_path2:
-            print 'FIX ME: In canonicalize with new_path:\n%s\n%s' % (new_path, new_path2)
+            print('FIX ME: In canonicalize with new_path:\n%s\n%s' % (new_path, new_path2))
           if fs.exists(new_path):
-            print 'ERROR: %s already exists - not replacing' % new_path
+            print('ERROR: %s already exists - not replacing' % new_path)
             continue
 
           /# Write a canonicalized version of the file
@@ -11039,16 +11039,16 @@ scope:
               metax.c.SUFFIX, '-' + nowstr + metax.c.SUFFIX)
             backup_path2 = m.group('base') + '-' + nowstr + '.meta' + m.group('metasuffix')
             if backup_path != backup_path2:
-              print 'FIX ME: In canonicalize with backup_path:\n%s\n%s' % (new_path, new_path2)
+              print('FIX ME: In canonicalize with backup_path:\n%s\n%s' % (new_path, new_path2))
             if backup_path == metafile_path:
-              print 'ERROR: not supporting files with %s suffix' % metax.c.SUFFIX
+              print('ERROR: not supporting files with %s suffix' % metax.c.SUFFIX)
               sys.exit(1)
-            print 'Moved %s to %s' % (
-              fs.relpath(metafile_path), fs.relpath(backup_path))
+            print('Moved %s to %s' % (
+              fs.relpath(metafile_path), fs.relpath(backup_path)))
             fs.rename(metafile_path, backup_path)
             fs.rename(new_path, metafile_path)
           else:
-            print 'Not replacing ' + metafile_path
+            print('Not replacing ' + metafile_path)
             fs.unlink(new_path)
     test:
     end method canonicalize;
@@ -11083,7 +11083,7 @@ scope:
         elif kind == 'left':
           args.append('--left-column')
         elif kind != 'full':
-          print 'ERROR: Invalid kind %s' % kind
+          print('ERROR: Invalid kind %s' % kind)
           sys.exit(1)
       args.append(original_path)
       args.append(new_path)
@@ -11261,20 +11261,20 @@ scope:
 
       return replacements
     test:
-      _, _, _, metameta = test.cachedInfo(metal='meta')
-      fs = metameta.fs()
+      _, metalang, _, metac = test.cachedInfo(metal='meta')
+      fs = metac.fs()
       try:
         fp = test.newStr()
         fs.setenv('METAROOT', '/tmp')
         _, _, _, meta = test.cachedInfo(metal='meta')
-        replacements = meta.generateMajorMode(fp=fp, dryrun=True)
+        replacements = metac.generateMajorMode(metalang, fp=fp, dryrun=True)
         /# import pprint
         /# pprint.pprint(replacements)
         test.iseq(
           '"Attribute" "BaseLanguage" "Construct" "FeatureValue" '
           '"File" "MetaLanguage" "Template"',
           replacements['<CONSTRUCTS-HERE>'])
-        /#print fp.getvalue()
+        /#print(fp.getvalue())
       finally:
         fs.unsetenv('METAROOT')
     end method generateMajorMode;
@@ -11330,9 +11330,9 @@ scope:
 
       if verbose:
         if rawtests:
-          print 'Running raw tests (without bazel)'
+          print('Running raw tests (without bazel)')
         else:
-          print 'Running tests with bazel'
+          print('Running tests with bazel')
 
       tester_map = {}
       raw_commands = []
@@ -11343,13 +11343,13 @@ scope:
         /# Validate fqn
         error = newdata.get('error', None)
         if error:
-          print 'ERROR: %s' % error
+          print('ERROR: %s' % error)
           continue
         test_target = newdata['test_target']
         test_arg = newdata.get('test_arg', None)
         rawexec = rawmap.get(baselang.id(), None)
         if rawtests and not rawexec:
-          print 'WARNING: %s does not support raw testing' % baselang.id()
+          print('WARNING: %s does not support raw testing' % baselang.id())
           rawtests = False
 
         /# Establish the command to execute.
@@ -11378,9 +11378,9 @@ scope:
 
         /# Print out the command being executed.
         if verbose:
-          print ' %% cd %s' % cwd
-          print ' %% %s%s' % (' '.join(command), ' | special_filtering')
-          print '=' * 80
+          print(' %% cd %s' % cwd)
+          print(' %% %s%s' % (' '.join(command), ' | special_filtering'))
+          print('=' * 80)
 
         /# Establish the env to use for the test harness.
         env = copy.copy(fs.environ())
@@ -11405,7 +11405,7 @@ scope:
             tests = self.parseBazelOutput(
               stdout=p.stdout, stderr=p.stderr, debug=debug)
           except Error as e:
-            print 'Internal Error: %s' % str(e)
+            print('Internal Error: %s' % str(e))
           else:
             if tests:
               self.formatBazelOutput(tests, showout=showout, showerr=showerr)
@@ -11429,20 +11429,20 @@ scope:
         0 = Show only errors
         1 = Show one line for each method, and full errors
     scope:
-      print '*************** DEPRECATED IN FAVOR of behavior processTestOutput'
-      ifp = cStringIO.StringIO(stderr or '')
-      efp = cStringIO.StringIO()
+      print('*************** DEPRECATED IN FAVOR of behavior processTestOutput')
+      ifp = io.StringIO(stderr or '')
+      efp = io.StringIO()
       self.filterMetaOutput(cwd=cwd, ifp=ifp, ofp=efp)
       filterr = efp.getvalue()
 
       if nofilt:
         if stdout:
           dsep(title='stdout')
-          print stdout
+          print(stdout)
         if stderr:
           dsep(title='stderr')
-          /#print stderr
-          print filterr
+          /#print(stderr)
+          print(filterr)
         if stdout or stderr:
           dsep(end=True)
         return
@@ -11475,7 +11475,7 @@ scope:
           while n > 0 and not data[n-1].strip():
             n -= 1
         for j in range(i, n):
-          print prefix + data[j]
+          print(prefix + data[j])
 
       /# We'll add one dict per test to data, merging stdout and stderr.
       /#   name: str
@@ -11520,7 +11520,7 @@ scope:
           if current_fqn is None:
             /# We are not currently expecting output
             if line.strip():
-              print 'UNKNOWN STDOUT: %s' % line
+              print('UNKNOWN STDOUT: %s' % line)
           else:
             /# This is stdout for current_fqn
             item = datamap[current_fqn]
@@ -11587,7 +11587,7 @@ scope:
           postamble = errlines[j:]
           break
         elif current_fqn is None:
-          print 'UNKNOWN STDERR: %s' % line
+          print('UNKNOWN STDERR: %s' % line)
         else:
           /# A line of stderr for current fqn, if one exists.
           item = datamap[current_fqn]
@@ -11597,36 +11597,36 @@ scope:
       /# format as used in the bazel-generated output.
       sep = '-' * 70
       show_nums = False
-      /# print stdout
+      /# print(stdout)
       last_printed_sep = False
       for i, item in enumerate(data):
         out = item['stdout']
         err = item['stderr']
         special = out or err
 
-        if special and not last_printed_sep: print sep
+        if special and not last_printed_sep: print(sep)
 
         if special or verbosity:
           prefix = '%3d) ' % i if show_nums else ''
-          print '%s%-40s ... %7d us   %s' % (
-            prefix, item['fqn'], item['time'] or -1, item['status'])
+          print('%s%-40s ... %7d us   %s' % (
+            prefix, item['fqn'], item['time'] or -1, item['status']))
 
         PrintStripped(out, ' |')
         PrintStripped(err, 'E|')
 
         if special:
-          print sep
+          print(sep)
           last_printed_sep = True
         elif verbosity:
           last_printed_sep = False
 
       if summary_data:
-        print '%-20s: %3d tests in %s seconds: %s' % (
+        print('%-20s: %3d tests in %s seconds: %s' % (
           namespace, int(summary_data['numtests']), summary_data['seconds'],
-          summary_data['status'])
+          summary_data['status']))
       if postamble:
         for line in postamble:
-          print line
+          print(line)
     test:
     end method processPythonTestOutput;
 
@@ -11645,7 +11645,7 @@ scope:
       var debug : bool = false #:
         Turn on debugging.
     scope:
-      print '***************** DEPRECATED IN FAVOR OF behavior fqnToTarget'
+      print('***************** DEPRECATED IN FAVOR OF behavior fqnToTarget')
 
       fs = self.fs()
       baselang = self.baselang()
@@ -11654,7 +11654,7 @@ scope:
       rootdir = fs.realpath(self.workspaceDirectory())
 
       if debug:
-        print 'ROOTDIR: %s' % rootdir
+        print('ROOTDIR: %s' % rootdir)
 
       /# The collection of arguments/flags to pass into the test harness
       test_args = []
@@ -11668,11 +11668,11 @@ scope:
         newpath = fs.join(path, part)
         if not fs.exists(newpath):
           if debug:
-            print 'Failed to find %s' % newpath
+            print('Failed to find %s' % newpath)
           index = i
           break
         if debug:
-          print 'Found %s' % newpath
+          print('Found %s' % newpath)
         path = newpath
       namespace_dir = path
 
@@ -11700,11 +11700,11 @@ scope:
           final_testpath = testspace_path
 
         if debug:
-          print parts
-          print index
-          print nmparts
-          print final_path
-          print final_testpath
+          print(parts)
+          print(index)
+          print(nmparts)
+          print(final_path)
+          print(final_testpath)
 
         /# The target and test_target are the same for both namespace-primary and
         /# class-primary languages, but are implemented differently (e.g. in
@@ -11724,7 +11724,7 @@ scope:
         indext = None
 
       if debug:
-        print 'index = %s' % index
+        print('index = %s' % index)
 
       if index is not None:
         /# There are some left-over parts of the fqn not matching directories,
@@ -11762,7 +11762,7 @@ scope:
             else:
               test_args.append(test_method)
         else:
-          /# print 'ERROR: %s is not a valid class' % '.'.join(parts[:index+1])
+          /# print('ERROR: %s is not a valid class' % '.'.join(parts[:index+1]))
           final_path = None
           final_testpath = None
       return (target, test_target, final_path, final_testpath, test_args)
@@ -11887,22 +11887,22 @@ scope:
 
       /# TODO(wmh): Convert this to use the fqnToTarget behavior defined on
       /# the BaseLanguageOopl hierarchy, and delete Compiler.fqnToTarget.
-      print '**************** HERE!'
+      print('**************** HERE!')
       target, test_target, path, test_path, test_args = self.fqnToTarget(fqn)
 
       def Run(args, cwd, verbose=False, debug=False):
         if verbose:
-          print ' %% cd %s' % cwd
-          print ' %% %s' % ' '.join(args)
+          print(' %% cd %s' % cwd)
+          print(' %% %s' % ' '.join(args))
         p = subprocess.Popen(
           args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
         stdout, stderr = p.communicate()
         if debug:
-          print '#' * 70
-          print stdout
-          print '@' * 70
-          print stderr
-          print '#' * 70
+          print('#' * 70)
+          print(stdout)
+          print('@' * 70)
+          print(stderr)
+          print('#' * 70)
         return {'args': args, 'stdout': stdout, 'stderr': stderr}
 
       /# Modify the environment so that invocations of 'python' will work
@@ -11961,11 +11961,11 @@ scope:
       m = bazel_stdout_re.match(bazeldata['stdout'])
       if not m:
         error = 'Failed to match bazel stdout against expected regexp!'
-        print '#' * 70
-        print bazeldata['stdout']
-        print '@' * 70
-        print bazel_stdout_re.pattern
-        print '#' * 70
+        print('#' * 70)
+        print(bazeldata['stdout'])
+        print('@' * 70)
+        print(bazel_stdout_re.pattern)
+        print('#' * 70)
 
       else:
         def Patch(val):
@@ -11985,10 +11985,10 @@ scope:
             expected_lines = expected_text.splitlines(True)
             lines = text.splitlines(True)
             diff = '\n' + ''.join(difflib.ndiff(expected_lines, lines))
-            print '#' * 80
-            print 'Found differences between expected and actual text:'
-            print diff
-            print '#' * 80
+            print('#' * 80)
+            print('Found differences between expected and actual text:')
+            print(diff)
+            print('#' * 80)
             result = False
           return result
 
@@ -11998,9 +11998,9 @@ scope:
           error = 'mismatch in stderr'
 
       if error:
-        print 'ERROR: %s' % error
+        print('ERROR: %s' % error)
       else:
-        /# print 'Verified raw vs bazel stdout/stderr for %s' % fqn
+        /# print('Verified raw vs bazel stdout/stderr for %s' % fqn)
         pass
       return not bool(error)
     test:
@@ -12072,18 +12072,18 @@ scope:
 
       if debug:
         dsep('Compiler.parseBazelOutput Input', subtitle='stdout')
-        print ''.join(stdout_lines)
+        print(''.join(stdout_lines))
         dsep(delim='-', subtitle='stderr')
-        print ''.join(stderr_lines)
+        print(''.join(stderr_lines))
         dsep('Compiler.parseBazelOutput Input', end=True)
 
       /# If syntax errors were found, stdout will contain a line like
       /#    Executed 0 out of 1 test: 1 fails to build.
       if re.search(r' \d+ fail\S+ to build', stdout_text):
         /# TODO(wmh): Perform baseline-to-metaline conversion on stderr!
-        print '#' * 37 + ' STDERR ' + '#' * 37
-        print stderr_text
-        print '#' * 80
+        print('#' * 37 + ' STDERR ' + '#' * 37)
+        print(stderr_text)
+        print('#' * 80)
         return None
 
       if not logdir:
@@ -12106,9 +12106,9 @@ scope:
             logroot = m.group('path')
             break
         if not logroot:
-          print '#' * 80
-          print ''.join(stderr_lines)
-          print '#' * 80
+          print('#' * 80)
+          print(''.join(stderr_lines))
+          print('#' * 80)
           raise Error('Failed to find a log directory')
 
       /#pprint.pprint(tests)
@@ -12164,7 +12164,7 @@ scope:
         tdata['class'] = parts[-1].replace('Test', '')
         status = tdata['status']
         if status == 'NO STATUS':
-          print 'Skipping %-30s: %s' % (subpath, status)
+          print('Skipping %-30s: %s' % (subpath, status))
           continue
 
         /# Identify the directory containing log info for this target
@@ -12173,7 +12173,7 @@ scope:
         /#   test.xml
         testdir = fs.join(logdir, subpath)
         tdata['dir'] = testdir
-        /#print fs.listdir(testdir)
+        /#print(fs.listdir(testdir))
 
         /# Read/cache the test.log file
         logpath = fs.join(testdir, 'test.log')
@@ -12448,16 +12448,16 @@ scope:
       mappings = {}
 
       if debug:
-        print '#' * 70
-        print fs.cwd()
-        print 'matcher = %s' % str(matcher)
-        print 'repopts = %s' % str(replace_options)
-        /# print fs.join(fs.cwd(), 'metax')
-        /# print fs.listdir(fs.join(fs.cwd(), 'metax'))
-        /#print fs.listdir('/Users/wmh/src/meta/lib/beta/python/metax')
+        print('#' * 70)
+        print(fs.cwd())
+        print('matcher = %s' % str(matcher))
+        print('repopts = %s' % str(replace_options))
+        /# print(fs.join(fs.cwd(), 'metax'))
+        /# print(fs.listdir(fs.join(fs.cwd(), 'metax')))
+        /#print(fs.listdir('/Users/wmh/src/meta/lib/beta/python/metax'))
         /#fp = fs.open('/Users/wmh/src/wmh/lib/meta/oopl/python/metax/c.py', 'r')
-        /#print 'HERE with %s' % Mapping
-        /#print '#' * 70
+        /#print('HERE with %s' % Mapping)
+        /#print('#' * 70)
 
       while True:
         line = ifp.readline()
@@ -12471,10 +12471,10 @@ scope:
           /# Establish the baselang path and line number.
           metadata = error_match.groupdict()
           if debug:
-            print '#' * 70
+            print('#' * 70)
             sys.stdout.write('Found error match for: ' + line)
             pprint.pprint(metadata)
-            print '#' * 70
+            print('#' * 70)
           linenum = int(metadata['line'])
           path = metadata['path']
           if path[0] != '/':
@@ -12491,15 +12491,15 @@ scope:
             if idx == -1:
               raise Error('Unexpected failed to find %s in %s' % (maintext, path))
             subpath = path[idx + len(maintext):]
-            /#print '**** HERE: %s' % subpath
+            /#print('**** HERE: %s' % subpath)
             path = fs.join(metarep, 'oopl', 'python', subpath)
-            /#print '**** NOW: %s' % path
+            /#print('**** NOW: %s' % path)
 
           /# Obtain the base-to-meta mapping file for 'path'
           realpath = fs.realpath(path)
           map_path = self.mapPath(realpath)
 
-          /# print 'PATH: %s\nREAL: %s\nMAP : %s' % (path, realpath, map_path)
+          /# print('PATH: %s\nREAL: %s\nMAP : %s' % (path, realpath, map_path))
 
           mapfile = mappings.get(map_path, None)
           if mapfile is None:
@@ -12508,21 +12508,21 @@ scope:
               mappings[map_path] = mapfile
               if debug:
                 ofp.write('META: Loading %s\n' % map_path)
-                print 'PATH: ' + path
-                print 'MAPP: ' + map_path
+                print('PATH: ' + path)
+                print('MAPP: ' + map_path)
             else:
               if debug:
                 ofp.write('META: Ignoring %s (no %s)\n' % (path, map_path))
-                print 'PATH: ' + path
-                print 'REAL: ' + realpath
-                print 'MAPP: ' + map_path
+                print('PATH: ' + path)
+                print('REAL: ' + realpath)
+                print('MAPP: ' + map_path)
               metadata = None
 
           if mapfile:
             metapath, metaline = mapfile.baseToMeta(linenum)
             /# Establish the metapath string to write.
             if debug:
-              print 'NOTE: Converting baseline %d to meta gives %s' % (linenum, metaline)
+              print('NOTE: Converting baseline %d to meta gives %s' % (linenum, metaline))
             if metakind == 'path':
               pass
             elif metakind == 'abbrev':
@@ -12534,7 +12534,7 @@ scope:
 
             /# Establish the metapath line number.
             if metaline is None:
-              /# print 'NO metaline'
+              /# print('NO metaline')
               metadata = None
             else:
               metadata['metaline'] = metaline
@@ -12587,7 +12587,7 @@ scope:
       /#    non-existent mapfile
       /#      /Users/wmh/src/meta/src/kernel/.meta/oopl/python/metax/.c.py.map
       /#    Need to provide a way to provide a mocked mapfile.
-      /# print 'Fix Compiler.filterMetaOutput'
+      /# print('Fix Compiler.filterMetaOutput')
       return
 
       _, _, _, metac = test.cachedInfo()
@@ -12616,7 +12616,7 @@ scope:
       ofp = test.fp()
       metac.filterMetaOutput(ifp=ifp, ofp=ofp, debug=False)
       out = ofp.getvalue()
-      print out
+      print(out)
       return
       test.iseqtext("""
         >|Traceback (most recent call last):
@@ -12713,16 +12713,16 @@ scope:
       allargs = [command] + args
 
       if not quiet:
-        print 'NOTE: %sExecuting command:' % ('(NOT) ' if dryrun else '')
+        print('NOTE: %sExecuting command:' % ('(NOT) ' if dryrun else ''))
         if cwd:
-          print ' %% cd %s' % cwd
+          print(' %% cd %s' % cwd)
         argstr = ' '.join(args)
         if extra_env:
-          print ' %% %s \\' % ' '.join(
-            ['%s=%s' % (evar, env[evar]) for evar in extra_env])
-          print '    %s %s' % (command, argstr)
+          print(' %% %s \\' % ' '.join(
+            ['%s=%s' % (evar, env[evar]) for evar in extra_env]))
+          print('    %s %s' % (command, argstr))
         else:
-          print ' %% %s %s' % (command, argstr)
+          print(' %% %s %s' % (command, argstr))
       else:
         if prompt:
           raise Error('Cannot specify quiet and prompt at the same time')
@@ -12753,10 +12753,10 @@ scope:
         if show:
           if stdout:
             for line in stdout.strip().split('\n'):
-              print ' |' + line
+              print(' |' + line)
           if stderr:
             for line in stderr.strip().split('\n'):
-              print 'E|' + line
+              print('E|' + line)
       else:
         rc = 1
         stdout = None
@@ -12807,7 +12807,7 @@ scope:
                 self.parseRepositoryNamespace(path)
             else:
               /# We do not expect any other top-level files.
-              print 'ERROR: %s is unexpected' % path
+              print('ERROR: %s is unexpected' % path)
 
     test:
     end method parseRepository;
@@ -12876,14 +12876,15 @@ scope:
           if testdata.pop(base, None):
             test_nmsp['src'] = base
         elif ignore_re.search(base):
-          /# print 'NOTE: Ignoring %s' % base
+          /# print('NOTE: Ignoring %s' % base)
           pass
         elif fs.isdir(subpath):
           if base.endswith('_test'): continue
+          if base == '__pycache__': continue
           subname = name + '.' + base
           namespaces[base] = self.parseRepositoryNamespace(subname, subpath)
         elif fs.islink(subpath):
-          print 'SKIPPING link %s' % subpath
+          print('SKIPPING link %s' % subpath)
         else:
           m = bre.match(base)
           if m:
@@ -12911,13 +12912,13 @@ scope:
                 classes.setdefault(cname, {}).setdefault('test', {})[subkey] = (
                   fs.relpath(tpath, path))
             else:
-              print 'ERROR: unrecognized class file %s within %s' % (base, path)
+              print('ERROR: unrecognized class file %s within %s' % (base, path))
           else:
-            print 'ERROR: unrecognized namespace file %s within %s' % (base, path)
+            print('ERROR: unrecognized namespace file %s within %s' % (base, path))
 
       if testdata:
-        print 'ERROR: unrecognized test files: %s in %s' % (
-          str(sorted(testdata)), testpath)
+        print('ERROR: unrecognized test files: %s in %s' % (
+          str(sorted(testdata)), testpath))
 
       if namespaces:
         user_nmsp['namespaces'] = namespaces
@@ -13061,8 +13062,8 @@ scope:
         /#   % metac -U env.meta root.meta
         /# which would tromp over env.meta. Should be
         /#   % metac -U out.dot env.meta root.meta
-        print 'ERROR: UML output file "%s" must end with .dot' % (
-          destpath)
+        print('ERROR: UML output file "%s" must end with .dot' % (
+          destpath))
         return False
       impath = basepath + '.png'
 
@@ -13189,7 +13190,7 @@ scope:
         }
 
       associnfo = config.pop('assocs') if 'assocs' in config else {}
-      /# print 'associnfo: %s' % str(associnfo)
+      /# print('associnfo: %s' % str(associnfo))
 
       def Match(value, restr):
         /# Determine if a value matches a restr.
@@ -13221,9 +13222,9 @@ scope:
               fails.append(
                 '%s has %s %s !~ %s' % (kindid, key, value, cfg[key]))
         if debug and fails:
-          print '#' * 40
-          print construct.kindid()
-          print '=' * 40
+          print('#' * 40)
+          print(construct.kindid())
+          print('=' * 40)
           pprint.pprint(fails)
         return len(fails) == 0
 
@@ -13302,11 +13303,11 @@ scope:
       for nmsp, nmdata in namespaces.iteritems():
         namespace = nmdata['construct']
         if debug:
-          print '  ' + namespace.kindid()
+          print('  ' + namespace.kindid())
         for clsname, clsdata in nmdata['classes'].iteritems():
           classy = clsdata['construct']
           if debug:
-            print '    ' + classy.kindid()
+            print('    ' + classy.kindid())
           clsdata['uml_fields'] = []
           clsdata['uml_methods'] = []
           for fmkind in ('field', 'method'):
@@ -13316,10 +13317,10 @@ scope:
               level= fmdata['level']
               if Matches(fmcons, config, level, vis):
                 if debug:
-                  print '      ' + fmcons.kindid()
+                  print('      ' + fmcons.kindid())
                 fmtype = fmdata['type']
                 if fmtype is None:
-                  print 'WARNING: No type for %s' % fmcons.kindfqn()
+                  print('WARNING: No type for %s' % fmcons.kindfqn())
                   fmtype = Type.Instance('void')
 
                 /# Establish any extra text to appear after the name
@@ -13365,13 +13366,13 @@ scope:
                   if basetype == 'vec':
                     /# Check if elements are class types.
                     if False:
-                      print 'FixMe: Currently ignoring %s.%s.%s : %s' % (
-                        nmsp, clsname, fmid, fmtype.raw())
+                      print('FixMe: Currently ignoring %s.%s.%s : %s' % (
+                        nmsp, clsname, fmid, fmtype.raw()))
                   elif 'map' in basetype:
                     /# Check if values are class types.
                     if False:
-                      print 'FixMe: Currently ignoring %s.%s.%s : %s' % (
-                        nmsp, clsname, fmid, fmtype.raw())
+                      print('FixMe: Currently ignoring %s.%s.%s : %s' % (
+                        nmsp, clsname, fmid, fmtype.raw()))
                 else:
                   /# Not primitive and not native means class type.
                   assoc_fqn = fmtype.base()
@@ -13384,9 +13385,9 @@ scope:
 
                   good = assoc_fqn in classes
                   if debug:
-                    print '%s%s.%s.%s : %s [%s]' % (
+                    print('%s%s.%s.%s : %s [%s]' % (
                       '*' if good else ' ',
-                      nmsp, clsname, fmid, fmtype.raw(), assoc_fqn)
+                      nmsp, clsname, fmid, fmtype.raw(), assoc_fqn))
                   if good:
                     edge = {
                       'arrowtail': 'odiamond',
@@ -13491,11 +13492,11 @@ scope:
                 ppcs = pklass.parentclasses()
                 pc = ppcs[0] if ppcs else None
                 ppc = pc['fqn'] if pc else None
-                /# print ' *** MISSING %s = %s' % (fqparent, ppc)
+                /# print(' *** MISSING %s = %s' % (fqparent, ppc))
                 classes[fqparent] = {
                   'name': fqparent, 'fqn': fqparent, 'parent': ppc}
               else:
-                print 'WARNING: Failed to kind parent "%s" for "%s"' % (fqparent, fqn)
+                print('WARNING: Failed to kind parent "%s" for "%s"' % (fqparent, fqn))
 
         /# Create an 'external' subgraph and add all missing classes to it.
         fp.write('  subgraph cluster_external {\n')
@@ -13527,7 +13528,7 @@ scope:
             /# The 'parent' is probably a baselang parent not defined in Meta.
             /# We dump it verbatim.
             fp.write('  %s -> %s\n' % (DotSafeId(parent), DotSafeId(fqn)))
-            /# print 'WARNING: %s has unknown parent %s' % (fqn, parent)
+            /# print('WARNING: %s has unknown parent %s' % (fqn, parent))
 
         /# Now specify associations.
         if False:
@@ -13541,26 +13542,26 @@ scope:
         /# Finish the dot file.
         fp.write('}\n')
         if verbose:
-          print 'Wrote ' + destpath
+          print('Wrote ' + destpath)
 
       /# Now create the image file.
       args = ['dot', '-Tpng', '-o', impath, destpath]
       if verbose:
-        print 'Command: ' + ' '.join(args)
+        print('Command: ' + ' '.join(args))
       p = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
       stdout, stderr = p.communicate()
       if stderr:
-        print 'ERROR: %s' % stderr
+        print('ERROR: %s' % stderr)
       else:
         if verbose:
-          print 'Wrote ' + impath
+          print('Wrote ' + impath)
 
         /# Now display the image file.
         if display:
           args = ['display', impath]
           if verbose:
-            print 'Command: ' + ' '.join(args)
+            print('Command: ' + ' '.join(args))
           try:
             subprocess.check_output(args)
           except KeyboardInterrupt:
@@ -13626,32 +13627,32 @@ scope:
         if fs.exists(path):
           fs.unlink(path)
           if verbose:
-            print 'NOTE: Removed ' + path
+            print('NOTE: Removed ' + path)
       problems = subprocess.check_output(
         ['find', '.', '-type', 'l', '-a', '-name', '.meta', '-a',
          '-mindepth', '2',  '-print'],
         cwd=kerneldir)
       if problems:
-        print 'WARNING: Not producing snapshot because of spurious .meta links.'
-        print problems
+        print('WARNING: Not producing snapshot because of spurious .meta links.')
+        print(problems)
         sys.exit(1)
       bazel_links = subprocess.check_output(
         ['find', '.', '-type', 'l', '-a', '-name', 'bazel-*', '-print'],
         cwd=kerneldir)
       if bazel_links:
-        print 'WARNING: Found bazel-* links.'
-        print bazel_links
+        print('WARNING: Found bazel-* links.')
+        print(bazel_links)
         ans = raw_input('Remove (yes|no)? ').strip()
         if ans.lower() == 'yes':
           for path in bazel_links.strip().split('\n'):
             fs.unlink(path)
             if verbose:
-              print 'Removed ' + path
+              print('Removed ' + path)
         bazel_links = subprocess.check_output(
           ['find', '.', '-type', 'l', '-a', '-name', 'bazel-*', '-print'],
           cwd=kerneldir)
         if bazel_links:
-          print 'Not proceeding.'
+          print('Not proceeding.')
           sys.exit(1)
 
       /###
@@ -13688,9 +13689,9 @@ scope:
       /###
       /# Create the new version dir
       assert not fs.exists(newpath)
-      fs.mkdir(newpath, 0755)
+      fs.mkdir(newpath, 0o755)
       if verbose:
-        print 'NOTE: Created %s' % newpath
+        print('NOTE: Created %s' % newpath)
 
       /###
       /# Copy metastrap.py <newpath>/src
@@ -13701,23 +13702,23 @@ scope:
       metastrap_dest = fs.join(newpath, 'metastrap.py')
       fs.copyfile(metastrap_path, metastrap_dest)
       if verbose:
-        print 'NOTE: Copied %s to %s' % (metastrap_path, metastrap_dest)
+        print('NOTE: Copied %s to %s' % (metastrap_path, metastrap_dest))
 
       /###
       /# Copy <<src_root>>/src/{kernel,lib}/*.meta to <newpath>/src/{kernel,lib}
       destsrcdir = fs.join(newpath, 'src')
-      fs.mkdir(destsrcdir, 0755)  
+      fs.mkdir(destsrcdir, 0o755)  
       for srcsub in ('kernel', 'lib'):
         srcpath = fs.join(config['src_root'], 'src', srcsub)
         destpath = fs.join(destsrcdir, srcsub)
-        fs.mkdir(destpath, 0755)  
+        fs.mkdir(destpath, 0o755)  
         for base in fs.listdir(srcpath):
           if '.meta' in base and base != '.meta':
             srcfile = fs.join(srcpath, base)
             destfile = fs.join(destpath, base)
             fs.copyfile(srcfile, destfile)
             if verbose:
-              print 'NOTE: Copied %s to %s' % (srcfile, destfile)
+              print('NOTE: Copied %s to %s' % (srcfile, destfile))
             
       /###
       /# Copy <<repository_path>>/oopl/python/metax to <newpath>/lib
@@ -13727,51 +13728,51 @@ scope:
       repometax = fs.join(
         config['repository_path'], 'oopl', 'python', 'metax')
       libdir = fs.join(newpath, 'lib')
-      fs.mkdir(libdir, 0755)
+      fs.mkdir(libdir, 0o755)
       destmetax = fs.join(libdir, 'metax')
       fs.copytree(repometax, destmetax, symlinks=False)
       if verbose:
-        print 'NOTE: Copied %s to %s' % (repometax, destmetax)
+        print('NOTE: Copied %s to %s' % (repometax, destmetax))
 
       /###
       /# Copy <<src_root>>/src/schema/{meta,oopl}/schema.meta to <newpath>/schema
       schemasrc = fs.join(config['src_root'], 'src', 'schema')  
       schemadir = fs.join(newpath, 'schema')
-      fs.mkdir(schemadir, 0755)  
+      fs.mkdir(schemadir, 0o755)  
       for metal in ('meta', 'oopl', 'doc'):
         subdir = fs.join(schemadir, metal)
-        fs.mkdir(subdir, 0755)  
+        fs.mkdir(subdir, 0o755)  
         schema_src = fs.join(schemasrc, metal, 'schema.meta')
         schema_dst = fs.join(subdir, 'schema.meta')
         fs.copyfile(schema_src, schema_dst)
         if verbose:
-          print 'NOTE: Copied %s to %s' % (schema_src, schema_dst)
+          print('NOTE: Copied %s to %s' % (schema_src, schema_dst))
       if False:
         /# TODO(wmh): Remove following ... above code replaces.
         metadir = fs.join(schemadir, 'meta')
         oopldir = fs.join(schemadir, 'oopl')
-        fs.mkdir(metadir, 0755)  
-        fs.mkdir(oopldir, 0755)
+        fs.mkdir(metadir, 0o755)  
+        fs.mkdir(oopldir, 0o755)
         meta_schema_src = fs.join(schemasrc, 'meta', 'schema.meta')
         oopl_schema_src = fs.join(schemasrc, 'oopl', 'schema.meta')
         meta_schema_dst = fs.join(metadir, 'schema.meta')
         oopl_schema_dst = fs.join(oopldir, 'schema.meta')
         fs.copyfile(meta_schema_src, meta_schema_dst)
         if verbose:
-          print 'NOTE: Copied %s to %s' % (meta_schema_src, meta_schema_dst)
+          print('NOTE: Copied %s to %s' % (meta_schema_src, meta_schema_dst))
         fs.copyfile(oopl_schema_src, oopl_schema_dst)
         if verbose:
-          print 'NOTE: Copied %s to %s' % (oopl_schema_src, oopl_schema_dst)
+          print('NOTE: Copied %s to %s' % (oopl_schema_src, oopl_schema_dst))
 
       /###
       /# Copy $HOME/.config/metameta to <newpath>/config/metameta
       configdir = fs.join(newpath, 'config')
-      fs.mkdir(configdir, 0755)
+      fs.mkdir(configdir, 0o755)
       config_src = fs.join(fs.getenv('HOME'), '.config', 'metaxy')
       config_dst = fs.join(configdir, 'metaxy')
       fs.copytree(config_src, config_dst)
       if verbose:
-        print 'NOTE: Copied %s to %s' % (config_src, config_dst)
+        print('NOTE: Copied %s to %s' % (config_src, config_dst))
 
       /###
       /# Update the 'current' link
@@ -13807,7 +13808,7 @@ scope:
         tarcmd = ['tar', '-czhf', tarbase, release_version]
         subprocess.call(tarcmd, cwd=release_dir, env=env)
         if verbose:
-          print 'NOTE: Created ' + tarpath
+          print('NOTE: Created ' + tarpath)
     end method MakeSnapshot;
 
     method maybeRecompileMeta : bool #:
@@ -13827,10 +13828,10 @@ scope:
           metamodtime = fs.mtime(metafile_path)
           basemodtime = fs.mtime(pyfile)
           if metamodtime > basemodtime:
-            print 'NOTE: compiling %s (%d seconds newer than %s)' % (
+            print('NOTE: compiling %s (%d seconds newer than %s)' % (
               fs.relpath(metafile_path),
               metamodtime - basemodtime,
-              fs.relpath(pyfile))
+              fs.relpath(pyfile)))
 
             /# TODO(wmh): We are NOT invoking a subprocess as we want this to be
             /# as efficient as possible. We may be able to significantly improve
@@ -13844,10 +13845,10 @@ scope:
             except Exception as e:
               text = traceback.format_exc()
               if False:
-                print '#' * 70
-                print text
-                print '=' * 70
-              ifp = cStringIO.StringIO(text)
+                print('#' * 70)
+                print(text)
+                print('=' * 70)
+              ifp = io.StringIO(text)
               /# Note that the baselang being compiled is NOT what is important
               /# when performing baseling-to-metaline conversions ... it is the
               /# baselang being used to compile the code that is important!
@@ -13858,7 +13859,7 @@ scope:
               sys.exit(1)
             else:
               if errors:
-                print 'ERROR: Failed to compile %s' % metafile_path
+                print('ERROR: Failed to compile %s' % metafile_path)
                 sys.exit(1)
               else:
                 /# If there were no changes between the python file on disk and
@@ -13874,10 +13875,10 @@ scope:
                   fs.touch(pyfile, None)
                 self.writeSummary([metafile])
         else:
-          print 'WARNING: metafile %s is missing' % metafile_path
+          print('WARNING: metafile %s is missing' % metafile_path)
       else:
         if not pyfile.endswith('__init__.py'):
-          print 'WARNING: Failed to find metafile for %s' % pyfile
+          print('WARNING: Failed to find metafile for %s' % pyfile)
       return result
     end method maybeRecompileMeta;
 
@@ -13891,10 +13892,10 @@ scope:
     scope:
       text = traceback.format_exc()
       if False:
-        print '#' * 70
-        print text
-        print '=' * 70
-      ifp = cStringIO.StringIO(text)
+        print('#' * 70)
+        print(text)
+        print('=' * 70)
+      ifp = io.StringIO(text)
       /# Note that the baselang being compiled is NOT what is important
       /# when performing baseling-to-metaline conversions ... it is the
       /# baselang being used to compile the code that is important!
@@ -13947,7 +13948,7 @@ scope:
       errors = 0
       chatty = True
 
-      /#print 'Here with width=%s showbox=%s htmldir=%s' % (width, showbox, htmldir)
+      /#print('Here with width=%s showbox=%s htmldir=%s' % (width, showbox, htmldir))
 
       /# Establish the rootdir for .html files.
       /#  - one possibility is to write hidden .html files adjacent to
@@ -13984,7 +13985,7 @@ scope:
           outlines = []
 
           /# Obtain the htmlish contents.
-          hfp = cStringIO.StringIO()
+          hfp = io.StringIO()
           mode = {'form': 'html', 'out': {}, 'uplift': uplift}
           if showall:
             mode['details'] = 'all'
@@ -14064,7 +14065,7 @@ scope:
               /# Escape sequence indicating block start/end.
               _, block_kind, conskind, block_uid, attrkey, basel, se = line.split(' ')
               if se == 'start':
-                /# print 'starting %s %s' % (consfqn, attrkey)
+                /# print('starting %s %s' % (consfqn, attrkey))
                 dentlevel += 1
                 classes = []
                 is_code = 'scope' in attrkey or 'test' in attrkey
@@ -14077,7 +14078,7 @@ scope:
                   indent + '<div id="%s" class="%s">' % (
                     block_uid, ' '.join(classes)))
               else:
-                /# print 'ending   %s %s' % (consfqn, attrkey)
+                /# print('ending   %s %s' % (consfqn, attrkey))
                 dentlevel -= 1
                 outlines.append(indent[2:] + '</div>')
             else:
@@ -14112,7 +14113,7 @@ scope:
           if htmldir is None:
             htmldir = fs.join(metadir, *parts)
           if not fs.exists(htmldir):
-            fs.makedirs(htmldir, 0755)
+            fs.makedirs(htmldir, 0o755)
           htmlbase = metax.c.PathFromMeta(
             fs.basename(metafile.path()), '_' + blsuffix +'.html')
           htmlpath = fs.join(htmldir, htmlbase)
@@ -14137,7 +14138,7 @@ scope:
             fp.write('  </body>\n')
             fp.write('</html>\n')
             if verbose:
-              print 'Wrote ' + htmlpath
+              print('Wrote ' + htmlpath)
 
         /# Now expand and translate.
         filecons.expandMeta()
@@ -14180,11 +14181,11 @@ scope:
               basefile = filemap[subpath]
               contents = basefile.contents()
               if contents is None:
-                print '******** HERE with empty %s' % subpath
+                print('******** HERE with empty %s' % subpath)
               else:
                 base_line_count = contents.count('\n')
                 base_byte_count = len(contents)
-                /# print 'Here with %-50s = %4d  %4d' % (subpath, base_line_count, base_byte_count)
+                /# print('Here with %-50s = %4d  %4d' % (subpath, base_line_count, base_byte_count))
                 counts['files'] += 1
                 counts['lines'] += base_line_count
                 counts['bytes'] += base_byte_count
@@ -14204,7 +14205,7 @@ scope:
                 assert subpath == basefile.subpath(), '%s (%s) vs %s (%s)' % (
                   subpath, type(subpath), basefile.subpath(), type(basefile.subpath()))
                 if contents is None:
-                  print '***** HERE with %s = %s' % (subpath, contents)
+                  print('***** HERE with %s = %s' % (subpath, contents))
                   raise Error('Failed')
                 else:
                   _, suffix = fs.splitext(subpath)
@@ -14228,7 +14229,7 @@ scope:
               fp.write('  </body>\n')
               fp.write('</html>\n')
               if verbose:
-                print 'Wrote ' + html2path
+                print('Wrote ' + html2path)
     test:
     end method generateHtml;
 
@@ -14247,7 +14248,7 @@ scope:
         changed) before we recompile it.
     scope:
       fs = self.fs()
-      print 'NOTE: Monitoring %d files...' % len(paths)
+      print('NOTE: Monitoring %d files...' % len(paths))
 
       def time2hms(ts):
         return datetime.datetime.fromtimestamp(mtime).strftime('%H:%M:%S')
@@ -14258,7 +14259,7 @@ scope:
       while True:
         start = time.time()
         updated = {}
-        /# print '%s: Checking %d paths' % (datetime.datetime.now(), len(paths))
+        /# print('%s: Checking %d paths' % (datetime.datetime.now(), len(paths)))
 
         /# Find paths that have changed since last round
         for path in paths:
@@ -14267,7 +14268,7 @@ scope:
             if mtime > pathmap[path]:
               /# The path has been updated.
               updated[path] = mtime  # this must be mtime, as we rely on it later
-              /# print 'NOTE: %s changed at %s (vs %s)' % (path, time2hms(mtime), time2hms(pathmap[path]))
+              /# print('NOTE: %s changed at %s (vs %s)' % (path, time2hms(mtime), time2hms(pathmap[path])))
           else:
             /# We don't have enough info about path yet, so we just add it for
             /# the next round.
@@ -14283,8 +14284,8 @@ scope:
           sys.exit(1)
         else:
           if updated:
-            print '%s: Found changes in %d of %d files' % (
-              time2hms(start), len(updated), len(paths))
+            print('%s: Found changes in %d of %d files' % (
+              time2hms(start), len(updated), len(paths)))
             self.writeSummary(metafiles, indent='  ')
 
         /# Update times of all compiled files.
@@ -14321,7 +14322,7 @@ scope:
           if rawsuff:
             explicits.add(rawsuff)
       if len(explicits) > 1:
-        print 'ERROR: Cannot compile into multiple baselangs in same metac invocation'
+        print('ERROR: Cannot compile into multiple baselangs in same metac invocation')
         sys.exit(1)
       elif len(explicits) == 1:
         basel = explicits.pop()
@@ -14342,16 +14343,16 @@ scope:
             /#    MetaLanguage instance. For now we use Compiler.SUFFIX_HACK
             canbasel = suffix_hack.get(baselang_flag.value(), None)
             if canbasel is None:
-              print 'ERROR: Unknown baselang "%s" in Compiler.SUFFIX_HACK' % baselang_flag.value()
+              print('ERROR: Unknown baselang "%s" in Compiler.SUFFIX_HACK' % baselang_flag.value())
               sys.exit(1)
             else:
               cansuff = suffix_hack.get(basel, None)
               if cansuff is None:
-                print 'ERROR: Unknown baselang suffix "%s"' % basel
+                print('ERROR: Unknown baselang suffix "%s"' % basel)
                 sys.exit(1)
               elif cansuff != canbasel:
-                print 'ERROR: Explicit --baselang %s (%s) does not match baselang %s (%s) implied by source suffixes' % (
-                  baselang_flag.value(), canbasel, basel, cansuff)
+                print('ERROR: Explicit --baselang %s (%s) does not match baselang %s (%s) implied by source suffixes' % (
+                  baselang_flag.value(), canbasel, basel, cansuff))
                 sys.exit(1)
           
       else:
@@ -14471,8 +14472,8 @@ scope:
             if metafile.hasErrors(show=True):
               errors += 1
             if errors == 0:
-              print '#' * 80
-              print path
+              print('#' * 80)
+              print(path)
               for construct in metafile.construct().attr('scope:').value():
                 construct.write(mode=mode)
       end command canonical;
@@ -14484,14 +14485,14 @@ scope:
         flags = self.cli()
         command = flags._command_()
         command.show()
-        print 'hello!'
+        print('hello!')
       end command cd;
 
       named
       command checkmap #:
         Verify that a baselang map file is correct.
       scope:
-        print 'WARNING: Command "checkmap" is not yet implemented.'
+        print('WARNING: Command "checkmap" is not yet implemented.')
       end command checkmap;
 
       named
@@ -14526,21 +14527,21 @@ scope:
                 cdir = info
               elif kind == 'FILES':
                 metaspec = '%s/{%s}' % (cdir, info.replace(' ',','))
-                /# print metaspec
+                /# print(metaspec)
                 metaspecs.append(metaspec)
                 for subpath in info.split():
                   metapath = fs.normpath(fs.join(cdir, subpath))
                   if fs.exists(metapath):
                     metapaths.append(metapath)
-                    /# print metapath
+                    /# print(metapath)
                   else:
-                    print 'ERROR: %s does not exist' % metapath
+                    print('ERROR: %s does not exist' % metapath)
         command = 'metac --summary_counts --summary_times --summary_files %s' % ' '.join(metaspecs)
-        print command
+        print(command)
         os.system(command)
 
         command = 'metac --summary_autogen --summary_counts --summary_times --summary_files %s' % ' '.join(metaspecs)
-        print command
+        print(command)
         os.system(command)
       end command;
 
@@ -14548,14 +14549,14 @@ scope:
       command clean #:
         Remove a class from the Meta repository
       scope:
-        print 'WARNING: Command "clean" is not yet implemented.'
+        print('WARNING: Command "clean" is not yet implemented.')
       end command clean;
 
       named
       command compare #:
         Run normal code and experimental code and compare generated results.
       scope:
-        print 'WARNING: Command "compare" is not yet implemented.'
+        print('WARNING: Command "compare" is not yet implemented.')
       end command compare;
 
       named
@@ -14603,11 +14604,11 @@ scope:
         cli = self.cli()
         if len(cli.rest) == 1:
           var = cli.rest[0]
-          print config.get(var, '<INVALID>')
+          print(config.get(var, '<INVALID>'))
         else:
           vars = cli.rest or sorted(config)
           for var in vars:
-            print '%-20s = %s' % (var, config.get(var, '<INVALID>'))
+            print('%-20s = %s' % (var, config.get(var, '<INVALID>')))
       end command config;
 
       named
@@ -14618,7 +14619,7 @@ scope:
         in current implementation).
                                            
       scope:
-        print 'baselang debugging not yet implemented'
+        print('baselang debugging not yet implemented')
       end command debug2;
 
       named
@@ -14656,7 +14657,7 @@ scope:
               for construct in file_construct.attrval('scope:', default=None) or []:
                 if construct.kind() != 'namespace': continue
                 construct.write(fp=fp)
-            print 'Wrote ' + newpath
+            print('Wrote ' + newpath)
           metafiles.append(metafile)
       end command expand;
 
@@ -14668,7 +14669,7 @@ scope:
         fs = self.fs()
         metal = self.metalang().id()
         if metal != 'oopl':
-          print 'usage: metac emacs <metalang> [schema_path]   (i.e.g do NOT use -L)'
+          print('usage: metac emacs <metalang> [schema_path]   (i.e.g do NOT use -L)')
         else:
           metal = cli.rest[0]
           schema_path = None
@@ -14677,7 +14678,7 @@ scope:
             schema_path = cli.rest[1]
             out_path = fs.join(
               fs.dirname(fs.abspath(schema_path)), 'meta%s-mode.el' % metal)
-            print 'out_path = %s' % out_path
+            print('out_path = %s' % out_path)
           metalang = self.metalangNamed(metal, schema_path=schema_path)
           assert metalang.compiler() is self
           self.generateMajorMode(metalang, out_path=out_path)
@@ -14768,7 +14769,7 @@ scope:
           )
           if cli.inmemory:
             basefile = fs.subpath('../tmp2/person_py_base.html')
-            print basefile.contents()
+            print(basefile.contents())
             fs.summarize()
       end command html;
 
@@ -14829,7 +14830,7 @@ scope:
           if more is not None:
             kwds.update(more)
           else:
-            print 'WARNING: --kind %s is unknown (ignored)' % flags.kind
+            print('WARNING: --kind %s is unknown (ignored)' % flags.kind)
         if flags.form:
           kwds['form'] = flags.form
         if flags.suffix:
@@ -14838,7 +14839,7 @@ scope:
           try:
             kwds['filter'] = re.compile(flags.filter)
           except sre_constants.error as e:
-            print 'ERROR: regexp "%s" is invalid (ignored)' % flags.filter
+            print('ERROR: regexp "%s" is invalid (ignored)' % flags.filter)
 
         argmap = self._parseArgs(flags.rest, resolve=True)
 
@@ -14847,10 +14848,10 @@ scope:
           if construct:
             lines = construct.writeIndex(**kwds)
             for line in lines:
-              print line
+              print(line)
           else:
-            print 'WARNING: Ignoring %s (%s)' % (
-              details['arg'], details['kind'])
+            print('WARNING: Ignoring %s (%s)' % (
+              details['arg'], details['kind']))
       end command index;
 
       named
@@ -14884,7 +14885,7 @@ scope:
         password = fs.getenv('METAX_GITHUB_PASSWORD', default=None)
         token = fs.getenv('METAX_GITHUB_TOKEN', default=None)
 
-        print 'WARNING: issue command not yet working!'
+        print('WARNING: issue command not yet working!')
 
         if password or token:
           repo.newIssue(
@@ -14899,7 +14900,7 @@ scope:
             token = token,
           )
         else:
-          print 'ERROR: Must define one of METAX_GITHUB_{PASSWORD,TOKEN}'
+          print('ERROR: Must define one of METAX_GITHUB_{PASSWORD,TOKEN}')
 
       end command issue;
 
@@ -14944,13 +14945,13 @@ scope:
           else:
             destpath = fs.join(destdir, fs.basename(srcpath))
           if not fs.exists(destdir):
-            fs.makedirs(destdir, 0700)
+            fs.makedirs(destdir, 0o700)
             if verbose:
-              print 'Note: Created %s' % destdir
+              print('Note: Created %s' % destdir)
 
           fs.copyfile(srcpath, destpath)
           if verbose:
-            print 'Note: Copied %s to %s' % (srcpath, destpath)
+            print('Note: Copied %s to %s' % (srcpath, destpath))
 
           if baselang.id() == 'python':
             /# Hackery to ensure that __init__.py files exist up the chain.
@@ -14961,7 +14962,7 @@ scope:
               if not fs.exists(ipath):
                 fs.touch(ipath)
                 if verbose:
-                  print 'Note: Touched %s' % ipath
+                  print('Note: Touched %s' % ipath)
               subparts.pop()
               tmpdir = fs.dirname(tmpdir)
 
@@ -14980,7 +14981,7 @@ scope:
             if testpath and fs.exists(testpath):
               CopySrc2Dst(testpath, verbose=verbose)
           else:
-            print 'WARNING: Ignoring arg "%s"' % details['arg']
+            print('WARNING: Ignoring arg "%s"' % details['arg'])
       end command mirror;
 
       named
@@ -14998,7 +14999,7 @@ scope:
       command parents #:
         Print out the parents (and metaparents) of the specified class.
       scope:
-        print 'WARNING: Command "parents" is not yet implemented.'
+        print('WARNING: Command "parents" is not yet implemented.')
       end command parents;
 
       named
@@ -15030,7 +15031,7 @@ scope:
       command reverse #:
         Reverse compile baselang files into meta files.
       scope:
-        print 'WARNING: Command "reverse" is not yet implemented.'
+        print('WARNING: Command "reverse" is not yet implemented.')
       end command reverse;
 
       named
@@ -15057,20 +15058,20 @@ scope:
               cls = getattr(module, clsname, None)
               if cls is None:
                 /# TODO(wmh): Why didn't we detect this earlier?
-                print 'ERROR: Unknown class ' + fqcn
+                print('ERROR: Unknown class ' + fqcn)
               else:
                 entry = getattr(cls, METAX_ENTRY_NAME, None)
                 if entry is None:
-                  print 'ERROR: %s does not have an entry point defined' % fqcn
+                  print('ERROR: %s does not have an entry point defined' % fqcn)
                 else:
                   args = ['meta-dynamic'] + allargs[1:]
                   entry(args)
             else:
-              print 'Not yet implementing run for %s' % baselang.id()
+              print('Not yet implementing run for %s' % baselang.id())
           else:
-            print 'ERROR: Invalid class ' + fqcn
+            print('ERROR: Invalid class ' + fqcn)
         else:
-          print 'usage: metac run <fqcn> [arg]...'
+          print('usage: metac run <fqcn> [arg]...')
       end command run;
 
       named
@@ -15083,12 +15084,12 @@ scope:
         
         metaoopl = self.metalang()
         if metaoopl.id() != 'oopl':
-          print 'ERROR: Do not use -L %s' % metaoopl.id()
-          print 'usage: metac schema <metalang>'
+          print('ERROR: Do not use -L %s' % metaoopl.id())
+          print('usage: metac schema <metalang>')
           sys.exit(1)
 
         if not cli.rest:
-          print 'usage: metac schema <metalang>'
+          print('usage: metac schema <metalang>')
           sys.exit(1)
 
         /# Important distinction:
@@ -15101,7 +15102,7 @@ scope:
           /# Second arg, if present, is the schema file defining the metalang.
           schema_path = cli.rest[0]
         else:
-          print 'usage: metac schema <metalang> <schema_file>'
+          print('usage: metac schema <metalang> <schema_file>')
           sys.exit(1)
         metalang = self.metalangNamed(metal, schema_path=schema_path)
         assert metalang.compiler() is self
@@ -15183,9 +15184,9 @@ scope:
         commands = []
 
         if debug:
-          print 'baselang          %s' % baselang.id()
-          print 'workingdir        %s' % wdir
-          print 'metaroot          %s' % metaroot
+          print('baselang          %s' % baselang.id())
+          print('workingdir        %s' % wdir)
+          print('metaroot          %s' % metaroot)
 
         /# NOTE(wmh): We currently do NOT untar the oopl.tgz file here ... it is
         /# done at a higher level than a specific baselang. Keep it a manual
@@ -15193,7 +15194,7 @@ scope:
         if False:
           oopl_tgz = fs.join(metaroot, 'src', 'templates', 'oopl.tgz')
           if debug:
-            print 'oopl.tgz          %s' % oopl_tgz
+            print('oopl.tgz          %s' % oopl_tgz)
           if not fs.exists(oopl_tgz):
             raise Error('Failed to find %s' % oopl_tgz)
           repopath = self.repositoryPath()
@@ -15219,7 +15220,7 @@ scope:
           default_crosstool = fs.join(
             output_base.strip(), 'external', 'local_config_cc', 'CROSSTOOL')
           if debug:
-            print 'default_crosstool %s' % default_crosstool
+            print('default_crosstool %s' % default_crosstool)
 
           /# If the default crosstool file is missing, invoke bazel to
           /# have it auto-generated.
@@ -15237,11 +15238,11 @@ scope:
           system = platform.system()
           special_crosstool = fs.join(wdir, 'CROSSTOOL.%s.g++' % system)
           if debug:
-            print 'special_crosstool %s' % special_crosstool
+            print('special_crosstool %s' % special_crosstool)
           if fs.exists(special_crosstool):
             fs.copyfile(special_crosstool, default_crosstool)
-            print 'NOTE: Replaced\n  %s\nwith\n  %s' % (
-              default_crosstool, special_crosstool)
+            print('NOTE: Replaced\n  %s\nwith\n  %s' % (
+              default_crosstool, special_crosstool))
       end command setup;
 
       named
@@ -15274,7 +15275,7 @@ scope:
             cmd = root.instantiate([root.id()] + args, parent=parent)
             if cmd.id() == 'main':
               /# Failed to find a valid command.
-              print 'Unknown command "%s"' % command
+              print('Unknown command "%s"' % command)
             else:
               /# Command instantiation identified a command.
 
@@ -15293,7 +15294,7 @@ scope:
               elif command in ('quit', 'exit'):
                 break
               else:
-                print 'Unknown command "%s" (ignored)' % command
+                print('Unknown command "%s" (ignored)' % command)
       end command shell;
 
       named
@@ -15304,7 +15305,7 @@ scope:
         argmap = self._parseArgs(cli.rest, implicit=True)
         metafiles = argmap['metafiles']
         if len(metafiles) != 1:
-          print 'ERROR: must provide exactly one meta file to "metac sh".'
+          print('ERROR: must provide exactly one meta file to "metac sh".')
           return
         path = metafiles[0]
         metafile = self.getMeta(
@@ -15334,7 +15335,7 @@ scope:
         given_ans = None
         while True:
           if given_ans:
-            print 'Found given "%s"' % given_ans
+            print('Found given "%s"' % given_ans)
             ans = given_ans
             given_ans = None
           else:
@@ -15366,11 +15367,11 @@ scope:
               current.list()
             elif action == 'pwd':
               /# List the contents of the current node.
-              print current.path()
+              print(current.path())
             elif action in ('h', 'history'):
               /# List the history.
               for i, cmd in enumerate(history, start=1):
-                print '%5d  %s' % (i, cmd)
+                print('%5d  %s' % (i, cmd))
             elif action[0] == '!':
               /# History reference.
               save = False
@@ -15384,11 +15385,11 @@ scope:
                 given_arg = history[index]
               else:
                 /# Error
-                print 'ERROR: Invalid history request "%s"' % ans
+                print('ERROR: Invalid history request "%s"' % ans)
             else:
-              print 'Unknown command "%s"' % action
+              print('Unknown command "%s"' % action)
           except Exception as e:
-            print 'ERROR: %s' % str(e)
+            print('ERROR: %s' % str(e))
           else:
             if save:
               history.append(ans)
@@ -15423,22 +15424,22 @@ scope:
           path = fs.realpath(metapath)
           parts = path.split('/')
           subpath = '/'.join(parts[-3:])
-          print subpath
+          print(subpath)
 
           filecons = metafile.construct()
           for construct in filecons.attrval('scope:'):
             fkind = construct.kind()
             if fkind == 'namespace':
-              print '  %s scope:' % construct.kindfqn()
+              print('  %s scope:' % construct.kindfqn())
               for ncons in construct.attrval('scope:'):
-                print '    ' + ncons.kindid()
+                print('    ' + ncons.kindid())
                 if ncons.kind() == 'class':
                   for econs in ncons.attrval('scope:'):
-                    print '      ' + econs.kindid()
+                    print('      ' + econs.kindid())
             elif fkind == 'MetaLanguage':
-              print '  %s config:' % construct.kindfqn()
+              print('  %s config:' % construct.kindfqn())
               for mcons in construct.attrval('config:'):
-                print '    ' + mcons.kindid()
+                print('    ' + mcons.kindid())
       end command summarize;
 
       named
@@ -15453,9 +15454,9 @@ scope:
           if targets:
             self.runUnitTests(targets, verbose=flags.verbose)
           else:
-            print 'No targets given to command "test"'
+            print('No targets given to command "test"')
         else:
-          print 'ERROR: no argmap'
+          print('ERROR: no argmap')
       end command test;
 
       named
@@ -15501,16 +15502,16 @@ scope:
           first = metafiles[0]
           destdir = cli.destdir
           if not fs.exists(destdir):
-            fs.makedirs(destdir, 0700)
+            fs.makedirs(destdir, 0o700)
           dotpath = fs.join(
             destdir, fs.basename(PathFromMeta(first.path(), '.dot')))
           self.generateUmlDiagram(
             metafiles, dotpath, config=config, display=cli.display,
             show_user=cli.showuser, show_meta=cli.showmeta,
             show_test=cli.showtest, size=cli.size)
-          print 'Wrote ' + dotpath
+          print('Wrote ' + dotpath)
         else:
-          print 'Must provide metafile(s) to generate uml for'
+          print('Must provide metafile(s) to generate uml for')
       end command uml;
 
       named
@@ -15554,7 +15555,7 @@ scope:
               metac._test_command()
         else:
           pprint.pprint(argmap)
-          print 'ERROR: Unknown command "%s"' % command
+          print('ERROR: Unknown command "%s"' % command)
         fs = metac.fs()
         if cli.showfs or fs.kind() == 'memory':
           fp = sys.stdout
@@ -15723,14 +15724,14 @@ scope:
       else:
         raise Error('Must provide one of password or token.')
       r = session.post(url, data=payload, headers=headers)
-      print '**** HERE with %s' % r.status_code
-      print r.content
-      print r.json()
+      print('**** HERE with %s' % r.status_code)
+      print(r.content)
+      print(r.json())
       if r.status_code == 202:
-        print 'Successfully created Issue %s' % title
+        print('Successfully created Issue %s' % title)
       else:
-        print 'Could not create Issue %s' % title
-        print 'Response: ' + r.content
+        print('Could not create Issue %s' % title)
+        print('Response: ' + r.content)
     test:
       repo = metax.c.GithubRepo('metaesque', 'meta')
 
@@ -15844,7 +15845,7 @@ scope:
           if subnode:
             node = subnode
           else:
-            print 'ERROR: failed to find "%s" within "%s"' % (part, node.path())
+            print('ERROR: failed to find "%s" within "%s"' % (part, node.path()))
       return self if error else node
     test:
       test.root.populate(
@@ -15857,7 +15858,7 @@ scope:
       List the children of the current node
     scope:
       for cid, child in self.children().iteritems():
-        print cid
+        print(cid)
     test:
     end method list;
 
@@ -16166,7 +16167,7 @@ scope:
           if imports and not metafile.hasErrors():
             metafile.importMeta()
       else:
-        /# print 'REUSING %s' % path
+        /# print('REUSING %s' % path)
         pass
 
       file = metafile.construct()

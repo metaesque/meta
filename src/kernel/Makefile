@@ -75,6 +75,9 @@ meta-%:
 up%:
 	cd ../schema/$*; metac schema $* schema.meta; metac meta$*.meta
 
+cup%:
+	cd ../schema/$*; metac --meta_version=current schema $* schema.meta; metac --meta_version=current meta$*.meta
+
 # target fullmeta-%:
 #   Compile all code needed to compile Meta in the specified baselang.
 fullmeta-%:
@@ -99,17 +102,10 @@ shell: fullmeta-py
 
 # target emacs:
 #   Create the emacs major mode for a given metalang, version 2
-emacs: fullmeta-py
-	metac emacs
-
-emacs-doc:
-	metac -L doc -b markdown emacs
-emacs-food:
-	metac -L food emacs
-emacs-family:
-	metac -L family emacs
-emacs-bio:
-	metac -L bio emacs
+emacs-oopl emacs: fullmeta-py
+	metac emacs oopl
+emacs-%:
+	metac emacs $*
 
 # target cards1-%:
 #   Compile a very simple .meta file into a baselang.

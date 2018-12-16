@@ -3,7 +3,7 @@ namespace metax.c.shell #:
 scope:
 
   class Shell < metax.lib.shell.Shell assocs:
-    std assoc cStringIO;
+    std assoc io;
     std assoc os;
   scope:
 
@@ -135,9 +135,9 @@ scope:
         cmd = root.instantiate([root.id(), command] + args, parent=parent)
         if cmd.id() == 'main':
           /# Failed to find a valid command.
-          print 'Unknown command "%s"' % command
+          print('Unknown command "%s"' % command)
         elif cmd.name() != command:
-          print 'Matched %s not %s' % (cmd.name(), command)
+          print('Matched %s not %s' % (cmd.name(), command))
         else:
           /# Command instantiation identified a command.
 
@@ -154,7 +154,7 @@ scope:
           if method:
             method()
           else:
-            print 'Unknown command "%s" (ignored)' % command
+            print('Unknown command "%s" (ignored)' % command)
       return result
     end method dispatch;
 
@@ -214,17 +214,17 @@ scope:
             ancestors = construct.ancestors()
             indent = ''
             for ancestor in ancestors:
-              print '%s%s' % (indent, ancestor.idfqn())
+              print('%s%s' % (indent, ancestor.idfqn()))
               indent += '  '
             /# Now, if requested, we print out the hierarchy below us.
             if below:
               self._showHierarchy(construct, indent)
             else:
-              print '%s%s' % (indent, construct.idfqn())
+              print('%s%s' % (indent, construct.idfqn()))
           elif construct.isMethod():
-            print 'Have method!'
+            print('Have method!')
           else:
-            print 'Warning: no hierarchy action defined for %s' % dir.abspath()
+            print('Warning: no hierarchy action defined for %s' % dir.abspath())
     test:
     end method showHierarchy;
 
@@ -237,7 +237,7 @@ scope:
       multi var args : vec;
     scope:
       if args:
-        print 'Warning; args ignored'
+        print('Warning; args ignored')
       nmsp = self.getctx('namespace', default=None)
       if nmsp:
         /# We know we are in a directory containing a 'construct'
@@ -355,12 +355,12 @@ scope:
               'dir', sym, context=cvar, generator=generator, freshold=1)
             dir.opaqueIs({'construct': cons})
             if debug:
-              print '  Setting %s = %s (%s -> %s)' % (sym, cons.kindfqn(), cvar, dir.familyPath())
+              print('  Setting %s = %s (%s -> %s)' % (sym, cons.kindfqn(), cvar, dir.familyPath()))
             output.append(dir)
           else:
             if debug:
-              print 'WARNING: Ignoring symbol %s (%s) within %s' % (
-                sym, cons.kindfqn(), construct.kindfqn())
+              print('WARNING: Ignoring symbol %s (%s) within %s' % (
+                sym, cons.kindfqn(), construct.kindfqn()))
 
       newform = True
 
@@ -413,7 +413,7 @@ scope:
       method = parent.opaque()['construct']
       assert method.kind() == 'method', 'expecting method not %s' % method.kind()
 
-      fp = cStringIO.StringIO()
+      fp = io.StringIO()
       method.write(fp=fp)
       meta = parent.add('file', 'meta')
       meta.contentIs(fp.getvalue())

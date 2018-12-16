@@ -70,6 +70,7 @@ scope:
   class Part #:
     Abstract superclass of Command, Flag and Arg.
   assocs<py>:
+    usertest std assoc datetime;
     std assoc logging;
     std assoc re;
   assocs<cc>:
@@ -153,7 +154,23 @@ scope:
           result = float(value)
         elif re.match(r'^\d+$', value):
           result = float(value)
-      
+
+      elif mytype == 'date':
+        val = re.sub(r'[-/@:]', '', value)
+        n = len(val)
+        if n == 8:
+          result = datetime.datetime.strptime(val, '%Y%m%d')
+        elif n == 10:
+          result = datetime.datetime.strptime(val, '%Y%m%d%H')
+        elif n == 12:
+          result = datetime.datetime.strptime(val, '%Y%m%d%H%M')
+        elif n == 14:
+          result = datetime.datetime.strptime(val, '%Y%m%d%H%M%S')
+        elif val == 'now':
+          result = datetime.datetime.now()
+        else:
+          raise Error('Unrecognized date "%s"' % value)
+
       elif mytype.startswith('enum'):
         enumtype = self.enumtype()
         if enumtype:
@@ -210,7 +227,9 @@ scope:
       test.iseq('red', test.arg3.typecheck('red'))
       test.iseq(invalid, test.arg3.typecheck('purple'))
       test.iseq('female', test.enumflag.typecheck('female'))
-
+      test.iseq(
+        datetime.datetime(2018, 12, 11, 6, 37, 11),
+        test.dateflag.typecheck('2018-12-11@06:37:11'))
     end method typecheck;
 
     method names : vec<str> #:
@@ -582,7 +601,7 @@ scope:
       flag2 = metax.cli.Flag(
         'flagb', default='', aliases='a,b', summary='some other flag')
       /# TODO(wmh): Reinstate this when moved to metacnew!
-      /# print 'reinstate test for Command.registerPart'
+      /# print('reinstate test for Command.registerPart')
       test.raises(metax.cli.NameConflict, cmd.registerPart, flag2)
     end method registerPart;
 
@@ -786,7 +805,7 @@ scope:
       errors = []
 
       if debug:
-        print 'DEBUG: Starting instantiate with names=%s argv=%s start=%s' % (self.names(), argv, start)
+        print('DEBUG: Starting instantiate with names=%s argv=%s start=%s' % (self.names(), argv, start))
         self.show()
 
       if parent is None:
@@ -794,7 +813,7 @@ scope:
         /# executable.
         self.nameIs(argv[0])
         if debug:
-          print 'DEBUG: Setting name to %s' % self.name()
+          print('DEBUG: Setting name to %s' % self.name())
       else:
         /# For subcommands, the name of the command is fixed, and must match
         /# argv[0].
@@ -814,7 +833,7 @@ scope:
         item = argv[index]
         nextitem = argv[index+1] if index < nm1 else None
         if debug:
-          print 'Working on index=%d item="%s" next="%s"' % (index, item, nextitem)
+          print('Working on index=%d item="%s" next="%s"' % (index, item, nextitem))
         if item[0] == '-':
           /# We are parsing a flag.
           m = fre.match(item)
@@ -857,8 +876,8 @@ scope:
                   if start:
                     flag.startIs(flag.value())
                   if debug:
-                    print 'DEBUG: item "%s" sets flag "--%s" to "%s"' % (
-                      item, flag.name(), flag.value())
+                    print('DEBUG: item "%s" sets flag "--%s" to "%s"' % (
+                      item, flag.name(), flag.value()))
               else:
                 errors.append(
                   'Command %s does not recognize flag -%s' %
@@ -888,8 +907,9 @@ scope:
                 if start:
                   flag.startIs(flag.value())
                 if debug:
-                  print 'DEBUG: item "%s" sets flag "--%s" to "%s"' % (
-                    item, flagname, flag.value())
+                  print(
+                    'DEBUG: item "%s" sets flag "--%s" to "%s"' %
+                    (item, flagname, flag.value()))
             else:
               errors.append(
                 'Command %s does not recognize flag --%s' % 
@@ -901,7 +921,7 @@ scope:
           if command:
             /# We are parsing a subcommand.
             if debug:
-              print 'DEBUG: item "%s" is a subcommand' % item
+              print('DEBUG: item "%s" is a subcommand' % item)
             result = command.instantiate(
               argv[index:], parent=self, start=start, efp=efp, debug=debug)
             /# The recursive call consumes all args, so we are done.
@@ -913,17 +933,18 @@ scope:
             arg = result.findArg(current_arg_index)
             if arg:
               if debug:
-                print 'DEBUG: Identified arg %s at position %d' % (arg.name(), current_arg_index)
+                print('DEBUG: Identified arg %s at position %d' % (arg.name(), current_arg_index))
 
               next_index = arg.instantiate(argv, index)
               if next_index > -1:
                 /# We have a valid arg.
                 if debug:
                   if next_index > index + 1:
-                    print 'DEBUG: arg "%s" consumes items %s' % (
-                      arg.name(), argv[index:next_index])
+                    print(
+                      'DEBUG: arg "%s" consumes items %s' %
+                      (arg.name(), argv[index:next_index]))
                   else:
-                    print 'DEBUG: item "%s" is arg "%s"' % (item, arg.name())
+                    print('DEBUG: item "%s" is arg "%s"' % (item, arg.name()))
                 if start:
                   arg.startIs(arg.value())
 
@@ -1007,6 +1028,7 @@ scope:
           >|"""faux:
           >|  A command with a flag and arg of each type.
           >|  --deps                 0                              none       =         
+          >|  --dob                  1980-05-17 00:00:00            none       1980-05-1$
           >|  --gender               undef                          none       =         
           >|  --height               1.87                           none       =         
           >|  --name                 Bob                            none       =         
@@ -1017,6 +1039,7 @@ scope:
           >|"""image:
           >|  Image processing.
           >|  --deps                 1                              =          0         
+          >|  --dob                  1980-05-17 00:00:00            none       1980-05-1$
           >|  --gender               female                         =          undef     
           >|  --height               1.63                           =          1.87      
           >|  --name                 Alice                          =          Bob       
@@ -1033,6 +1056,7 @@ scope:
           >|"""list:
           >|  Image listing
           >|  --deps                 1                              =          0         
+          >|  --dob                  1980-05-17 00:00:00            none       1980-05-1$
           >|  --gender               female                         =          undef     
           >|  --height               1.63                           =          1.87      
           >|  --name                 Alice                          =          Bob       
@@ -1158,12 +1182,12 @@ scope:
             if vm:
               result[vm.group(1)] = int(vm.group(2) or -1)
             else:
-              print 'ERROR: Invalid enum spec "%s" (ignored)' % part
+              print('ERROR: Invalid enum spec "%s" (ignored)' % part)
         else:
           result = None
         -> result
       test<py>:
-        print '**** FIX ME ... not being generated in meta2!'
+        print('**** FIX ME ... not being generated in meta2!')
       end accessor get;
     end field;
 
@@ -1638,6 +1662,9 @@ scope:
       test.realflag = test.faux.newFlag(
         'height', mytype='real', aliases='h', default='1.87',
         summary='Height in meters.')
+      test.dateflag = test.faux.newFlag(
+        'dob', mytype='date', aliases='d', default='1980-05-17',
+        summary='Date of birth.')
       test.enumflag = test.faux.newFlag(
         'gender', mytype='enum<undef|female|male|trans>', default='undef',
         summary='Gender of person')

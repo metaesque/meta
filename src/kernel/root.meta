@@ -123,7 +123,7 @@ scope:
         /# TODO(wmh): Get this working in bazel!  Need to add to assocs
         /# and define a BUILD target ... in oopl.tgz?
         import metastrap
-        /# print 'NOTE: Initializing metax.root.Config!'
+        /# print('NOTE: Initializing metax.root.Config!')
         result = metastrap.Config()
         logging.info('metax.root.Object.Config: initialized to %s' % str(result))
         -> result
@@ -280,7 +280,7 @@ scope:
               metarep = os.getenv('METAREP')
               if metarep is None:
                 metarep = '/Users/wmh/src/wmh/lib/meta2'
-                print 'WARNING: Temporarily using hardcoded repopath %s' % metarep
+                print('WARNING: Temporarily using hardcoded repopath %s' % metarep)
               else:
                 metarep += '2'  # NEWSUFFIX
             parts = [metarep, 'oopl', 'python']
@@ -329,7 +329,7 @@ scope:
 
       test method test_generic
       scope<py>:
-        print 'here with %s' % test.obj
+        print('here with %s' % test.obj)
       scope<js>:
         console.log('here with ' + test.obj);
       end;

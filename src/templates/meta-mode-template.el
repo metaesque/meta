@@ -876,7 +876,7 @@ such newline-indentation is provided.")
       ;; Color multi-line comment blocks
       '("\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\|\n\\)*\\)" 2 font-lock-comment-face)
       ;; Color the "end" token.
-      '("end\\( [^;\n]*\\)?;" . font-lock-metalang-end-face)
+      '("end\\( [a-zA-Z0-9_. ]+\\)?;" . font-lock-metaoopl-end-face)
       ;; Color literal strings.
       (cons "'[^'\n]*'" font-lock-string-face)
       ;'("#:\n\\([ \t]*.*\\)" 1 font-lock-comment-face)

@@ -73,7 +73,6 @@ scope:
     std assoc logging;
     std assoc os;
     std assoc re;
-    std assoc sre;
     std assoc shlex;
     std assoc subprocess;
   scope:
@@ -155,10 +154,10 @@ scope:
           family_str = var_re.sub('(?P<\\1>[^\/]+)', family)
           try:
             path_re = re.compile(family_str)
-          except sre.error as e:
-            print 'FAMILY: %s' % family
-            print 'FAMILY_STR: %s' % family_str
-            print 'ERROR: %s' % e
+          except re.error as e:
+            print('FAMILY: %s' % family)
+            print('FAMILY_STR: %s' % family_str)
+            print('ERROR: %s' % e)
             raise Exception('testing things')
           pmatch = path_re.match(path)
           if pmatch:
@@ -483,7 +482,7 @@ scope:
         /#    they already had aliases applied when they were first invoked.
         prearg_groups = self.split(self._aliases[command])
         if len(prearg_groups) > 1:
-          print 'ERROR: Not supporting aliases producing %d commands' % len(prearg_groups)
+          print('ERROR: Not supporting aliases producing %d commands' % len(prearg_groups))
         command, preargs = prearg_groups[0]
         args = preargs + args
 
@@ -523,9 +522,9 @@ scope:
             result = dispatcher(command, method, args)
           else:
             result = method(*args)
-        except Error, e:
+        except Error as e:
           self.log('%s: %s\n', e.__class__.__name__, str(e))
-        except IndexError, e:
+        except IndexError as e:
           /# This often happens if the method implementing the command is
           /# careless about how it parses arguments (and assumes that an
           /# argument exists that doesn't
@@ -642,23 +641,23 @@ scope:
       dir = self.cwd()
       for path in args:
         if '/' in path:
-          print 'WARNING: Not yet handling relpaths in cat. Ignoring ' + path
+          print('WARNING: Not yet handling relpaths in cat. Ignoring ' + path)
           continue
         node = dir.child(path)
         if not node:
-          print 'File "%s" does not exist.' % path
+          print('File "%s" does not exist.' % path)
           continue
         if node.isSymlink():
           node = node.link()
           if not node:
-            print 'Symlink "%s" has no link' % path
+            print('Symlink "%s" has no link' % path)
             continue
 
         if node.isDir():
-          print 'Cannot cat directory "%s"' % path
+          print('Cannot cat directory "%s"' % path)
           continue
         else:
-          print node.content()
+          print(node.content())
     test:
       sh = test.shell
       sh.runCommand('alias', ['ls', 'ls -F'])
@@ -703,7 +702,7 @@ scope:
         for command in sorted(self._commands.keys()):
           info = self._commands[command]
           method = info['method']
-          /#print dir(method.im_func)
+          /#print(dir(method.im_func))
           desc = method.im_func.func_doc
           lines = re.split('\n', desc or 'Missing doc string: ' % method.__name__)
           self.log('%-15s: %s\n', command, lines[0])
@@ -800,7 +799,7 @@ scope:
           /# Move up to parent.
           dir = dir.parent()
           if dir is None:
-            print 'WARNING: Cannot move above root'
+            print('WARNING: Cannot move above root')
             break
           else:
             self.cwdIs(dir)
@@ -819,10 +818,10 @@ scope:
               /# We ensure that the subdir is still fresh.
               dir.refresh()
 
-              /# print '***** HERE with %s = %s' % (dir.abspath(), dir.infomap())
+              /# print('***** HERE with %s = %s' % (dir.abspath(), dir.infomap()))
 
             else:
-              print 'ERROR: %s is not a directory' % dir.abspath()
+              print('ERROR: %s is not a directory' % dir.abspath())
               break
           else:
             raise InvalidDirectoryError('Directory %s has no child %s' % (dir.abspath(), part))
@@ -859,7 +858,7 @@ scope:
         /#   type: the value must be of this specified python type
         /#   set: the value must be in the given set
         var_type = var_info['type']
-        /# print 'var=%s var_info=%s var_type=%s' % (var, var_info, var_type)
+        /# print('var=%s var_info=%s var_type=%s' % (var, var_info, var_type))
         if type(var_type) is type:
           try:
             value = var_type(value)
@@ -1015,9 +1014,9 @@ scope:
         stdout, stderr = p.communicate()
         retcode = p.returncode
         if retcode < 0:
-          print >>sys.stderr, "Child was terminated by signal", -retcode
+          sys.stderr.write('Child was terminated by signal %d' % -retcode)
         else:
-          print >>sys.stderr, "Child returned ", retcode
+          sys.stderr.write('Child returned %d' % retcode)
           if stdout:
             self.log('-' * 70 + '\n')
             self.log('STDOUT:\n')
@@ -1026,13 +1025,13 @@ scope:
             self.log('-' * 70 + '\n')
             self.log('STDERR:\n')
             self.log(stderr + '\n')
-      except OSError, e:
-        print >>sys.stderr, "Execution failed:", e
+      except OSError as e:
+        sys.stderr.write('Execution failed: %s' % e)
         retcode = subprocess.call("mycmd" + " myarg", shell=True)
         if retcode < 0:
-          print >>sys.stderr, "Child was terminated by signal", -retcode
+          sys.stderr.write('Child was terminated by signal %d' % -retcode)
         else:
-          print >>sys.stderr, "Child returned", retcode
+          sys.stderr.write('Child returned %d' % retcode)
     test:
       /# Need to mox out sys.stdin.readline
       pass
@@ -1481,7 +1480,7 @@ scope:
       var child : Node;
     scope:
       self._children[child.name()] = child
-      /# print 'Added %s below %s' % (child.name(), self.name())
+      /# print('Added %s below %s' % (child.name(), self.name()))
     test:
       /# Because Node.__init__ calls registerChild to register
       /# every object with its parent, we can test registerChild by
@@ -1563,7 +1562,7 @@ scope:
       if info is not None:
         if kind == 'dir':
           result.infomapIs(info)
-          /# print '**** Have set %s info to %s' % (result.abspath(), info)
+          /# print('**** Have set %s info to %s' % (result.abspath(), info))
         else:
           raise Error(
             'The infomap keyword is only legal for kind dir not %s' % kind)

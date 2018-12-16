@@ -60,7 +60,7 @@ def Config(verbose=Verbose):
         configpath = os.path.join(meta_config_dir, 'config.meta')
     exists = os.path.exists(configpath)
     if verbose:
-      print 'NOTE: Reading %s' % configpath
+      print('NOTE: Reading %s' % configpath)
     result = {}
     _Config = result
     if exists:
@@ -71,9 +71,9 @@ def Config(verbose=Verbose):
             result[m.group('var')] = os.path.expandvars(m.group('val'))
       result['config_path'] = configpath
     else:
-      print 'WARNING: %s does not exist' % configpath
-      print 'PWD: %s' % os.getcwd()
-      print 'DIR: %s' % str(os.listdir(os.getcwd()))
+      print('WARNING: %s does not exist' % configpath)
+      print('PWD: %s' % os.getcwd())
+      print('DIR: %s' % str(os.listdir(os.getcwd())))
       result['config_path'] = configpath
 
   # TODO(wmh): Generalize the syntax of config.meta to support the
@@ -97,9 +97,9 @@ def Config(verbose=Verbose):
     'story': os.path.join(
       os.getenv('HOME'), 'src', 'wmx', 'lib', 'python', 'metarotica', 'story', 'meta', 'schema.meta'),
   }
-  for k, v in result['metalangs'].iteritems():
+  for k, v in result['metalangs'].items():
     if not os.path.exists(v):
-      print 'ERROR: %s has non-existent path %s' % (k, v)
+      print('ERROR: %s has non-existent path %s' % (k, v))
       sys.exit(1)
   #import pprint
   # pprint.pprint(result)
@@ -166,7 +166,7 @@ def Setup(verbose=Verbose, auto=False):
         sys.argv.pop(i)
         sys.argv.pop(i)
   if verbose:
-    print "NOTE: Using meta version '%s'" % version
+    print("NOTE: Using meta version '%s'" % version)
 
   global Version
   Version = version
@@ -197,7 +197,7 @@ def UpdatePythonPath(updates, verbose=False):
     for newpath in updates:
       sys.path.insert(0, newpath)
       if verbose:
-        print 'NOTE: Added %s to front of sys.path' % newpath
+        print('NOTE: Added %s to front of sys.path' % newpath)
 
 
 def VersionPath(version):
@@ -218,14 +218,14 @@ def VersionPath(version):
 def RegisterPath(path, verbose=False):
   # Ensure that 'path' is in sys.path.
   if not os.path.exists(path):
-    print 'ERROR in metameta.RegisterPath: Failed to find %s' % path
+    print('ERROR in metameta.RegisterPath: Failed to find %s' % path)
     # raise Exception('here')
 
-  #print 'Adding %s to start of sys.path' % path
+  #print('Adding %s to start of sys.path' % path)
   sys.path.insert(0, path)
   NewPythonPaths.append(path)
   if verbose:
-    print 'Adding %s to python path' % path
+    print('Adding %s to python path' % path)
 
   # Ensure that 'path' is in PYTHONPATH
   env = os.environ
@@ -493,12 +493,12 @@ class MetaImporter(object):
     Compiler, command, cli = ImportMeta(
       ['metac', '--metalang', 'oopl', '--baselang', 'python'])
     Compiler.Initialize()
-    # print '**** HERE with cli=%s' % cli
+    # print('**** HERE with cli=%s' % cli)
     # command.show()
     import metax.root
     metax.root.Object.Init(cli=cli)
     metac = Compiler(metal=cli.metalang, basel='python')
-    # print 'NOTE: Created %s' % str(metac)
+    # print('NOTE: Created %s' % str(metac))
 
     # field metac: parser.Compiler
     #   The Meta compiler.
@@ -562,7 +562,7 @@ class MetaImporter(object):
       pass
     else:
       cli = self._metac.cli()
-      # print 'cli=%s' % id(cli)
+      # print('cli=%s' % id(cli))
       # assert cli
       subpath = fullname.replace('.', '/')
       repdir = os.path.join(MetaImporter.METAREP, 'oopl', 'python')
@@ -572,7 +572,7 @@ class MetaImporter(object):
         # associated metafile needs recompiling.
         if not self._metac.maybeRecompileMeta(pyfile):
           # If errors were found, we exit.
-          print 'Exiting due to errors'
+          print('Exiting due to errors')
           sys.exit(1)
         
         ismeta = True

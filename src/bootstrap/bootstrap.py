@@ -52,7 +52,7 @@ VARS = collections.OrderedDict([
     'type': ValidPath,
   }),
   ('python', {
-    'desc': 'The path of the python executable.',
+    'desc': 'The path of the python2 executable.',
     'default': '/usr/bin/python',
     'type': ValidPath,
   }),
