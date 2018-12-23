@@ -290,7 +290,7 @@ def ImportMeta(argv=None):
 def RecoverMeta(e):
   # Invoked if invocation of a meta-generated entry point (MetaxEntry) raises
   # an exception.
-  import cStringIO
+  import io
   import traceback
   import metax.c
   import metax.root
@@ -307,7 +307,9 @@ def RecoverMeta(e):
   metac = metax.c.Compiler(metal='oopl', basel='python')
   metax.c.Compiler.CurrentIs(metac)
   text = traceback.format_exc()
-  ifp = cStringIO.StringIO(text)
+  if sys.version_info[0] == 2 and isinstance(text, str):
+    text = unicode(text)
+  ifp = io.StringIO(text)
   baselang = metac.metalang().baselangNamed('python')
   metac.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)
 

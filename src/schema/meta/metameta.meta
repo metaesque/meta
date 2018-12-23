@@ -10,7 +10,7 @@ namespace metax.meta scope:
     meta file (or auto-generated internally).
   assocs:
     std assoc re;
-    std assoc cStringIO;
+    std assoc io;
   scope:
 
     method kind : str scope:
@@ -114,7 +114,7 @@ namespace metax.meta scope:
         assert context is not None, 'Construct %s has null context' % uid
 
       /#if self.kind() == 'class':
-      /#  print 'CREATING %s (%s)' % (uid, id(self))
+      /#  print('CREATING %s (%s)' % (uid, id(self)))
     end;
 
     method kindid : str #:
@@ -221,7 +221,7 @@ namespace metax.meta scope:
         return (result, num)
 
       def NewStr():
-        return cStringIO.StringIO()
+        return io.StringIO()
 
       assert construct is not construct2
 
@@ -355,7 +355,7 @@ namespace metax.meta scope:
             /# all.  Useful when forming the tuples passed in as secondaries
             /# from code that may or may not produce null values ... avoids
             /# caller having to do checks.
-            /# print '**** WARNING: IGNORING %s (None) within %s' % (skey, construct.kindfqn())
+            /# print('**** WARNING: IGNORING %s (None) within %s' % (skey, construct.kindfqn()))
             continue
           elif isinstance(sval, metax.attr.Attribute):
             secondary = sval
@@ -560,7 +560,7 @@ namespace metax.meta scope:
             self.metafile().error(
               'Failed to find attribute "%s"' % key,
               line=self.primary().line())
-            /#print info
+            /#print(info)
             /#raise metax.c.Error(
             /#  'Here with attr %s : %s in %s' %
             /#  (key, info['type'], self.kindid()))
@@ -577,7 +577,7 @@ namespace metax.meta scope:
             /# here and ConsInfo.registerSecondary. Alternative, we can just be
             /# careful about using metax.c.EMPTY ... only when truly needed.
 
-            /# print '****** HERE with key %s type %s value %s'  % (key, attrinfo['type'], str(value))
+            /# print('****** HERE with key %s type %s value %s'  % (key, attrinfo['type'], str(value)))
             attr = metax.c.MetaFile.CreateNewAttribute(
               self, consinfo, key, key=key, value=value, typecheck=False,
               /# Not necessary since we are passing in parent, but that may
@@ -815,7 +815,7 @@ namespace metax.meta scope:
         If true, do not consider self. If false, do consider self.
     scope:
       target = self.parent().parent() if proper else self
-      if isinstance(kind, re._pattern_type):
+      if isinstance(kind, re._pattern_type if sys.version_info[0] == 2 else re.Pattern):
         while target and not kind.search(target.kind()):
           target = target.parentConstruct()
       else:
@@ -1165,7 +1165,7 @@ namespace metax.meta scope:
                 /# sets the value to None in such cases.
                 /# 
                 /# For now, we do not add these attributes.
-                /# print '**** HERE with none %s %s for %s' % (attribute, key, construct.kindfqn())
+                /# print('**** HERE with none %s %s for %s' % (attribute, key, construct.kindfqn()))
                 pass
               else:
                 attribute.lineIs(sline)
@@ -1320,7 +1320,7 @@ namespace metax.meta scope:
               sep=sep, minlevel=minlevel, maxlevel=maxlevel,
               width=width, suffix=suffix, filter=filter)
 
-          /# print 'For "%s" there were %d children and %s' % (output[-1], len(output) - currdex, matches)
+          /# print('For "%s" there were %d children and %s' % (output[-1], len(output) - currdex, matches))
           if len(output) <= currdex and filter:
             /# We are filtering, and there was no match amongst any children,
             /# so we remove this entry too.
@@ -1335,7 +1335,7 @@ namespace metax.meta scope:
     method asStr : str #:
       Return a string representation of self.
     scope:
-      fp = cStringIO.StringIO()
+      fp = io.StringIO()
       self.write(fp=fp)
       return fp.getvalue()
     test:
@@ -1579,7 +1579,7 @@ namespace metax.meta scope:
       var output : vec<metax.c.Construct> = null #:
         Where to write constructs created during expansion.
     scope:
-      print '**** MetaConstruct no expansion needed for %s' % self.kindid()
+      print('**** MetaConstruct no expansion needed for %s' % self.kindid())
     end method expandMeta;
 
     override
@@ -1671,7 +1671,7 @@ namespace metax.meta scope:
 
         /# Inherit parent constructs into self.
         pmap = metalangparent.consmap()
-        for kind, ccls in pmap.iteritems():
+        for kind, ccls in pmap.items():
           self.registerConstructClass(kind, ccls)
     end method postCreationInitialization;
 
@@ -1684,7 +1684,7 @@ namespace metax.meta scope:
         The subclass of Construct to use to represent instances of
         construct 'kind'.
     scope:
-      /# print 'Registering %s %s for %s' % (kind, cls.__name__, self.id())
+      /# print('Registering %s %s for %s' % (kind, cls.__name__, self.id()))
       /# FIXME(wmh)
       /# assert issubclass(cls, metax.meta.Construct)
       self._consmap[kind] = cls
@@ -1806,7 +1806,7 @@ namespace metax.meta scope:
             /# added, and should not be used during canonicalization?
             /#  - do we add an implicit field to ComplexBlock? Or to NamespaceConstruct?
             scope = metax.attr.ComplexBlock(None, 'scope:', [])
-            /# print 'Added new scope to %s' % child.kindfqn()
+            /# print('Added new scope to %s' % child.kindfqn())
             child.registerAttribute(scope)
         elif ckind == 'class':
           /# We have a File-level class ... move it into namespace.
@@ -1821,8 +1821,8 @@ namespace metax.meta scope:
             nmsp_scope = current_namespace.attr('scope:')
             child.changeParent(nmsp_scope)
             if False:
-              print 'Implicitly added %s to %s' % (
-               child.kindfqn(), current_namespace.kindfqn())
+              print('Implicitly added %s to %s' % (
+               child.kindfqn(), current_namespace.kindfqn()))
             /#current_namespace._setClassVariant(child)
     test:
     end method preExpandFileConstruct;
@@ -1857,7 +1857,7 @@ namespace metax.meta scope:
 
       outbase = 'meta%s.meta' % (self.id())
       if verbose:
-        print 'Generating ' + outbase
+        print('Generating ' + outbase)
 
       errors = 0
       for construct in config:
@@ -1886,8 +1886,9 @@ namespace metax.meta scope:
           if cscope:
 
             if verbose:
-              print '  construct %-10s class %-20s parent %s' % (
-                construct.id(), clsname, parent_clsname)
+              print(
+                '  construct %-10s class %-20s parent %s' %
+                (construct.id(), clsname, parent_clsname))
 
             assocscope = construct.attr('associations:', default=None)
 
@@ -1947,7 +1948,7 @@ namespace metax.meta scope:
                 position='-',
               )
             else:
-              /# print 'WARNING: Found explicit kind() method for %s' % construct.kindfqn()
+              /# print('WARNING: Found explicit kind() method for %s' % construct.kindfqn())
               pass
 
             /# Now consider the expand:, import:, translate:, compile: constructs.
@@ -1994,9 +1995,9 @@ namespace metax.meta scope:
                   mname, context, parent=kscope, precount=1, primary_line=1,
                   features=features, secondaries=secondaries)
                 if verbose:
-                  print '    method %s' % mname
+                  print('    method %s' % mname)
           else:
-            print 'WARNING: No scope for %s' % construct.kindfqn()
+            print('WARNING: No scope for %s' % construct.kindfqn())
         elif kind == 'BaseLanguage':
           /# Create base language instances.
           clsname = construct.className()
@@ -2022,8 +2023,9 @@ namespace metax.meta scope:
           cscope = construct.attr('scope:', default=None)
           if cscope:
             if verbose:
-              print '  baselang  %-10s class %-20s parent %s' % (
-                construct.id(), clsname, parent_clsname)
+              print(
+                '  baselang  %-10s class %-20s parent %s' %
+                (construct.id(), clsname, parent_clsname))
 
             lnum = 0
             features = []
@@ -2072,21 +2074,21 @@ namespace metax.meta scope:
       outpath = outbase  # put this someplace more predicitably then current dir
       if not errors:
         if fs.exists(outpath):
-          fs.chmod(outpath, 0600)
+          fs.chmod(outpath, 0o600)
         with open(outpath, 'w') as cfp:
           /#namespace.termcodeIs(1)
           /#namespace.write(fp=cfp, mode={'uplift': True})
           namespace.write(fp=cfp)
         if fs.exists(outpath):
           if verbose:
-            print 'Wrote ' + outpath
-          fs.chmod(outpath, 0400)
+            print('Wrote ' + outpath)
+          fs.chmod(outpath, 0o400)
       else:
-        print 'Not writing %s due to errors' % outpath
+        print('Not writing %s due to errors' % outpath)
 
 
       /# Compile the .meta file to verify that it is working properly.
-      /# print '######################\n# IMPORTANT: Execute this!\n######################\n%% metac %s' % outpath
+      /# print('######################\n# IMPORTANT: Execute this!\n######################\n%% metac %s' % outpath)
       /# import os
       /# os.system('metac %s' % outpath)
     test:
@@ -2235,7 +2237,7 @@ namespace metax.meta scope:
       fs = metac.fs()
       baselang = metac.baselang()
       if debug:
-        print 'HERE in FileConstruct.importMeta for %s' % metafile.path()
+        print('HERE in FileConstruct.importMeta for %s' % metafile.path())
       for fqn in metafile.classdeps():
         if fqn in existing_classes:
           /# We already have the class parsed, so we do not need to check its
@@ -2262,7 +2264,7 @@ namespace metax.meta scope:
 
           /# Register metafile
           if debug:
-            print '  %s = %s' % (fqn, meta_path)
+            print('  %s = %s' % (fqn, meta_path))
           if meta_path in existing_metafiles:
             pass
           elif meta_path:
@@ -2271,7 +2273,7 @@ namespace metax.meta scope:
       /# We import all of the dependent metafiles.
       for meta_path in metapaths:
         if debug:
-          print '  *** Loading %s' % meta_path
+          print('  *** Loading %s' % meta_path)
         metafile = metac.getMeta(
           meta_path, expand=True,
           /# I suspect there are times where we will need to perform a
@@ -2285,7 +2287,7 @@ namespace metax.meta scope:
           /# We definitely don't need to translate or compile these classes.
           translate=False, compile=False)
         if debug:
-          print '  *** Loaded %s' % metafile.path()
+          print('  *** Loaded %s' % metafile.path())
 
       /# Establish which metafiles need to be transitively loaded due to
       /# additional unresolved dependencies in the above code.
@@ -2504,7 +2506,7 @@ namespace metax.meta scope:
     super (id,parent,context)
     scope:
       if id != 'Person':
-        print 'CREATING GenericConstruct for %s %s' % (kind, id)
+        print('CREATING GenericConstruct for %s %s' % (kind, id))
         /# raise metax.c.Error('blah')
     end lifecycle;
 

@@ -272,8 +272,8 @@ scope:
   end class StubHolder;
 
   native fixme scope<py>:
-    import cStringIO
-    cStringIOClass = cStringIO.StringIO().__class__
+    import io
+    StrStrClass = io.StringIO().__class__
   end native;    
   
   class TestCase #:
@@ -364,7 +364,6 @@ scope:
   parent<cc> ^.testing.Test
   assocs<py>:
     std assoc shutil;
-    std assoc cStringIO;
     std assoc io;
     std assoc logging;
     usertest std assoc os;
@@ -583,7 +582,7 @@ scope:
         cls.DebugIs(True)
       cls.CanonicalStdoutIs(sys.stdout)
       cls.CanonicalStderrIs(sys.stderr)
-      cls.cStringIOClass = cStringIO.StringIO().__class__
+      cls.StrStrClass = io.StringIO().__class__
     finalize<py>:
       self.deblog('Invoking %s finalizer for %s' % (self.name(), self.methname()))
     setup<py>:
@@ -613,7 +612,7 @@ scope:
         "Invoking " + this->name() + " setUp for " + this->methname());
     clsetup<py>:
       if metax.test.TestCase.Debug():
-        print 'Invoking %s SetUp' % meta.__name__
+        print('Invoking %s SetUp' % meta.__name__)
     clsetup<js>:
       if (/* metax.test.*/ TestCase.Debug()) {
         console.log('Invoking ' + this.constructor.name + ' SetUp');
@@ -678,7 +677,7 @@ scope:
       /# More here!
     clteardown<py>:
       if metax.test.TestCase.Debug():
-        print 'Invoking %s TearDown' % cls.__name__
+        print('Invoking %s TearDown' % cls.__name__)
     clteardown<js>:
       if (TestCase.Debug()) {
         console.log('Invoking ' + this.constructor.name + ' TearDown');
@@ -797,7 +796,7 @@ scope:
       var msg : &str;
     scope<py>:
       if self.debug():
-        print '%s: %s' % (self.uid(), msg)
+        print('%s: %s' % (self.uid(), msg))
     scope<js>:
       if (this.debug()) {
         this.log(this.uid() + ': ' + msg);
@@ -900,13 +899,13 @@ scope:
       Capture all subsequent output written to stdout until getStdout() is
       invoked.
     scope<py>:
-      self._stdout = cStringIO.StringIO()
+      self._stdout = io.StringIO()
       sys.stdout = self._stdout
     test<py>:
       self.assertTrue(sys.stdout is metax.test.TestCase.CanonicalStdout())
       self._tc.captureStdout()
-      self.assertTrue(isinstance(sys.stdout, metax.test.cStringIOClass))
-      print 'hello world'
+      self.assertTrue(isinstance(sys.stdout, metax.test.StrStrClass))
+      print('hello world')
       out = self._tc.getStdout()
       self.assertTrue(sys.stdout is metax.test.TestCase.CanonicalStdout())
       self.assertEqual('hello world\n', out)
@@ -919,7 +918,7 @@ scope:
     scope<py>:
       /# TODO(wmh): Use self._stdout to test.
       cls = sys.stdout.__class__
-      if cls is TestCase.cStringIOClass or isinstance(sys.stdout, StringIO.StringIO):
+      if cls is TestCase.StrStrClass or isinstance(sys.stdout, StringIO.StringIO):
         result = sys.stdout.getvalue()
       else:
         result = None
@@ -936,12 +935,12 @@ scope:
       Capture all subsequent output written to stderr until getStderr() is
       invoked.
     scope<py>:
-      self._stderr = cStringIO.StringIO()
+      self._stderr = io.StringIO()
       sys.stderr = self._stderr
     test<py>:
       self.assertTrue(sys.stderr is metax.test.TestCase.CanonicalStderr())
       self._tc.captureStderr()
-      self.assertTrue(isinstance(sys.stderr, metax.test.cStringIOClass))
+      self.assertTrue(isinstance(sys.stderr, metax.test.StrStrClass))
       sys.stderr.write('hello world\n')
       err = self._tc.getStderr()
       self.assertTrue(sys.stderr is metax.test.TestCase.CanonicalStderr())
@@ -955,7 +954,7 @@ scope:
     scope<py>:
       /# TODO(wmh): Use self._stdout to test.
       cls = sys.stderr.__class__
-      if cls is TestCase.cStringIOClass or isinstance(sys.stderr, StringIO.StringIO):
+      if cls is TestCase.StrStrClass or isinstance(sys.stderr, StringIO.StringIO):
         result = sys.stderr.getvalue()
       else:
         result = None
@@ -1058,9 +1057,9 @@ scope:
       var content : str = null;
     scope<py>:
       if content is None:
-        result = cStringIO.StringIO()
+        result = io.StringIO()
       else:
-        result = cStringIO.StringIO(content)
+        result = io.StringIO(content)
       self.strstreams().append(result)
       return result
     scope<js>:
@@ -1472,7 +1471,7 @@ scope:
       else:
         epath = metax.root.Object.Resource(
           'entry_mre', fqn='metax.test.TestCase')
-        /# print '**** HERE with epath=%s' % epath
+        /# print('**** HERE with epath=%s' % epath)
         with open(epath, 'r') as fp:
           contents = fp.read()
 
@@ -1657,7 +1656,7 @@ scope:
       
       /# Revert fake-filesystem-related modules
       for modname, mod in self._hacks.iteritems():
-        /# print 'Here with %s = %s vs %s' % (modname, getattr(module, modname, None), mod)
+        /# print('Here with %s = %s vs %s' % (modname, getattr(module, modname, None), mod))
         setattr(module, modname, mod)
 
     test<py>:
@@ -2129,7 +2128,7 @@ scope:
       if TestCase.WriteGoldens():
         with open(golden, 'w') as fp:
           fp.write(content)
-        print 'Wrote %d bytes to golden %s' % (len(content), golden)
+        print('Wrote %d bytes to golden %s' % (len(content), golden))
       else:
         if True:
           with open(golden, 'r') as fp:
@@ -2157,7 +2156,7 @@ scope:
     scope<py>:
       if TestCase.WriteGoldens():
         shutil.copyfile(path, golden)
-        print 'Copied %s to %s' % (path, golden)
+        print('Copied %s to %s' % (path, golden))
       else:
         self.iseqfile(golden, path)
     scope<js>:
@@ -2415,6 +2414,30 @@ scope:
     scope<cc>:
       throw metax::root::Error("TestCase.isinst() not yet implemented");
     end method isinst;
+
+    method exists #:
+      Verify that a path exists.
+    params:
+      var path : str #:
+        A path to verify exists.
+      var msg : str = null #:
+        The message to print on failure.
+    scope:
+      self.istrue(os.path.exists(path), msg or '%s does not exist' % path)
+    test:
+    end method exists;
+
+    method notexists #:
+      Verify that a path does not exist.
+    params:
+      var path : str #:
+        A path to verify does not exist.
+      var msg : str = null #:
+        The message to print on failure.
+    scope:
+      self.isfalse(os.path.exists(path), msg or '%s unexpectedly exists' % path)
+    test:
+    end method notexists;
 
     method fail #:
       # Invoked to indicate an unconditional failure.

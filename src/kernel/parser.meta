@@ -313,7 +313,7 @@ scope:
       if dsize < 0:
         fp.write(inside + '\n')
       else:
-        left = dsize / 2
+        left = dsize // 2
         fp.write('%s%s%s\n' % (delim * left, inside, delim * (dsize - left)))
       if subtitle:
         fp.write(subtitle + '\n')
@@ -569,7 +569,7 @@ scope:
       table = self
       while table is not None:
         symbols = table.symbols()
-        for symbol, data in symbols.iteritems():
+        for symbol, data in symbols.items():
           if symbol not in result:
             result[symbol] = data
         table = table.parent()
@@ -2141,7 +2141,7 @@ scope:
       TODO(wmh): Move to lifecycle 'copy' when it is implemented.
     scope:
       result = self.__class__()
-      for var, data in self._map.iteritems():
+      for var, data in self._map.items():
         value, attribute, delim, width = data
         result.addVar(var, value, attribute=attribute, delim=delim, width=width)
       return result
@@ -3320,7 +3320,7 @@ scope:
       if k and (k > 1 or (k == 1 and new_chunks[0])):
         /# We need to add the first chunk of new_chunks to the end of
         /# chunks[-1].
-        assert isinstance(last_chunk, basestring) and indent == last_chunk, 'indent="%s" last_chunk="%s"' % (indent, last_chunk)
+        assert not isinstance(last_chunk, BaseSegment) and indent == last_chunk, 'indent="%s" last_chunk="%s"' % (indent, last_chunk)
         self.appendChunk(new_chunks[0])
         /# Append all subsequent chunks.
         for item in new_chunks[1:]:
@@ -4266,12 +4266,12 @@ scope:
 
       /# Group all tokens sharing same ConsInfo together
       tmp = {}
-      for key, consinfo in self.consmap().iteritems():
+      for key, consinfo in self.consmap().items():
         tmp.setdefault(consinfo, []).append(key)
 
       /# Create a copy of consmap
       consmap = {}
-      for consinfo, keys in tmp.iteritems():
+      for consinfo, keys in tmp.items():
         /# TODO(wmh): It is not technically necessary to create clones of
         /# every ConsInfo ... it is only those constructs that have 'config'
         /# blocks that need to be cloned.  How can we detect this
@@ -4471,7 +4471,7 @@ scope:
 
           /# consinfo.features() maps feature keys/aliases to maps containing
           /# cankey, etc.
-          for token, fkeyinfo in consinfo.features().iteritems():
+          for token, fkeyinfo in consinfo.features().items():
             fkey = fkeyinfo['cankey']
             info = features.get(token, None)
             if info:
@@ -4490,7 +4490,7 @@ scope:
 
           /# consinfo.featvals() maps legal feature values to canonical feature
           /# keys.
-          for token, fkey in consinfo.featvals().iteritems():
+          for token, fkey in consinfo.featvals().items():
             info = features.get(token, None)
             if info:
               if info[0] != 'value':
@@ -9457,7 +9457,7 @@ scope:
       /#   config:
       empty = '<empty>'
       consmap = {}
-      for cons, construct_class in clsmap.iteritems():
+      for cons, construct_class in clsmap.items():
         consinfo = ConsInfo(
           cons,
           'word' if cons in ('Attribute', 'File', 'FeatureValue', 'Template')
@@ -9712,7 +9712,7 @@ scope:
         /#    scope of the Construct.
         /#  - Instead of having the various construct classes defined here
         /#    in parser.meta, the code should be moved into the schema file.
-        for construct_name, construct_class in construct_classes.iteritems():
+        for construct_name, construct_class in construct_classes.items():
           metalang.registerConstructClass(construct_name, construct_class)
 
         /# Add any specified basesels.
@@ -9878,7 +9878,7 @@ scope:
         /# We can add the ConsInfo instances from bootstrapContext instead of
         /# having to parse the Meta(Meta) metalang.
         bootstrap_context = self.bootstrapContext()
-        for cons, consinfo in bootstrap_context.consmap().iteritems():
+        for cons, consinfo in bootstrap_context.consmap().items():
           consmap[cons] = consinfo
       else:
         raise Error('Not yet supporting MetaLang parent %s' % metalang_parent)
@@ -11158,7 +11158,7 @@ scope:
       secondaries = {}
       ckeys = {}
 
-      for cid, consinfo in consmap.iteritems():
+      for cid, consinfo in consmap.items():
         fks = consinfo.features()
         fvs = consinfo.featvals()
         featkeys.update(fks)
@@ -12570,7 +12570,7 @@ scope:
           if paths:
             for abbrev in sorted(paths):
               ofp.write(
-                '%s = %s\n' % (str.ljust(abbrev, maxwidth), paths[abbrev]))
+                '%s = %s\n' % (str.ljust(abbrev.encode('utf8'), maxwidth), paths[abbrev]))
         /# too noisy for no real gain
         /# dsep(' End File Map', delim='-', fp=ofp)
 
@@ -13300,18 +13300,18 @@ scope:
       /#       association between the class containing the field and the
       /#       class identified by the type of the field.
       /#        - whether it is composition or delegation
-      for nmsp, nmdata in namespaces.iteritems():
+      for nmsp, nmdata in namespaces.items():
         namespace = nmdata['construct']
         if debug:
           print('  ' + namespace.kindid())
-        for clsname, clsdata in nmdata['classes'].iteritems():
+        for clsname, clsdata in nmdata['classes'].items():
           classy = clsdata['construct']
           if debug:
             print('    ' + classy.kindid())
           clsdata['uml_fields'] = []
           clsdata['uml_methods'] = []
           for fmkind in ('field', 'method'):
-            for fmid, fmdata in clsdata[fmkind].iteritems():
+            for fmid, fmdata in clsdata[fmkind].items():
               fmcons = fmdata['construct']
               vis = fmdata['visibility']
               level= fmdata['level']
@@ -14289,7 +14289,7 @@ scope:
             self.writeSummary(metafiles, indent='  ')
 
         /# Update times of all compiled files.
-        for path, mtime in updated.iteritems():
+        for path, mtime in updated.items():
           pathmap[path] = mtime
 
         /# Wait until next round
@@ -15554,7 +15554,7 @@ scope:
             if argmap['fqns']:
               metac._test_command()
         else:
-          pprint.pprint(argmap)
+          /# pprint.pprint(argmap)
           print('ERROR: Unknown command "%s"' % command)
         fs = metac.fs()
         if cli.showfs or fs.kind() == 'memory':
@@ -15857,7 +15857,7 @@ scope:
     method list #:
       List the children of the current node
     scope:
-      for cid, child in self.children().iteritems():
+      for cid, child in self.children().items():
         print(cid)
     test:
     end method list;

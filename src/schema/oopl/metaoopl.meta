@@ -84,8 +84,9 @@ namespace metax.oopl scope:
       /#       is expanded.
       /# TODO(wmh): Switch this to be abstract to force children to
       /# define the method.
-      print '%s: %sConstruct.expandMeta() should be defined' % (
-        self.kindid(), self.kind().capitalize())
+      print(
+        '%s: %sConstruct.expandMeta() should be defined' %
+        (self.kindid(), self.kind().capitalize()))
 
     end method expandMeta;
 
@@ -99,8 +100,9 @@ namespace metax.oopl scope:
       /# perform baselang-specific actions.
       /# TODO(wmh): Switch this to be abstract to force children to
       /# define the method.
-      print '%s: %sConstruct.translateMeta() should be defined' % (
-        self.kindid(), self.kind().capitalize())
+      print(
+        '%s: %sConstruct.translateMeta() should be defined' %
+        (self.kindid(), self.kind().capitalize()))
 
     end method translateMeta;
 
@@ -163,7 +165,7 @@ namespace metax.oopl scope:
         Any human-readable notes associated with the symbol.        
     scope:
       table = self.symbols()
-      /# print '%s registering symbol %s = %s' % (self.kindfqn(), name, construct.kindfqn())
+      /# print('%s registering symbol %s = %s' % (self.kindfqn(), name, construct.kindfqn()))
       table.register(name, construct, source=self, note=note)
     test:
       test.defineClassAndMethods('py')
@@ -221,8 +223,9 @@ namespace metax.oopl scope:
         try:
           result = construct.effectiveType()
         except AttributeError as e:
-          print 'WARNING: Failed to find effective type for %s (%s): %s' % (
-            construct.kindfqn(), construct.__class__.__name__, str(e))
+          print(
+            'WARNING: Failed to find effective type for %s (%s): %s' %
+            (construct.kindfqn(), construct.__class__.__name__, str(e)))
           result = None
       return result
     test:
@@ -371,7 +374,7 @@ namespace metax.oopl scope:
         /#    scope: block on 'sp2'
         parent_construct = filecons
         parent_scope = parent
-        print 'scope of filecons path: %s' % parent_scope.path()
+        print('scope of filecons path: %s' % parent_scope.path())
         for pid in parts:
           child = parent_scope.cons(pid, default=None)
           if child:
@@ -384,15 +387,15 @@ namespace metax.oopl scope:
             parent_construct = metax.oopl.NamespaceConstruct.NewFromData(
               pid, context, parent=parent_scope,
               secondaries=[('scope:', [])])
-          print 'cons path %s' % parent_construct.path()
+          print('cons path %s' % parent_construct.path())
           parent_scope = parent_construct.attr('scope:', default=REQUIRED)
-          print 'scope path %s' % parent_scope.path()
+          print('scope path %s' % parent_scope.path())
 
         /# Now we process the final_nmsp by updating self's id and parent.
         self.idIs(final_nmsp)
         self.parentIs(parent_scope)
-        print 'final nmsp path is %s' % self.path()
-        print 'HERE with %s vs %s' % (id, self.fqn())
+        print('final nmsp path is %s' % self.path())
+        print('HERE with %s vs %s' % (id, self.fqn()))
     test:
     end method createImplicitParents;
 
@@ -539,10 +542,10 @@ namespace metax.oopl scope:
       istest = self.isTest()
       if False:
         /# Useful during debugging.
-        print bldpath
-        print '  Targets:'
+        print(bldpath)
+        print('  Targets:')
         for target in targets:
-          print '    ' + target
+          print('    ' + target)
 
       rule, build_data = baselang.createBuildFragment(
         self, targets, test=istest,
@@ -709,10 +712,10 @@ namespace metax.oopl scope:
             raise metax.c.Error('Not currently supporting imports of form "%s"' % line)
 
         if debug > 3:
-          print '#' * 80
-          print 'Removed from start'
+          print('#' * 80)
+          print('Removed from start')
           sys.stdout.write(contents[:start_index])
-          print '-' * 80
+          print('-' * 80)
 
         /# All python test class files are required to have a line containing
         /# start_end.
@@ -727,10 +730,10 @@ namespace metax.oopl scope:
             (end_index, contents[end_index-5:end_index+5]))
           end_removed = contents[end_index:].count('\n')
           if debug > 3:
-            print '#' * 80
-            print 'Removed from end'
-            print contents[end_index:]
-            print '=' * 80
+            print('#' * 80)
+            print('Removed from end')
+            print(contents[end_index:])
+            print('=' * 80)
           /# By decrementing end_index to position ourselves on the newline,
           /# we ensure that when we split the resulting content into lines,
           /# we do not introduce a spurious newline at the end.
@@ -744,14 +747,15 @@ namespace metax.oopl scope:
         chunks.append((start_removed, lines, submapfile))
 
         if debug > 2:
-          print '#' * 80
-          print contents
+          print('#' * 80)
+          print(contents)
         if debug > 1:
-          print '-' * 80
+          print('-' * 80)
         if debug:
           fs = self.compiler().fs()
-          print '%-25s: removed %d start lines and %d end lines leaving %d lines' % (
-            fs.basename(basefile.subpath()), start_removed, end_removed, len(lines))
+          print(
+            '%-25s: removed %d start lines and %d end lines leaving %d lines' %
+            (fs.basename(basefile.subpath()), start_removed, end_removed, len(lines)))
         if debug > 1:
           submapfile.serialize()
 
@@ -777,6 +781,14 @@ namespace metax.oopl scope:
         if 'import sys' not in new_lines:
           new_lines.append('  import sys')
         new_lines.append('  %s = sys.modules[__name__]' % fqn)
+
+        /# Now some future-proofing imports to allow code to work in both
+        /# python2 and python3. See
+        /#   http://python-future.org/compatible_idioms.html
+        /# for useful discussion.
+        /# CODETANGLE(metaclass_support)
+        new_lines.append('from future.utils import with_metaclass')
+
         n = len(all_lines)
         my_index += 1
         all_lines = all_lines[:my_index-1] + new_lines + all_lines[my_index:]
@@ -903,7 +915,7 @@ namespace metax.oopl scope:
       if self.isUser():
         file_construct = self.ancestor('File')
         file_construct.currentIs(self)
-        /# print 'Setting current of %s to %s' % (file_construct.kindfqn(), self.kindfqn())
+        /# print('Setting current of %s to %s' % (file_construct.kindfqn(), self.kindfqn()))
 
       /# Invoke expandMeta() on child constructs.
       /#  - we make a copy of children so that we do NOT expand the classes
@@ -1048,7 +1060,7 @@ namespace metax.oopl scope:
           if child.isTestCase():
             test_classes.append(child)
         if bld is not None:
-          /# print '%s = %d' % (basefile.subpath(), len(basefile.contents()))
+          /# print('%s = %d' % (basefile.subpath(), len(basefile.contents())))
           assert bld.subpath().endswith('.bld'), bld.subpath()
           blds.append(bld)
 
@@ -1150,7 +1162,7 @@ namespace metax.oopl scope:
       oldklass = self.myclass()
       klass = new_parent.parent().ancestor('class', proper=False)
       self.myclassIs(klass)
-      /# print '**** NOTE: Changed parent of %s which changes class from %s to %s' % (self.fqn(), oldklass.fqn() if oldklass else None, klass.fqn())
+      /# print('**** NOTE: Changed parent of %s which changes class from %s to %s' % (self.fqn(), oldklass.fqn() if oldklass else None, klass.fqn()))
     end method changeParent;
 
     method updateClass : tuple<metax.oopl.ClassConstruct,bool> #:
@@ -1233,7 +1245,7 @@ namespace metax.oopl scope:
         /#  - NOTE(wmh): As of 2017/12/04 the above hypothesis is proved
         /#    incorrect ... classes with location 'test' have variant 'testuser'
         /#    and myclass is not initialized.
-        /# print 'HERE with %s and %s and %s' % (self.fqn(), self.myclass(), myclass.fqn())
+        /# print('HERE with %s and %s and %s' % (self.fqn(), self.myclass(), myclass.fqn()))
         assert self.myclass() is myclass
 
       return myclass, moved
@@ -1483,6 +1495,9 @@ namespace metax.oopl scope:
         abbrev: str (optional)
           The name by which the import is known locally.
 
+    field commands : @vec<CommandConstruct> #:
+      The toplevel command constructs. Used to produce executables.
+
     field initializer : metax.oopl.MethodConstruct #:
       The initializer associated with this ClassConstruct.
 
@@ -1628,8 +1643,9 @@ namespace metax.oopl scope:
       if fqn in deps:
         info = deps[fqn]
         if info['kind'] != kind:
-          print '**** WARNING: for %s dep %s has kind %s vs %s' % (
-            self.kindfqn(), fqn, kind, info['kind'])
+          print(
+            '**** WARNING: for %s dep %s has kind %s vs %s' %
+            (self.kindfqn(), fqn, kind, info['kind']))
         if info['target'] != target and kind != 'std':
           /# CODETANGLE(std_target): note that registerDependencies passes
           /# in a target for 'std' even though target isn't needed. But
@@ -1637,8 +1653,9 @@ namespace metax.oopl scope:
           /# do not bother with a target since 'std' assocs by definition
           /# do not need one.  Can we clean this up so we don't need to 
           /# make the test against 'std' above?
-          print '**** WARNING: for %s dep %s has target %s vs %s' % (
-            self.kindfqn(), fqn, target, info['target'])
+          print(
+            '**** WARNING: for %s dep %s has target %s vs %s' %
+            (self.kindfqn(), fqn, target, info['target']))
         /# TODO(wmh): Do we need to validate alias?
       else:
         dep = {'fqn': fqn, 'kind': kind, 'target': target, 'reason': reason}
@@ -1648,9 +1665,9 @@ namespace metax.oopl scope:
         metafile = self.metafile()
         if target:
           metafile.registerDependentClass(fqn)
-          /# print 'Adding %s as dependency of %s' % (fqn, metafile.path())
+          /# print('Adding %s as dependency of %s' % (fqn, metafile.path()))
         else:
-          /# print 'NOT adding %s as dependency of %s' % (fqn, metafile.path())
+          /# print('NOT adding %s as dependency of %s' % (fqn, metafile.path()))
           pass
     test:
     end method addDependency;
@@ -1759,9 +1776,9 @@ namespace metax.oopl scope:
         if False:
           for cn, c in (('user', userclass), ('under', underclass), ('test', testclass), ('meta', metaclass)):
             if c:
-              print '%s = %s' % (cn, c.kindfqn())
+              print('%s = %s' % (cn, c.kindfqn()))
             else:
-              print '%s = %s' % (cn, c)
+              print('%s = %s' % (cn, c))
         if True:
           assert userclass is None
           assert underclass is None
@@ -1801,7 +1818,7 @@ namespace metax.oopl scope:
           testparent = 'TestCase'
         else:
           testparent = 'metax.test.TestCase'
-        /# print '**** HERE!!! %s = %s' % (self.kindfqn(), testparent)
+        /# print('**** HERE!!! %s = %s' % (self.kindfqn(), testparent))
       testname = metax.oopl.ClassConstruct.TestifyName(self.id())
       assert testspace is not None
       return (testspace, testblock, testname, testparent)
@@ -1846,9 +1863,9 @@ namespace metax.oopl scope:
           /# TODO(wmh): Update this to use parentdata['class'] when we've
           /# implemented importMeta().
           metaparent = metax.oopl.ClassConstruct.MetaifyName(parentdata['metafqn'])
-        /# print '******* HERE with %s and %s and %s' % (self.fqn(), metaparent, parentdata)
+        /# print('******* HERE with %s and %s and %s' % (self.fqn(), metaparent, parentdata))
       else:
-        /# print '**** FOR %s found explicit metaparent %s' % (self.kindfqn(), metaparent)
+        /# print('**** FOR %s found explicit metaparent %s' % (self.kindfqn(), metaparent))
         pass
 
       /# TODO(wmh): Delete following when we are using root.meta2
@@ -2134,7 +2151,7 @@ namespace metax.oopl scope:
               aid, namespace=namespace)
 
           atarget = dep.attrval('target', default=None)
-          /#print '*** HER with %s' % atarget
+          /#print('*** HER with %s' % atarget)
 
           if atarget is None:
             /# TODO(wmh): If akind is 'std' we could set atarget to null, but we
@@ -2366,16 +2383,16 @@ namespace metax.oopl scope:
         dest_path = fs.join(dest_dir, filename)
 
         if not fs.exists(dest_dir):
-          fs.makedirs(dest_dir, 0755)
+          fs.makedirs(dest_dir, 0o755)
         target = fs.join(dest_base, filename)
 
-        /# print 'src_path %s' % src_path
-        /# print 'dest_path %s' % dest_path
-        /# print 'target %s' % target
+        /# print('src_path %s' % src_path)
+        /# print('dest_path %s' % dest_path)
+        /# print('target %s' % target)
 
         /# Create the symlink from src_path to dest_path.
         if not fs.lexists(dest_path):
-          print 'NOTE: Linking %s to %s' % (src_path, dest_path)
+          print('NOTE: Linking %s to %s' % (src_path, dest_path))
           fs.symlink(src_path, dest_path)
         else:
           /# The file already exists ... verify it is a symlink and points where
@@ -2636,7 +2653,7 @@ namespace metax.oopl scope:
             metatestblock = testblock
             metatestparent = metax.oopl.ClassConstruct.MetaifyName(testparent)
             metatestparent2 = metax.oopl.ClassConstruct.MetaifyName('metax.test.TestCase')
-            /# print 'For %s\n  %s\n  %s' % (self.kindfqn(), metatestparent, metatestparent2)
+            /# print('For %s\n  %s\n  %s' % (self.kindfqn(), metatestparent, metatestparent2))
             metatestclass = metax.oopl.ClassConstruct.NewFromData(
               /# TODO(wmh): Verify that metatest class should share same context as
               /# user class.
@@ -3020,7 +3037,7 @@ namespace metax.oopl scope:
             primary_line=-1,
             position='-')
 
-          /# print 'WARNING: created implicit %s (%s)' % (initializer.fqn(), self.isTest())
+          /# print('WARNING: created implicit %s (%s)' % (initializer.fqn(), self.isTest()))
           /# initializer.write()
           self.registerInitializer(initializer)
 
@@ -3132,10 +3149,10 @@ namespace metax.oopl scope:
             /# the class exactly as-is.
             pass
           elif params is not None:
-            print '#' * 70
-            print 'HERE with %s = %s' % (self.kindfqn(), self.variant())
+            print('#' * 70)
+            print('HERE with %s = %s' % (self.kindfqn(), self.variant()))
             initializer.write()
-            print '#' * 70
+            print('#' * 70)
             metafile.error(
               'metaclass initializer %s should not specify params:' %
               initializer.fqn(),
@@ -3246,7 +3263,7 @@ namespace metax.oopl scope:
           /#  - the parent class is incorrectly specified by the user
           /#  - there is a bug in Meta
           if not parent_info.get('external', False):
-            /# print 'PARENT INFO: %s' % str(parent_info)
+            /# print('PARENT INFO: %s' % str(parent_info))
             metafile.warning(
               'Failed to import parent %s for %s' % (fqn, self.fqn()),
               line=self.primary().line())
@@ -3577,11 +3594,11 @@ namespace metax.oopl scope:
         bldpath = metac.basePath(fqn, prefix='.', suffix='.bld')
         if False:
           /# Useful during debugging.
-          print bldpath
+          print(bldpath)
           self.showDependencies()
-          print '  Targets:'
+          print('  Targets:')
           for target in targets:
-            print '    ' + target
+            print('    ' + target)
         rule, build_data = baselang.createBuildFragment(
           self, sorted(targets), test=istestcase)
         if rule is not None:
@@ -3609,8 +3626,13 @@ namespace metax.oopl scope:
       scope, children = self.attrpair('scope:')
       for child in children:
         child.compileMeta()
-      metax.c.D.compile.end()
 
+      /# Generate binaries.
+      for command in self.commands():
+        compilation = command.attrval('compilation')
+        command.createExecutableBinary(auto=compilation == 'implicit')
+
+      metax.c.D.compile.end()
     end method compileMeta;
 
   end class ClassConstruct;
@@ -3710,11 +3732,11 @@ namespace metax.oopl scope:
             receiver_code += baselang.config('staticsep')
           else:
             receiver_code += baselang.config('selfsep')
-          /# print '%s = %s [%s]' % (self.kindfqn(), receiver_code, kind)
+          /# print('%s = %s [%s]' % (self.kindfqn(), receiver_code, kind))
         else:
           receiver_code = ''
 
-        /# print 'FieldConstruct.expandMeta: %s' % fqn
+        /# print('FieldConstruct.expandMeta: %s' % fqn)
 
         /# Register this field with the class.
         if myclass:
@@ -3748,7 +3770,7 @@ namespace metax.oopl scope:
         field_code = '%s%s' % (receiver_code, rawfield)
         bodymap = {}
         if packinfo:
-          /# print '%s = %s' % (name, packinfo)
+          /# print('%s = %s' % (name, packinfo))
           start_bit, bits, signed = packinfo
           maxval = (1 << bits) - 1
           mask = '0x%x' % maxval
@@ -4176,10 +4198,10 @@ namespace metax.oopl scope:
 
       if self.kind() != 'method':
         /# lifecycle and behavior should be expanded away, no?
-        print '%s in %s' % (self.kindfqn(), self.parentConstruct().kindfqn())
-        print '@' * 70
+        print('%s in %s' % (self.kindfqn(), self.parentConstruct().kindfqn()))
+        print('@' * 70)
         self.write()
-        print '@' * 70
+        print('@' * 70)
         raise metax.c.Error('Expecting only methods not %s' % self.kindfqn())
 
       metac = self.compiler()
@@ -4333,7 +4355,7 @@ namespace metax.oopl scope:
             )
           ):
             msg = '%s has been optimized away' % self.kindfqn()
-            /#print 'NOTE: ' + msg
+            /#print('NOTE: ' + msg)
             metafile.info(msg, line=self.primary().line())
 
             /# Setting scope_lines to None means "do not generate method".
@@ -4800,7 +4822,7 @@ namespace metax.oopl scope:
           execname = self.id()
           m = metax.c.ExprParser.ID_RE.match(execname)
           if m and m.group(3):
-            /# print '***** HERE with %s' % execname
+            /# print('***** HERE with %s' % execname)
             execname = (m.group(1) or '') + m.group(2)
 
         /# Establish baselang syntax for method return type.
@@ -4861,7 +4883,7 @@ namespace metax.oopl scope:
               pass
 
         template_name = baselang.establishTemplateName(self, defn=True)
-        /# print 'Here with %s = %s' % (self.kindfqn(), template_name)
+        /# print('Here with %s = %s' % (self.kindfqn(), template_name))
 
         streams = metafile.streams()
         consinfo = self.context().consinfo(self.kind())
@@ -4955,7 +4977,7 @@ namespace metax.oopl scope:
               /# TODO(wmh): methods from behaviors are not showing up as being
               /# overridden.
               if name != 'meta':
-                /# print '  In %s found parent definition %s' % (self.kindfqn(), super_method.kindfqn())
+                /# print('  In %s found parent definition %s' % (self.kindfqn(), super_method.kindfqn()))
                 pass
 
         /# Now initialize the symbol table of the method.
@@ -5364,8 +5386,8 @@ namespace metax.oopl scope:
       location = self.attrval('location')
 
       if False:
-        print '#' * 70
-        print self.kindfqn()
+        print('#' * 70)
+        print(self.kindfqn())
         self.write()
 
       fkey_order = (
@@ -5416,7 +5438,7 @@ namespace metax.oopl scope:
         else:
           receiver_class = parent_block.cons(clsname, default=None)
         if receiver_class is None:
-          print 'ERROR: Failed to find %s in %s' % (clsname, parent_block.parent().fqn())
+          print('ERROR: Failed to find %s in %s' % (clsname, parent_block.parent().fqn()))
         else:
           /# feature attributes
           features = []
@@ -5710,7 +5732,7 @@ namespace metax.oopl scope:
             baselang.simpleToBase(comment_attr, output=lines, comment=True)
             baselang.simpleToBase(scope_attr, output=lines)
             segment = metax.c.BaseSegment(scope_attr, chunks=lines)
-            /# print '**** HERE with %s for %s(%s) and %s,%s' % (self.kindfqn(), target_class.kindfqn(), id(target_class), position, placement)
+            /# print('**** HERE with %s for %s(%s) and %s,%s' % (self.kindfqn(), target_class.kindfqn(), id(target_class), position, placement))
             extralines = target_class.extralines().setdefault(position, {}).setdefault(placement, [])
             extralines.append(segment)
     end method expandMeta;
@@ -5858,6 +5880,7 @@ namespace metax.oopl scope:
       /# Establish the binary to use.
       binaryexpr = self.attrval('binary')
       python_binary = binaryexpr.asStr(unquote=True) or metac.Config()['python']
+      /# print '%s = %s' % (self.kindfqn(), python_binary)
 
       /# Create the content of the binary file.
       cmdlines = [
@@ -5899,7 +5922,7 @@ namespace metax.oopl scope:
       cmdpath = metac.basePath(nmsp.fqn() + '.' + self.id())
       cmdfile = metax.fs.BaseFile(
         cmdpath, '\n'.join(cmdlines) + '\n',
-        metafile=metafile, mapfile=None, mode=0755)
+        metafile=metafile, mapfile=None, mode=0o755)
       metafile.registerFile(cmdfile)
 
       /# Now we make a symlink from oopl/bin/<id> to the above cmdpath.
@@ -5911,7 +5934,7 @@ namespace metax.oopl scope:
       /#  - we do the same thing for any aliases of the command.
       linkdir = fs.join(metac.repositoryPath(), 'bin')
       if not fs.exists(linkdir):
-        fs.makedirs(linkdir, 0755)
+        fs.makedirs(linkdir, 0o755)
 
       basenames = [self.id()]
       aliases = self.attrval('aliases', default=None)
@@ -5969,6 +5992,7 @@ namespace metax.oopl scope:
       metaclass_scope = metaclass.attr('scope:', default=metax.c.REQUIRED)
       userclass = metaclass.underclass()
       assert userclass is not None
+      assert userclass is klass
       class_scope = userclass.attr('scope:', default=metax.c.REQUIRED)
 
       command_kind = self.attrval('kind')
@@ -6062,15 +6086,14 @@ namespace metax.oopl scope:
         /# Works fine for Python, but may not for other baselangs.
         metaclass.addDependency(
           'metax.cli.Command', 'cls', 'needed for entry point')
-
-        /# Now create the executable binary that calls into this entry point.
-        compilation = self.attrval('compilation')
-        self.createExecutableBinary(auto=compilation == 'implicit')
+        /# Register this top-level command with the class. These will be used
+        /# to generate executable binaries within ClassConstruct.compileMeta().
+        userclass.commands().append(self)
 
       command_init = streams.stream('command_init')
       command_body = streams.stream('command_body')
 
-      /# print '*** For %s found %s lines in body before start' % (self.kindfqn(), len(command_body))
+      /# print('*** For %s found %s lines in body before start' % (self.kindfqn(), len(command_body)))
 
       /# We need to add code to command_init to create a new
       /# metax.cli.Command instance.
@@ -6194,7 +6217,7 @@ namespace metax.oopl scope:
           command_body.append('')
           command_body.append('%selse:' % indent)
           command_body.append(
-            indent + "  print 'ERROR: Unrecognized command \"%s\"' % " + sub_var )
+            indent + "  print('ERROR: Unrecognized command \"%s\"' % " + sub_var + ')')
 
       if (not subcmds or toplevel) and not has_optargs:
         /# There were no subcommands or optional args (or, alternatively, this 
@@ -6467,7 +6490,7 @@ namespace metax.oopl scope:
     scope:
 
       metax.c.D.expand.sinfo(self.kindfqn())
-      print 'HERE in %s.expandMeta()' % self.kindfqn()
+      print('HERE in %s.expandMeta()' % self.kindfqn())
       metax.c.D.expand.end()
 
     end method expandMeta;
@@ -6478,7 +6501,7 @@ namespace metax.oopl scope:
 
       metax.c.D.translate.sinfo(self.kindfqn())
       /# I don't believe we ever use this, right?
-      print 'HERE in %s.translateMeta()' % self.kindfqn()
+      print('HERE in %s.translateMeta()' % self.kindfqn())
       metax.c.D.translate.end()
 
     end method translateMeta;
@@ -6721,7 +6744,7 @@ namespace metax.oopl scope:
       if metatypes is None:
         metatypes = self.metatypes()
       baseinfo = metatypes.get(mtypestr, None)
-      /# print 'metabase: mtypestr=%s param=%s kind=%s baseinfo=%s' % (mtypestr, param, kind, baseinfo)
+      /# print('metabase: mtypestr=%s param=%s kind=%s baseinfo=%s' % (mtypestr, param, kind, baseinfo))
       if not baseinfo:
         /# The given mtypestr is not a hardcoded meta type ... return None
         result = None
@@ -6822,8 +6845,9 @@ namespace metax.oopl scope:
 
       cls = self.__class__
       if debug:
-        print 'In BaseLanguageOopl.typeToBase with metatype=%s' % (
-          metatype.raw() if metatype else None)
+        print(
+          'In BaseLanguageOopl.typeToBase with metatype=%s' %
+          (metatype.raw() if metatype else None))
 
       if metatype is None:
         result = 'METATYPE is NONE'
@@ -6833,7 +6857,7 @@ namespace metax.oopl scope:
         if result.startswith('{#') and result.endswith('#}'):
           result = result[2:-2].replace('_', ' ')
         if debug:
-          print '  type is invalid'
+          print('  type is invalid')
 
       else:
         params = metatype.params()
@@ -6856,8 +6880,9 @@ namespace metax.oopl scope:
         scope_sep = metax.c.Context.Tokens()['scope_sep']
 
         if debug:
-          print '  metabase=%s basetype=%s numeric=%s isptr=%s isref=%s' % (
-            metabase, basetype, numeric, metatype.isPtr(), metatype.isRef())
+          print(
+            '  metabase=%s basetype=%s numeric=%s isptr=%s isref=%s' %
+            (metabase, basetype, numeric, metatype.isPtr(), metatype.isRef()))
 
         if basetype:
           /# We've found a mapping from meta-level to base-level.
@@ -6872,11 +6897,11 @@ namespace metax.oopl scope:
             param_pairs = cls.Templates().get(metabase, [])
 
             if False:
-              print '-' * 70
-              print metatype
-              print basetype
-              print param_pairs
-              print params
+              print('-' * 70)
+              print(metatype)
+              print(basetype)
+              print(param_pairs)
+              print(params)
 
             np = len(params) if params else 0
 
@@ -6896,7 +6921,7 @@ namespace metax.oopl scope:
                   param_map[pkey] = self.typeToBase(
                     /# TODO(wmh): Should some variant of 'value' be passed down?
                     mtype, class_construct=class_construct, defqn=defqn)
-                /# print 'PARAM PAIRS for %s: %s = %s [%s]' % (metabase, param_pairs, param_map, basetype)
+                /# print('PARAM PAIRS for %s: %s = %s [%s]' % (metabase, param_pairs, param_map, basetype))
             result = basetype % param_map
         else:
           /# The metatype is not native/primitive, so it must be a class.
@@ -6919,7 +6944,7 @@ namespace metax.oopl scope:
         /# class itself. Instead, we must use the non-qualified class name.
         if class_construct:
           nmspfqn = class_construct.namespace().fqn()
-          /#print 'HERE with %-30s and %s' % (nmspfqn, result)
+          /#print('HERE with %-30s and %s' % (nmspfqn, result))
           if result == class_construct.fqn():
             result = result.split('.')[-1]
           elif False and result.startswith(nmspfqn):
@@ -6928,7 +6953,7 @@ namespace metax.oopl scope:
         result = self._annotateBaseType(metatype, result)
 
       if debug:
-        print '  result is "%s" for "%s"' % (result, metatype.raw())
+        print('  result is "%s" for "%s"' % (result, metatype.raw()))
 
       return result
     test:
@@ -7242,7 +7267,7 @@ namespace metax.oopl scope:
         strlit = expr.value()
         if basel in ('cpp', 'java'):
           result = expr.asStr(quote=True, delim='\"')
-          /# print '******** basel=%s str expr="%s"' % (basel, result)
+          /# print('******** basel=%s str expr="%s"' % (basel, result))
         elif basel in ('python', 'javascript'):
           result = expr.asStr(quote=True)
         elif basel == 'perl':
@@ -7322,13 +7347,13 @@ namespace metax.oopl scope:
         recstr, metatype = self.analyzeVariable(rec, executable=executable)
 
         /# TODO(wmh): This code is currently broken ... fix it!
-        print 'HERE with recstr=%s metatype=%s' % (recstr, metatype)
-        print '#' * 70
-        print metafile.path()
-        print expr
-        print executable.kindfqn()
-        print executable.primary().line()
-        print '#' * 70
+        print('HERE with recstr=%s metatype=%s' % (recstr, metatype))
+        print('#' * 70)
+        print(metafile.path())
+        print(expr)
+        print(executable.kindfqn())
+        print(executable.primary().line())
+        print('#' * 70)
 
         if metatype:
           rec = recstr
@@ -7351,7 +7376,7 @@ namespace metax.oopl scope:
             for i in range(0, len(subcalls)):
               subcall = subcalls[i]
               subvar = subcall['name']
-              /# print 'Looking for %s (%s)' % (subvar, subcall)
+              /# print('Looking for %s (%s)' % (subvar, subcall))
               /#construct.showSymbols()
               child = construct.symbol(subvar)
               if not child:
@@ -7369,11 +7394,11 @@ namespace metax.oopl scope:
                 subcall_index = i + 1
                 executable = child
                 rec += '.' + subvar
-                /#print 'HERE with %s' % child.kindfqn()
+                /#print('HERE with %s' % child.kindfqn())
                 /#child.showSymbols()
                 metatype = child.implicitType()
-                /#print subcalls[subcall_index:]
-                /#print metatype
+                /#print(subcalls[subcall_index:])
+                /#print(metatype)
                 break
               else:
                 raise metax.c.Error('Unexpected %s' % child.kindfqn())
@@ -7385,11 +7410,11 @@ namespace metax.oopl scope:
             DC += 1
             if DC > 10:
               raise metax.c.Error('here')
-            /# print 'Here with %s and %s' % (executable.kindfqn() if executable else executable, rec)
+            /# print('Here with %s and %s' % (executable.kindfqn() if executable else executable, rec))
             if executable:
               executable.showSymbols()
 
-        /#print 'Here with receiver %s : %s' % (rec, metatype)
+        /#print('Here with receiver %s : %s' % (rec, metatype))
 
         /# Now process the cascading call-sites.
         /#  - update what the receiver looks like, in 'rec'
@@ -7498,7 +7523,7 @@ namespace metax.oopl scope:
               /# method invocation ... maybe.
               rec, metatype = self.compileMethodInvocation(
                 metafile, rec, metatype, name, args)
-              /# print 'FOUND return type "%s" [%s]' % (str(metatype), metatype.raw())
+              /# print('FOUND return type "%s" [%s]' % (str(metatype), metatype.raw()))
             else:
               /# Without typechecking (or without a receiver type), we cannot
               /# handle native-type method renaming, so the following code is
@@ -7535,7 +7560,7 @@ namespace metax.oopl scope:
         raise metax.c.Error('Invalid expr kind "%s"' % kind)
 
       if metafile.numErrors() > numerrs:
-        print 'WARNING: Ignoring _compileExpr result due to errors'
+        print('WARNING: Ignoring _compileExpr result due to errors')
         result = None
 
       return metatype
@@ -7669,8 +7694,8 @@ namespace metax.oopl scope:
             metatype = myclass.typeOfSelf(dothis=(varname=='this'))
           else:
             metatype = None
-            /# print 'Warning: no executable - cannot currently identify type of self'
-        /# print 'In analyzeVariable, varname=%s basestr=%s metatype=%s' % (varname, basestr, metatype)
+            /# print('Warning: no executable - cannot currently identify type of self')
+        /# print('In analyzeVariable, varname=%s basestr=%s metatype=%s' % (varname, basestr, metatype))
       else:
         /# We have a variable reference.  It must be one of the variables
         /# available in the current lexical context.
@@ -7739,7 +7764,7 @@ namespace metax.oopl scope:
           if default:
             defval, resmtype = self.compileExpr(
               default, metafile, method, indent='    ')
-            /# print '**** HERE with %s = %s' % (field.kindfqn(), defval)
+            /# print('**** HERE with %s = %s' % (field.kindfqn(), defval))
           else:
             defval = self.defaultValue(metatype)
         if fkind == 'static':
@@ -7751,7 +7776,7 @@ namespace metax.oopl scope:
           /# There is an explicit initialization of this field in the
           /# user-provided code, so we do NOT provide a default initialization.
           fval = initmap[fid]
-          /# print 'HERE with %s and %s = %s = %s' % (method.fqn(), fid, fval, defval)
+          /# print('HERE with %s and %s = %s = %s' % (method.fqn(), fid, fval, defval))
           if fval == defval:
             metafile.warning(
               'Explicit initalization of %s to %s not necessary (is default)' %
@@ -7760,7 +7785,7 @@ namespace metax.oopl scope:
           /# There is no need to initialize the field, because C++ has already
           /# invoked a constructor on the field class to initialize the field
           /# before this method was entered.
-          /# print 'Skipping %s = %s' % (field.rawfield(), defval)
+          /# print('Skipping %s = %s' % (field.rawfield(), defval))
           pass
         else:
           code = '%s%s = %s%s' % (recsepstr, field.rawfield(), defval, stmtend)
@@ -7829,7 +7854,7 @@ namespace metax.oopl scope:
         recs.add(metarec)
         recstr = '|'.join([re.escape(rec) for rec in recs])
 
-        /# print '%-12s  %s = %s' % (self.id(), location, recstr)
+        /# print('%-12s  %s = %s' % (self.id(), location, recstr))
 
         fre = re.compile(
           /# Note that we only consider assignments that are NOT indented,
@@ -7855,7 +7880,7 @@ namespace metax.oopl scope:
         for line in lines:
           m = fre.search(line)
           if m:
-            /# print m.groupdict()
+            /# print(m.groupdict())
             rawfield = m.group('rawfield')
             if rawfield:
               /# CODETANGLE(fieldinit): See FieldConstruct.expandMeta(), which
@@ -7871,7 +7896,7 @@ namespace metax.oopl scope:
             else:
               fname = m.group('field')
               fval = re.sub(r's*\);?\s*$', '', m.group('value'))
-            /# print 'LINE: %s [fname=%s fval=%s]' % (line, fname, fval)
+            /# print('LINE: %s [fname=%s fval=%s]' % (line, fname, fval))
             initmap[fname] = fval
       return initmap
     test:
@@ -7989,7 +8014,7 @@ namespace metax.oopl scope:
           /#  - TODO(wmh): avoid replacing within string literals!
           recre = re.compile(r'(^|[^a-zA-Z0-9_.])%s\.' % metarec)
           replacement = r'\1%s.' % baserec
-          /# print 'For %s base=%s meta=%s auto=%s repl=%s' % (parent.kindfqn(), baserec, metarec, parent.autogen(), replacement)
+          /# print('For %s base=%s meta=%s auto=%s repl=%s' % (parent.kindfqn(), baserec, metarec, parent.autogen(), replacement))
         else:
           recre = None
 
@@ -8875,7 +8900,7 @@ namespace metax.oopl scope:
       else:
         raise metax.c.Error('Unhandled acc "%s"' % acc)
 
-      /# print '*** FTYPE %-6s %-20s %-20s %s' % (acc, ftype, result, self.typeToBase(result))
+      /# print('*** FTYPE %-6s %-20s %-20s %s' % (acc, ftype, result, self.typeToBase(result)))
 
       return result
     test:
@@ -9044,7 +9069,7 @@ namespace metax.oopl scope:
         /#       base type is const.
         prefix = metatype.prefix()
         parts = metax.c.Type.METATYPE_SPLIT.split(prefix)
-        /#print '%-30s = %s' % (metatype.raw(), str(parts))
+        /#print('%-30s = %s' % (metatype.raw(), str(parts)))
 
         n = len(parts)
         assert ((n-1)%3) == 0
@@ -9148,8 +9173,12 @@ namespace metax.oopl scope:
         if metaclass:
           /# Remember that a class may not have a metaclass even if it is
           /# a user class (if autogen=nometa).
-          preamble = varset.getValue('preamble')
-          preamble.append('__metaclass__ = %s' % metaclass.id())
+          if False:
+            /# CODETANGLE(metaclass_support)
+            /# We no longer do this, and instead modify parentspec in
+            /# formatParentSpec.
+            preamble = varset.getValue('preamble')
+            preamble.append('__metaclass__ = %s' % metaclass.id())
           variant = construct.variant()
           if variant in ('user', 'test'):
             /# Meta guarantees that for every user-level class nm.sp.Foo, there is
@@ -9333,7 +9362,7 @@ namespace metax.oopl scope:
           baselang = construct.baselang()
           for field in myclass.fields():
             ftype = field.attrval('type', default=metax.c.LOOKUP)
-            /# print 'HERE with %s = %s' % (str(ftype), baselang.typeToBase(ftype))
+            /# print('HERE with %s = %s' % (str(ftype), baselang.typeToBase(ftype)))
 
             /# TODO(wmh): See the comment within the scope of
             /# OoplJavascript.formatMethodComment() discussing defqn. We need
@@ -9935,7 +9964,7 @@ namespace metax.oopl scope:
           /#   - we could just scan for symlinks that look like resource links!
           resources = construct.resources()
           data = []
-          for resname, respath in resources.iteritems():
+          for resname, respath in resources.items():
             data.append(respath)
           build['data'] = sorted(data)
         if test:
@@ -10148,7 +10177,7 @@ namespace metax.oopl scope:
         rule = None
         build = None
 
-      /# print '%s: %s' % (rule, build)
+      /# print('%s: %s' % (rule, build))
       return rule, build
     test:
     end receiver OoplJavascript;
@@ -10223,7 +10252,7 @@ namespace metax.oopl scope:
       /# returning an appropriate dummy-value based on method return type!
       result = []
       if message:
-        result.append('print "%s"' % message)
+        result.append('print("%s")' % message)
 
       if executable:
         /# We don't require 'returns' because we are currently calling this
@@ -10973,7 +11002,7 @@ namespace metax.oopl scope:
           elif kind == 'num':
             result = value.value()
           else:
-            print '*** HERE with %s = %s' % (value, mtype.raw())
+            print('*** HERE with %s = %s' % (value, mtype.raw()))
             result = 'fix me'
       else:
         raise metax.c.Error('Unknown value type %s for formatExpr' % type(value))
@@ -11003,7 +11032,7 @@ namespace metax.oopl scope:
       if kind == 'static':
         default = field.attrval('default', default=None)
         mtype = field.attrval('type', default=metax.c.LOOKUP)
-        /# print '%s : %s = %s' % (field.fqn(), mtype.raw(), default)
+        /# print('%s : %s = %s' % (field.fqn(), mtype.raw(), default))
 
         /# TODO(wmh): Replace this with compileExpr() when we are fully
         /# migrated to 'default' always being of type 'expr'.
@@ -11046,7 +11075,7 @@ namespace metax.oopl scope:
         basetype = OoplCpp.CC_STR
       else:
         basetype = self.typeToBase(metatype, class_construct=myclass)
-        /# print '****** %-20s %-30s = %s' % (rawfield, metatype, basetype)
+        /# print('****** %-20s %-30s = %s' % (rawfield, metatype, basetype))
 
       kind = field.attrval('kind')
       kindstr = 'static ' if kind == 'static' else ''
@@ -11171,7 +11200,7 @@ namespace metax.oopl scope:
         /#  param['type'], class_construct=myclass, defqn=False)
         basetype = self.typeToBase(
           param['type'], class_construct=myclass, defqn=True)
-        /#print '%-30s = %-30s = %s' % (param['type'].raw(), basetype2, basetype)
+        /#print('%-30s = %-30s = %s' % (param['type'].raw(), basetype2, basetype))
 
         if default is None:
           lines.append(' * @param {%s} %s' % (basetype, param['name']))
@@ -11303,7 +11332,7 @@ namespace metax.oopl scope:
             default = self.formatExpr(
               param['default'], param['type'], executable)
             defval = self.pseudovars().get(default, default)
-            /# print '%s : %s = %s [%s]' % (param['name'], param['type'].raw(), param['default'], defval)
+            /# print('%s : %s = %s [%s]' % (param['name'], param['type'].raw(), param['default'], defval))
             part += '=' + defval
           result.append(part)
       if 'varvec' in params:
@@ -11424,6 +11453,11 @@ namespace metax.oopl scope:
       metafqn = parentdata['metafqn']
       basefqn = parentdata['fqn']
       parentspec = basefqn or metafqn
+
+      metaclass = class_construct.metaclass()
+      if metaclass:
+        /# CODETANGLE(metaclass_support)
+        parentspec = 'with_metaclass(%s, %s)' % (metaclass.id(), parentspec)
       return parentspec
     test:
     end receiver OoplPython;
@@ -11935,8 +11969,8 @@ namespace metax.oopl scope:
     receiver OoplPython scope:
       if debug:
         dsep('OoplPython.parseBazelLog Input', delim='@')
-        print logdata
-        print tdata
+        print(logdata)
+        print(tdata)
         dsep('OoplPython.parseBazelLog Input', delim='@', end=True)
       methods = tdata['methods']
 
@@ -11969,17 +12003,17 @@ namespace metax.oopl scope:
       sum = summary_re.search(logdata)
       stat = status_re.search(logdata)
       if not sum or not stat:
-        print
-        print 'summary: %s' % sum
-        print 'status : %s' % stat
-        print logdata
-        print 'ERROR: Failed to find expected match(es)'
+        print()
+        print('summary: %s' % sum)
+        print('status : %s' % stat)
+        print(logdata)
+        print('ERROR: Failed to find expected match(es)')
         tdata['status2'] = 'FATAL'
         return
 
       statdata = stat.groupdict()
       sumdata = sum.groupdict()
-      /# print '#' * 70; print target; print statdata; print sumdata
+      /# print('#' * 70; print target; print statdata; print sumdata)
 
       tdata['count'] = int(sumdata['count'])
       tdata['time2'] = sumdata['time']
@@ -11992,7 +12026,7 @@ namespace metax.oopl scope:
         errors = ''
       else:
         errors = logdata[eqidx:sum.start(0)]
-      /#print errors
+      /#print(errors)
 
       /# Now parse the error text
       /#  - after splitting, edata will contain 3K+1 elements where K is the
@@ -12010,9 +12044,9 @@ namespace metax.oopl scope:
       assert (n-1) % 3 == 0
       preout = edata[0].strip()
       if False and preout:
-        print '-' * 70
-        print preout
-        print '-' * 70
+        print('-' * 70)
+        print(preout)
+        print('-' * 70)
         pprint.pprint(edata)
 
       i = 1
@@ -12039,11 +12073,11 @@ namespace metax.oopl scope:
       /#      <status> is optional and is either ERROR or FAILED
       stdout = logdata[stat.end(0)-1:]  # -1 so we start on a newline (ore below relies on it)
       if stdout[0] != '\n':
-        print '#' * 70
-        print logdata
-        print '-' * 70
-        print stdout
-        print '#' * 70
+        print('#' * 70)
+        print(logdata)
+        print('-' * 70)
+        print(stdout)
+        print('#' * 70)
         return
 
       ore = re.compile(
@@ -12076,8 +12110,8 @@ namespace metax.oopl scope:
 
       if debug:
         dsep('OoplJavascript.parseBazelLog Input', delim='@')
-        print logdata
-        print tdata
+        print(logdata)
+        print(tdata)
         dsep('OoplJavascript.parseBazelLog Input', delim='@', end=True)
 
       msre = re.compile(r'^(\d{2}):(\d{2}):(\d{2})\.(\d{3})$')
@@ -12118,8 +12152,8 @@ namespace metax.oopl scope:
           stdout = None
 
           if debug:
-            print methdata
-            print '=' * 70
+            print(methdata)
+            print('=' * 70)
 
           for line in methdata.split('\n'):
             m = method_start_re.match(line)
@@ -12132,12 +12166,12 @@ namespace metax.oopl scope:
               stdout = []
 
               if debug:
-                print 'Found test method: %s' % str(m.groupdict())
+                print('Found test method: %s' % str(m.groupdict()))
 
               mdata = methods.setdefault(cmname, {})
               mdata['start'] = m.group('time')
             elif end_re is None:
-              print '**** IGNORING %s' % line
+              print('**** IGNORING %s' % line)
             else:
               /# We should always find a method_start before we need end_re.
               m = end_re.match(line)
@@ -12151,7 +12185,7 @@ namespace metax.oopl scope:
                 mdata['end'] = m.group('time')
                 mdata['us'] = (StrToMs(mdata['end']) - StrToMs(mdata['start'])) * 1000
                 if debug:
-                  print 'Found end of method: %s' % str(mdata)
+                  print('Found end of method: %s' % str(mdata))
                 end_re = None
                 stdout = None
               else:
@@ -12159,14 +12193,14 @@ namespace metax.oopl scope:
                 stdout.append(line[3:])
 
           if stdout:
-            print '***** ERROR! Have left-over stdout'
-            print '\n'.join(stdout)
+            print('***** ERROR! Have left-over stdout')
+            print('\n'.join(stdout))
 
           if debug:
-            print '@' * 70
+            print('@' * 70)
 
       else:
-        print 'ERROR: Failed to find class tests!'
+        print('ERROR: Failed to find class tests!')
 
       /#import pprint; pprint.pprint(tdata)
     test:
@@ -12175,8 +12209,8 @@ namespace metax.oopl scope:
     receiver OoplCpp scope:
       if debug:
         dsep('OoplCpp.parseBazelLog Input', delim='@')
-        print logdata
-        print tdata
+        print(logdata)
+        print(tdata)
         dsep('OoplCpp.parseBazelLog Input', delim='@', end=True)
       methods = tdata['methods']
 
@@ -12297,13 +12331,13 @@ namespace metax.oopl scope:
       index = 0
 
       if debug:
-        print '@' * 70
-        print logdata
-        print '@' * 70
+        print('@' * 70)
+        print(logdata)
+        print('@' * 70)
 
       for line in logdata.split('\n'):
         if debug:
-          print '### %s' % line
+          print('### %s' % line)
         if index >= len(regexps):
           outputs.setdefault(index, []).append(line)
         else:
@@ -12313,7 +12347,7 @@ namespace metax.oopl scope:
             /# line that doesn't match against the next regexp is added to
             /# outputs[index-1] (with index 7 being special).
             if debug:
-              print 'Found index %d: %s for %s' % (index, str(m.groupdict()), line)
+              print('Found index %d: %s for %s' % (index, str(m.groupdict()), line))
             matches[index] = m.groupdict()
             index += 1
           else:
@@ -12397,13 +12431,13 @@ namespace metax.oopl scope:
 
       if debug:
         for i in sorted(outputs):
-          print i
+          print(i)
           for line in outputs[i]:
-            print '  ' + line
+            print('  ' + line)
         pprint.pprint(matches)
         pprint.pprint(order)
         for key in methods:
-          print '%-20s: %s' % (key, methods[key])
+          print('%-20s: %s' % (key, methods[key]))
 
     test:
       logdata = (
@@ -12492,11 +12526,11 @@ namespace metax.oopl scope:
         filterr = stderr
         if stdout:
           dsep(title='stdout')
-          print stdout
+          print(stdout)
         if stderr:
           dsep(title='stderr')
-          /#print stderr
-          print filterr
+          /#print(stderr)
+          print(filterr)
         if stdout or stderr:
           dsep(end=True)
         return
@@ -12535,7 +12569,7 @@ namespace metax.oopl scope:
           while n > 0 and not data[n-1].strip():
             n -= 1
         for j in range(i, n):
-          print prefix + data[j]
+          print(prefix + data[j])
 
       /# We'll add one dict per test to data, merging stdout and stderr.
       /#   name: str
@@ -12580,7 +12614,7 @@ namespace metax.oopl scope:
           if current_fqn is None:
             /# We are not currently expecting output
             if line.strip():
-              print 'UNKNOWN STDOUT: %s' % line
+              print('UNKNOWN STDOUT: %s' % line)
           else:
             /# This is stdout for current_fqn
             item = datamap[current_fqn]
@@ -12647,7 +12681,7 @@ namespace metax.oopl scope:
           postamble = errlines[j:]
           break
         elif current_fqn is None:
-          print 'UNKNOWN STDERR: %s' % line
+          print('UNKNOWN STDERR: %s' % line)
         else:
           /# A line of stderr for current fqn, if one exists.
           item = datamap[current_fqn]
@@ -12657,36 +12691,38 @@ namespace metax.oopl scope:
       /# format as used in the bazel-generated output.
       sep = '-' * 70
       show_nums = False
-      /# print stdout
+      /# print(stdout)
       last_printed_sep = False
       for i, item in enumerate(data):
         out = item['stdout']
         err = item['stderr']
         special = out or err
 
-        if special and not last_printed_sep: print sep
+        if special and not last_printed_sep: print(sep)
 
         if special or verbosity:
           prefix = '%3d) ' % i if show_nums else ''
-          print '%s%-40s ... %7d us   %s' % (
-            prefix, item['fqn'], item['time'] or -1, item['status'])
+          print(
+            '%s%-40s ... %7d us   %s' %
+            (prefix, item['fqn'], item['time'] or -1, item['status']))
 
         PrintStripped(out, ' |')
         PrintStripped(err, 'E|')
 
         if special:
-          print sep
+          print(sep)
           last_printed_sep = True
         elif verbosity:
           last_printed_sep = False
 
       if summary_data:
-        print '%-20s: %3d tests in %s seconds: %s' % (
-          namespace, int(summary_data['numtests']), summary_data['seconds'],
-          summary_data['status'])
+        print(
+          '%-20s: %3d tests in %s seconds: %s' %
+          (namespace, int(summary_data['numtests']), summary_data['seconds'],
+          summary_data['status']))
       if postamble:
         for line in postamble:
-          print line
+          print(line)
     end receiver OoplPython;
 
   end behavior processTestOutput;
@@ -12939,7 +12975,7 @@ namespace metax.oopl scope:
             elif command == 'show':
               skip = True
               code, _ = GenCode(lines)
-              print code
+              print(code)
               break
             elif command == 'pop':
               skip = True

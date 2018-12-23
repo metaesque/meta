@@ -156,7 +156,7 @@ scope:
           result = float(value)
 
       elif mytype == 'date':
-        val = re.sub(r'[-/@:]', '', value)
+        val = re.sub(r'[-/@: ]', '', value)
         n = len(val)
         if n == 8:
           result = datetime.datetime.strptime(val, '%Y%m%d')
@@ -170,6 +170,16 @@ scope:
           result = datetime.datetime.now()
         else:
           raise Error('Unrecognized date "%s"' % value)
+
+      elif mytype == 'regexp':
+        if value == '':
+          /# Fix this hackery. How to specify a default value?
+          result = re.compile(r'.*')
+        else:
+          try:
+            result = re.compile(value)
+          except re.error:
+            raise Error('Invalid regexp "%s"' % value)
 
       elif mytype.startswith('enum'):
         enumtype = self.enumtype()
@@ -230,6 +240,7 @@ scope:
       test.iseq(
         datetime.datetime(2018, 12, 11, 6, 37, 11),
         test.dateflag.typecheck('2018-12-11@06:37:11'))
+      test.reflag.typecheck('$v\d+$')
     end method typecheck;
 
     method names : vec<str> #:
@@ -616,7 +627,7 @@ scope:
       result = {}
       command = self
       while command is not None:
-        for nora, part in command.parts().iteritems():
+        for nora, part in command.parts().items():
           if not aliases and nora != part.name(): continue
           if nora not in result:
             result[nora] = part
@@ -1665,6 +1676,9 @@ scope:
       test.dateflag = test.faux.newFlag(
         'dob', mytype='date', aliases='d', default='1980-05-17',
         summary='Date of birth.')
+      test.reflag = test.faux.newFlag(
+        'version', mytype='regexp', aliases='r', default='',
+        summary='Version to use.')
       test.enumflag = test.faux.newFlag(
         'gender', mytype='enum<undef|female|male|trans>', default='undef',
         summary='Gender of person')

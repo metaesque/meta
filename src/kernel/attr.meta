@@ -23,7 +23,7 @@ scope:
         SimpleBlock           --> value is a list of str
         ComplexBlock          --> value is a list of Construct
   assocs:
-    std assoc cStringIO;
+    std assoc io;
   scope:
 
     field parent : Construct #:
@@ -206,6 +206,10 @@ scope:
       /# Render the key.
       if key and not self.isBlock():
         key += ' '
+      /# If fp is an io.StringIO vs a cStringIO.StringIO, key is expected to
+      /# be unicode. Figure out a better way of handling this.
+      /# if sys.version_info[0] == 2 and isinstance(key, str):
+      /#   key = unicode(key)
       fp.write(key)
       count = len(key)
 
@@ -256,9 +260,14 @@ scope:
       var mode : map = null #:
         See Construct.write() for details on mode semantics.
     scope:
-      fp = cStringIO.StringIO()
+      if sys.version_info[0] == 2:
+        import cStringIO
+        fp = cStringIO.StringIO()
+      else:
+        fp = io.StringIO()
       self.write(fp=fp, mode=mode)
-      return fp.getvalue()
+      result = fp.getvalue()
+      return result
     test:
       test.defineAttributes()
       test.iseq('gender male', test.feature.asStr())
@@ -411,7 +420,7 @@ scope:
           /#   'flag' from 'word' to 'expr', we implicitly convert some basic
           /#   string values to Expr instances.
           /# TODO(wmh): Remove this code when we are fully migrated!
-          print 'In ExprAttribute.valueIs() with non-expr "%s"' % value
+          print('In ExprAttribute.valueIs() with non-expr "%s"' % value)
           if value == '""':
             raise Error('here')
           error = True
@@ -456,7 +465,7 @@ scope:
             /# CODETANGLE(special_expr): TODO(wmh): Decide whether <special> is
             /# indicated by an Expr with value() None, or by an Expr that is
             /# None.
-            print '******* HERE with value %s' % value
+            print('******* HERE with value %s' % value)
             pass
           else:
             value = metax.c.Expr(kind, value, val)
@@ -633,7 +642,7 @@ scope:
         /# Attribues are usually created with a null value before the
         /# value is parsed, so we need to handle null.
         pass
-      elif isinstance(value, basestring):
+      elif isinstance(value, basestring if sys.version_info[0] == 2 else str):
         value = EnumAttribute.StrToEnum(value)
       elif isinstance(value, (list, tuple)):
         /# We support tuple so that CreateNewAttribute() can create an
@@ -962,17 +971,17 @@ scope:
 
       register_in_metafile = True
 
-      /# print 'registerConstruct: %s and %s' % (construct.kindfqn(), parent.kindfqn() if parent else None)
+      /# print('registerConstruct: %s and %s' % (construct.kindfqn(), parent.kindfqn() if parent else None))
       import metax.oopl
       is_namespace = isinstance(construct, metax.oopl.NamespaceConstruct)
 
       if is_namespace:
-        /# print 'Registering namespace %s in %s' % (construct.id(), parent.kindfqn())
+        /# print('Registering namespace %s in %s' % (construct.id(), parent.kindfqn()))
         pass
 
       if existing_parent:
         if existing_parent is not self:
-          print (
+          print(
             'ERROR: Attempting to register %s within %s when it is already '
             'registered within %s' %
             (construct.kindid(),
@@ -987,7 +996,7 @@ scope:
 
       cid = construct.id()
       if cid is None:
-        print '********** WARNING: Here with %s' % construct.kindid()
+        print('********** WARNING: Here with %s' % construct.kindid())
         raise Error('Cannot register a construct before id is established')
 
       cmap = self._map
@@ -1278,7 +1287,7 @@ scope:
       else:
         val = str(value)
         if not val:
-          print '*********** HERE with %s' % self.__class__
+          print('*********** HERE with %s' % self.__class__)
 
         fp.write(val)
       return len(val)
@@ -1298,6 +1307,10 @@ scope:
       val = str(self.value())
       if mode and mode.get('form', 'code') == 'html':
         val = '<span class="face-featval">%s</span>' % val
+      /# If fp is an io.StringIO vs a cStringIO.StringIO, val is expected to
+      /# be unicode. Figure out a better way of handling this.
+      /# if sys.version_info[0] == 2 and isinstance(val, str):
+      /#   val = unicode(val)
       fp.write(val)
       return len(val)
     test:
