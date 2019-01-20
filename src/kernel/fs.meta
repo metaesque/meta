@@ -179,7 +179,7 @@ scope:
         If true, print out children.
     scope:
       subindent = indent + '  '
-      fp.write('%s%s/\n' % (indent, self.name()))
+      fp.write(u'%s%s/\n' % (indent, self.name()))
       if details:
         for child in self.children().values():
           child.show(fp=fp, indent=subindent, details=details)
@@ -227,7 +227,7 @@ scope:
         If true, print out details.
     scope:
       isexec = False  # TODO(wmh): Fix this.
-      fp.write('%s%s%s\n' % (indent, self.name(), '*' if isexec else ''))
+      fp.write(u'%s%s%s\n' % (indent, self.name(), '*' if isexec else ''))
     test:
       alice = test.hier()
       readme = alice.parent().child('bob', 'README')
@@ -265,9 +265,9 @@ scope:
         If true, print out details.
     scope:
       if details:
-        fp.write('%s%s -> %s\n' % (indent, self.name(), self.src().path()))
+        fp.write(u'%s%s -> %s\n' % (indent, self.name(), self.src().path()))
       else:
-        fp.write('%s%s@\n' % (indent, self.name()))
+        fp.write(u'%s%s@\n' % (indent, self.name()))
     test:
       alice = test.hier()
       readme = alice.child('README')
@@ -1067,46 +1067,46 @@ scope:
         If true, show contents of files.
     scope:
       kind = self.kind()
-      fp.write('\n')
+      fp.write(u'\n')
       if verbose:
-        fp.write('#' * 80 + '\n')
-      fp.write('Filesystem:\n')
+        fp.write(u'#' * 80 + '\n')
+      fp.write(u'Filesystem:\n')
       filemap = self.filemap()
       for i, subpath in enumerate(sorted(filemap), start=1):
         basefile = filemap[subpath]
         contents = basefile.contents()
         mapfile = basefile.mapfile()
         if verbose:
-          fp.write('  ' + '=' * 80 + '\n')
+          fp.write(u'  ' + '=' * 80 + '\n')
         subpathstr = subpath if len(subpath) < 60 else subpath[:59] + '$'
         fp.write(
-          '  %2d %8d %-60s%s\n' %
+          u'  %2d %8d %-60s%s\n' %
           (i, len(contents), subpathstr, ' map' if mapfile else ''))
         if verbose:
           fill = '   |'
           assert contents[-1] == '\n'
           fp.write(fill + contents[:-1].replace('\n', '\n' + fill) + '\n')
           if mapfile:
-            fp.write('  ' + '-' * 80 + '\n')
+            fp.write(u'  ' + '-' * 80 + '\n')
             mapfile.serialize(fp=fp, indent='  ')
             
       if kind == 'disk':
         fs = self._disk_filesystem
         if fs:
-          fp.write('On-disk filesystem\n')
+          fp.write(u'On-disk filesystem\n')
           for path in sorted(fs):
             st = os.stat(path)
-            fp.write('  %6d bytes: %s\n' % (st.st_size, path))
+            fp.write(u'  %6d bytes: %s\n' % (st.st_size, path))
       else:
         if kind == 'emulate':
           diskfs = self._disk_filesystem
           fakefs = self._fake_filesystem
           if diskfs and fakefs:
-            fp.write('On fake_filesystem\n')
+            fp.write(u'On fake_filesystem\n')
             for path in sorted(diskfs):
               fakefile = self.getFakeFile(path)
               size = len(fakefile.contents)
-              fp.write('  %6d bytes: %s\n' % (size, path))
+              fp.write(u'  %6d bytes: %s\n' % (size, path))
     end method summarize;
 
     method addFauxFile #:

@@ -102,7 +102,7 @@ scope:
         if not isinstance(prefix, basestring):
           print('ERROR: prefix is %s DEFAULT is %s' % (prefix, DEFAULT))
         prefix += ': '
-      self.fp().write(('  ' * self._dent) + prefix + str(msg) + '\n')
+      self.fp().write((u'  ' * self._dent) + prefix + str(msg) + '\n')
     end method _info;
 
     test

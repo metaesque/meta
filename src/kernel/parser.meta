@@ -669,22 +669,22 @@ scope:
       construct = self.construct()
       symbols = self.allSymbols() if full else self.symbols()
       subindent = indent + '  '
-      fp.write('%sSymbolTable for %s:\n' % (indent, construct.kindfqn()))
+      fp.write(u'%sSymbolTable for %s:\n' % (indent, construct.kindfqn()))
       if symbols:
         if width < 0:
           width = max([len(s) for s in symbols])
         for symbol in sorted(symbols):
           data = symbols[symbol]
           construct = data['construct']
-          location = ' (%s)' % data['source'].kind() if full else ''
+          location = u' (%s)' % data['source'].kind() if full else ''
           notestr = data.get('note', None)
           note = ' [%s]' % notestr if notestr else ''
           fp.write(
-            '%s%s = %s%s%s\n' %
+            u'%s%s = %s%s%s\n' %
             (subindent, symbol.ljust(width), construct.kindfqn(), location,
              note))
       else:
-        fp.write('%s  empty\n' % indent)
+        fp.write(u'%s  empty\n' % indent)
     test:
       fp = test.fp()
       test.mtable.show(fp=fp, width=20)
@@ -974,7 +974,7 @@ scope:
       fp.write(
         'ExprParser starts at R%dC%d, currrently at R%dC%d seeing "%s"\n' %
         (start[0], start[1], self.row(), self.col(),
-        self.peek().replace('\n', '\\n')))
+        self.peek().replace(u'\n', u'\\n')))
 
       nrows = self.numrows()
       start = 0 if verbose else max(0, self.row() - 5)
@@ -983,14 +983,14 @@ scope:
         /# We use set() here so that we have a single place within which to
         /# abstract away details about the exact structure of 'source'.
         self.set(row=row)
-        fp.write('  [%3d] %s' % (row, self.line()))
-      fp.write('        ' + '0123456789' * 7 + '\n')
+        fp.write(u'  [%3d] %s' % (row, self.line()))
+      fp.write(u'        ' + '0123456789' * 7 + '\n')
 
       errors = self.errors()
       if errors:
         fp.write('ERRORS:\n')
         for e in errors:
-          fp.write('  ' + e + '\n')
+          fp.write(u'  ' + e + '\n')
 
       /# Reinstate position we entered this method at.
       self.set(row=crow, col=ccol)
@@ -2002,7 +2002,7 @@ scope:
   scope:
 
     field kind : str #:
-      One of 'num', 'real', 'str', 'id', 'list', 'hash', 'plist', 'call',...
+      One of 'num', 'str', 'id', 'list', 'hash', 'plist', 'call',...
     field text : str #:
       The (possibly multiline) string representation of the expression
     field value : any #:
@@ -2334,7 +2334,7 @@ scope:
         if attribute:
           lines[-1] += ' [%s.%s line %d]' % (
             name, attribute.key(), attribute.line())
-      return '\n'.join(lines)
+      return u'\n'.join(lines)
     test:
       test.iseqtext(
         'age             = 25\n'
@@ -3425,10 +3425,10 @@ scope:
         What to insert before each line.
     scope:
       close = False
-      fp.write('%s%s\n' % (indent, self.metapath()))
+      fp.write(u'%s%s\n' % (indent, self.metapath()))
       mapping = self.mapping()
       for bline, mline, fullid in mapping:
-        fp.write('%s  %8d %8d %s\n' % (indent, bline, mline, fullid))
+        fp.write(u'%s  %8d %8d %s\n' % (indent, bline, mline, fullid))
       if close: fs.close(fp)
     test:
       mapfile = metax.c.MapFile(
@@ -3629,30 +3629,30 @@ scope:
     scope:
       klass = self._construct_class
       fp.write(
-        '%s%s: %s\n' %
+        u'%s%s: %s\n' %
         (indent, self.name(), klass.__name__ if klass else 'No class (generic)'))
-      fp.write('%s  featvals:\n' % (indent))
+      fp.write(u'%s  featvals:\n' % (indent))
       featvals = self.featvals()
       for featval in sorted(featvals):
-        fp.write('%s    %-20s = %s\n' % (indent, featval, featvals[featval]))
-      fp.write('%s  features:\n' % (indent))
+        fp.write(u'%s    %-20s = %s\n' % (indent, featval, featvals[featval]))
+      fp.write(u'%s  features:\n' % (indent))
       features = self.features()
       for featkey in sorted(features):
         feature = features[featkey]
         fp.write(
-          '%s    %-20s = %-20s %s\n' %
+          u'%s    %-20s = %-20s %s\n' %
           (indent, featkey, feature['cankey'], feature['default']))
       primary = self.primary()
-      fp.write('%s  primary:\n' % indent)
+      fp.write(u'%s  primary:\n' % indent)
       for pkey in sorted(primary):
         data = primary[pkey]
         fp.write(
-          '%s    %-20s = %-20s %-20s %-20s %-1s %-1s\n' %
+          u'%s    %-20s = %-20s %-20s %-20s %-1s %-1s\n' %
           (indent, pkey,
            data['cankey'], '<required>', data['type'],
            str(data['keyopt'])[0], str(data['valopt'])[0]))
       secondaries = self.secondaries()
-      fp.write('%s  secondaries:\n' % indent)
+      fp.write(u'%s  secondaries:\n' % indent)
       for secondary in sorted(secondaries):
         data = secondaries[secondary]
         type = data['type']
@@ -3662,7 +3662,7 @@ scope:
         else:
           children = ''
         fp.write(
-          '%s    %-20s = %-20s %-20s %-20s %-1s %-1s%s\n' %
+          u'%s    %-20s = %-20s %-20s %-20s %-1s %-1s%s\n' %
           (indent, secondary,
            data['cankey'], data['default'], typestr,
            str(data['keyopt'])[0], str(data['valopt'])[0], children))
@@ -4106,19 +4106,19 @@ scope:
       var fp : ostream = out #:
         Where to write to.
     scope:
-      fp.write('ConsGroup: %s\n' % ','.join(self.kinds()))
+      fp.write(u'ConsGroup: %s\n' % ','.join(self.kinds()))
 
       primaries = self.primaries()
-      fp.write('  Primaries:\n')
+      fp.write(u'  Primaries:\n')
       for token in sorted(primaries):
-        fp.write('    %-20s = %s\n' % (token, primaries[token].name()))
+        fp.write(u'    %-20s = %s\n' % (token, primaries[token].name()))
 
-      fp.write('  Features:\n')
+      fp.write(u'  Features:\n')
       features = self.features()
       for token in sorted(features):
         info = features[token]
         fp.write(
-          '    %-20s = %-20s %-20s %s\n' %
+          u'    %-20s = %-20s %-20s %s\n' %
           (token, info[0], info[1], ','.join(sorted(info[2]))))
     test:
       _, _, _, compiler = test.cachedInfo(metal='meta')
@@ -4419,7 +4419,7 @@ scope:
         What to insert before each line of output.
     scope:
       metafile = self.metafile()
-      fp.write('Context: %s\n' % (metafile.path() if metafile else 'null'))
+      fp.write(u'Context: %s\n' % (metafile.path() if metafile else 'null'))
       subindent = indent + '  '
       consmap = self.consmap()
       for key in sorted(consmap):
@@ -4888,7 +4888,7 @@ scope:
       rep = cls.Repository
       for tstr in sorted(rep):
         metatype = rep[tstr]
-        fp.write('%-30s : %s\n' % (tstr, metatype))
+        fp.write(u'%-30s : %s\n' % (tstr, metatype))
     test:
       metax.c.Type.Repository = None
       metax.c.Type.Meta__Initialize()
@@ -5031,6 +5031,12 @@ scope:
         'hms': {},   # time of day without date
         'date': {},  # this is a date plus time of day
 
+        /# TODO(wmh): Add support for random variables
+        /#  - when used as type of var, if default is a number, we can
+        /#    implicitly initialize to scipy.stats.uniform(<number>, 0)
+        /#  - could support rv.norm(), rv.norm(5,1), rv.uniform(5,8), etc.
+        'rv': {},    # random variable
+
         'regexp': {},
 
         'nulltype': {},
@@ -5094,20 +5100,20 @@ scope:
     params:
       var fp : ostream = out;
     scope:
-      fp.write('Type: %s\n' % self._raw)
-      fp.write('  prefix = %s\n' % self._prefix)
-      fp.write('  base   = %s\n' % self._base)
-      fp.write('  native = %s\n' % self._native)
-      fp.write('  params = %s\n' % self._params)
+      fp.write(u'Type: %s\n' % self._raw)
+      fp.write(u'  prefix = %s\n' % self._prefix)
+      fp.write(u'  base   = %s\n' % self._base)
+      fp.write(u'  native = %s\n' % self._native)
+      fp.write(u'  params = %s\n' % self._params)
     test:
       fp = test.newStr()
       test.type.dump(fp=fp)
       test.iseqtext(
-        'Type: @int<32>\n'
-        '  prefix = @\n'
-        '  base   = int\n'
-        '  native = False\n'
-        "  params = ['32']\n",
+        u'Type: @int<32>\n'
+        u'  prefix = @\n'
+        u'  base   = int\n'
+        u'  native = False\n'
+        u"  params = ['32']\n",
         fp.getvalue())
     end method dump;
 
@@ -6350,14 +6356,14 @@ scope:
       var fp : ostream = out #:
         Where to write to.
     scope:
-      sep = '#' * 80 + '\n'
+      sep = u'#' * 80 + '\n'
       fp.write(sep)
       lines = self.lines()
       rawlines = self.text().rstrip().split('\n')
       assert len(lines) == len(rawlines), '%d lines vs %d rawlines' % (len(lines), len(rawlines))
       n = len(lines)
       rawstart = 0
-      fp.write('lnum:index:in:line\n')
+      fp.write(u'lnum:index:in:line\n')
       for i in range(0, n):
         rawline = rawlines[i]
         rawlen = len(rawline) + 1
@@ -6365,7 +6371,7 @@ scope:
         start = line.start()
         assert start == rawstart
         fp.write(
-          '%4d:%5d:%2d:%s\n' % (i, line.start(), line.indent(), line.line()))
+          u'%4d:%5d:%2d:%s\n' % (i, line.start(), line.indent(), line.line()))
         rawstart += rawlen
       fp.write(sep)
     test:
@@ -7100,16 +7106,21 @@ scope:
         /#           so it must be an incorrectly specified secondary token.
         /#         - otherwise we assume it is an implicit termination and
         /#           detect the syntax error in parseConstruct.
+
+        if False and litkey is None:
+          print '****** HERE with litkey=%s key=%s basel=%s secondary=%s termcode=%d line=%d:%s' % (
+            litkey, key, basel, secondary, termcode, lnum, line.line())
+
         ldent = line.indent()
         if index == line.start() + ldent:
           if ldent < indent:
             /# Definite implicit construct termination
             construct.termcodeIs(0)
           elif ldent == indent:
-            if litkey[-1] == ':':
+            if litkey is None or litkey[-1] == ':':
               /# This cannot possibly be a feature key, feature value or
               /# primary key, so it isn't the start of a new construct. Must
-              /# be an typoed secondary key.
+              /# be an typed secondary key.
               self.error(
                 'Unknown secondary token "%s"' % litkey, line=lnum, col=key_col)
               /# The most likely situation is that an attribute key has been
@@ -10464,7 +10475,7 @@ scope:
     params:
       var metafiles : vec<MetaFile> #:
         The metafiles to summarize.
-      var fp : ostream = out #:
+      var fp : ostream = err #:
         Where to write output
       var indent : str = '' #:
         What each line starts with.
@@ -11133,10 +11144,7 @@ scope:
       fs = self.fs()
       context = metalang.context()
       consmap = context.consmap()
-      /# TODO(wmh): Decide whether metalang ids should be lowercase, or
-      /# whether they should be mapped to lowercase when used in file paths,
-      /# or to abide by literal case-sensitivity.
-      metaid = metalang.id().lower()
+      metaid = metalang.id()
       MetaLang = metalang.name()
       metaprefix = 'meta%s' % metaid
 
@@ -11144,11 +11152,11 @@ scope:
         'emacs_template', fqn='metax.c.Compiler')
 
       if out_path is None:
-        out_path = self.metaPath(
-          'src', 'schema', metaid, 'meta%s-mode.el' % metaid)
+        config = metax.root.MetaObject.Config()
+        out_path = config['metalangs'].get(metaid, None)
 
       fp.write(
-        'Creating major mode %s for %s (%s) from %s\n' % (
+        u'Creating major mode %s for %s (%s) from %s\n' % (
           out_path, metaid, MetaLang, in_file))
 
       featkeys = {}
@@ -11206,15 +11214,15 @@ scope:
       for baselang in metalang.baselist():
         bkeys.update(baselang.keywords())
       fp.write(
-        '  Construct  [%3d]: %s\n' % (len(ckeys), ' '.join(sorted(ckeys))))
+        u'  Construct  [%3d]: %s\n' % (len(ckeys), ' '.join(sorted(ckeys))))
       fp.write(
-        '  Attributes [%3d]: %s\n' % (len(akeys), ' '.join(sorted(akeys))))
+        u'  Attributes [%3d]: %s\n' % (len(akeys), ' '.join(sorted(akeys))))
       fp.write(
-        '  Featvals   [%3d]: %s\n' % (len(fvals), ' '.join(sorted(fvals))))
+        u'  Featvals   [%3d]: %s\n' % (len(fvals), ' '.join(sorted(fvals))))
       fp.write(
-        '  Keywords   [%3d]: %s\n' % (len(kkeys), ' '.join(sorted(kkeys))))
+        u'  Keywords   [%3d]: %s\n' % (len(kkeys), ' '.join(sorted(kkeys))))
       fp.write(
-        '  Basewords  [%3d]: %s\n' % (len(bkeys), ' '.join(sorted(bkeys))))
+        u'  Basewords  [%3d]: %s\n' % (len(bkeys), ' '.join(sorted(bkeys))))
 
       kwds = {'metaprefix': metaprefix}
       replacements = {
@@ -12197,8 +12205,8 @@ scope:
       _, _, _, metac = test.cachedInfo()
       fs = metac.fs()
       sample_logs = test.resourcePath('sample_logs')
-      stdout = test.newStr(fs.read(fs.join(sample_logs, 'bazel_stdout')))
-      stderr = test.newStr(fs.read(fs.join(sample_logs, 'bazel_stderr')))
+      stdout = test.newStr(unicode(fs.read(fs.join(sample_logs, 'bazel_stdout'))))
+      stderr = test.newStr(unicode(fs.read(fs.join(sample_logs, 'bazel_stderr'))))
       tests = metac.parseBazelOutput(
         stdout=stdout, stderr=stderr, logdir=sample_logs)
       tdata = tests['//demo/cards2_test:FrenchPackTest']
@@ -12249,7 +12257,7 @@ scope:
         cstatus2 = tdata['status2']
         if cstatus2 == 'OK': cstatus2 = ''
         fp.write(
-          '%s%-60s %10s   %-6s\n' %
+          u'%s%-60s %10s   %-6s\n' %
           (indent, fqcn, clstime, cstatus))
         meths = tdata['methods']
         for cmname in sorted(meths):
@@ -12258,26 +12266,26 @@ scope:
           mdata = meths[cmname]
           mstatus = ' FAIL' if 'stderr' in mdata else ''
           fp.write(
-            '%s  %-60s %8dus%s\n' %
+            u'%s  %-60s %8dus%s\n' %
             (indent, method_name, mdata['us'], mstatus))
           if showout:
             stdout = mdata.get('stdout', '')
             if stdout:
               for line in stdout.rstrip().split('\n'):
-                fp.write('%s     |%s\n' % (indent, line))
+                fp.write(u'%s     |%s\n' % (indent, line))
           if showerr:
             stderr = mdata.get('stderr', '')
             if stderr:
               for line in stderr.rstrip().split('\n'):
-                fp.write('%s    E|%s\n' % (indent, line))
+                fp.write(u'%s    E|%s\n' % (indent, line))
 
         /#pprint.pprint(tdata)
     test:
       _, _, _, metac = test.cachedInfo()
       fs = metac.fs()
       sample_logs = test.resourcePath('sample_logs')
-      stdout = test.newStr(fs.read(fs.join(sample_logs, 'bazel_stdout')))
-      stderr = test.newStr(fs.read(fs.join(sample_logs, 'bazel_stderr')))
+      stdout = test.newStr(unicode(fs.read(fs.join(sample_logs, 'bazel_stdout'))))
+      stderr = test.newStr(unicode(fs.read(fs.join(sample_logs, 'bazel_stderr'))))
       tests = metac.parseBazelOutput(
         stdout=stdout, stderr=stderr, logdir=sample_logs)
 
@@ -13828,8 +13836,9 @@ scope:
           metamodtime = fs.mtime(metafile_path)
           basemodtime = fs.mtime(pyfile)
           if metamodtime > basemodtime:
-            print('NOTE: compiling %s (%d seconds newer than %s)' % (
-              fs.relpath(metafile_path),
+            sys.stderr.write(
+              'NOTE: compiling %s (%d seconds newer than %s)\n' %
+              (fs.relpath(metafile_path),
               metamodtime - basemodtime,
               fs.relpath(pyfile)))
 
@@ -13895,7 +13904,7 @@ scope:
         print('#' * 70)
         print(text)
         print('=' * 70)
-      ifp = io.StringIO(text)
+      ifp = io.StringIO(unicode(text))
       /# Note that the baselang being compiled is NOT what is important
       /# when performing baseling-to-metaline conversions ... it is the
       /# baselang being used to compile the code that is important!

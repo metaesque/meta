@@ -364,7 +364,7 @@ scope:
   parent<cc> ^.testing.Test
   assocs<py>:
     std assoc shutil;
-    std assoc io;
+    usertest std assoc io;
     std assoc logging;
     usertest std assoc os;
     std assoc re;
@@ -899,12 +899,13 @@ scope:
       Capture all subsequent output written to stdout until getStdout() is
       invoked.
     scope<py>:
-      self._stdout = io.StringIO()
+      /#self._stdout = io.StringIO()
+      self._stdout = io.BytesIO()
       sys.stdout = self._stdout
     test<py>:
       self.assertTrue(sys.stdout is metax.test.TestCase.CanonicalStdout())
       self._tc.captureStdout()
-      self.assertTrue(isinstance(sys.stdout, metax.test.StrStrClass))
+      self.assertTrue(isinstance(sys.stdout, io.BytesIO), type(sys.stdout))
       print('hello world')
       out = self._tc.getStdout()
       self.assertTrue(sys.stdout is metax.test.TestCase.CanonicalStdout())
@@ -918,7 +919,7 @@ scope:
     scope<py>:
       /# TODO(wmh): Use self._stdout to test.
       cls = sys.stdout.__class__
-      if cls is TestCase.StrStrClass or isinstance(sys.stdout, StringIO.StringIO):
+      if cls is TestCase.StrStrClass or isinstance(sys.stdout, io.BytesIO):
         result = sys.stdout.getvalue()
       else:
         result = None
@@ -941,10 +942,10 @@ scope:
       self.assertTrue(sys.stderr is metax.test.TestCase.CanonicalStderr())
       self._tc.captureStderr()
       self.assertTrue(isinstance(sys.stderr, metax.test.StrStrClass))
-      sys.stderr.write('hello world\n')
+      sys.stderr.write(u'hello world\n')
       err = self._tc.getStderr()
       self.assertTrue(sys.stderr is metax.test.TestCase.CanonicalStderr())
-      self.assertEqual('hello world\n', err)
+      self.assertEqual(u'hello world\n', err)
     end method captureStderr;
 
     new specific
@@ -1040,6 +1041,8 @@ scope:
     params:
       var content : str = null;
     scope<py>:
+      if content is not None:
+        content = unicode(content)
       return self.fp(content=content)
     scope<js>:
       throw new Error('TestCase.newStr() not yet implemented');
@@ -1969,12 +1972,12 @@ scope:
       indent = ' ' * depth
 
       /# We print out the indented key (no newline ... values printed later).
-      fp.write('%s%s ' % (indent, formstr(key, keywidth-depth)))
+      fp.write(u'%s%s ' % (indent, formstr(key, keywidth-depth)))
 
       if obj1 == obj2:
         /# The two objects are equal, so we don't need to do anything more.
         fp.write(
-          '  ' + formstr(obj1, valwidth) + ' ' + formstr(obj2, valwidth) + '\n')
+          u'  ' + formstr(obj1, valwidth) + ' ' + formstr(obj2, valwidth) + '\n')
       else:
         /# The two objects differ, so we analyze more carefully.
         t1 = type(obj1)
@@ -1983,7 +1986,7 @@ scope:
           /# The two types are the same, so we can meaningfully compare them,
           /# including recursing into them if they are containers.
           if isinstance(obj1, (list, tuple)):
-            fp.write('\n')
+            fp.write(u'\n')
             l1 = len(obj1)
             l2 = len(obj2)
             ml = max(l1, l2)
@@ -1995,7 +1998,7 @@ scope:
                 depth+1,
                 fp=fp, keywidth=keywidth, valwidth=valwidth)
           elif isinstance(obj1, dict):
-            fp.write('\n')
+            fp.write(u'\n')
             keys = set(obj1)
             keys.update(set(obj2))
             for key in sorted(keys):
@@ -2007,12 +2010,12 @@ scope:
                 fp=fp, keywidth=keywidth, valwidth=valwidth)
           else:
             fp.write(
-              '* ' + formstr(obj1, valwidth) +
+              u'* ' + formstr(obj1, valwidth) +
               ' ' + formstr(obj2, valwidth) + '\n')
         else:
           /# The two objects are different types so they are incomparable.
           fp.write(
-            '* ' + formstr(t1, valwidth) + ' ' + formstr(t2, valwidth) + '\n')
+            u'* ' + formstr(t1, valwidth) + ' ' + formstr(t2, valwidth) + '\n')
     test:
       tc = metax.test.TestCase('run')
 

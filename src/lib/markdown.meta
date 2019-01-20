@@ -2069,16 +2069,17 @@ scope:
     scope:
       implicit = self.implicit()
       prelines = self.prelines()
+      indent = unicode(indent)
       if aspect == 'ascii':
         if prelines:
-          fp.write('\n' * prelines)
+          fp.write(u'\n' * prelines)
         if indent:
           sep = '\n' + indent
           if not nofirst:
             fp.write(indent)
           fp.write(self.text().replace('\n', sep) + '\n')
         else:
-          fp.write(self.text() + '\n')
+          fp.write(self.text() + u'\n')
       elif aspect == 'html':
         if parser is None:
           parser = self.parent().parser()          
@@ -2086,14 +2087,14 @@ scope:
           self.text(), parser=parser, indent=indent)
         sep = '\n' + indent
         if prelines:
-          fp.write('\n' * prelines)
+          fp.write(u'\n' * prelines)
         if implicit:
           fp.write(indent + text.replace('\n', sep) + '\n')
         else:
           fp.write(indent + '<p>' + text.replace('\n', sep) + '</p>\n')
       elif aspect == 'tex':
         text = self.__class__.TextToTex(self.text())
-        fp.write(text + '\n')
+        fp.write(text + u'\n')
       else:
         print 'ERROR: Unknown aspect %s for Table.show()' % aspect
     test:
@@ -2173,19 +2174,20 @@ scope:
       var parser : Parser = null #:
         The parser instance to use.
     scope:
+      indent = unicode(indent)
       prelines = self.prelines()
       if aspect == 'ascii':
         if prelines:
-          fp.write('\n' * prelines)
+          fp.write(u'\n' * prelines)
         for line in self.lines():
           fp.write(indent + line + '\n')
       elif aspect == 'html':
-        fp.write('%s<blockquote>\n' % indent)
+        fp.write(u'%s<blockquote>\n' % indent)
         for line in self.lines():
-          fp.write(line[2:] + '\n')
-        fp.write('%s</blockquote>\n' % indent)
+          fp.write(line[2:] + u'\n')
+        fp.write(u'%s</blockquote>\n' % indent)
       elif aspect == 'tex':
-        fp.write('Not yet handling blockquotes in tex\n')
+        fp.write(u'Not yet handling blockquotes in tex\n')
       else:
         print 'ERROR: Unknown aspect %s for Table.show()' % aspect
     test:
@@ -2332,11 +2334,11 @@ scope:
       if aspect == 'html':
         tag = 'ol' if ordered else 'ul'
         if prelines:
-          fp.write('\n' * prelines)
-        fp.write('%s<%s>\n' % (indent, tag))
+          fp.write(u'\n' * prelines)
+        fp.write(u'%s<%s>\n' % (indent, tag))
         for item in self.items():
           item.show(fp=fp, indent=subindent, aspect=aspect)
-        fp.write('%s</%s>\n' % (indent, tag))
+        fp.write(u'%s</%s>\n' % (indent, tag))
       elif aspect == 'ascii':
         /# For ascii, the amount of extra indentation (beyond 'indent') is
         /# customizable, and depends on various things. First, let's consider
@@ -2371,7 +2373,7 @@ scope:
           /# can add additional spaces to mark_format.
 
         if prelines:
-          fp.write('\n' * prelines)
+          fp.write(u'\n' * prelines)
         for i, item in enumerate(items):
           if ordered:
             mark = mark_format % {'num': (i + int(self.mark()))}
@@ -2379,9 +2381,9 @@ scope:
             mark = mark_format
           item.show(fp=fp, indent=indent, aspect=aspect, mark=mark)
       elif aspect == 'tex':
-        fp.write('List.show() not implemented for aspect=%s\n' % aspect)
+        fp.write(u'List.show() not implemented for aspect=%s\n' % aspect)
       elif aspect == 'markdown':
-        fp.write('List.show() not implemented for aspect=%s\n' % aspect)
+        fp.write(u'List.show() not implemented for aspect=%s\n' % aspect)
       else:
         print 'ERROR: Unknown aspect %s for List.show()' % aspect
     test:
@@ -2446,6 +2448,7 @@ scope:
         The parser instance to use.
     scope:
       parent = self.parent()
+      indent = unicode(indent)
 
       if aspect == 'ascii':
         /# Things are complicated here by the fact that we need to print out
@@ -2461,7 +2464,7 @@ scope:
         prelines = self.prelines()
 
         if prelines:
-          fp.write('\n' * prelines)          
+          fp.write(u'\n' * prelines)          
         for i, block in enumerate(self.blocks()):
           if i == 0:
             /# This is the first block in the listitem, so we add the listitem
@@ -2476,10 +2479,10 @@ scope:
             block.show(fp=fp, indent=subindent, aspect=aspect)
 
       elif aspect == 'tex':
-        fp.write('ListItem.show() for aspect text not yet implemented\n')
+        fp.write(u'ListItem.show() for aspect text not yet implemented\n')
 
       elif aspect == 'html':
-        fp.write('%s<li>\n' % indent)
+        fp.write(u'%s<li>\n' % indent)
         blocks = self.blocks()
         if len(blocks) == 1:
           block = blocks[0]
@@ -2490,13 +2493,13 @@ scope:
         else:
           for block in blocks:
             block.show(fp=fp, indent=indent, aspect=aspect)
-        fp.write('%s</li>\n' % indent)
+        fp.write(u'%s</li>\n' % indent)
 
       elif aspect == 'markdown':
         pass
 
       else:
-        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+        print(u'ERROR: Unknown aspect %s for Table.show()' % aspect)
     test:
       test.makeLists()
 
@@ -2574,35 +2577,36 @@ scope:
       var parser : Parser = null #:
         The parser instance to use.
     scope:
+      indent = unicode(indent)
       prelines = self.prelines()
       lines = self.lines()
       if aspect == 'html':
         if prelines:
-          fp.write('\n' * prelines)
+          fp.write(u'\n' * prelines)
         lang = self.language()
         if lang is None:
           /# The indented form
-          fp.write('%s<pre><code>' % indent)
+          fp.write(u'%s<pre><code>' % indent)
           for line in lines:
             if line:
               assert line.startswith('    ')
               /# TODO(wmh): Use translate instead of multiple replace calls()
               codeline = line[4:].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-              fp.write(codeline + '\n')
+              fp.write(codeline + u'\n')
             else:
-              fp.write('\n')
+              fp.write(u'\n')
         else:
           /# The quoted form.
           cstr = ' class="%s"' % lang if lang else ''
-          fp.write('%s<pre><code%s>' % (indent, cstr))
+          fp.write(u'%s<pre><code%s>' % (indent, cstr))
           for line in lines:
             /# TODO(wmh): Use translate instead of multiple replace calls()
             codeline = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            fp.write(codeline + '\n')
-        fp.write('</code></pre>\n')
+            fp.write(codeline + u'\n')
+        fp.write(u'</code></pre>\n')
       elif aspect == 'ascii':
         if prelines:
-          fp.write('\n' * prelines)
+          fp.write(u'\n' * prelines)
         lang = self.language()
         if lang is None:
           /# The indented form
@@ -2611,17 +2615,17 @@ scope:
             fp.write(indent + line + '\n')
         else:
           /# The quoted form.
-          fp.write('%s~~~%s\n' % (indent, lang))
+          fp.write(u'%s~~~%s\n' % (indent, lang))
           for line in lines:
             fp.write(indent + line + '\n')
-          fp.write('%s~~~\n' % indent)
+          fp.write(u'%s~~~\n' % indent)
 
       elif aspect == 'tex':
-        fp.write('%sFIX tex CODE\n' % indent)
+        fp.write(u'%sFIX tex CODE\n' % indent)
       elif aspect == 'markdown':
-        fp.write('%sFIX markdown CODE\n' % indent)
+        fp.write(u'%sFIX markdown CODE\n' % indent)
       else:
-        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+        print(u'ERROR: Unknown aspect %s for Table.show()' % aspect)
     test:
       fp = test.newStr()
       test.code.show(fp=fp, aspect='ascii')
@@ -2701,18 +2705,18 @@ scope:
       prelines = self.prelines()
       if aspect == 'html':
         if prelines:
-          fp.write('\n' * prelines)
-        fp.write('%s<hr/>\n' % indent)
+          fp.write(u'\n' * prelines)
+        fp.write(u'%s<hr/>\n' % indent)
       elif aspect == 'ascii':
         if prelines:
-          fp.write('\n' * prelines)
-        fp.write('%s%s\n' % (indent, '-' * (70 - len(indent))))
+          fp.write(u'\n' * prelines)
+        fp.write(u'%s%s\n' % (indent, '-' * (70 - len(indent))))
       elif aspect == 'tex':
-        fp.write('%s\\hline\n' % indent)
+        fp.write(u'%s\\hline\n' % indent)
       elif aspect == 'markdown':
-        fp.write('%s%s' % (indent, self.text()))
+        fp.write(u'%s%s' % (indent, self.text()))
       else:
-        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+        print(u'ERROR: Unknown aspect %s for Table.show()' % aspect)
     test:
       fp = test.newStr()
       test.hr.show(fp=fp, aspect='ascii')
@@ -2779,19 +2783,19 @@ scope:
       lines = self.lines()
       if aspect == 'ascii':
         if prelines:
-          fp.write('\n' * prelines)
+          fp.write(u'\n' * prelines)
         for line in lines:
-          fp.write('%s%s\n' % (indent, line))
+          fp.write(u'%s%s\n' % (indent, line))
       elif aspect == 'html':
         if prelines:
-          fp.write('\n' * prelines)
+          fp.write(u'\n' * prelines)
         for line in lines:
-          fp.write('%s%s\n' % (indent, line))
+          fp.write(u'%s%s\n' % (indent, line))
       elif aspect == 'tex':
-        fp.write('%s\\begin{comment}\n' % indent)
+        fp.write(u'%s\\begin{comment}\n' % indent)
         for line in lines:
-          fp.write('%s%s\n' % (indent, line))
-        fp.write('%s\\end{comment}\n' % indent)
+          fp.write(u'%s%s\n' % (indent, line))
+        fp.write(u'%s\\end{comment}\n' % indent)
       else:
         print 'ERROR: Unknown aspect %s for Table.show()' % aspect
     test:
@@ -3092,9 +3096,9 @@ scope:
 
       if aspect == 'ascii':
         if prelines:
-          fp.write('\n' * prelines)
+          fp.write(u'\n' * prelines)
         if title:
-          fp.write('%sTable: %s\n\n' % (indent, title))
+          fp.write(u'%sTable: %s\n\n' % (indent, title))
 
         /# Accumulate all the entries in each column (including header)
         columns = self.columns()
@@ -3116,7 +3120,7 @@ scope:
 
         /# Print the header.
         fp.write(
-          '%s| %s |\n' % 
+          u'%s| %s |\n' % 
           (indent, 
            FormatRow(header, aligns, widths)))
 
@@ -3129,16 +3133,16 @@ scope:
           width = widths[i]
           sep = left + ('-' * (max(1, width - len(left + right)))) + right
           seplist.append(sep)
-        fp.write('%s|%s|\n' % (indent, FormatRow(seplist, aligns, widths)))
+        fp.write(u'%s|%s|\n' % (indent, FormatRow(seplist, aligns, widths)))
 
         /# Print the data rows.
         /#   TODO(wmh): Find max width for each column.
         for row in self.rows():
           fp.write(
-            '%s| %s |\n' %
+            u'%s| %s |\n' %
             (indent, FormatRow(row.data(), aligns, widths)))
 
-        fp.write('\n')
+        fp.write(u'\n')
 
       elif aspect == 'tex':
         columns = self.columns()
@@ -3188,46 +3192,46 @@ scope:
           table_loc  = 'h!'
 
         /# Print the table
-        fp.write('\\begin{%s}[%s]\n' % (table_type, table_loc))
-        fp.write('  \\centering\n')
-        fp.write('  \\rowcolors{2}{gray!25}{white}\n')
+        fp.write(u'\\begin{%s}[%s]\n' % (table_type, table_loc))
+        fp.write(u'  \\centering\n')
+        fp.write(u'  \\rowcolors{2}{gray!25}{white}\n')
         if title:
-          fp.write('  \\caption{%s}\n' % title)
+          fp.write(u'  \\caption{%s}\n' % title)
         /# fp.write('\\label{tab:table1}\n')
-        fp.write('  \\begin{tabular}{%s}\n' % colspec)
+        fp.write(u'  \\begin{tabular}{%s}\n' % colspec)
         
         /# Print the header (if one exists)
         if numh:
-          fp.write('    \\hline\n')
-          fp.write('    \\rowcolor{gray!50}\n')
-          fp.write('    %s\\\\\n' % ' & '.join(headers))
-          fp.write('    \\hline\n')
+          fp.write(u'    \\hline\n')
+          fp.write(u'    \\rowcolor{gray!50}\n')
+          fp.write(u'    %s\\\\\n' % ' & '.join(headers))
+          fp.write(u'    \\hline\n')
 
         for row in self.rows():
           line = ' & '.join([
             metax.lib.markdown.Paragraph.TextToTex(cell, parser=parser) 
             for cell in row.data()])
-          fp.write('    %s\\\\\n' % line)
+          fp.write(u'    %s\\\\\n' % line)
           /# fp.write('    \\hline\n')
-        fp.write('    \\hline\n')
-        fp.write(  '\\end{tabular}\n')
-        fp.write('\\end{%s}\n' % table_type)
+        fp.write(u'    \\hline\n')
+        fp.write(u'  \\end{tabular}\n')
+        fp.write(u'\\end{%s}\n' % table_type)
 
       elif aspect == 'html':
         csscls = self.csscls()
         cssclsstr = ' class="%s"' % csscls if csscls else ''
         uid = self.uid()
         uidstr = ' id="%s"' % uid if uid else ''
-        fp.write('<table%s%s>\n' % (cssclsstr, uidstr))
+        fp.write(u'<table%s%s>\n' % (cssclsstr, uidstr))
         if title:
-          fp.write('  <caption>%s</caption>\n' % title)
+          fp.write(u'  <caption>%s</caption>\n' % title)
         for row in self.rows():
-          line = '<tr>%s</tr>\n' % ''.join(
+          line = u'<tr>%s</tr>\n' % ''.join(
             ['<td>%s</td>' % 
              (metax.lib.markdown.Paragraph.TextToHtml(cell, parser=parser).strip() or '&nbsp;')
              for cell in row.data()])
           fp.write(line)
-        fp.write('</table>\n')
+        fp.write(u'</table>\n')
 
       else:
         print 'ERROR: Unknown aspect %s for Table.show()' % aspect
@@ -3262,7 +3266,7 @@ scope:
         >|    Alice & 25 & 1.7m & Kiwi\\
         >|    Bob & 23 & 1.9m & Apple\\
         >|    \hline
-        >|\end{tabular}
+        >|  \end{tabular}
         >|\end{table}
         >|""",
         fp.getvalue())
@@ -3673,7 +3677,7 @@ scope:
         abbrev = self.abbrev()
         abbrevstr = ' [=%s]' % abbrev if abbrev else ''
         fp.write(
-          '%s%s%s%s\n' %
+          u'%s%s%s%s\n' %
           (indent, '  ' * d, self.title() or '(sham)', abbrevstr))
         if aspect == 'title*':
           for block in self.blocks():
@@ -3683,7 +3687,7 @@ scope:
               /# section titles.
               title = '*' + title
               /# Write the augmented text title.
-              fp.write('%s%s%s\n' % (indent, '  ' * (d+1), title))
+              fp.write(u'%s%s%s\n' % (indent, '  ' * (d+1), title))
           /# Now handle children
           if depth != 0:
             for child in self.children():
@@ -3694,8 +3698,8 @@ scope:
       elif aspect == 'ascii':
         if d:
           if prelines:
-            fp.write('\n' * prelines)
-          fp.write('%s%s %s\n' % (indent, '#' * d, self.title()))
+            fp.write(u'\n' * prelines)
+          fp.write(u'%s%s %s\n' % (indent, '#' * d, self.title()))
         for block in self.blocks():
           block.show(fp=fp, indent=indent, aspect=aspect, parser=parser)
         /# Now handle children
@@ -3716,7 +3720,7 @@ scope:
           else:
             /# Root level.
             fp.write(
-              >|"""<html>
+              >|u"""<html>
               >|  <head>
               >|%(csslib)s
               >|  </head>
@@ -3735,9 +3739,9 @@ scope:
           tag = kdata['tag']
           abbrev = self.abbrev()
           idstr = ' id="%s" title="%s"' % (abbrev, abbrev) if abbrev else ''
-          fp.write('\n')
+          fp.write(u'\n')
           fp.write(
-            '\n<%s%s>%s</%s>\n' % (
+            u'\n<%s%s>%s</%s>\n' % (
               tag, idstr,
               metax.lib.markdown.Paragraph.TextToHtml(
                 title, parser=self.parser(), indent=indent),
@@ -3757,7 +3761,7 @@ scope:
         if d == 0 and not nohead:
           if postamble:
             fp.write(postamble)
-          fp.write('  </body>\n</html>\n')
+          fp.write(u'  </body>\n</html>\n')
 
       elif aspect == 'tex':
         d = self.depth()
@@ -3826,9 +3830,9 @@ scope:
           }[d]
           tag = kdata['tag']
           suffix = kdata.get('suffix', '')
-          fp.write('\\%s{%s}%s\n' % (
+          fp.write(u'\\%s{%s}%s\n' % (
             tag, metax.lib.markdown.Paragraph.TextToTex(title), suffix))
-          fp.write('\n')
+          fp.write(u'\n')
 
         /# Print out any block objects.
         for block in self.blocks():
@@ -3842,7 +3846,7 @@ scope:
 
         /# Perform any wrap-up needed.
         if d == 0:
-          fp.write('\\end{document}\n')
+          fp.write(u'\\end{document}\n')
 
       else:
         raise Error('Unknown aspect "%s" for Section.show' % aspect)

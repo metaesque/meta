@@ -115,8 +115,8 @@ scope:
       accessor get test:
         sh = test.shell
         test.iseq(
-          ['alias', 'aliases', 'cd', 'help', 'history', 'ls', 'printenv', 'pwd',
-           'quit', 'set'],
+          ['alias', 'aliases', 'cat', 'cd', 'help', 'history', 'ls',
+           'pwd', 'quit', 'set', 'vars'],
           sorted(sh.commands().keys()))
     end field commands;
 
@@ -180,7 +180,7 @@ scope:
           return result
 
         d = metax.lib.shell.DynamicDirectory(
-          root, 'dir', context='test', generator=Gen, freshold=10)
+          root, 'dir', 'test', generator=Gen, freshold=10)
         sh.changeDirCommand('dir/subdir')
         dd = sh._cwd
         sh.cwdIs(dd)
@@ -260,7 +260,8 @@ scope:
       multi var args : vec #:
         Used to replace printf sequences in msg.
     scope:
-      self._fp.write(msg % args)
+      fullmsg = unicode(msg % args)
+      self._fp.write(fullmsg)
     test:
       sh = test.shell
       out = sh._fp
@@ -1251,12 +1252,12 @@ scope:
               child_name += '@'
           data.append(child_name)
       if detailed:
-        fp.write('\n'.join(data) + '\n')
+        fp.write(u'\n'.join(data) + '\n')
       else:
         /# TODO(wmh): provide multi-child-per-line support
         output = self.__class__.FormatListing(
           data, width=self.terminalWidth())
-        fp.write(output + '\n')
+        fp.write(u'' + output + '\n')
       return data
     test:
       fp = test.fp()

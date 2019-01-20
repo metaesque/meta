@@ -210,7 +210,7 @@ scope:
       /# be unicode. Figure out a better way of handling this.
       /# if sys.version_info[0] == 2 and isinstance(key, str):
       /#   key = unicode(key)
-      fp.write(key)
+      fp.write(unicode(key))
       count = len(key)
 
       /# Determine how to format the attribute value.
@@ -401,6 +401,8 @@ scope:
 
   class ExprAttribute < Attribute #:
     An attribute whose value is an Expr.
+  assocs:
+    std assoc re;
   scope:
 
     field value : Expr #:
@@ -1289,18 +1291,18 @@ scope:
         if not val:
           print('*********** HERE with %s' % self.__class__)
 
-        fp.write(val)
+        fp.write(unicode(val))
       return len(val)
     test:
       test.defineAttributes()
       mode = {}
       fp = test.newStr()
       test.iseq(4, test.feature.writeValueLines(fp=fp, indent='..', mode=mode))
-      fp.write('\n')
+      fp.write(u'\n')
       test.iseq(3, test.id.writeValueLines(fp=fp, indent='..', mode=mode))
-      fp.write('\n')
+      fp.write(u'\n')
       test.iseq(2, test.num.writeValueLines(fp=fp, indent='..', mode=mode))
-      fp.write('\n')
+      fp.write(u'\n')
       test.iseqmap('male\nbob\n42\n', fp.getvalue())
 
     receiver FeatureAttribute scope:
@@ -1311,7 +1313,7 @@ scope:
       /# be unicode. Figure out a better way of handling this.
       /# if sys.version_info[0] == 2 and isinstance(val, str):
       /#   val = unicode(val)
-      fp.write(val)
+      fp.write(unicode(val))
       return len(val)
     test:
       test.defineAttributes()
@@ -1331,7 +1333,7 @@ scope:
       val = str(self.value())
       if mode and mode.get('form', 'code') == 'html':
         val = metax.c.HtmlSafe(val)
-      fp.write(val)
+      fp.write(unicode(val))
       return len(val)
     test:
       test.defineAttributes()
@@ -1348,7 +1350,7 @@ scope:
 
     receiver ExprAttribute scope:
       val = self.value().text()
-      fp.write(val)
+      fp.write(unicode(val))
       return len(val)
     test:
       test.defineAttributes()
@@ -1358,7 +1360,7 @@ scope:
 
     receiver EnumAttribute scope:
       val = '<%s>' % '|'.join(self.value())
-      fp.write(val)
+      fp.write(unicode(val))
       return len(val)
     test:
       test.defineAttributes()
@@ -1370,7 +1372,7 @@ scope:
       val = self.value().raw()
       if mode and mode.get('form', 'code') == 'html':
         val = HtmlSafe(val)
-      fp.write(val)
+      fp.write(unicode(val))
       return len(val)
     test:
       test.defineAttributes()
@@ -1379,6 +1381,7 @@ scope:
       test.iseq('vec<str>', fp.getvalue())
 
     receiver SimpleBlock scope:
+      indent = unicode(indent)
       form = mode.get('form', 'code') if mode else 'code'
       ishtml = form == 'html'
       construct = self.parent()
@@ -1392,7 +1395,7 @@ scope:
         kind = '???'
 
       /# Block always starts on new line.
-      fp.write('\n')
+      fp.write(u'\n')
 
       /# If this is html, we insert a special control line at start and end.
       if ishtml:
@@ -1411,7 +1414,7 @@ scope:
           fp.write(indent + line + '\n')
         else:
           /# The line is empty. We don't add indent either.
-          fp.write('\n')
+          fp.write(u'\n')
 
       if ishtml:
         fp.write(control_line + 'end\n')
@@ -1436,7 +1439,7 @@ scope:
       ishtml = form == 'html'
 
       /# The value of a complex block (for now) always starts on a new line.
-      fp.write('\n')
+      fp.write(u'\n')
 
       /# If this is html, we insert a special control line at start and end.
       if ishtml:
@@ -1455,7 +1458,7 @@ scope:
       /# postcount records how many empty lines exist after the last construct
       /# in the block.
       for i in range(0, self.postcount()):
-        fp.write('\n')
+        fp.write(u'\n')
 
       if ishtml:
         fp.write(control_line + 'end\n')

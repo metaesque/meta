@@ -81,30 +81,33 @@ def Config(verbose=Verbose):
   # a simple block that contains individual key/value pairs. Replace following
   # hardcoded code with that more general solution, where the person specifies
   # the mapping in their ~/.config/metaxy/config.meta file.
-  src_root = result['src_root'] 
-  result['metalangs'] = {
+  src_root = result['src_root']
+  metalangs = {
     'meta': os.path.join(src_root, 'src', 'schema', 'meta', 'schema.meta'),
     'oopl': os.path.join(src_root, 'src', 'schema', 'oopl', 'schema.meta'),
     'doc': os.path.join(src_root, 'src', 'schema', 'doc', 'schema.meta'),
-
-    'bio': os.path.join(
-      os.getenv('HOME'), 'src', 'wmh', 'lib', 'python', 'wmh', 'meta', 'bio', 'schema.meta'),
-    'food': os.path.join(
-      os.getenv('HOME'), 'src', 'wmh', 'lib', 'python', 'wmh', 'meta', 'food', 'schema.meta'),
-    'family': os.path.join(
-      os.getenv('HOME'), 'src', 'wmh', 'lib', 'python', 'wmh', 'meta', 'family', 'schema.meta'),
-
-    'story': os.path.join(
-      os.getenv('HOME'), 'src', 'wmx', 'lib', 'python', 'metarotica', 'story', 'meta', 'schema.meta'),
   }
-  for k, v in result['metalangs'].items():
+  home = os.getenv('HOME')
+  if home:
+    metalangs.update({
+      'bio': os.path.join(
+        home, 'src', 'wmh', 'lib', 'python', 'wmh', 'meta', 'bio', 'schema.meta'),
+      'food': os.path.join(
+        home, 'src', 'wmh', 'lib', 'python', 'wmh', 'meta', 'food', 'schema.meta'),
+      'family': os.path.join(
+        home, 'src', 'wmh', 'lib', 'python', 'wmh', 'meta', 'family', 'schema.meta'),
+      'story': os.path.join(
+        home, 'src', 'wmx', 'lib', 'python', 'metarotica', 'story', 'meta', 'schema.meta'),
+    })
+  for k, v in metalangs.items():
     if not os.path.exists(v):
       print('ERROR: %s has non-existent path %s' % (k, v))
       sys.exit(1)
+  result['metalangs'] = metalangs
   #import pprint
   # pprint.pprint(result)
       
-  logging.info('metastrap.Config() returns %s' % result)
+  # logging.info('metastrap.Config() returns %s' % result)
   return result
 
 

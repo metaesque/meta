@@ -125,7 +125,7 @@ scope:
         import metastrap
         /# print('NOTE: Initializing metax.root.Config!')
         result = metastrap.Config()
-        logging.info('metax.root.Object.Config: initialized to %s' % str(result))
+        /# logging.info('metax.root.Object.Config: initialized to %s' % str(result))
         -> result
       lazy<cc>:
         std::cerr << "metax.root.ObjectMeta.Config() not yet implemented" << std::endl;
@@ -158,8 +158,8 @@ scope:
     params:
       var cli : any = null #:
         A metax.cli.Values instance obtained from instantiating a command line.
-        IMPORTANT: We are not specifying the type (metax.cli.Values) here because
-        it would introduce a circularity to depend on metax.cli.Values.
+        IMPORTANT: We are not specifying the type (metax.cli.Values) here
+        because it would introduce a circularity to depend on metax.cli.Values.
       var resources : map<@str,@str> = null #:
         An explicit mapping for resources.
     scope<py>:

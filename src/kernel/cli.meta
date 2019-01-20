@@ -106,6 +106,8 @@ scope:
         alist = re.split(r'\s*,\s*', aliases)
         self.aliasesIs(alist)
     scope<cc>:
+    clinit<py>:
+      cls.RegexpClass = re.compile('.').__class__
     end lifecycle;
 
     method typecheck : any #:
@@ -150,9 +152,9 @@ scope:
       elif mytype in ('real', 'float', 'double'):
         if isinstance(value, (int, float)):
           result = float(value)
-        elif re.match(r'^\d*\.\d+$', value):
+        elif re.match(r'^-?\d*\.\d+$', value):
           result = float(value)
-        elif re.match(r'^\d+$', value):
+        elif re.match(r'^-?\d+$', value):
           result = float(value)
 
       elif mytype == 'date':
@@ -665,8 +667,8 @@ scope:
       var desc : str = null #:
         A multi-line description of the flag.
     scope<py>:
-      if default is None:
-        raise Error('Flag --%s : %s needs a default value' % (name, mytype))
+      /#if default is None:
+      /#  raise Error('Flag --%s : %s needs a default value' % (name, mytype))
       result = Flag(
         name, mytype=mytype, default=default, aliases=aliases,
         summary=summary, desc=desc)
@@ -834,6 +836,7 @@ scope:
             (self.name(), argv[0]))
 
       fre = re.compile(r'^(-{1,2})([^= ]+)(?:=(.*))?')
+      negnumre = re.compile('^-(?:\d*\.\d+|\d+(\.\d+)?)')
 
       /# Now parse flags/args/subcommands.
       index = 1
@@ -845,7 +848,7 @@ scope:
         nextitem = argv[index+1] if index < nm1 else None
         if debug:
           print('Working on index=%d item="%s" next="%s"' % (index, item, nextitem))
-        if item[0] == '-':
+        if item[0] == '-' and not negnumre.match(item):
           /# We are parsing a flag.
           m = fre.match(item)
           flagmark = m.group(1)
@@ -1043,6 +1046,7 @@ scope:
           >|  --gender               undef                          none       =         
           >|  --height               1.87                           none       =         
           >|  --name                 Bob                            none       =         
+          >|  --version              .*                             none                 
           >|""",
           before)
 
@@ -1054,6 +1058,7 @@ scope:
           >|  --gender               female                         =          undef     
           >|  --height               1.63                           =          1.87      
           >|  --name                 Alice                          =          Bob       
+          >|  --version              .*                             none                 
           >|  width                  300                            =          None      
           >|  length                 600                            None       =         
           >|  color                  red                            None       =         
@@ -1071,6 +1076,7 @@ scope:
           >|  --gender               female                         =          undef     
           >|  --height               1.63                           =          1.87      
           >|  --name                 Alice                          =          Bob       
+          >|  --version              .*                             none                 
           >|  files                  ['a', 'b', 'c']                None       []        
           >|""",
           test.out())
@@ -1198,7 +1204,10 @@ scope:
           result = None
         -> result
       test<py>:
-        print('**** FIX ME ... not being generated in meta2!')
+        test.iseqmap(
+          {'trans': -1, 'undef': -1, 'male': -1, 'female': -1},
+          test.enumflag.enumtype())
+        test.isnull(test.dateflag.enumtype())
       end accessor get;
     end field;
 
@@ -1208,7 +1217,6 @@ scope:
     field start : any #:
       The value of the flag/arg as specified by the command line.  This will
       be null if it was not explicitly specified on the command line.
-
     field value : any #:
       The current value of the flag/arg. This can be from the default, or from
       a value specified on the command line, or from a runtime modification.
@@ -1453,11 +1461,11 @@ scope:
         helpfull: provide detailed help for the part.
   scope:
     receiver Command scope<py>:
-      fp.write('%s%s:\n' % (indent, self.name()))
+      fp.write(u'%s%s:\n' % (indent, self.name()))
       summary = self.summary()
       if summary:
-        fp.write('%s  %s\n' % (indent, summary))
-      subindent = indent + '  '
+        fp.write(u'%s  %s\n' % (indent, summary))
+      subindent = unicode(indent) + '  '
 
       if mode == 'summary':
         parts = self.allParts()
@@ -1478,7 +1486,7 @@ scope:
         /# order isn't important).
         for command in self.order():
           if 'full' in mode:
-            fp.write('\n')
+            fp.write(u'\n')
           command.show(fp=fp, indent=subindent, mode=mode)
 
       for arg in self.args():
@@ -1501,28 +1509,33 @@ scope:
       start = self.start()
       default = self.default()
 
+      if isinstance(value, Part.RegexpClass):
+        valstr = value.pattern
+      else:
+        valstr = str(value)
+
       def Trunc(val, width):
         w = len(val)
         return val if w < width else val[:width-1] + '$'
 
       if mode == 'summary':
-        sval = 'none' if start is None else ('=' if str(start) == str(value) else Trunc(str(start), 10))
-        dval = '=' if str(default) == str(value) else Trunc(str(default), 10)
+        sval = 'none' if start is None else ('=' if str(start) == valstr else Trunc(str(start), 10))
+        dval = '=' if str(default) == valstr else Trunc(str(default), 10)
 
         fp.write(
-          '%s--%-20s %-30s %-10s %-10s\n' %
-          (indent, self.name(), value, sval, dval))
+          u'%s--%-20s %-30s %-10s %-10s\n' %
+          (indent, self.name(), valstr, sval, dval))
 
       elif 'help' in mode:
         symbols = '|'.join([self.name()] + self.aliases())
-        fp.write('%s--%s: %s\n' % (indent, symbols, self.summary() or ''))
+        fp.write(u'%s--%s: %s\n' % (indent, symbols, self.summary() or ''))
         desc = self.desc()
         if desc and 'full' in mode:
           for line in desc.split('\n'):
-            fp.write('%s  %s\n' % (indent, line))
+            fp.write(u'%s  %s\n' % (indent, line))
 
       else:
-        fp.write('%sERROR: Unknown mode %s\n' % (indent, summary))
+        fp.write(u'%sERROR: Unknown mode %s\n' % (indent, summary))
     test<py>:
       fp = test.newStr()
       test.baselang.show(fp=fp)

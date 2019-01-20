@@ -1119,7 +1119,7 @@ namespace metax.meta scope:
       details = mode.get('details', 'user')
 
       /# Add blank lines before the construct
-      fp.write('\n' * self.precount())
+      fp.write(u'\n' * self.precount())
 
       construct = self
       if details == 'all':
@@ -1188,7 +1188,7 @@ namespace metax.meta scope:
           continue
         /# Write the attribute
         preattr = construct.preAttrStr(attribute, prev, numc, indent)
-        fp.write(preattr)
+        fp.write(unicode(preattr))
         numc = attribute.write(fp=fp, indent=indent, mode=mode)
         /# Prepare for next iteration
         prev = attribute
@@ -1351,7 +1351,7 @@ namespace metax.meta scope:
       termcode = self.termcode()
 
       if termcode == 0 or termcode == metax.c.TERM_UNINIT:
-        result = ''
+        result = u''
       else:
         items = []
         if termcode & 0x2:
@@ -1360,7 +1360,7 @@ namespace metax.meta scope:
           items.append(self.kind())
         if termcode & 0x8:
           items.append(self.id())
-        result = ' '.join(items)
+        result = u' '.join(items)
         if termcode & 0x1:
           result += context.token('term')
       return result
@@ -1391,8 +1391,9 @@ namespace metax.meta scope:
         html = form == 'html'
       else:
         html = False
+      indent = unicode(indent)
 
-      result = ''
+      result = u''
       termcode = self.termcode()
       if termcode > 0 and termcode != metax.c.TERM_UNINIT:
         if termcode == 1:
@@ -1407,7 +1408,7 @@ namespace metax.meta scope:
             /# a newline, but otherwise we do.
             pass
           else:
-            result = '\n'
+            result = u'\n'
           termstr = self.termstr()
           if html:
             termstr = '<span class="face-end">' + termstr + '</span>'
@@ -1454,9 +1455,9 @@ namespace metax.meta scope:
           result = indent
         elif attribute.line() != prevattr.line():
           /# The previous attribute is on a different line.
-          result = '\n' + indent
+          result = u'\n' + indent
         else:
-          result = ' '
+          result = u' '
       return result
     test:
     end method preAttrStr;

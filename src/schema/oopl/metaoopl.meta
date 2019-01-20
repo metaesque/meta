@@ -1646,7 +1646,7 @@ namespace metax.oopl scope:
           print(
             '**** WARNING: for %s dep %s has kind %s vs %s' %
             (self.kindfqn(), fqn, kind, info['kind']))
-        if info['target'] != target and kind != 'std':
+        if target and info['target'] != target and kind != 'std':
           /# CODETANGLE(std_target): note that registerDependencies passes
           /# in a target for 'std' even though target isn't needed. But
           /# other calls to addDependency (like in OoplPython.autogenPrint)
@@ -3672,6 +3672,8 @@ namespace metax.oopl scope:
       /# Expand the field
       /#  - produce accessor methods (getter, setter, reffer, etc.)
       /#    in appropriate class depending on level.
+      /#  - generate test methods for those fields that request it (when accessors
+      /#    are defined).
       /#  - leave the field construct in the user class no matter what
       /#    (translateMeta can decide whether to ignore or not on a per-baselang
       /#    basis).
@@ -3805,6 +3807,8 @@ namespace metax.oopl scope:
         /# Determine if there are any explicit accessors.
         lazylines = None
         if scope:
+          testclass = myclass.testclass()
+          testscope = testclass.attr('scope:')
           for accessor in accessors:
             acc = accessor.id()
             if acc not in bodymap:
@@ -3823,6 +3827,49 @@ namespace metax.oopl scope:
                 /# We process the lazylines after we've created a getter method
                 /# below.
                 pass
+
+              /###
+              /# Check for explicit test method(s) for this accessor.
+              testattr, testlines = accessor.attrpair('test:', default=None)
+              testsattr, testxlist = accessor.attrpair('tests:', default=None)
+              testdata = []
+              if testattr and testsattr:
+                metafile.error(
+                  'Cannot define both test: and tests:', attribute=testsattr)
+              elif testattr:
+                /# Simple block of lines.
+                testbase = metax.oopl.ExecutableConstruct.TestifyName(self.id())
+                if len(testlines) == 0:
+                  testlines = baselang.emptyBlockCode(None)
+                testdata.append({
+                  'name': testbase,
+                  'features': [],
+                  'secondaries': [],
+                  'scope': testlines,
+                  'line': testattr.line(),
+                })
+
+              elif testsattr:
+                /# TODO(wmh): See the expand: code in construct _executable_
+                /# for generating test method(s) for methods. We should be able
+                /# to use the exact same code for both methods and fields for
+                /# generating test methods.
+                metafile.error('Not yet handling tests: blocks for fields')
+
+              for testinfo in testdata:
+                secondaries = testinfo['secondaries']
+                assert 'scope:' not in [p[0] for p in secondaries]
+                tscope = testinfo['scope']
+                assert tscope is not None
+                secondaries.append(('scope:', tscope, testinfo.get('line', -1)))
+                unittest = metax.oopl.MethodConstruct.NewFromData(
+                  testinfo['name'], context, parent=testscope,
+                  features=testinfo['features'],
+                  secondaries=secondaries,
+                  /# Add at end of test scope. Since we are processing fields
+                  /# in order, the test methods will have the same order.
+                  position=None)
+                unittest.myclassIs(testclass)
 
         /# Establish which accessors to generate
         /#  - TODO(wmh): Improve on this by making the 'access' attribute
@@ -6147,6 +6194,7 @@ namespace metax.oopl scope:
       args = []
       default_encountered = False
       has_optargs = False
+
       for child in subconstructs:
         kind = child.kind()
 
@@ -6218,6 +6266,13 @@ namespace metax.oopl scope:
           command_body.append('%selse:' % indent)
           command_body.append(
             indent + "  print('ERROR: Unrecognized command \"%s\"' % " + sub_var + ')')
+
+      /# Now insert the postamble if it exists.
+      postamble = self.attrval('postamble:', default=None)
+      if postamble:
+        command_body.append('')
+        for line in postamble:
+          command_body.append(indent + line)
 
       if (not subcmds or toplevel) and not has_optargs:
         /# There were no subcommands or optional args (or, alternatively, this 
@@ -6365,9 +6420,7 @@ namespace metax.oopl scope:
     method isArg : bool #:
       True if this instance is a positional arg
     scope:
-      /# TODO(wmh): When construct aliases are working properly we can check
-      /# whether the kind is 'arg'.
-      return self.id().startswith('arg_')
+      return self.primary().litkey() == 'arg'
     test:
     end method isArg;
 
@@ -8326,6 +8379,12 @@ namespace metax.oopl scope:
 
         /# TODO(wmh): Need a better means of specifying regexp class in python.
         'regexp': {'base': 're._pattern_type', 'default': 'None'},
+
+        'date': {'base': 'datetime.datetime', 'default': 'None'},
+        'ymd': {'base': 'datetime.date', 'default': 'None'},
+        'hms': {'base': 'datetime.time', 'default': 'None'},
+
+        'rv': {'base': 'scipy.stats._distn_infrastructure.rv_generic', 'default': 'None'},
 
         'nulltype': {'base': 'types.NoneType', 'default': 'None'},
         'class': {'base': 'type', 'default': 'None'},
@@ -11317,6 +11376,10 @@ namespace metax.oopl scope:
       kind = executable.attrval('kind')
       if kind == 'static':
         /# No receiver.
+        /#  - define the local variable 'cls'.
+        /#    TODO(wmh): Only insert the definition if there isn't already a
+        /#    definition of 'cls' at left margin!
+        preamble.append('cls = %s' % executable.myclass().id())
         pass
       else:
         rec = self.receiverStr(executable)
@@ -11329,9 +11392,44 @@ namespace metax.oopl scope:
         for param in pdata:
           part = param['name']
           if 'default' in param:
-            default = self.formatExpr(
-              param['default'], param['type'], executable)
+            defexpr = param['default']
+            default = self.formatExpr(defexpr, param['type'], executable)
             defval = self.pseudovars().get(default, default)
+
+            /# TODO(wmh): Need to implement a generic mechanism for providing
+            /# type-specific interpretations of default values. The following is
+            /# an example of how we can provide specialized support for the 'rv'
+            /# native type (allow default to be set to a float, implying a
+            /# constant rv), but we need something more general that is still
+            /# efficient (e.g. something where we can look up in a dict for the
+            /# native type and perform actions based on that lookup).
+            metatype = param['type']
+            rawtype = metatype.raw() if metatype else None
+            if rawtype == 'rv':
+              /# The default value for a random variable can be:
+              /#  - a call of the form 'rv.uniform(loc,scale)' or
+              /#    'rv.norm(loc,scale)', etc.
+              /#  - a number, which is interpreted as a constant RV.
+              ekind = defexpr.kind()
+              if ekind == 'num':
+                /# TODO(wmh): Ensure that we import scipy.stats!
+                myclass = executable.myclass()
+                myclass.addDependency(
+                  /# TODO(wmh): We should be looking in self.metatypes()['rv']
+                  /# or self.metatypes()['rv.uniform'] for the namespace to
+                  /# import.
+                  'scipy.stats', 'std', 'implicit import for type rv', target=None)
+                defval = 'scipy.stats.uniform(%s, 0.0)' % defval
+              elif ekind == 'call':
+                /# TODO(wmh): Fix this!  Allow expressions of the form
+                /#   @rv.uniform(10,2), @rv.norm(5,2), etc.
+                /# The code is currently failing to properly parse the expr
+                /# representations of the above ... clean that up!
+                raise Error('Not yet supporting explicit call exprs in rvs')
+              else:
+                raise Error(
+                  'Not supporting %s expr for type %s' % (ekind, rawtype))
+
             /# print('%s : %s = %s [%s]' % (param['name'], param['type'].raw(), param['default'], defval))
             part += '=' + defval
           result.append(part)
