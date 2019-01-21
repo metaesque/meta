@@ -1,6 +1,7 @@
 import collections
 import os
 import platform
+import pprint
 import re
 import requests   # must ensure this is installed!
 import shutil
@@ -63,7 +64,7 @@ VARS = collections.OrderedDict([
   }),
 ])
 
-def CreateConfig():
+def CreateConfig(src_root, bazel_path):
   # Create the ~/.config/metaxy/config.meta file.
   #  - VARS specifies the variables for which values are required, along
   #    with a description, default value, and value validator.
@@ -77,9 +78,31 @@ def CreateConfig():
   # metastrap is in PYTHONPATH.
   import metastrap
 
+  # Establish (default) config path.
+  config_path = metastrap.ConfigPath()
+  if not os.path.exists(config_path):
+    # This is the very first setup ... make an initial version of config.meta.
+    tmpl_path = config_path + '.tmpl'
+    if os.path.exists(tmpl_path):
+      with open(tmpl_path, 'r') as ifp:
+        with open(config_path, 'w') as ofp:
+          for line in ifp:
+            line = re.sub(
+              r'var src_root = (\S+)', 'var src_root = ' + src_root, line)
+            ofp.write(line)
+    else:
+      print('ERROR: Failed to find %s or %s' % (config_path, tmpl_path))
+
   # Establish the config path and parse it into key/value pairs.
   config = metastrap.Config()
-  config_path = config['config_path']
+  if config_path != config['config_path']:
+    print(
+      'ERROR: Mismatch between %s and %s' % (config_path, config['config_path']))
+    sys.exit(1)
+
+  # Set the src_root and bazel_path
+  config['src_root'] = src_root
+  config['bazel'] = bazel_path
 
   # We will write to a tmp file, and move the tmp file to destination if no
   # errors occur.
@@ -126,7 +149,10 @@ def CreateConfig():
     shutil.copyfile(config_path, config_path + '.old')
     shutil.copyfile(new_path, config_path)
     os.unlink(new_path)
-    
+
+  config = metastrap.Config()
+  return config
+
 
 def InstallBazel():
   # Establish the latest version of bazel.
@@ -134,8 +160,9 @@ def InstallBazel():
   # Where the bazel executable should be installed
   print 'Please specify the path within which to install bazel. You can use'
   print 'environment variables in the path.'
-  install_dir = raw_input('Path: ')
-  # install_dir = os.path.join(os.getenv('HOME'), 'bin')  
+  default_install_dir = os.path.join(os.getenv('HOME'), 'bin')
+  install_dir = os.path.expandvars(
+    raw_input('Path [%s]: ' % default_install_dir) or default_install_dir)
 
   # Download the releases page
   github_bazel_releases = 'https://github.com/bazelbuild/bazel/releases'
@@ -196,12 +223,19 @@ def InstallBazel():
   # Install
   if installer:
     os.chmod(installer, 0755)
-    subprocess.check_output([installer, '--user'])
+    args = [
+      installer,
+      os.path.expandvars('--base=$HOME/.bazel'),
+      os.path.expandvars('--bin=%s' % install_dir)
+    ]
+    print('Command: %s' % ' '.join(args))
+    subprocess.check_output(args)
 
   # Verify executable
   if not os.path.exists(executable):
     print 'ERROR: Failed to obtain %s' % executable
     sys.exit(1)
+  return executable
 
 
 def SetupBootstrap(src_root):
@@ -213,7 +247,10 @@ def SetupBootstrap(src_root):
     for pstr in pp.split(':'):
       paths.append(os.path.realpath(pstr))
   while True:
-    pdir = raw_input('Preferred path for python libraries: ')
+    default_pdir = os.path.expandvars('$HOME/src/$USER/lib/python')
+    pdir = (
+      raw_input('Preferred path for python libraries [%s]: ' % default_pdir) or
+      default_pdir)
     python_dir = os.path.realpath(os.path.expandvars(pdir))
     if python_dir in paths:
       break
@@ -232,12 +269,18 @@ def SetupBootstrap(src_root):
       print 'ERROR: %s exists' % full_path
       sys.exit(1)
   else:
-    print 'src %s link %s' % (metastrap_path, path)
-    os.symlink(metastrap_path, path)
+    print 'src %s link %s' % (metastrap_path, full_path)
+    os.symlink(metastrap_path, full_path)
+
+def BuildMeta(src_root):
+  os.system('cd %s; ' % src_root)
 
 
 def main():
-  src_root = raw_input('Directory containing local Meta github client: ')
+  default_src_root = os.path.expandvars('$HOME/src/meta')
+  src_root = raw_input(
+    'Directory containing local Meta github client [%s]: ' % default_src_root
+  ) or default_src_root
   src_root = os.path.expandvars(src_root)
   if not os.path.exists(src_root):
     print '%s does not exist.' % src_root
@@ -252,15 +295,20 @@ def main():
   if True:
     SetupBootstrap(src_root)
 
-  # Create the $HOME/.config/metaxy/config.meta file
-  if True:
-    CreateConfig(src_root)
-
   # Install bazel.
   #  - https://docs.bazel.build/versions/master/install.html
   if True:
-    InstallBazel()
-    
+    bazel_path = InstallBazel()
+  
+  # Create the $HOME/.config/metaxy/config.meta file
+  if True:
+    config = CreateConfig(src_root, bazel_path)
+    # pprint.pprint(config)
+
+  # Build Meta
+  if True:
+    BuildMeta(src_root)
+
 
 if __name__ == '__main__':
   main()

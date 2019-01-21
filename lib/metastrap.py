@@ -44,26 +44,14 @@ def Config(verbose=Verbose):
   global _Config
   result = _Config
   if result is None:
-    # CODETANGLE(parse_config): Similar code exists in
-    # <<src_root/src/kernel/parser.meta2.
-    vre = re.compile(r'var\s+(?P<var>\S+)\s+=\s+(?P<val>\S+)')
-    configpath = os.getenv('META_CONFIG')
-    if not configpath:
-      home = os.getenv('HOME')
-      if not home:
-        # Special hack to handle GAE.
-        configpath = './data/config.gae'
-        if not os.path.exists(configpath):
-          raise Exception('Failed to find env.var HOME')
-      else:
-        meta_config_dir = os.path.join(home, '.config', 'metaxy')
-        configpath = os.path.join(meta_config_dir, 'config.meta')
+    configpath = ConfigPath()
     exists = os.path.exists(configpath)
     if verbose:
       print('NOTE: Reading %s' % configpath)
     result = {}
     _Config = result
     if exists:
+      vre = re.compile(r'var\s+(?P<var>\S+)\s+=\s+(?P<val>\S+)')
       with open(configpath, 'r') as fp:
         for line in fp:
           m = vre.match(line)
@@ -109,6 +97,22 @@ def Config(verbose=Verbose):
       
   # logging.info('metastrap.Config() returns %s' % result)
   return result
+
+
+def ConfigPath():
+  """Obtain the path to the meta config file."""
+  configpath = os.getenv('META_CONFIG')
+  if not configpath:
+    home = os.getenv('HOME')
+    if not home:
+      # Special hack to handle GAE.
+      configpath = './data/config.gae'
+      if not os.path.exists(configpath):
+        raise Exception('Failed to find env.var HOME')
+    else:
+      meta_config_dir = os.path.join(home, '.config', 'metaxy')
+      configpath = os.path.join(meta_config_dir, 'config.meta')
+  return configpath
 
 
 def ConfigureVersion(verbose=Verbose):
