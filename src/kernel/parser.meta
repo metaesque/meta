@@ -11153,7 +11153,8 @@ scope:
 
       if out_path is None:
         config = metax.root.MetaObject.Config()
-        out_path = config['metalangs'].get(metaid, None)
+        schema_path = config['metalangs'].get(metaid, None)
+        out_path = fs.join(fs.dirname(schema_path), 'meta%s-mode.el' % metaid)
 
       fp.write(
         u'Creating major mode %s for %s (%s) from %s\n' % (
@@ -13789,7 +13790,10 @@ scope:
         if not fs.islink(current_link):
           raise IOError('Expecting %s to be a symlink' % current_link)
         fs.unlink(current_link)
-      fs.symlink(newpath, current_link)
+      fs.symlink(
+        /# newpath,
+        new_version,
+        current_link)
 
       /###
       /# Update the 'stable' link
@@ -13799,7 +13803,9 @@ scope:
           raise IOError('Expecting %s to be a symlink' % stable_link)
         fs.unlink(stable_link)
       fs.symlink(
-        fs.join(release_dir, previous_version), stable_link)
+        /# fs.join(release_dir, previous_version),
+        previous_version,
+        stable_link)
 
       /###
       /# Create a tar file (for releases)
@@ -13807,7 +13813,10 @@ scope:
       /#    for details on why the env.vars. are being set.
       if make_release:
         release_path = fs.join(release_dir, release_version)
-        fs.symlink(newpath, release_path)
+        fs.symlink(
+          /# newpath,
+          new_version,
+          release_path)
         tarbase = release_version + '.tgz'
         tarpath = fs.join(release_dir, tarbase)
         env = copy.copy(fs.environ())
