@@ -849,10 +849,10 @@ scope:
       var evar : str;
       var value : str;
     scope<py>:
-      raise Error('setenv() is not yet working properly (do not use)')
+      raise metax.root.Error('setenv() is not yet working properly (do not use)')
       current = os.environ.get(evar, None)
       if current != ENV.get(evar, None):
-        raise Error(
+        raise metax.root.Error(
           'Expecting evar = "%s" not "%s"' % (ENV.get(evar, None), current))
       os.environ[evar] = value
       self._envars[evar] = current
@@ -1002,7 +1002,7 @@ scope:
           obj = item.im_class
           name = item.__name__
         else:
-          raise Error('Unrecognized item %s' % item)
+          raise metax.root.Error('Unrecognized item %s' % item)
         logging.debug('Stubbing out %s within %s', name, obj)
         m.StubOutWithMock(obj, name)
 
@@ -1231,7 +1231,7 @@ scope:
         fs2 = self.setupFilesystem(
             module, path_specs=None, from_module=first_module)
         if fs2 is not fs:
-          raise Error("Shared filesystem isn't being shared.")
+          raise metax.root.Error("Shared filesystem isn't being shared.")
       self._fs = fs
       return fs
     test<py>:
@@ -1286,7 +1286,7 @@ scope:
       mname = module.__name__
       fsinfo = self._fsinfo
       if mname in fsinfo:
-        raise Error(
+        raise metax.root.Error(
             'Attempt to setupFilesystem on %s when it is already setup' %
             mname)
 
@@ -1296,7 +1296,7 @@ scope:
       if from_module:
         oname = from_module.__name__
         if oname not in fsinfo:
-          raise Error(
+          raise metax.root.Error(
               'Request to setup faux filesystem for module %s based on module %s'
               ' which has not been set up.' % (mname, oname))
         info['objs'] = fsinfo[oname]['objs']
@@ -1416,7 +1416,7 @@ scope:
             'apply_umask', 'srcpath'])
         for key in in_kwds:
           if key not in legal_keys:
-            raise Error(
+            raise metax.root.Error(
                 "Invalid key '%s' passed to path_specs arg in populateFilesystem"
                 % key)
 
@@ -1451,11 +1451,11 @@ scope:
           /# Build up a kwds dict suitable for passing to
           /# fake_filesystem.FakeFilesystem.CreateLink()
           if 'srcpath' not in in_kwds:
-            raise Error('Request to create a symlink without a src file')
+            raise metax.root.Error('Request to create a symlink without a src file')
           link_target = in_kwds['srcpath']
           fs.CreateLink(path, link_target)
         else:
-          raise Error("Invalid file type '%s'" % type_)
+          raise metax.root.Error("Invalid file type '%s'" % type_)
     test<py>:
       /# TODO(wmh): Get this working in bazel
       import mox
@@ -1651,7 +1651,7 @@ scope:
       fsinfo = self._fsinfo
       mname = module.__name__
       if mname not in fsinfo:
-        raise Error(
+        raise metax.root.Error(
             'Attempt to revert filesystem for %s when no filesystem set up'
             % mname)
       del module.open

@@ -306,15 +306,14 @@ scope:
       var units : map #:
         Maps unit names/aliases/abbrevs to integer powers (positive or negative)
     scope:
-      Quantity = metax.units.Quantity
-      nb = Quantity.PowerBits()
-      result = Quantity.ZeroPowers
-      unitmap = Quantity.UnitMap
+      nb = cls.PowerBits()
+      result = cls.ZeroPowers
+      unitmap = cls.UnitMap
       for unit, power in units.iteritems():
         unitdata = unitmap.get(unit, None)
         if not unitdata: raise Error('Invalid unit "%s"' % unit)
         start = nb * unitdata['index']
-        result = Quantity.Encode(result, start, nb, power, incr=True)
+        result = cls.Encode(result, start, nb, power, incr=True)
       return result
     test:
       UE = metax.units.Quantity.DimensionEncoding
