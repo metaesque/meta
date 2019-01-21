@@ -5,6 +5,8 @@
 	logallrefupdates = true
 	ignorecase = true
 	precomposeunicode = true
+[user]
+        email = wade@holst.ca
 [remote "origin"]
 	url = git+ssh://git@metaesque.hack/metaesque/meta.git
 	fetch = +refs/heads/*:refs/remotes/origin/*
