@@ -173,7 +173,8 @@ scope:
       if key and form == 'html':
         style = ''
         /# TODO(wmh): This color map should come from the current context!
-        color = Compiler.ConstructColorMap.get(kind, None)
+        import metax.c
+        color = metax.c.Compiler.ConstructColorMap.get(kind, None)
         spanparts = ['span']
         spanparts.append('class="face-%s"' % kind)
         if kind == 'primary' and color:
@@ -201,7 +202,7 @@ scope:
             lout.setdefault(self.key(), []).append(htmlid)
 
         key = '<%s>%s%s</span>' % (
-          ' '.join(spanparts), HtmlSafe(key), postamble)
+          ' '.join(spanparts), Attribute.HtmlSafe(key), postamble)
 
       /# Render the key.
       if key and not self.isBlock():
@@ -227,6 +228,16 @@ scope:
       return result
     test:
     end method write;
+
+    static
+    method HtmlSafe : str #:
+      Make a string html-safe
+    params:
+      var val : str;
+    scope:
+      return val.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    test:
+    end method HtmlSafe;
 
     static
     method ModeFor : tuple<str,bool> #:
@@ -1128,7 +1139,7 @@ scope:
         if construct is None:
           result = None
           if fp:
-            fp.write('Failed to find child construct %s' % id)
+            fp.write(u'Failed to find child construct %s' % id)
           break
         if attr is None:
           /# This is only allowed for the last part, and is a request
@@ -1143,7 +1154,7 @@ scope:
         if not block:
           result = None
           if fp:
-            fp.write('Failed to find attribute %s' % attr)
+            fp.write(u'Failed to find attribute %s' % attr)
           break
         result = block
 
@@ -1332,7 +1343,7 @@ scope:
     receiver WordAttribute scope:
       val = str(self.value())
       if mode and mode.get('form', 'code') == 'html':
-        val = metax.c.HtmlSafe(val)
+        val = Attribute.HtmlSafe(val)
       fp.write(unicode(val))
       return len(val)
     test:
@@ -1371,7 +1382,7 @@ scope:
     receiver TypeAttribute scope:
       val = self.value().raw()
       if mode and mode.get('form', 'code') == 'html':
-        val = HtmlSafe(val)
+        val = Attribute.HtmlSafe(val)
       fp.write(unicode(val))
       return len(val)
     test:
@@ -1403,7 +1414,7 @@ scope:
         attrkey = self.key()
         block_uid = self.htmlId()
         control_line = (
-          ' simple %s %s %s %s ' %
+          u' simple %s %s %s %s ' %
           (kind, block_uid, self.key(), basel))
         fp.write(control_line + 'start\n')
 
@@ -1447,7 +1458,7 @@ scope:
         attrkey = self.key()
         block_uid = self.htmlId()
         control_line = (
-          ' complex %s %s %s %s ' %
+          u' complex %s %s %s %s ' %
           (construct.kind(), block_uid, self.key(), basel))
         fp.write(control_line + 'start\n')
 

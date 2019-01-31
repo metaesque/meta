@@ -392,33 +392,59 @@ scope:
         Indentation before each line.
       var full : bool = false #:
         If true, print out full help.
+      var commands : vec<str> = null #:
+        The subcommand(s) for which help is desired. If null or empty,
+        top-level help is produced.
     scope<py>:
       mode = 'helpfull' if full else 'help'
-      self.show(fp=fp, indent=indent, mode=mode)
+
+      command = self
+      if commands:
+        for nora in commands:
+          subcmd = command.findCommand(nora)
+          if subcmd:
+            /# Valid subcommand.
+            fp.write('%s%s:\n' % (indent, command.name()))
+            indent += '  '
+            command = subcmd
+          else:
+            /# Invalid subcommand ... print out from this level
+            print(u'WARNING: Unknown command "%s"' % nora)
+            break
+
+      command.show(fp=fp, indent=indent, mode=mode)
     test<py>:
       fp = test.fp()
       test.command.help(fp=fp)
       test.command.help(fp=fp, full=True)
       test.iseqtext(
-      >|"""meta2:
-      >|  --baselang|b: The baselang to compile into.
-      >|  --metadir: The subdir to write code to.
-      >|  --metalang|L: The metalang the code is defined in.
-      >|  canonical:
-      >|    Canonicalize the specified meta files and report diffs.
-      >|    --expand|e: If true, invoke expandMeta() before canonicalizing
-      >|meta2:
-      >|  --baselang|b: The baselang to compile into.
-      >|    If this is <special>, a metalang-specific default is used
-      >|  --metadir: The subdir to write code to.
-      >|    A value of .meta2 is treated specially, being symlinked to repo
-      >|  --metalang|L: The metalang the code is defined in.
-      >|
-      >|  canonical:
-      >|    Canonicalize the specified meta files and report diffs.
-      >|    --expand|e: If true, invoke expandMeta() before canonicalizing
-      >|      By default, expandMeta() invokes parseMeta() but not expandMeta().
-      >|""",
+        >|"""meta2:
+        >|  --baselang|b : str = "<special>"
+        >|    The baselang to compile into.
+        >|  --metadir : str = ".meta2"
+        >|    The subdir to write code to.
+        >|  --metalang|L : str = "oopl"
+        >|    The metalang the code is defined in.
+        >|  canonical:
+        >|    Canonicalize the specified meta files and report diffs.
+        >|    --expand|e : bool = False
+        >|      If true, invoke expandMeta() before canonicalizing
+        >|meta2:
+        >|  --baselang|b : str = "<special>"
+        >|    The baselang to compile into.
+        >|    If this is <special>, a metalang-specific default is used
+        >|  --metadir : str = ".meta2"
+        >|    The subdir to write code to.
+        >|    A value of .meta2 is treated specially, being symlinked to repo
+        >|  --metalang|L : str = "oopl"
+        >|    The metalang the code is defined in.
+        >|
+        >|  canonical:
+        >|    Canonicalize the specified meta files and report diffs.
+        >|    --expand|e : bool = False
+        >|      If true, invoke expandMeta() before canonicalizing
+        >|      By default, expandMeta() invokes parseMeta() but not expandMeta().
+        >|""",
         test.out())
     end method help;
 
@@ -1528,7 +1554,15 @@ scope:
 
       elif 'help' in mode:
         symbols = '|'.join([self.name()] + self.aliases())
-        fp.write(u'%s--%s: %s\n' % (indent, symbols, self.summary() or ''))
+        mytype = self.mytype()
+        default = self.default()
+        if mytype == 'str':
+          default = '"%s"' % default
+        fp.write(
+          u'%s--%s : %s = %s\n' % (indent, symbols, mytype,default))
+        summary = self.summary()
+        if summary:
+          fp.write(u'%s  %s\n' % (indent, summary))
         desc = self.desc()
         if desc and 'full' in mode:
           for line in desc.split('\n'):

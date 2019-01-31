@@ -5527,6 +5527,26 @@ config:
             /#    killing it.
             myclass.registerInitializer(None)
 
+        /# Check if we need to introduce a special local variable for receivers
+        /#  - note that we used to rewrite variable references, replacing
+        /#    'test' and 'meta' with 'self' (this was done in behavior
+        /#    simpleToBase). However, it is not possible to guarantee a proper
+        /#    replacement of receiver references without a full parse of the
+        /#    source code. A better solution is to introduce a local variable.
+        /#  - TODO(wmh): Make this baselang-general!
+        if scope_attr:
+          scope_parent = scope_attr.parent()
+          if isinstance(scope_parent, metax.oopl.ExecutableConstruct):
+            baserec = baselang.receiverStr(scope_parent, deref=True)
+            metarec = baselang.receiverStr(scope_parent, style='meta')
+            if baserec != metarec and len(scope_lines) > 0:
+              /# print 'Here with %s and %s and %s' % (self.kindfqn(), baserec, metarec)
+              /# TODO(wmh): Make this baselang-general!
+              /# TODO(wmh): If any parameter is defined with same name as metarec,
+              /#   we need to report warning or not tromp!
+              /# TODO(wmh): Do not insert if there are no scope lines, etc.
+              preamble.append('%s = %s' % (metarec, baserec))
+
       return scope_attr, scope_lines, preamble, postamble, retamble, comment, params
     end method methodInfo;
 
@@ -7113,8 +7133,11 @@ config:
           /# never gets executed (avoids special case code latter).
           command_body.append('')
           if True:
-            command_body.append("%sif cli.rest and cli.rest[0].startswith('help'):" % indent)
-            command_body.append("%s  meta__command.help(full='ful' in cli.rest[0])" % indent)
+            command_body.append(
+              "%sif cli.rest and cli.rest[0].startswith('help'):" % indent)
+            command_body.append(
+              '%s  meta__command.help'
+              "(full='ful' in cli.rest[0], commands=cli.rest[1:])" % indent)
           else:
             command_body.append('%sif False:\n' % indent)
             command_body.append('%s  pass' % indent)
@@ -9186,30 +9209,30 @@ scope:
         for line in simple.value():
           output.append(rem + line)
       else:
-        /# We perform a small set of rewrites on the user-provided data.
-        /#  - '^ */# ' is replaced with baselang comment one-line comment
-        /#  - meta-level receiver replaced with baselang receiver.
-        /#     - must be careful not to replace things that aren't receivers!
-        /#     - to do a truly safe job, will need to parse the baselang,
-        /#       but for now we use a heuristic.
-        /#  - replace __metafile__ with the absolute path of the .meta file
-        /#    that the __metafile__ is found within.
-        /#  - IMPORTANT: The replacement of '^ *>|' with '' does NOT occur
-        /#    here
+        /# Determine if we are to replace meta-level receivers with base-level.
+        /#  - must be careful not to replace things that aren't receivers!
+        /#  - to do a truly safe job, will need to parse the baselang.
+        /#  - further experience has shown that this isn't viable, so this
+        /#    code is disabled and can be deleted. See the code at the
+        /#    end of methodInfo() for the replacement (defining a local var).
         parent = simple.parent()
-        if replace_receiver and isinstance(parent, metax.oopl.ExecutableConstruct):
+        recre = None
+
+        if False and replace_receiver and isinstance(parent, metax.oopl.ExecutableConstruct):
           baserec = self.receiverStr(parent, deref=True)
           metarec = self.receiverStr(parent, style='meta')
-          /# This regexp is carefully crafted to avoid grabbing non-receivers:
-          /#  - the basics: don't replace inside another variable
-          /#  - a bit more subtle: do not replace '.test.var' ... that is NOT
-          /#    the 'test' receiver.
-          /#  - TODO(wmh): avoid replacing within string literals!
-          recre = re.compile(r'(^|[^a-zA-Z0-9_.])%s\.' % metarec)
-          replacement = r'\1%s.' % baserec
-          /# print('For %s base=%s meta=%s auto=%s repl=%s' % (parent.kindfqn(), baserec, metarec, parent.autogen(), replacement))
-        else:
-          recre = None
+          if baserec != metarec:
+            /# This regexp is carefully crafted to avoid grabbing non-receivers:
+            /#  - the basics: don't replace inside another variable
+            /#  - a bit more subtle: do not replace '.test.var' ... that is NOT
+            /#    the 'test' receiver.
+            /#  - TODO(wmh): avoid replacing within string literals!
+            /#  - TODO(wmh): this solution is BAD because the code seen in source
+            /#    differs from the code reported during exceptions. Better to
+            /#    insert a variable instead.
+            recre = re.compile(r'(^|[^a-zA-Z0-9_.])%s\.' % metarec)
+            replacement = r'\1%s.' % baserec
+            /# print('For %s base=%s meta=%s auto=%s repl=%s' % (parent.kindfqn(), baserec, metarec, parent.autogen(), replacement))
 
         comre = re.compile(
           r'^( *)%s( ?)(.*)' % re.escape(metax.c.Context.Tokens()['remark']))
@@ -9227,6 +9250,15 @@ scope:
         metafile = simple.parent().metafile()
         metafile_str = "'" + metafile.path() + "'"
 
+        /# We perform a small set of rewrites on the user-provided data.
+        /#  - '^ */# ' is replaced with baselang comment one-line comment
+        /#  - replace __meta file__ with the absolute path of the .meta file
+        /#    that the __meta file__ is found within.
+        /#  - IMPORTANT: The replacement of '^ *>|' with '' does NOT occur
+        /#    here
+        /#  - We no longer perform pseudovar rewriting (e.g. 'meta' to 'self',
+        /#    'test' to 'self', etc.). Instead, in methodInfo() we add a
+        /#    local variable called 'test' or 'meta' (assigned to 'self').
         for i in range(s, e):
           line = lines[i]
           line = line.replace('__meta' + 'file__', metafile_str)

@@ -221,6 +221,9 @@ scope:
     /# Must be something that cannot conflict with a sub-namespace or class.
     /# IMPORTANT: This is hardcoded in root.meta! CODETANGLE(resource_dir)
     RESOURCES_SUBDIR = '.__resources'
+    /# See https://www.python.org/dev/peps/pep-3147/ for a discussion of what
+    /# __pycache__ is for.
+    PYCACHE = '__pycache__'
 
     METAX_CMD_NAME = 'MetaxCLI'
     METAX_ENTRY_NAME = 'MetaxEntry'
@@ -272,9 +275,6 @@ scope:
       'translate': 0,
       'compile': 0,
     })
-
-    def HtmlSafe(val):
-      return val.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
     /# TODO(wmh): Move this someplace cleaner. For example, metax.logs.
     def dsep(
@@ -1913,7 +1913,7 @@ scope:
       eprs = metax.c.ExprParser(
         test.metafileFor('@test.iseq(@test!hex.q, 1);\n'))
       test.iseq(
-        "{'rec': 'self', 'subcalls': [{'args': [<kind=call str=@test!hex.q expr={'rec': 'test', 'subcalls': [{'field': True, 'name': 'hex'}, {'name': 'q'}]}>, <kind=num str=1 expr=1>], 'name': 'iseq'}]}",
+        "{'rec': 'test', 'subcalls': [{'args': [<kind=call str=@test!hex.q expr={'rec': 'test', 'subcalls': [{'field': True, 'name': 'hex'}, {'name': 'q'}]}>, <kind=num str=1 expr=1>], 'name': 'iseq'}]}",
         str(eprs._parseCall()))
 
       /# Nested method invocation with nested calls spanning multiple lines.
@@ -1924,7 +1924,7 @@ scope:
           "          @edge.summary);\n"),
           col=8)
       test.iseqtext(
-        "{'rec': 'self', 'subcalls': [{'args': [<kind=str str='Edge between <1,0,-1> (n) and <1,-1,0> (s) with center <0,-52>' expr='Edge between <1,0,-1> (n) and <1,-1,0> (s) with center <0,-52>'>, <kind=call str=@edge.summary expr={'rec': 'edge', 'subcalls': [{'name': 'summary'}]}>], 'name': 'iseq'}]}",
+        "{'rec': 'test', 'subcalls': [{'args': [<kind=str str='Edge between <1,0,-1> (n) and <1,-1,0> (s) with center <0,-52>' expr='Edge between <1,0,-1> (n) and <1,-1,0> (s) with center <0,-52>'>, <kind=call str=@edge.summary expr={'rec': 'edge', 'subcalls': [{'name': 'summary'}]}>], 'name': 'iseq'}]}",
         str(eprs._parseCall()))
 
     end method _parseCall;
@@ -8872,6 +8872,11 @@ scope:
         r'(?P<rest>.*)'
         ,
         flags=re.DOTALL)
+        
+      /# Matches a file in a namespace repository directory. Used by
+      /# parseRepositoryNamespace.
+      cls.NamespaceFileRE = re.compile(
+        r'^(?P<dot>[.]?)(?P<name>[^.]+)(?:\.(?P<suffix>\S+))$')
 
       cls.HTML_HEAD = (
         >|"""    <style>
@@ -10130,26 +10135,36 @@ scope:
         metac.basePath('nm.sp.Class', prefix='.', suffix='.map'))
     end method basePath;
 
-    method basePathToMeta : str #:
+    method basePathToMeta : tuple<str,bool> #:
       Given a baselang path to a namespace or class file, obtain the path of
       the .meta source file associated with it.
+
+      Returns:
+       0. the .meta path, or null if not found
+       1. true if the path exists, false if it does not.
     params:
       var basepath : str #:
         The baselang path.
+      var map_path : str = null #:
+        This is almost always null, and is obtained from basepath. But if
+        it is known by the caller, it can be provided (in which case basepath
+        is ignored and can be null).
     scope:
       result = None
+      exists = False
       fs = self.fs()
 
       /# map_path = fs.join(
       /#   fs.dirname(basepath), '.' + fs.basename(basepath) + '.map')
-      map_path = self.mapPath(basepath)
+      if map_path is None:
+        map_path = self.mapPath(basepath)
       if fs.exists(map_path):
         with fs.open(map_path, 'r') as fp:
           result = fp.readline()[:-1]
           m = metax.c.SUFFIX_RE.match(result)
-          if not m:
-            raise Error('%s is not a Meta source file' % result)
-      return result
+          if m and fs.exists(result):
+            exists = True
+      return result, exists
     test:
     end method basePathToMeta;
 
@@ -10917,7 +10932,7 @@ scope:
               final_path = fs.join(rootdir, tdata['path'])
               fqn = arg
               construct = None
-              metapath = self.basePathToMeta(final_path)
+              metapath, _ = self.basePathToMeta(final_path)
               if metapath:
                 file_construct = PathToConstruct(metapath)
                 if file_construct:
@@ -12797,9 +12812,21 @@ scope:
       /#   bazel: str
       /#     The file containing the BUILD snippet for the class.
 
-      top_re = re.compile(r'^(?:BUILD|bazel-|WORKSPACE|\.meta__stub).*')
-      for basel in ('python',):  # 'javascript', 'cpp'):
-        topdir = fs.join(repopath, 'oopl', basel)
+      top_re = re.compile(
+        r'^(?:BUILD|README|bazel-|WORKSPACE|CROSSTOOL.*|metastrap|__init__\.py|\.meta__stub).*')
+      odir = fs.join(repopath, 'oopl')
+      for basel in fs.listdir(odir):
+        if basel == 'meta':
+          /# Special-case directory
+          /# TODO(wmh): Perform special parsing of this dir.
+          continue
+
+        if basel != 'python':
+          print 'WARNING: Not yet handling parseRepository on %s' % basel
+          continue
+
+        /# TODO(wmh): Ignore basel if it isn't a legal baselang for metaoopl.
+        topdir = fs.join(odir, basel)
         for base in fs.listdir(topdir):
           m = top_re.match(base)
           if m:
@@ -12813,7 +12840,8 @@ scope:
                 /# Ignored here, as it will be handled by the non-test code.
                 pass
               else:
-                self.parseRepositoryNamespace(path)
+                /# print path
+                self.parseRepositoryNamespace(base, path)
             else:
               /# We do not expect any other top-level files.
               print('ERROR: %s is unexpected' % path)
@@ -12830,30 +12858,18 @@ scope:
         The repository path to parse as a namespace.
     scope:
       fs = self.fs()
-      bre = re.compile(r'^(?P<dot>[.]?)(?P<name>[^.]+)(?:\.(?P<suffix>\S+))$')
-      ignore_re = re.compile('^__init__\.pyc|~$')
 
-      /# classes: map
-      /#   user: map
-      /#     defn: str
-      /#       The basename of the file containing the definition. In
-      /#       baselangs without distinction, this exists but decl does not.
-      /#     decl: str
-      /#       The basename of the declaration file (only in langs with
-      /#       defn/decl distinction).
-      /#     map: str
-      /#       The basename of the map file
-      /#   test: map
-      /#     same structure as user
-      /#   meta: map
-      /#     same structure as user
-      classes = {}
-      namespaces = {}
-      user_nmsp = {
-        'name': name,
-        'path': path,
+      /# The legal suffixes for this baselang/namespace.
+      /#   TODO(wmh): Customize by baselang!
+      suffixes = {
+        'py': 'defn',
+        'py.map': 'map',
+        'bld': 'bld',
       }
-      test_nmsp = {}
+      /# TODO(wmh): The following should be baselang-specific too.
+      /# Be careful with how many things are ignored ... we want the repo
+      /# hierarchy to stay clean.
+      ignore_re = re.compile('^__init__\.pyc|~$')
 
       /# Obtain the files in the associated test path.
       testpath = metax.oopl.NamespaceConstruct.TestifyName(path)
@@ -12862,81 +12878,97 @@ scope:
         testdata = {base: base for base in fs.listdir(testpath)}
         testdata.pop('.', None)
         testdata.pop('..', None)
-        test_nmsp['path'] = testpath
       else:
         testdata = {}
 
-      /# Customize by baselang.
-      suffixes = {
-        'py': 'defn',
-        'py.map': 'map',
-        'bld': 'bld',
+      /# Record errors here. Maps relpaths to error message.
+      errors = {}
+
+      /# Define the skeleton of the return result (for user and test spaces).
+      result = {
+        'user': {
+          'name': name,
+          'path': path,
+          /# classes: map
+          /#   user: map
+          /#     defn: str
+          /#       The basename of the file containing the definition. In
+          /#       baselangs without distinction, this exists but decl does not.
+          /#     decl: str
+          /#       The basename of the declaration file (only in langs with
+          /#       defn/decl distinction).
+          /#     map: str
+          /#       The basename of the map file
+          /#   test: map
+          /#     same structure as user
+          /#   meta: map
+          /#p     same structure as user
+          'classes': {},
+          /# child namespaces
+          'namespaces': {},
+        },
+        'test': {
+          'path': testpath,
+          /# classes has same structure as above for user_nmsp['classes']
+          'classes': {},
+          'basemap': testdata,
+        }
       }
-      prefix = '.'  # for python yes, all other langues should be empty
 
       for base in fs.listdir(path):
         subpath = fs.join(path, base)
         if base == 'BUILD':
-          user_nmsp['build'] = base
+          /# BUILD (process test BUILD too)
+          result['user']['build'] = base
           if testdata.pop(base, None):
-            test_nmsp['build'] = base
+            result['test']['build'] = base
         elif base == '__init__.py':
-          user_nmsp['src'] = base
+          /# The __init__.py file (process test __init__.py too)
+          /# TODO(wmh): This is only for python!
+          result['user']['src'] = base
           if testdata.pop(base, None):
-            test_nmsp['src'] = base
+            result['test']['src'] = base
         elif ignore_re.search(base):
-          /# print('NOTE: Ignoring %s' % base)
+          /# This file is explicitly to be ignored.
           pass
-        elif fs.isdir(subpath):
-          if base.endswith('_test'): continue
-          if base == '__pycache__': continue
-          subname = name + '.' + base
-          namespaces[base] = self.parseRepositoryNamespace(subname, subpath)
         elif fs.islink(subpath):
+          /# A symlink ... ignored?
           print('SKIPPING link %s' % subpath)
         else:
-          m = bre.match(base)
-          if m:
-            data = m.groupdict()
-            cname = data['name']
-            suffix = data['suffix']
-            ckey = 'user'
-            if cname.endswith('Meta'):
-              ckey = 'meta'
-              cname = cname[:-4]
-            subkey = suffixes.get(suffix, None)
-            if cname == '__init__':
-              /# namespace info.
-              user_nmsp[subkey] = base
-              if testdata.pop(base, None):
-                test_nmsp[subkey] = base
-            elif subkey:
-              /# this is a defn or map file for a class (ckey indicates meta or user)
-              /#  - we need to check for an associated test class in testdata
-              classes.setdefault(cname, {}).setdefault(ckey, {})[subkey] = base
-              tname = '%s%sTest.%s' % (data['dot'], cname, suffix)
-              tbase = testdata.pop(tname, None)
-              if tbase:
-                tpath = fs.join(testpath, tbase)
-                classes.setdefault(cname, {}).setdefault('test', {})[subkey] = (
-                  fs.relpath(tpath, path))
-            else:
-              print('ERROR: unrecognized class file %s within %s' % (base, path))
-          else:
-            print('ERROR: unrecognized namespace file %s within %s' % (base, path))
+          /# This is either a class file, executable, or an error.
+          self.parseRepositoryFile(
+            base, suffixes, errors, result['user'], testnmspmap=result['test'])
+          
+      /# testdata contains all unprocessed files in the test namespace
+      /# directory associated with this namespace directory.
+      /#  - process each file as if it were a class file, populating
+      /#    the test namespace result.
+      for testbase in testdata.keys():
+        if self.parseRepositoryFile(testbase, suffixes, errors, result['test']):
+          del testdata[testbase]
 
       if testdata:
-        print('ERROR: unrecognized test files: %s in %s' % (
-          str(sorted(testdata)), testpath))
+        for testbase in testdata:
+          testfull = fs.join(testpath, testbase)
+          testrelpath = fs.relpath(testfull, path)
+          errors[testrelpath] = 'unrecognized test file'
 
-      if namespaces:
-        user_nmsp['namespaces'] = namespaces
-      if classes:
-        user_nmsp['classes'] = classes
+      /# Delete empty entries from our result.
+      for nmsp in result.values():
+        for key in ('classes', 'basemap', 'namespaces'):
+          if key in nmsp and not nmsp[key]:
+            /# The key exists but is empty, so we remove it.
+            del nmsp[key]
 
-      result = {'user': user_nmsp}
-      if test_nmsp:
-        result['test'] = test_nmsp
+      if errors:
+        result['errors'] = errors
+        print '#' * 80
+        print '%s: unrecognized files:' % path
+        for subpath in sorted(errors):
+          print '  %s' % subpath
+          print '    %s' % errors[subpath]
+        print '#' * 80
+
       return result
     test:
       _, _, _, metaoopl = test.cachedInfo()
@@ -12944,6 +12976,7 @@ scope:
       fs = metaoopl.fs()
       path = fs.join(root, 'oopl', 'python', 'metax', 'root')
       res = metaoopl.parseRepositoryNamespace('metax.root', path)
+      homedir = fs.getenv('HOME')
       test.iseqmap(
         {
           'test': {
@@ -12961,18 +12994,21 @@ scope:
                 'user': {
                   'defn': '.Error.py',
                   'map': '.Error.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/root.meta',
                 }
               },
               'InternalError': {
                 'user': {
                   'defn': '.InternalError.py',
                   'map': '.InternalError.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/root.meta',
                 }
               },
               'Object': {
                 'meta': {
                   'defn': '.ObjectMeta.py',
                   'map': '.ObjectMeta.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/root.meta',
                 },
                 'test': {
                   'defn': '../root_test/.ObjectTest.py',
@@ -12981,12 +13017,14 @@ scope:
                 'user': {
                   'defn': '.Object.py',
                   'map': '.Object.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/root.meta',
                 },
               },
               'ObjectMetaRoot': {
                 'user': {
                   'defn': '.ObjectMetaRoot.py',
                   'map': '.ObjectMetaRoot.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/root.meta',
                 },
               },
             },
@@ -12996,12 +13034,222 @@ scope:
             'src': '__init__.py',
           },
         },
-        res)
+        res, width=160)
 
-      path2 = fs.dirname(path)
-      /# res2 = metaoopl.parseRepositoryNamespace('metax', path2)
-      /# pprint.pprint(res2)
+      path2 = fs.join(root, 'oopl', 'python', 'metax', 'test')
+      res2 = metaoopl.parseRepositoryNamespace('metax.test', path2)
+      test.iseqmap(
+        {
+          'test': {
+            'bld': '.__init__.bld',
+            'build': 'BUILD',
+            'map': '.__init__.py.map',
+            'path': '/Users/wmh/src/wmh/lib/meta/oopl/python/metax/test_test',
+            'src': '__init__.py',
+          },
+          'user': {
+            'bld': '.__init__.bld',
+            'build': 'BUILD',
+            'classes': {
+              'FakeFcntl': {
+                'meta': {
+                  'defn': '.FakeFcntlMeta.py',
+                  'map': '.FakeFcntlMeta.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                },
+                'test': {
+                  'defn': '../test_test/.FakeFcntlTest.py',
+                  'map': '../test_test/.FakeFcntlTest.py.map',
+                },
+                'user': {
+                  'defn': '.FakeFcntl.py',
+                  'map': '.FakeFcntl.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                }
+              },
+              'StubHolder': {
+                'meta': {
+                  'defn': '.StubHolderMeta.py',
+                  'map': '.StubHolderMeta.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                },
+                'test': {
+                  'defn': '../test_test/.StubHolderTest.py',
+                  'map': '../test_test/.StubHolderTest.py.map',
+                },
+                'user': {
+                  'defn': '.StubHolder.py',
+                  'map': '.StubHolder.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                },
+              },
+              'TestCase': {
+                'meta': {
+                  'defn': '.TestCaseMeta.py',
+                  'map': '.TestCaseMeta.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                },
+                'resources': {
+                  'cipherfile': '.__resources/TestCase_cipherfile',
+                  'entry_mre': '.__resources/TestCase_entry_mre',
+                },
+                'test': {
+                  'defn': '../test_test/.TestCaseTest.py',
+                  'map': '../test_test/.TestCaseTest.py.map',
+                },
+                'user': {
+                  'defn': '.TestCase.py',
+                  'map': '.TestCase.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                },
+              },
+            },
+            'map': '.__init__.py.map',
+            'name': 'metax.test',
+            'path': '/Users/wmh/src/wmh/lib/meta/oopl/python/metax/test',
+            'src': '__init__.py',
+          },
+        },
+        res2, width=160)
+
+      path3 = fs.join(root, 'oopl', 'python', 'metax')
+      res3 = metaoopl.parseRepositoryNamespace('metax', path3)
+      test.isfalse('errors' in res3)
     end method parseRepositoryNamespace;
+
+    method parseRepositoryFile : bool #:
+      Parse a file within a namespace.
+       - class source/header file
+       - .map or .bld file
+       - otherwise unknown
+
+      Returns:
+        true if file parsed, false if not recognized.
+    params:
+      var base : str #:
+        is a file within the namespace directory being parsed
+      var suffixes : map #:
+        The legal suffixes for current namespace and baselang.
+      var errors : map #:
+        Maps full paths to error messages.
+      var nmspmap : map #:
+        the namespace dict for the path being parsed. May be either
+        user data or test data depending on where it is called from.
+      var testnmspmap : map = null #:
+        the test namespace (if we are processing user namespace) or null.
+    scope:
+      result = False   # true if we successfully identified a file
+      fs = self.fs()
+      path = nmspmap['path']
+      fullpath = fs.join(path, base)
+      testdirmap = testnmspmap['basemap'] if testnmspmap else None
+
+      m = Compiler.NamespaceFileRE.match(base)
+
+      if fs.isdir(fullpath):
+        /# We have a subdirectory.
+        if base == RESOURCES_SUBDIR:
+          /# Parse resource files.
+          for resbase in fs.listdir(fullpath):
+            parts = resbase.split('_', 1)
+            if len(parts) == 2:
+              clsname, resname = parts
+              rescls = nmspmap['classes'].get(clsname, None)
+              if rescls:
+                /# TODO(wmh): rescls consists of the following:
+                /#    meta: map
+                /#    user: map
+                /#    test: map
+                /#    resources: map
+                /# The first three are similar-maps, while 'resources' is
+                /# different. Should we be putting 'resources' into 'user'
+                /# instead?
+                rescls.setdefault('resources', {})[resname] = '%s/%s' % (
+                  base, resbase)
+              result = True
+            else:
+              errors[fs.join(base, resbase)] = 'Unknown resource file'
+        elif base == SPECIAL_CHILD_DIR:
+          /# We've found a '.meta' file .. that is broken!
+          errors[base] = 'Should not appear in repo!'
+        elif base == PYCACHE:
+          /# Ignore __pycache__: https://www.python.org/dev/peps/pep-3147/
+          result = True
+        else:
+            /# We assume this is a recursive namespace
+          if base.endswith('_test') or not testnmspmap:
+            /# If we are in a test namespace, we do not call
+            /# parseRepositoryNamespace().
+            /#
+            /# confusingly, we are processing a user namespace if testnmspmap
+            /# is set, and are parsing a test namespace if it isn't set.
+            pass
+          else:
+            subname = nmspmap['name'] + '.' + base
+            nmspmap['namespaces'][base] = self.parseRepositoryNamespace(
+              subname, fullpath)
+      elif m:
+        data = m.groupdict()
+
+        cname = data['name']
+        suffix = data['suffix']
+        ckey = 'user'
+        if cname.endswith('Meta'):
+          ckey = 'meta'
+          cname = cname[:-4]
+        subkey = suffixes.get(suffix, None)
+
+        if cname == '__init__':
+          /# namespace info.
+          nmspmap[subkey] = base
+          if testdirmap and testdirmap.pop(base, None):
+            testnmspmap[subkey] = base
+          result = True
+        elif subkey:
+          /# this is a defn or map file for a class (ckey indicates meta or user)
+          /#  - we need to check for an associated test class in testdata
+          clsinfo = nmspmap['classes'].setdefault(cname, {}).setdefault(ckey, {})
+          clsinfo[subkey] = base
+
+          /# If we have a map file, parse it.
+          if subkey == 'map':
+            metapath, meta_exists = self.basePathToMeta(None, map_path=fullpath)
+            if not meta_exists:
+              /# The .meta file specified in the map file does not exist,
+              /# which means that this entire class is stale and should be
+              /# deleted!
+              errors[path] = '%s references non-existent %s' % (base, metapath)
+            else:
+              clsinfo['metapath'] = metapath
+
+          if testnmspmap:
+            /# This means nmspmap refers to user data (not test data).
+            tname = '%s%sTest.%s' % (data['dot'], cname, suffix)
+            tbase = testdirmap.pop(tname, None)
+            if tbase:
+              fs = self.fs()
+              tpath = fs.join(testnmspmap['path'], tbase)
+              nmspmap['classes'].setdefault(cname, {}).setdefault('test', {})[subkey] = (
+                fs.relpath(tpath, path))
+          result = True
+        else:
+          errors[base] = 'unrecognized class file'
+      else:
+        ok = False
+        if fs.isfile(fullpath) and fs.is_x(fullpath):
+          with open(fullpath, 'r') as rfp:
+            contents = rfp.read()
+          if METAX_ENTRY_NAME in contents:
+            ok = True
+            nmspmap.setdefault('executables', []).append(base)
+          else:
+            /# print 'WARN: Failed to find %s in %s' % (METAX_ENTRY_NAME, fullpath)
+            pass
+        if not ok:
+          errors[base] = 'unrecognized namespace file'
+      return result
+    test:
+    end method parseRepositoryFile;
 
     method generateUmlDiagram #:
       Generate a UML diagram (using graphviz dot) for all metafiles.
@@ -13839,9 +14087,9 @@ scope:
     scope:
       fs = self.fs()
       result = True
-      metafile_path = self.basePathToMeta(pyfile)
+      metafile_path, meta_exists = self.basePathToMeta(pyfile)
       if metafile_path:
-        if fs.exists(metafile_path):
+        if meta_exists:
           metamodtime = fs.mtime(metafile_path)
           basemodtime = fs.mtime(pyfile)
           if metamodtime > basemodtime:
@@ -13899,7 +14147,6 @@ scope:
           print('WARNING: Failed to find metafile for %s' % pyfile)
       return result
     end method maybeRecompileMeta;
-
 
     method handleCompilationException : any #:
       When an exception is used during compilation of .meta files, this method
@@ -14019,9 +14266,9 @@ scope:
           /# pprint.pprint(out)
 
           if showbox:
-            outlines.append('<div class="metadex">')
-            outlines.append('  <center><b>%s</b></center>' % namespace.id())
-            outlines.append('  <table>')
+            outlines.append(u'<div class="metadex">')
+            outlines.append(u'  <center><b>%s</b></center>' % namespace.id())
+            outlines.append(u'  <table>')
             bout = out['block']
             for i, bkey in enumerate(sorted(bout)):
               argstr = "allids.block['%s']" % bkey
@@ -14032,7 +14279,7 @@ scope:
               css = 'ctrl1' if i == 0 else 'ctrl2'
               tdhack = ' style="color: red;"' if i == 0 else ''
               outlines.append(
-                '    <tr>'
+                u'    <tr>'
                 '<td>%s</td>'
                 '<td></td>'
                 '<td>%s</td>'
@@ -14053,7 +14300,7 @@ scope:
                 for j, bkey in enumerate(sorted(baseout)):
                   argstr = "allids.lang.%s['%s']" % (lkey, bkey)
                   outlines.append(
-                    '    <tr>'
+                    u'    <tr>'
                     '<td>%s</td>'
                     '<td>%s</td>'
                     '<td>%s</td>'
@@ -14068,17 +14315,17 @@ scope:
                      argstr, bkey, lkey, css,
                      argstr, bkey, lkey, css))
               /# cout = out['construct']
-            outlines.append('  </table>')
-            outlines.append('</div>')
+            outlines.append(u'  </table>')
+            outlines.append(u'</div>')
 
           /# Now wrap the htmlized lines into an overarching structure
           /# that shows line numbers, indents blocks, allows blocks to
           /# be opened and closed, etc.
-          outlines.append('<div class="metafile">')
+          outlines.append(u'<div class="metafile">')
           dentlevel = 0
           linenum = 0
           for line in lines:
-            indent = '  ' * (dentlevel + 1)
+            indent = u'  ' * (dentlevel + 1)
             if line and line[0] == '':
               /# Escape sequence indicating block start/end.
               _, block_kind, conskind, block_uid, attrkey, basel, se = line.split(' ')
@@ -14119,7 +14366,7 @@ scope:
                 outlines.append(indent + '</div>')
               else:
                 outlines.append(
-                  '%s<div>'
+                  u'%s<div>'
                   '<span class="linenum">%d</span>'
                   '<span class="indent%d"></span>'
                   '<span class="linetext"><code>%s</code></span>'
@@ -14514,11 +14761,11 @@ scope:
       end command checkmap;
 
       named
-      command checkrep #:
+      command checkrepo #:
         Verify that the Meta repository is sane.
       scope:
         self.parseRepository()
-      end command checkrep;
+      end command checkrepo;
 
       named
       command checkhack #:
@@ -14720,14 +14967,6 @@ scope:
         if not errors:
           self.writeSummary(metafiles)
       end command get;
-
-      named
-      command help #:
-        A summary of all commands.
-      scope:
-        command = self.cli()._command_().parent()
-        command.help(full=True)
-      end command help;
 
       command html #:
         Create .html files for the specified metafile(s) and their basefiles.
@@ -15465,7 +15704,7 @@ scope:
         Test specified namespaces/classes/methods.
       scope:
         cli = self.cli()
-        argmap = self._parseArgs(cli.rest, implicit=True)
+        argmap = self.argmap() or self._parseArgs(cli.rest, implicit=True)
         if argmap:
           targets = argmap['fqns']
           flags = self.cli()
@@ -15569,6 +15808,25 @@ scope:
           /# each fqn.
           metac.argmapIs(argmap)
           if metac._compile_command():
+            /# Provide some special-case logic
+            /#  - if cli.rawtests2 is set and there is exactly one .meta
+            /#    source file being compiled and there are no explicit fqns
+            /#    specified, then add all top-level fqns of the parsed
+            /#    metafile.
+            if (
+              cli.rawtests2
+              and len(argmap['metafiles']) == 1
+              and len(argmap['fqns']) == 0
+            ):
+              sole_metafile = metac.metafiles()[argmap['metafiles'][0]]
+              for namespace in sole_metafile.constructs()['namespace']:
+                if namespace.isTest(): continue
+                /# Implicitly add all non-test namespaces in the sole metafile
+                /# we compiled.
+                nmsp = namespace.id()
+                print('NOTE: Implicitly testing namespace %s' % nmsp)
+                argmap['fqns'].append(nmsp)
+
             if argmap['fqns']:
               metac._test_command()
         else:
@@ -15577,7 +15835,7 @@ scope:
         fs = metac.fs()
         if cli.showfs or fs.kind() == 'memory':
           fp = sys.stdout
-          fs.summarize(fp=fp, groups=argmap.get('groups', None))
+          fs.summarize(fp=fp)
       end command __default__;
     end command metac;
 

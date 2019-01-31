@@ -2498,7 +2498,7 @@ config:
         pass
       else:
         class_path = fs.join(metac.repositoryPath(), baselang.classPath(fqn))
-        meta_path = metac.basePathToMeta(class_path)
+        meta_path, meta_exists = metac.basePathToMeta(class_path)
 
         /# Canonicalize path
         if meta_path is None:
@@ -2512,7 +2512,7 @@ config:
             metafile.warning(
               'Failed to find class %s' % fqn,
               line=klass.primary().line() if klass else -1)
-        elif fs.exists(meta_path):
+        elif meta_exists:
           meta_path = fs.realpath(meta_path)
 
         /# Register metafile

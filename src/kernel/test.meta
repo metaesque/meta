@@ -367,6 +367,7 @@ scope:
     usertest std assoc io;
     std assoc logging;
     usertest std assoc os;
+    std assoc pprint;
     std assoc re;
     std assoc stat;
     usertest std assoc sys;
@@ -899,17 +900,31 @@ scope:
       Capture all subsequent output written to stdout until getStdout() is
       invoked.
     scope<py>:
-      /#self._stdout = io.StringIO()
-      self._stdout = io.BytesIO()
-      sys.stdout = self._stdout
+      /# Can't use BytesIO, as one cannot write unicode to such.
+      /#   TypeError: 'unicode' does not have the buffer interface
+      /# Can't use StringIO, as that cause both
+      /#   print('hello')
+      /#   print(u'hello')
+      /# to raise
+      /#   TypeError: unicode argument expected, got 'str'
+      /# self._stdout = io.BytesIO()
+      /#
+      /# Maybe
+      /#   https://stackoverflow.com/questions/4675728/redirect-stdout-to-a-file-in-python/22434262#22434262
+      /# solves this problem for python 2.7, but I'm not sure. For now, I'm
+      /# hacking up a tempfile solution.
+      fd, tmpfile = tempfile.mkstemp()
+      os.close(fd)
+      self._stdout_redir = tmpfile
+      sys.stdout = open(tmpfile, 'w')
     test<py>:
       self.assertTrue(sys.stdout is metax.test.TestCase.CanonicalStdout())
       self._tc.captureStdout()
-      self.assertTrue(isinstance(sys.stdout, io.BytesIO), type(sys.stdout))
-      print('hello world')
+      self.assertTrue(hasattr(self._tc, '_stdout_redir'))
+      print(u'hello world')
       out = self._tc.getStdout()
       self.assertTrue(sys.stdout is metax.test.TestCase.CanonicalStdout())
-      self.assertEqual('hello world\n', out)
+      self.assertEqual(u'hello world\n', out)
     end method captureStdout;
 
     new specific
@@ -917,14 +932,16 @@ scope:
       Obtain the stdout captured since the last call to captureStdout().
       Resets stdout to what it was before captureStdout() was invoked.
     scope<py>:
-      /# TODO(wmh): Use self._stdout to test.
-      cls = sys.stdout.__class__
-      if cls is TestCase.StrStrClass or isinstance(sys.stdout, io.BytesIO):
-        result = sys.stdout.getvalue()
+      redir = getattr(self, '_stdout_redir', None)
+      if redir:
+        /# We are currently capturing stdout
+        sys.stdout.close()
+        with open(redir, 'r') as fp:
+          result = fp.read()
+        self._stdout_redir = None
       else:
         result = None
       sys.stdout = TestCase.CanonicalStdout()
-      self._stdout = None
       return result
     test<py>:
       /# noop, tested in test_captureStdout()
@@ -1779,15 +1796,20 @@ scope:
       want to keep it for use in other baselangs, or if allowing it
       encourages people to use methods that won't work in <cc> and <*>.
     params:
-      var expected : any;
       var item : any;
+      var expected : any = null;
       var message : any = null;
     scope<py>:
-      if message is None:
-        eval = str(expected).replace('\n', '\\n')
-        aval = str(item).replace('\n', '\\n')
-        message = '"%s" != "%s"' % (eval, aval)
-      self.assertEqual(expected, item, message)
+      if expected is None:
+        /# This is a request to print out the item, rather than compare against
+        /# expected.
+        print(u'iseq: %s' % str(item))
+      else:
+        if message is None:
+          eval = str(expected).replace('\n', '\\n')
+          aval = str(item).replace('\n', '\\n')
+          message = u'"%s" != "%s"' % (eval, aval)
+        self.assertEqual(expected, item, message)
     scope<js>:
       if (message == null) {
         assertEquals(expected, item);
@@ -1899,11 +1921,15 @@ scope:
     end method noteqstr;
 
     method iseqvec params:
-      var expected : vec;
       var items : vec;
+      var expected : vec = null;
       var message : str = null;
     scope<py>:
-      self.assertListEqual(expected, items, message)
+      if expected is None:
+        print('iseqvec:')
+        pprint.pprint(items)
+      else:
+        self.assertListEqual(expected, items, message)
     scope<js>:
       if (message == null) {
         assertElementsEquals(expected, items);
@@ -1921,8 +1947,9 @@ scope:
       var width : int = 30;
     scope<py>:
       if expected != data:
-        fp = io.BytesIO()
-        self.recursiveCompare('', expected, data, 0, fp=fp)
+        /# Don't use BytesIO, as one cannot write unicode to such.
+        fp = io.StringIO()
+        self.recursiveCompare('', expected, data, 0, fp=fp, valwidth=width)
         self.fail(fp.getvalue())        
     scope<js>:
       if (msg) {
@@ -2012,6 +2039,13 @@ scope:
             fp.write(
               u'* ' + formstr(obj1, valwidth) +
               ' ' + formstr(obj2, valwidth) + '\n')
+        elif (
+          (obj1 is None and isinstance(obj2, basestring)) or
+          (obj2 is None and isinstance(obj1, basestring))
+        ):
+          fp.write(
+            u'* ' + formstr(obj1, valwidth) +
+            ' ' + formstr(obj2, valwidth) + '\n')
         else:
           /# The two objects are different types so they are incomparable.
           fp.write(

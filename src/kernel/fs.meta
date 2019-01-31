@@ -987,6 +987,33 @@ scope:
         return os.path.islink(path)
     end method islink;
 
+    method is_r : bool #:
+      Is readable.
+    params:
+      var path : str;
+    scope:
+      return os.access(path, os.R_OK)
+    test:
+    end method is_r;
+
+    method is_w : bool #:
+      Is writeable.
+    params:
+      var path : str;
+    scope:
+      return os.access(path, os.W_OK)
+    test:
+    end method is_w;
+
+    method is_x : bool #:
+      Is readable.
+    params:
+      var path : str;
+    scope:
+      return os.access(path, os.X_OK)
+    test:
+    end method is_x;
+
     method mtime : float #:
       Obtain the last modified time of a file, in seconds since unix epoch.
     params:
