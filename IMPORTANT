@@ -1,5 +1,19 @@
 Pressing issues:
 
+ - In oopl/schema.meta, behavior fqnToTarget() validates method 'methname'
+   within fqn 'nm.sp.Class.methanme' by looking in the user-class .map file
+   in $repo/oopl/python/nm/sp/.Class.py.map. However, when fqn is meant to
+   be interpreted as an implicit test method, we should really be checking
+   $repo/oopl/python/nm/sp_test/.ClassTest.py.map instead!  This is why
+     % metac -rv apis wmh.apis.Repository.registerSource_1
+   fails (registerSource_1 is not a method in the user class, but
+   test_registerSource_1 *is* a method in the associated test class).
+
+. HOWEVER, when the fqn is meant
+   to be interpreted as an implicit test method (the usual case!), we should
+   really be looking
+
+
  - Python's lookup rules for class variables
    - metax.root.Object.Config is a static field that defines _Config on all
      subclasses.

@@ -518,8 +518,15 @@ namespace metax.oopl scope:
           '',
           '',
           "if __name__ == '__main__':",
-          "  metax.test.main()"
         ])
+        testsuite = self.attr('testsuite:', default=None)
+        if testsuite:
+          tmp = []
+          baselang.simpleToBase(testsuite, output=tmp, strip_empty=True)
+          for line in tmp:
+            all_lines.append('  ' + line)
+        else:
+          all_lines.append('  metax.test.main()')
 
       else:
         /# Experimenting with the introduction of a 'Meta()' method in each
@@ -888,6 +895,9 @@ namespace metax.oopl scope:
         testpreports_attr = self.attr('testpreports:', default=None)
         if testpreports_attr:
           secondaries.append(('preports:', testpreports_attr.value()))
+        testsuite_attr = self.attr('testsuite:', default=None)
+        if testsuite_attr:
+          secondaries.append(('testsuite:', testsuite_attr.value()))
         testspace = metax.oopl.NamespaceConstruct.NewFromData(
           /# TODO(wmh): Verify that the implicit testspace should share the
           /# same context as the user namespace.
@@ -11784,6 +11794,7 @@ namespace metax.oopl scope:
               /# To validate this, we can parse/grep tfile
               method_name = parts[i]
               verified = False
+
               with fs.open(tfile, 'r') as mfp:
                 for line in mfp:
                   if fqn in line:

@@ -322,6 +322,10 @@ config:
     Attribute config:;
     Attribute scope: children <class|behavior|native|field|method>;
 
+    secondary
+    Attribute testsuite: : simplex = <empty> #:
+      The code to create a test suite
+
     Template python scope:
       >|WARNING: THIS TEMPLATE NOT CURRENTLY USED
       >|# -*- coding: utf-8 -*-
@@ -379,6 +383,9 @@ config:
       testpreports_attr = self.attr('testpreports:', default=None)
       if testpreports_attr:
         secondaries.append(('preports:', testpreports_attr.value()))
+      testsuite_attr = self.attr('testsuite:', default=None)
+      if testsuite_attr:
+        secondaries.append(('testsuite:', testsuite_attr.value()))
       testspace = metax.oopl.NamespaceConstruct.NewFromData(
         /# TODO(wmh): Verify that the implicit testspace should share the
         /# same context as the user namespace.
@@ -866,8 +873,15 @@ config:
           '',
           '',
           "if __name__ == '__main__':",
-          "  metax.test.main()"
         ])
+        testsuite = self.attr('testsuite:', default=None)
+        if testsuite:
+          tmp = []
+          baselang.simpleToBase(testsuite, output=tmp, strip_empty=True)
+          for line in tmp:
+            all_lines.append('  ' + line)
+        else:
+          all_lines.append('  metax.test.main()')
 
       else:
         /# Experimenting with the introduction of a 'Meta()' method in each
@@ -1200,6 +1214,7 @@ config:
     end method _importClassesPython;
 
   end Construct namespace;
+
   abstract
   Construct _classic_ < _symbol_ clsname ClassicConstruct #:
     @_classic_: Abstract parent of all constructs that appear within a class.
@@ -6836,10 +6851,8 @@ config:
   config:
 
     primary
-    Attribute testx : id = <required> #:
-      The name of the testx. Note that one cannot use values like
-      '1' or '2' here because they aren't valid ids. Better to use
-      a word/phrase more descriptive of what is being tested.
+    Attribute testx : word = <required> #:
+      The name of the testx.
 
     Attribute comment:;
     Attribute config:;
@@ -12924,6 +12937,7 @@ scope:
               /# To validate this, we can parse/grep tfile
               method_name = parts[i]
               verified = False
+
               with fs.open(tfile, 'r') as mfp:
                 for line in mfp:
                   if fqn in line:

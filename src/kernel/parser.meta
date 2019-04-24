@@ -10925,8 +10925,12 @@ scope:
             })
           else:
             /# Check if the arg represents a valid fqn target. 
-            /# target, test_target, final_path, _, _ = self.fqnToTarget(
-            /#   arg, debug=False)
+            /#  - if we are looking at arg 'nm.sp.Class.methname', we check
+            /#    for 'nm.sp.Class.methname' in $repo/nm/sp/.Class.py.map
+            /#  - if the arg 'nm.sp.Class.methname' is part of a test request
+            /#    (almost always the case!), we should actually be looking for
+            /#    'nm.sp.ClassTest.test_methname' in 
+            /#    $repo/nm/sp_test/.ClassTest.py.map instead!
             tdata = baselang.fqnToTarget(arg)
             if tdata.get('error', None) is None:
               final_path = fs.join(rootdir, tdata['path'])

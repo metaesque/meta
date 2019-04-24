@@ -2503,7 +2503,7 @@ scope:
   native #:
     The code needed to run the namespace level tests.
   scope<py>:
-    def main():
+    def main(**kwds):
       /# In Python, one invokes unittests using the simple idiom:
       /#   if __name__ == '__main__':
       /#      unittest.main()
@@ -2528,7 +2528,8 @@ scope:
       /# By passing verbosity=0, we disable unittest.TextTestRunner's default
       /# behavior of printing out a '.' (or 'E' or 'F') for each test. Meta
       /# provides its own output.
-      unittest.main(verbosity=0)
+      kwds['verbosity'] = 0
+      return unittest.main(**kwds)
   end native;
 
 end namespace metax.test;
