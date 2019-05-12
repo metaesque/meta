@@ -236,7 +236,7 @@ scope:
           ['here', '  abc', '  def', 'hgi'], 1, re.compile(r'^  ')))
     end method _advancePosition;
 
-    method parseLines : BlockGroup #:
+    method parseLines : Section #:
       Parse a collection of lines as markdown.
 
       Returns:
@@ -271,7 +271,7 @@ scope:
       /#         consume all lines up to '^>'
       /#    '#': parse a section header (create a new Section)
       /#         affects only the current line (but prelines reset)
-      /#    '>': parse a blockquote
+      /#    '> ': parse a blockquote
       /#         consume all lines starting with '>' and all non-empty
       /#         lines after last such line.
       /#    '^    ': a code block
@@ -315,7 +315,7 @@ scope:
       /#    - convert \*\*[^*]\*\* to italics unless either \*\* is surrounded by
       /#      whitespace.  Same for '__'
       /#    - convert `...` to <code>...</code>
-      /#    - convert <$url> to <a href=$url$url</a>
+      /#    - convert <$url> to <a href="$url">$url</a>
       cls = self.__class__
       categories = cls.CATEGORIES
       if parent is None:
@@ -796,7 +796,7 @@ scope:
           /# We have an explicit page break.
           Record(i, 'page break')
           /# TODO(wmh): Add some processing here to support page numbers.
-          m = pre.match(line)
+          /# m = pre.match(line)
           i += 1
 
         else:
@@ -1110,7 +1110,7 @@ scope:
       return book
     test:
       /# NOTE: test.parseBook() invokes test.md.loadBook()
-      book = test.parseBook(['simple_md'])
+      book = test.parseBook(['metax.markdown_test.TestCase.simple_md'])
       test.iseq(1, len(book.children()))
     end method loadBook;
 
@@ -1329,17 +1329,13 @@ scope:
       A unique identifier for this block.
 
     lifecycle params:
-      var parent : Object #:
-        The parent of this text object.
+      var parent -> parent;
       var prelines : int = 0 #:
         The number of empty lines found before this block started.        
-      var uid : str = null #:
-        A unique identifier for this block.
+      var uid -> uid = null;
     super (prelines=prelines)
     scope:
-      /# self.endpageIs(False)
-      self.parentIs(parent)
-      self.uidIs(uid)
+    end lifecycle;
 
     method fulltitle : str #:
       The fully qualified title of this text object.
@@ -1348,6 +1344,24 @@ scope:
     test:
       test.iseq('/Section 1/SubSection A', test.subsection.fulltitle())
     end method fulltitle;
+
+    method fqn : str #:
+      The fully qualified path of this text object, prefering uids over titles.
+    scope:
+      parent = self.parent()
+      if parent is None:
+        result = '/'
+      else:
+        result = parent.fqn() + '/'
+      uid = self.uid()
+      if uid:
+        result += uid
+      else:
+        result += self.title()
+      return result
+    test:
+      test.iseq('/Section 1/SubSection A', test.subsection.fulltitle())
+    end method fqn;
 
     method isBlock : bool #:
       Return true if this is a block.
@@ -1372,7 +1386,9 @@ scope:
         The parent of this block object.
       var prelines : int = 0 #:
         The number of empty lines found before this block started.        
-    super (parent, prelines=prelines)
+      var uid : str = null #:
+        A unique identifier for this BlockGroup
+    super (parent, prelines=prelines, uid=uid)
     scope:
     end;
 
@@ -2183,11 +2199,8 @@ scope:
     super (parent, prelines=prelines)
     scope:
       self.linesIs(lines)
-    end lifecycle;
-
-    test
-    lifecycle setup:
-      self.code = metax.lib.markdown.Code(
+    setup:
+      test.code = metax.lib.markdown.Code(
         test.subsection,
         ['if a == 1:',
          '  return False',
@@ -2196,6 +2209,7 @@ scope:
         ],
         language='python')
     end lifecycle;
+
   end class Code;
 
   class HR < Object #:
@@ -2637,12 +2651,26 @@ scope:
     scope:
       self.uidIs(abbrev)   # TODO(wmh): Replace abbrev with uid in params and use super to initialize
       self.depthIs(0 if not parent else parent.depth() + 1)
-    
     test:
       test.iseq(2, test.subsection.depth())
     clinit:
       cls.AbbrevReIs(re.compile(r'[^a-z]'))
     end lifecycle;
+
+    method xtitle : str #:
+      Return title annotated with uid if present.
+    scope:
+      result = self.title()
+      uid = self.uid()
+      if uid:
+        result += ' [=' + uid + ']'
+      return result
+    test:
+      section = test.subsection
+      test.iseq('SubSection A [=suba]', section.xtitle())
+      section.uidIs('newuid')
+      test.iseq('SubSection A [=newuid]', section.xtitle())
+    end method xtitle;
 
     protected
     method register #:
@@ -2935,6 +2963,7 @@ scope:
       implicit = self.implicit()
       prelines = self.prelines()
       indent = unicode(indent)
+      rawtext = self.text().decode('utf8', 'replace')
       if aspect == 'ascii':
         if prelines:
           fp.write(u'\n' * prelines)
@@ -2942,14 +2971,13 @@ scope:
           sep = '\n' + indent
           if not nofirst:
             fp.write(indent)
-          fp.write(self.text().replace('\n', sep) + '\n')
+          fp.write(rawtext.replace('\n', sep) + '\n')
         else:
-          fp.write(self.text() + u'\n')
+          fp.write(rawtext + u'\n')
       elif aspect == 'html':
         if parser is None:
           parser = self.parent().parser()          
-        text = self.__class__.TextToHtml(
-          self.text(), parser=parser, indent=indent)
+        text = self.__class__.TextToHtml(rawtext, parser=parser, indent=indent)
         sep = '\n' + indent
         if prelines:
           fp.write(u'\n' * prelines)
@@ -2958,7 +2986,7 @@ scope:
         else:
           fp.write(indent + '<p>' + text.replace('\n', sep) + '</p>\n')
       elif aspect == 'tex':
-        text = self.__class__.TextToTex(self.text())
+        text = self.__class__.TextToTex(rawtext)
         fp.write(text + u'\n')
       else:
         print 'ERROR: Unknown aspect %s for Table.show()' % aspect
@@ -3190,7 +3218,7 @@ scope:
         if lang is None:
           /# The indented form
           for line in lines:
-            assert line.startswith('    ')
+            assert line.startswith('    ') or not line
             fp.write(indent + line + '\n')
         else:
           /# The quoted form.
@@ -3332,7 +3360,7 @@ scope:
           width = widths[i]
           sep = left + ('-' * (max(1, width - len(left + right)))) + right
           seplist.append(sep)
-        fp.write(u'%s|%s|\n' % (indent, FormatRow(seplist, aligns, widths)))
+        fp.write(u'%s| %s |\n' % (indent, FormatRow(seplist, aligns, widths)))
 
         /# Print the data rows.
         /#   TODO(wmh): Find max width for each column.
@@ -3442,7 +3470,7 @@ scope:
         >|r"""...Table: Table Title
         >|
         >|...| Name  | Age | Height | Fruit |
-        >|...|:---- | :-- | -----: | :---:|
+        >|...| :---- | :-- | -----: | :---: |
         >|...| Alice | 25  |   1.7m |  Kiwi |
         >|...| Bob   | 23  |   1.9m | Apple |
         >|
@@ -3517,7 +3545,9 @@ scope:
         if d:
           if prelines:
             fp.write(u'\n' * prelines)
-          fp.write(u'%s%s %s\n' % (indent, '#' * d, self.title()))
+          fp.write(
+            u'%s%s %s\n' % 
+            (indent, '#' * d, self.title().decode('utf8', 'replace')))
         for block in self.blocks():
           block.show(fp=fp, indent=indent, aspect=aspect, parser=parser)
         /# Now handle children
@@ -3811,16 +3841,23 @@ scope:
     end;
 
     method parseBook params:
-      var resources : &vec<str> #:
-        The names of the resources to parse as part of the book.
+      var specs : vec<str> #:
+        Each element can be either a path or a resource id identifying a
+        .md file to parse.
       var bookname : str = 'TheBook' #:
         The title of the book.
     scope:
       paths = []
-      for resid in resources:
-        res = metax.root.Object.Resource(
-          resid, fqn='metax.lib.markdown_test.TestCase')
-        paths.append(res)
+      for spec in specs:
+        if os.path.exists(spec):
+          paths.append(spec)
+        else:
+          path = metax.root.Object.Resource(spec)
+          print 'HERE with %s and %s' % (spec, path)
+          if os.path.exists(path):
+            paths.append(path)
+          else:
+            print 'ERROR: Ignoring unknown resource %s' % spec
       book = self.md.loadBook(paths, bookname=bookname)
       return book
     end method parseBook;

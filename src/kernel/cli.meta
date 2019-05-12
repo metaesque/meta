@@ -1491,7 +1491,9 @@ scope:
       summary = self.summary()
       if summary:
         fp.write(u'%s  %s\n' % (indent, summary))
-      subindent = unicode(indent) + '  '
+      if sys.version_info.major < 3:
+        indent = unicode(indent)
+      subindent = indent + '  '
 
       if mode == 'summary':
         parts = self.allParts()

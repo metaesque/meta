@@ -6,6 +6,13 @@ MetaLanguage meta name Meta toplevel <MetaLanguage|File> #:
    - any time any config: construct is modified,
      meta.c.MetaLanguage.BootstrapContext() must be updated to reflect the
      change.
+
+   - TODO(wmh): In normal Meta code, one can use the 'preports:' attribute on
+     'native' to insert arbitrary python code in the module preamble, but this
+     is not currently possible in namespaces generated from MetaLanguage
+     specifications. Consider defining 'preports:' on MetaLanguage, and passing
+     it into the namespace created when a MetaLanguage is compiled into
+     Meta<Python>.
 config:
 
   abstract

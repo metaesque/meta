@@ -624,9 +624,17 @@ scope:
       }
     teardown<py>:
       /# Reinstate I/O
+      oredir = getattr(self, '_stdout_redir', None)
+      if oredir:
+        sys.stdout.close()
       sys.stdout = TestCase.CanonicalStdout()
+
+      eredir = getattr(self, '_stderr_redir', None)
+      if eredir:
+        sys.stderr.close()
       sys.stderr = TestCase.CanonicalStderr()
 
+      /# Time taken
       seconds = time.time() - self._start
       self.deblog('Invoking %s tearDown for %s' % (self.name(), self.methname()))
       status = self.status()
@@ -750,11 +758,14 @@ scope:
         One of '', 'FAIL' or 'ERROR'.
     scope<py>:
       /# TODO(wmh): This relies on a private method in unittest.TestCase, and
-      /# is thus inherently fragile. Can we do better?  Also, in python 3.4,
-      /# the field is _outcomeForDoCleanups. See
+      /# is thus inherently fragile. Can we do better?  Also, in python 3.[1-3]
+      /# the field is _outcomeForDoCleanups, and for python 3.4+ it is
+      /# _outcome. See
       /#    https://stackoverflow.com/questions/4414234/getting-pythons-unittest-results-in-a-teardown-method
-      /# for details.  I considered defining the method failureException(msg)
-      /# in metax.test.TestCase ... this would override the field
+      /# for details.
+      /#
+      /# I considered defining the method failureException(msg) in
+      /# metax.test.TestCase ... this would override the field
       /#   self.failureException
       /# introduced in unittest.case._AssertRaisesContext and inherited into
       /# unittest.TestCase.  The code in case.py almost always uses this
@@ -773,15 +784,43 @@ scope:
       /# usually be very small (list of failures and errors). Also, the
       /# property solution would not capture all failures (for example,
       /# _UnexpectedSuccess exceptions).
-      text_test_result = self._resultForDoCleanups
-      if text_test_result:
-        for tst, err in text_test_result.failures:
-          if self is tst:
-            return 'FAIL'
-        for tst, err in text_test_result.errors:
-          if self is tst:
-            return 'ERROR'
-      return ''
+      def list2reason(rec, exc_list):
+        if exc_list and exc_list[-1][0] is rec:
+            return exc_list[-1][1]
+
+      if hasattr(self, '_outcome'):  # Python 3.4+
+        result = self.defaultTestResult()  # these 2 methods have no side effects
+        self._feedErrorsToResult(result, self._outcome.errors)
+      else:  # Python 3.2 - 3.3 or 3.0 - 3.1 and 2.7
+        result = getattr(self, '_outcomeForDoCleanups', self._resultForDoCleanups)
+      failure = list2reason(self, result.failures)
+      if failure:
+        result = 'FAIL'
+      else:
+        error = list2reason(self, result.errors)
+        if error:
+          result = 'ERROR'
+        else:
+          result = ''
+      return result
+      
+      if False:
+        /# THis is old code ... remove it.
+        text_test_result = getattr(self, '_outcome', None)
+        if hasattr(self, '_outcome'):
+          text_test_result = self._outcome
+        elif hasattr(self, '_outcomeForDoCleanups'):
+          text_test_result = self._outcomeForDoCleanups
+        else:
+          text_test_result = self._resultForDoCleanups
+          if text_test_result:
+            for tst, err in text_test_result.failures:
+              if self is tst:
+                return 'FAIL'
+            for tst, err in text_test_result.errors:
+              if self is tst:
+                return 'ERROR'
+        return ''
     scope<js>:
       /# console.log('Fix TestCase.status in Javascript');
       return 'FIXME';
@@ -1761,7 +1800,22 @@ scope:
       var container : any;
       var msg : str = null;
     scope<py>:
-      self.assertIn(member, container, msg=msg);
+      rex = re.compile(r'.')
+      rcls = rex.__class__
+      if isinstance(member, rcls):
+        if isinstance(container, (list, tuple)):
+          found = False
+          for elem in container:
+            if member.search(elem):
+              found = True
+              break
+          self.assertTrue(
+            found, 'Failed to find regexp "%s" in %s' %
+            (member.pattern, container))
+        else:
+          self.assertIsNotNone(member.search(container))
+      else:
+        self.assertIn(member, container, msg=msg);
     scope<js>:
       if (msg) {
         assertContains(msg, member, container);
@@ -1780,7 +1834,7 @@ scope:
       var value : str #:
         The value to match.
     scope<py>:
-      m = re.match(restr, value)
+      m = re.search(restr, value)
       if not m:
         self.fail('Expected match failed:\n  %s\n  %s' % (restr, value))
     scope<js>:
@@ -1968,7 +2022,10 @@ scope:
       var val : str;
       var width : int;
     scope:
-      vstr = str(val)
+      if isinstance(val, unicode):
+        vstr = val
+      else:
+        vstr = str(val)
       v = len(vstr)
       if v < width:
         result = vstr + ' ' * (width - v)
@@ -2206,11 +2263,14 @@ scope:
       Compare two float values for closeness.
     params:
       var f1 : double;
-      var f2 : double;
+      var f2 : double = null;
       var delta : double = 0.00001;
       var msg : str = null;
     scope<py>:
-      self.assertAlmostEqual(f1, f2, delta=delta, msg=msg)
+      if f2 is None:
+        print(f1)
+      else:
+        self.assertAlmostEqual(f1, f2, delta=delta, msg=msg)
     scope<js>:
       if (msg) {
         assertRoughlyEquals(msg, f1, f2, delta);
@@ -2426,9 +2486,9 @@ scope:
       self.assertIsNotNone(val, msg)
     scope<js>:
       if (msg) {
-        assertNotNull(msg, val);
+        assertIsNotNone(msg, val);
       } else {
-        assertNotNull(val);
+        assertIsNotNone(val);
       }
     scope<cc>:
       throw metax::root::Error("TestCase.notnull() not yet implemented");

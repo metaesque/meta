@@ -486,6 +486,8 @@ config:
   import:
     metax.c.D.imports.sinfo(self.id())
 
+    /# print '**** HERE importing %s' % self.kindfqn()
+
     /# For namespaces, importMeta is primarily a means to invoke
     /# ClassConstruct.importMeta(), which does more heavy lifting. However,
     /# this method is also where we register each class within the namespace
@@ -986,6 +988,8 @@ config:
         r'import\s+(?P<import>\S+)'
         r'(?: as (?P<alias>\S+))?'
         r'(?:\s*#\s*target=(?P<target>\S+))?')
+      optre = re.compile(r'#.* optional=(\S+)')
+      optional_fqns = set()
 
       /# TODO(wmh): Make these less fragile. Any changes to the 'End Imports'
       /# or 'Start Harness' lines in templates will raise an Error.
@@ -999,6 +1003,57 @@ config:
 
       /# The class iniitalization lines.
       clinit_lines = []
+
+      def PatchImport(all_lines, fqn, special=False):
+        /# This method is used for two related purposes:
+        /#  - some imports are marked as optional, and the line
+        /#      import nm.sp
+        /#    is to be replaced with:
+        /#      try:
+        /#        import nm.sp
+        /#      except ImportError as e:
+        /#        pass
+        /#  - Within module nm.sp, we want users to be able to make reference
+        /#    to both SomeClass and nm.sp.SomeClass, but by default only
+        /#    the former is legal (nm.sp is not normally defined within nm.sp).
+        /#    To define it, we need to perform exactly the conditional
+        /#    import syntax mentioned above, plus some additional special
+        /#    work.
+        try:
+          my_index = all_lines.index('import ' + fqn)
+          /# We need to add some lines of code after myindex to ensure the module
+          /# is available fully qualified. It is important that this special
+          /# code occur before we import any namespaces within this namespace,
+          /# so that they too have access to the fully qualified namespace (so
+          /# we cannot insert the special code at the end of all_lines).
+          new_lines = []
+          new_lines.append('try:')
+          new_lines.append('  import ' + fqn)
+          new_lines.append('except ImportError:')
+          new_lines.append('  pass')
+
+          if special:
+            parent_nmsp, base_nmsp = fqn.rsplit('.', 1)
+            new_lines.append(
+              "if not getattr(%s, '%s', None):" % (parent_nmsp, base_nmsp))
+            if 'import sys' not in new_lines:
+              new_lines.append('  import sys')
+            new_lines.append('  %s = sys.modules[__name__]' % fqn)
+
+            /# Now some future-proofing imports to allow code to work in both
+            /# python2 and python3. See
+            /#   http://python-future.org/compatible_idioms.html
+            /# for useful discussion.
+            /# CODETANGLE(metaclass_support)
+            new_lines.append('from future.utils import with_metaclass')
+
+          n = len(all_lines)
+          my_index += 1
+          all_lines = all_lines[:my_index-1] + new_lines + all_lines[my_index:]
+          assert len(all_lines) == n + len(new_lines) - 1
+        except ValueError:
+          pass
+        return all_lines
 
       /# imports : vec<str>
       /#  - Accumulates all the import lines from individual classes, to be
@@ -1053,11 +1108,15 @@ config:
         import_lines = contents[:start_index-1].split('\n')
         start_removed = len(import_lines)
         for line in import_lines:
-          /# Parse the import line (into import and target).
+          /# Parse the import line (into import, target, optional, etc.).
           /#  - May need to generalize to support
           /#      'from nm.sp import X as Y'
           /#  - The order in which imports appear is sometimes critically
           /#    important, so we maintain the order (based on when first seen).
+          /#  - If optional=<fqn> exists in the comment, it means the import
+          /#    is optional and should be guarded with a 
+          /#       try ... except ImportError
+          /#    block.
           if line and line[0] == '#': continue
           m = impre.match(line)
           if m:
@@ -1070,6 +1129,9 @@ config:
             target = m.group('target')
             if target and target != 'None':
               targets.add(target)
+            om = optre.search(line)
+            if om:
+              optional_fqns.add(om.group(1))
           else:
             raise metax.c.Error('Not currently supporting imports of form "%s"' % line)
 
@@ -1124,39 +1186,11 @@ config:
       /# We add some special importation code to ensure that one can access all
       /# classes within the namespace fully-qualified (by default, python does
       /# not add 'sp' to 'nm' until after 'nm.sp' has been parsed).
-      all_lines = prelines + sorted(imports)
-      try:
-        my_index = all_lines.index('import ' + fqn)
-        /# We need to add some lines of code after myindex to ensure the module
-        /# is available fully qualified. It is important that this special
-        /# code occur before we import any namespaces within this namespace,
-        /# so that they too have access to the fully qualified namespace (so
-        /# we cannot insert the special code at the end of all_lines).
-        new_lines = []
-        new_lines.append('try:')
-        new_lines.append('  import ' + fqn)
-        new_lines.append('except ImportError:')
-        new_lines.append('  pass')
-        parent_nmsp, base_nmsp = fqn.rsplit('.', 1)
-        new_lines.append(
-          "if not getattr(%s, '%s', None):" % (parent_nmsp, base_nmsp))
-        if 'import sys' not in new_lines:
-          new_lines.append('  import sys')
-        new_lines.append('  %s = sys.modules[__name__]' % fqn)
+      all_lines = prelines + imports
+      all_lines = PatchImport(all_lines, fqn, special=True)
 
-        /# Now some future-proofing imports to allow code to work in both
-        /# python2 and python3. See
-        /#   http://python-future.org/compatible_idioms.html
-        /# for useful discussion.
-        /# CODETANGLE(metaclass_support)
-        new_lines.append('from future.utils import with_metaclass')
-
-        n = len(all_lines)
-        my_index += 1
-        all_lines = all_lines[:my_index-1] + new_lines + all_lines[my_index:]
-        assert len(all_lines) == n + len(new_lines) - 1
-      except ValueError:
-        pass
+      for optfqn in optional_fqns:
+        all_lines = PatchImport(all_lines, optfqn, special=False)
 
       /# Now obtain the merged collection of lines, and associated mapfile.
       /#  - starts with the sorted list of imports
@@ -3097,6 +3131,8 @@ config:
         associated with fqn is used.
       var alias : str = null #:
         The name by which the dependency is to be referenced locally.
+      var optional : bool = false #:
+        If true, this dependency is optional (i.e. guard the import).
     scope:
       if target == '<auto>':
         if kind == 'std':
@@ -3123,9 +3159,13 @@ config:
             (self.kindfqn(), fqn, target, info['target']))
         /# TODO(wmh): Do we need to validate alias?
       else:
-        dep = {'fqn': fqn, 'kind': kind, 'target': target, 'reason': reason}
+        dep = {
+          'fqn': fqn, 'kind': kind, 'target': target, 'reason': reason,
+        }
         if alias:
           dep['alias'] = alias
+        if optional:
+          dep['optional'] = True
         deps[fqn] = dep
         metafile = self.metafile()
         if target:
@@ -3596,9 +3636,11 @@ config:
         elif akind == 'assoc':
           /# assoc
           aid = dep.id()
-          aloc = dep.attrval('location', default=metax.c.LOOKUP)
-          akind = dep.attrval('kind', default=metax.c.LOOKUP)
-          alias = dep.attrval('alias', default=metax.c.LOOKUP)
+          lookup = metax.c.LOOKUP
+          aloc = dep.attrval('location', default=lookup)
+          akind = dep.attrval('kind', default=lookup)
+          alias = dep.attrval('alias', default=lookup)
+          status = dep.attrval('status', default=lookup)
 
           if self.variant() == 'testuser':
             /# We do not filter out any assocs if we are in an explicit test
@@ -3628,7 +3670,9 @@ config:
             atarget = atarget.asStr(unquote=True)
           if atarget:
             self.addDependency(
-              fqn, akind, 'in assocs', alias=alias, target=atarget)
+              fqn, akind, 'in assocs', alias=alias, target=atarget,
+              optional=status == 'optional',
+            )
 
       /# Implicit imports
       if metaclass is not None:
@@ -5033,9 +5077,7 @@ config:
             /# message.
             missing_message = None
           else:
-            /# TODO(wmh): disabling temporarily
-            missing_message = None
-            /# missing_message = '%s does not yet have a unittest' % fqn
+            missing_message = '%s does not yet have a unittest' % fqn
 
           if testattr and testsattr:
             metafile.error(
@@ -6340,6 +6382,20 @@ config:
     Attribute test:;
     Attribute tests:;
 
+    secondary
+    Attribute preamble: : simplex = <empty> #:
+      Code that appears at the beginning of the method for every receiver
+      (except those marked abstract). This is an alternative way of sharing
+      code (compared with inheritance, beta-style subreplacement, etc.)
+      TODO(wmh): This is not yet implemented ... experimental.
+
+    secondary
+    Attribute postamble: : simplex = <empty> #:
+      Code that appears at the end of the method for every receiver
+      (except those marked abstract). This is an alternative way of sharing
+      code (compared with inheritance, beta-style subreplacement, etc.)
+      TODO(wmh): This is not yet implemented ... experimental.
+
     Attribute comment:;
     Attribute config:;
     Attribute scope: : complex children <receiver>;
@@ -6374,11 +6430,16 @@ config:
     scope, receivers = self.attrpair('scope:', default=None)
     for receiver in receivers:
 
-      /# IMPORTANT: we want to support the receiver id being a fqn, but that
-      /# is rather complicated:
-      /#  - we would need to import *before* expand
-      /#  - we could be modifying code in other .meta files within this metafile.
-      /#  - this may not be practical.
+      /# IMPORTANT: we want to support the receiver id being a fqn, but there
+      /# are issues to be resolved:
+      /#  - do we need two levels of import, one before expand and one after?
+      /#  - it appears some external classes exist in self.compiler().classes()
+      /#    even without importMeta() being invoked (how is this happening?)
+      /#  - if we are instrument a class outside of the current metafile, we
+      /#    must detect that fact and only allow things to proceed if the
+      /#    metafile defining the class is explicitly listed as one of the
+      /#    files for which code is being regenerated (else we will not
+      /#    write the changes for the class even if we instrument it).
       clsname = receiver.id()
 
       feature_map = copy.copy(default_feature_map)
@@ -6402,16 +6463,45 @@ config:
       /# Find the class_construct matching 'clsname'
       /#  - TODO(wmh): This needs to be generalized to support classes
       /#    in a different namespace than the behavior.
-      /#  - Easily accomplished because we have access to the entire
-      /#    hierarchy by fqn.
-      if location == 'meta':
-        receiver_class = parent_block.cons(
-          metax.oopl.ClassConstruct.MetaifyName(clsname), default=None)
+      /#  - Easily accomplished for classes in the same metafile (we have
+      /#    access to the entire hierarchy by fqn via self.compiler().classes()),
+      /#    but more complicated if the referenced class is in a separate
+      /#   metafile.
+      proceed = False
+      targetclsname = (
+        metax.oopl.ClassConstruct.MetaifyName(clsname) if location == 'meta'
+        else clsname)
+
+      if '.' in clsname:
+        /# We have an fqn (note that we assume that any id with one or more
+        /# '.' is absolute ... the only relative ids supported currently are
+        /# those within the same namespace as the behavior, not any other
+        /# namespace in the namespace hierarchy.
+        metac = self.compiler()
+        receiver_class = metac.classes().get(targetclsname, None)
+        if receiver_class is None:
+          print('BIG ERROR: %s does not exist anywhere' % targetclsname)
+        else:
+          /# TODO(wmh): There is more work to do here.
+          /#  - must ensure that the class is in a metafile that is being
+          /#    actively compiled (not just one that was implicitly loaded
+          /#    and will thus not be written).
+          /#  - in experiments, if proceed is set True, the instrumentation
+          /#    code causes 
+          /#       InternalError: Failed to find stream named "defn" in ['command_body', 'command_init']
+          print('NOTE: Found %s ... must verify we are generating code for it' % targetclsname)
+          proceed = False
       else:
-        receiver_class = parent_block.cons(clsname, default=None)
-      if receiver_class is None:
-        print('ERROR: Failed to find %s in %s' % (clsname, parent_block.parent().fqn()))
-      else:
+        /# A local class name (defined in same namespace as the behavior).
+        receiver_class = parent_block.cons(targetclsname, default=None)
+        if receiver_class is None:
+          /# The receiver is not a class defined in the same namespace as the
+          /# 'behavior'
+          print('ERROR: Failed to find %s in %s' % (clsname, parent_block.parent().fqn()))
+        else:
+          proceed = True
+
+      if proceed:
         /# feature attributes
         features = []
         for k in fkey_order:
@@ -6480,7 +6570,7 @@ config:
     end Attribute presence;
 
     primary
-    Attribute receiver : id = <required> #:
+    Attribute receiver : xid = <required> #:
       The name of the receiver. May be fqcn or clsname.
 
     secondary
@@ -6768,7 +6858,7 @@ config:
       scope = self.attr('scope:', default=None)
       if scope:
         precount = self.precount()
-        /# We adjust metaline down by precound so that an error on line
+        /# We adjust metaline down by precount so that an error on line
         /# precount corresponds to scope.line() ... e.g. the blank lines
         /# inserted should not break line mapping.
         metaline = scope.line() - precount
@@ -6793,6 +6883,15 @@ config:
   config:
 
     Attribute location;
+
+    feature
+    Attribute status : <required|optional> = required #:
+      By default, the assoc is required to exist, but if it is marked as
+      optional, it is not an error if the assoc does not exist during compile
+      time (it may still be an error at runtime if code that needs the assoc is
+      executed). This allows us to support usecases where a module is desired in
+      a context where a library is not available, and the client simply avoids
+      invoking methods that rely on the library.
 
     feature
     Attribute kind : <cls|lib|std|decl|def> = cls #:
@@ -6942,7 +7041,8 @@ config:
     secondary
     Attribute binary : str = <empty> #:
       Only relevant for top-level command constructs. Specifies the binary to
-      use when the default is not suitable.
+      use when the default is not suitable.  Allows one to, for example,
+      make code require python3 instead of python2.
     
     Attribute comment:;
     Attribute scope: : simple;
@@ -9297,6 +9397,11 @@ scope:
       var data : map #:
         See, for example, http://www.bazel.io/docs/be/c-cpp.html.
     scope:
+      /# TODO(wmh): This import should be at the top of the namespace file,
+      /# but until we add a 'preport:' secondary attribute to MetaLanguage,
+      /# that isn't possible here.
+      from past.builtins import basestring
+
       lines = [rule + '(']
       k = set(data)
       keys = []
@@ -11510,7 +11615,8 @@ scope:
           /# No formal mechanism for marking a method abstract in Javascript,
           /# so we raise a runtime error.
           result.append(
-            "raise NotImplementedError('%s');" % executable.fqn())
+            'raise NotImplementedError'
+            "('%s.%s' % (self.__class__.__module__, self.__class__.__name__))")
         if returns and not returns.isVoid():
           defval = self.defaultValue(returns)
           result.append('return %s' % defval)
@@ -12019,6 +12125,8 @@ scope:
         'metastrap.__Meta__', 'lib',
         'implicit import in OoplCpp.formatDependencies',
         target='//metastrap:__Meta__')
+
+      /# Now call the parent implementation.
       imports, targets = super(OoplCpp, self).formatDependencies(
         class_construct)
       return imports, targets
@@ -12045,8 +12153,10 @@ scope:
       kind = info['kind']
       target = info['target']
       reason = info['reason']
+      optional = info.get('optional', False)
       alias = info.get('alias', None)
       alias_str = ' as %s' % alias if alias else ''
+      opt_str = (' optional=%s' % fqn) if optional else ''
 
       if kind == 'cls':
         /# Note that 'target' will be class-specific, but Python does not
@@ -12063,17 +12173,18 @@ scope:
           metafile.error('Invalid class type "%s"' % fqn)
           import_str = None
         else:
-          import_str = 'import %s%s  # target=%s reason=%s' % (
-            fqn[:idx], alias_str, target, reason)
+          import_str = 'import %s%s  # target=%s reason=%s%s' % (
+            fqn[:idx], alias_str, target, reason, opt_str)
 
       elif kind == 'lib':
         /# The target identifies a namespace, so we do not need to
         /# modify it.
-        import_str = 'import %s%s  # target=%s reason=%s' % (
-          fqn, alias_str, target, reason)
+        import_str = 'import %s%s  # target=%s reason=%s%s' % (
+          fqn, alias_str, target, reason, opt_str)
 
       elif kind == 'std':
         import_str = 'import %s%s' % (fqn, alias_str)
+
       else:
         raise metax.c.Error('Unknown kind "%s"' % kind)
 
@@ -12220,6 +12331,11 @@ scope:
   scope:
 
     receiver BaseLanguageOopl scope:
+      /# TODO(wmh): This import should be at the top of the namespace file,
+      /# but until we add a 'preport:' secondary attribute to MetaLanguage,
+      /# that isn't possible here.
+      from past.builtins import basestring
+
       if value is None:
         /# CODETANGLE(special_expr): TODO(wmh): Decide whether <special> is
         /# indicated by an Expr with value() None, or by an Expr that is None.

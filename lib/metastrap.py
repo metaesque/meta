@@ -13,6 +13,9 @@ import os
 import re
 import sys
 
+if sys.version_info.major == 3:
+  import importlib.abc
+
 Verbose = False
 
 # _Config: dict
@@ -462,7 +465,7 @@ def ParseArgv(argv, cli_module, root_module=None):
 
 
 # http://dangerontheranger.blogspot.com/2012/07/how-to-use-sysmetapath-with-python.html
-class MetaImporter(object):
+class MetaImporter(object if sys.version_info.major < 3 else importlib.abc.MetaPathFinder):
   """Auto-compile meta files newer than imported python files.
 
   Since Meta generates python files, we want to ensure that anytime a python
@@ -495,6 +498,7 @@ class MetaImporter(object):
     if self.__class__._Instance:
       raise Error(
         'Use MetaImporter.Instance() to obtain the singleton instance')
+    # print('HERE creating MetaImporter')
 
     # We create an instance of the Meta compiler so that we can dynamically
     # compile meta code without having to invoke a subprocess (we want to be
@@ -536,6 +540,17 @@ class MetaImporter(object):
         fp.write('%s\n' % key)
       #fp.write('%s: %s\n' % (key, cache[key]))
 
+  def find_spec(self, fullname, path, target=None):
+    """This method is supposed called by Python3 if this class is on
+    sys.meta_path, but it is not currently work.
+    
+    https://docs.python.org/3/library/importlib.html#importlib.abc.MetaPathFinder.find_spec
+    
+    I've experimented with making this class a subclass of
+    importlib.abc.MetaPathFinder in python3, but that doesn't fix the issue.
+    """
+    return self.maybeRecompileMeta(fullname, path, target=target)    
+
   def find_module(self, fullname, path=None):
     """This method is called by Python if this class is on sys.path.
 
@@ -554,8 +569,27 @@ class MetaImporter(object):
       If fullname is the name of a module/package that we want to report as
       found, then we need to return a loader object.
     """
-    cache = self._cache
+    return self.maybeRecompileMeta(fullname, path)
 
+  def maybeRecompileMeta(self, fullname, path, target=None):
+    """A method shared by find_module() and find_spec().
+
+    This method never actually finds a module (it always returns None), but
+    may dynamically recompile a .meta file if the .meta file associated with
+    a python module is newer than the python .py/.pyc files.
+
+    Args:
+      fullname: str
+        The fully-qualified name of the module to look for.
+      path: list of str or None
+        Either __path__ (for submodules and subpackages) or None (for
+        a top-level module/package).
+      target: str or None
+        Used as a hint. Only in python3, not python2.
+    """
+    # print('Checking if %s involves a Meta recompile' % fullname)
+    cache = self._cache
+    
     # TODO(wmh): Determine if we can rely on path (which is usually a list of
     # one path, or None).  I initially assumed it was the first directory in
     # sys.path matching fullname, but that doesn't explain:
@@ -632,4 +666,4 @@ def AutoCompile():
   """
   # Note that sys.meta_path has nothing to do with Meta ... it is a generic
   # python concept: https://docs.python.org/2/library/sys.html#sys.meta_path
-  sys.meta_path.append(MetaImporter.Instance())
+  sys.meta_path.insert(0, MetaImporter.Instance())

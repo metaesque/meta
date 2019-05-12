@@ -1195,7 +1195,7 @@ scope:
         /# expression to parse.
 
         /# Establish the kind of expr being parsed.
-        fname = func.func_name
+        fname = func.func_name if sys.version_info.major < 3 else func.__name__
         assert fname.startswith('_parse')
         kind = fname[6:].lower()
 
@@ -6167,7 +6167,7 @@ scope:
         The fully qualified name of the class depended upon.
     scope:
       self.classdeps().add(fqcn)
-      /# print('Now have %d deps in %s' % (len(self.classdeps()), id(self)))
+      /#print('Now have %d deps in %s' % (len(self.classdeps()), id(self)))
     test:
     end method registerDependentClass;
 
@@ -7108,8 +7108,9 @@ scope:
         /#           detect the syntax error in parseConstruct.
 
         if False and litkey is None:
-          print '****** HERE with litkey=%s key=%s basel=%s secondary=%s termcode=%d line=%d:%s' % (
-            litkey, key, basel, secondary, termcode, lnum, line.line())
+          print(
+            '****** HERE with litkey=%s key=%s basel=%s secondary=%s termcode=%d line=%d:%s' % 
+            (litkey, key, basel, secondary, termcode, lnum, line.line()))
 
         ldent = line.indent()
         if index == line.start() + ldent:
@@ -8138,6 +8139,11 @@ scope:
       self._lnum += 1
       line = self.line()
       index = (line._start + line._indent) if line else -1
+      if False and line is None:
+        print(
+          'Line %5d: %s in %s (%d)' %
+          (self._lnum - 1, self._lines[self._lnum-1].line(), self.path(), index))
+        /# raise Error('Found line null')
       self._index = index
       matches = True
       if indent > -1 and indent != line._indent:
@@ -9251,6 +9257,7 @@ scope:
       var klass : metax.oopl.ClassConstruct;
     scope:
       fqn = klass.fqn()
+      /# print('Registering %s' % fqn)
       classes = self.classes()
       if fqn in classes and classes[fqn] is not klass:
         /#raise Error(
@@ -11316,6 +11323,9 @@ scope:
         fully-qualified BUILD targets.
       var verbose : bool = false #:
         If true, print output of tests, etc.
+      var basebinary : str = 'default' #:
+        The binary to use for the baselang. Can be either an executable path,
+        or one of 'default', 'old' or 'new' (semantics is baselang-dependent).
     scope:
       /# TODO(wmh): This needs to be implemented on a per-baselang basis as
       /# a behavior (or at least parts of it).
@@ -11353,8 +11363,19 @@ scope:
         /# Maps baselang id to shell executable to invoke for raw tests.
         /# If a id does not exist, it means that baselang does not support
         /# raw testing.
-        'python': 'python',
+        'python': {
+          'default': 'python',
+          'old': 'python2',
+          'new': 'python3',
+        }
       }
+      if basebinary and basebinary[0] == '/' and os.path.exists(basebinary):
+        rawexec = basebinary
+      else:
+        rawexec = rawmap.get(baselang.id(), {}).get(basebinary, None)
+        if rawtests and not rawexec:
+          print('WARNING: %s does not support raw testing' % baselang.id())
+          rawtests = False
 
       if verbose:
         if rawtests:
@@ -11375,10 +11396,6 @@ scope:
           continue
         test_target = newdata['test_target']
         test_arg = newdata.get('test_arg', None)
-        rawexec = rawmap.get(baselang.id(), None)
-        if rawtests and not rawexec:
-          print('WARNING: %s does not support raw testing' % baselang.id())
-          rawtests = False
 
         /# Establish the command to execute.
         if rawtests:
@@ -12597,8 +12614,12 @@ scope:
         for kind, paths in (('meta', meta_paths), ('base', base_paths)):
           if paths:
             for abbrev in sorted(paths):
+              /# Used to encode abbrev, but that poses problems in python3:
+              /#    TypeError: descriptor 'ljust' requires a 'str' object but received a 'bytes'
+              /# If problems occur, find a different solution.
+              astr = abbrev.encode('utf8', 'ignore') if sys.version_info.major < 3 else abbrev
               ofp.write(
-                '%s = %s\n' % (str.ljust(abbrev.encode('utf8'), maxwidth), paths[abbrev]))
+                '%s = %s\n' % (str.ljust(astr, maxwidth), paths[abbrev]))
         /# too noisy for no real gain
         /# dsep(' End File Map', delim='-', fp=ofp)
 
@@ -12826,7 +12847,7 @@ scope:
           continue
 
         if basel != 'python':
-          print 'WARNING: Not yet handling parseRepository on %s' % basel
+          print('WARNING: Not yet handling parseRepository on %s' % basel)
           continue
 
         /# TODO(wmh): Ignore basel if it isn't a legal baselang for metaoopl.
@@ -12966,12 +12987,12 @@ scope:
 
       if errors:
         result['errors'] = errors
-        print '#' * 80
-        print '%s: unrecognized files:' % path
+        print('#' * 80)
+        print('%s: unrecognized files:' % path)
         for subpath in sorted(errors):
-          print '  %s' % subpath
-          print '    %s' % errors[subpath]
-        print '#' * 80
+          print('  %s' % subpath)
+          print('    %s' % errors[subpath])
+        print('#' * 80)
 
       return result
     test:
@@ -13247,7 +13268,7 @@ scope:
             ok = True
             nmspmap.setdefault('executables', []).append(base)
           else:
-            /# print 'WARN: Failed to find %s in %s' % (METAX_ENTRY_NAME, fullpath)
+            /# print('WARN: Failed to find %s in %s' % (METAX_ENTRY_NAME, fullpath))
             pass
         if not ok:
           errors[base] = 'unrecognized namespace file'
@@ -14651,6 +14672,14 @@ scope:
       flag baselang @ b : str = 'python' #:
         The baselang to compile into.
         If this is <special>, a metalang-specific default is used.
+      flag basebinary : str = 'default' #:
+        An experimental means of specifying a non-default binary. For example,
+        by default Meta<Python> currently generates v2 code (although this will
+        change to be v3 sometime). In order to use a non-default binary for
+        python, one can specify the 'binary' attribute on top-level 'command'
+        constructs, but that doesn't help for test invocations. This flag
+        allows support for this. It can either be an existng path, or one of
+        'default', 'old', or 'new' (semantics is baselang dependent).
       flag metalang @ L : str = 'oopl' #:
         The metalang the code is defined in.
       flag optimize_level @ O : str = 'high' #:
@@ -14861,7 +14890,8 @@ scope:
                 targets.append(namespace.fqn())
           flags.rawtests = True
           if targets:
-            self.runUnitTests(targets, verbose=flags.verbose)
+            self.runUnitTests(
+              targets, verbose=flags.verbose, basebinary=flags.basebinary)
         return errors == 0
       end command compile;
 
@@ -14932,7 +14962,8 @@ scope:
 
       named
       command emacs #:
-        Generate an emacs major mode for the current meta language.
+        Generate an emacs major mode for the metalanguage specified as first
+        arg (do NOT use -L!)
       scope:
         cli = self.cli()
         fs = self.fs()
@@ -15713,7 +15744,8 @@ scope:
           targets = argmap['fqns']
           flags = self.cli()
           if targets:
-            self.runUnitTests(targets, verbose=flags.verbose)
+            self.runUnitTests(
+              targets, verbose=flags.verbose, basebinary=flags.basebinary)
           else:
             print('No targets given to command "test"')
         else:
@@ -15737,7 +15769,7 @@ scope:
           Display fields
         flag methods @ m : bool = false #:
           Display methods
-        flag size @ s : str = '18' #:
+        flag size @ s : str = '17.5' #:
           Number of inches of width and height.
           TODO(wmh): Use a more sensible unit.
         flag destdir : str = './tmp' #:
