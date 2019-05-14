@@ -14672,7 +14672,7 @@ scope:
       flag baselang @ b : str = 'python' #:
         The baselang to compile into.
         If this is <special>, a metalang-specific default is used.
-      flag basebinary : str = 'default' #:
+      flag basebinary @ B : str = 'default' #:
         An experimental means of specifying a non-default binary. For example,
         by default Meta<Python> currently generates v2 code (although this will
         change to be v3 sometime). In order to use a non-default binary for

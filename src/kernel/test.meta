@@ -603,6 +603,8 @@ scope:
       /# of the code to properly revert fake filesytem module 'os'.
       self._hacks = {}
       self.maxDiff = None
+
+
     setup<js>:
       this.deblog('Invoking ' + this.name() + ' setUp for ' + this.methname());
       /# TODO(wmh): Look into the stub mechanism provided by
@@ -1777,13 +1779,19 @@ scope:
     end method startswith;
 
     method endswith params:
-      var suffix : str;
-      var strval : str;
+      var first : str #:
+        If second is non-null, first is the suffix. If second is null, first
+        is the full string.
+      var second : str = null #:
+        If null, it is a request to print out first, which represents the
+        full string. If non-null, first is a suffix, and second is the
+        full string to search in.
     scope<py>:
-      if strval is None:
-        self.fail(
-          'String is null when expecting non-null ending with\n  "%s"' % suffix)
+      if second is None:
+        print(first)
       else:
+        suffix = first
+        strval = second
         self.assertTrue(
           strval.endswith(suffix),
           'String\n  "%s"\ndoes not end with\n  "%s"' % (strval, suffix))
@@ -2549,7 +2557,11 @@ scope:
     end;
 
     test
-    lifecycle setup:
+    lifecycle #:
+      TODO(wmh): Why is this code necessary? There is already a setup<py>
+      block in the instance lifecycle! (and we should be warning about
+      conflicts between them!)
+    setup:
       self._tc = metax.test.TestCase('captureStdout')
       /# This is important to stop various tests from printing out output
       /# that confuses the python parsing scripts.
