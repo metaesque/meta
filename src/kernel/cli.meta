@@ -1624,9 +1624,9 @@ scope:
   scope:
 
     field _command_ : Command #:
-      TODO(wmh): Change this to metax__command and have the rule that programmers
-      should never use 'metax__' or 'Metax__' as a prefix in any attribute
-      value (maybe even enforce that rule).
+      TODO(wmh): Change this to metax__command and have the rule that
+      programmers should never use 'metax__' or 'Metax__' as a prefix in any
+      attribute value (maybe even enforce that rule).
 
     lifecycle params:
       var command -> _command_;

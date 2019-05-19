@@ -2,7 +2,7 @@ namespace demo.cards0 #:
   Playing cards.
 scope:
 
-  class Card < meta.root.Object #:
+  class Card #:
     A card with suit and rank.
   scope:
 
@@ -14,6 +14,7 @@ scope:
     lifecycle _ params:
       var rank -> rank;
       var suit -> suit;
+    scope:
     end lifecycle;
 
     method test : int #:

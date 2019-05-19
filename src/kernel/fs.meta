@@ -306,6 +306,7 @@ scope:
     std assoc io;
     std assoc shutil;
     std assoc tempfile;
+    std assoc time;
 
     test resource testdata path "./testdata/fs";
   scope:
@@ -492,9 +493,9 @@ scope:
       var mtime : float = null #:
         If provied, mtime is set to this value
     scope:
+      /# https://stackoverflow.com/questions/1158076/implement-touch-using-python
       with open(path, 'a') as fp:
-        if atime or mtime:
-          os.path.utime(path, (atime, mtime))
+        os.utime(path, (atime or time.time(), mtime or time.time()))
     test:
     end method touch;
 

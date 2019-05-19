@@ -125,10 +125,13 @@ scope:
         import metastrap
         /# print('NOTE: Initializing metax.root.Config!')
         result = metastrap.Config()
-        /# logging.info('metax.root.Object.Config: initialized to %s' % str(result))
+        /# logging.info(
+        /#   'metax.root.Object.Config: initialized to %s' % str(result))
         -> result
       lazy<cc>:
-        std::cerr << "metax.root.ObjectMeta.Config() not yet implemented" << std::endl;
+        std::cerr
+          << "metax.root.ObjectMeta.Config() not yet implemented"
+          << std::endl;
     end field Config;
 
     static
@@ -140,7 +143,7 @@ scope:
         induced if we type it as metax.cli.Values. Need to establish
         whether this will be implementable in C++.
       - Initialized via metax.root.MetaObject.Initialize(), which is
-        invoked by 'meta2'. However, we need a mechanism for initializing
+        invoked by 'metac'. However, we need a mechanism for initializing
         it in situations where this object is desired 'in the wild'
         without the compiler as intermediary.
       - TODO(wmh): Find a way to initialize this properly.

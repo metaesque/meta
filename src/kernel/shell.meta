@@ -37,8 +37,6 @@ scope:
       /#     - ability to print out the Context associated with arbitrary block
       root = self.filesystem()
       disk = root.add('dir', 'disk')
-      /#mem = root.add('dir', 'mem')
-      /#mem.add('dir', 'mem', generator=self.generateMetafiles, freshold=1)
 
       /# Defining directory 'mem'
       mem = root.add(
@@ -78,7 +76,7 @@ scope:
                           /# file contents, etc.
                           /#
                           /# Possibilities:
-                          /#   meta --> file containing meta source code.
+                          /#   meta --> file containing meta source code of method
                           /#   py   --> file containing python source code
                           /#   cc   --> file containing c++ source code
                           /#   ...
@@ -119,25 +117,36 @@ scope:
         /# A recognized command ... let the parent implementation handle it.
         result = super(Shell, self).dispatch(command, args)
       else:
-        /# We see if the command is one defined by the collection of 
-        /# 'command' constructs in the Compiler class. If so, command <foo>
-        /# is implemented by method Compiler.<foo>_command(), accepting zero
-        /# args but expecting self.flags().rest to contain the args.
+        /# There is a Compiler instance associated with this Shell. It should
+        /# have a top-level 'metac' command defined on it, with numerous
+        /# sub-commands within that top-level command. Those subcommands are
+        /# legal commands here. Determining what to invoke is based on the
+        /# following notes:
+        /#  - all of the subcommands should have feature attribute 'kind'
+        /#    value 'named', which means a '_<command>_command' method will
+        /#    be defined to implement the code, so that method can be invoked.
+        /#  - need to update the comamnd stored in the Object.CLI() ...
+        /#    this code is fragile and esoteric (would be nice to cleanup).
         result = None
+
+        /# Find the top-level (metac) compiler.
         compiler = self.compiler()
         cli = compiler.cli()
         cmd = cli._command_()
-        while cmd.id() != 'main':
-          cmd = cmd.parent()
-        root = cmd
-        parent = root.parent()
+        root = cmd.root()
+        assert root.id() == 'metac'
 
-        cmd = root.instantiate([root.id(), command] + args, parent=parent)
-        if cmd.id() == 'main':
+        /# Form a command line based on 'command' and 'args'. Use this
+        /# command-line to instantiate the metac Command (which should return
+        /# some sub-command within metac, properly initialized).
+        allargs = [root.name(), command] + args
+        cmd = root.instantiate(allargs, parent=None)
+
+        if cmd is root:
           /# Failed to find a valid command.
           print('Unknown command "%s"' % command)
-        elif cmd.name() != command:
-          print('Matched %s not %s' % (cmd.name(), command))
+        elif cmd.id() != command:
+          print('Matched %s not %s' % (cmd.id(), command))
         else:
           /# Command instantiation identified a command.
 
@@ -148,8 +157,8 @@ scope:
           /# Individual commands should set this. In fact, consider
           /# deleting this field.
           compiler.argmapIs(None)
-          
-          func_name = command + '_command'
+
+          func_name = '_%s_command' % command
           method = getattr(compiler, func_name, None)
           if method:
             method()
@@ -168,10 +177,12 @@ scope:
       multi var args : vec;
     scope:
       super(Shell, self).helpCommand(*args)
-      command = self.compiler().cli()._command_()
-      while command.id() != 'main':
-        command = command.parent()
-      command.help()
+
+      if False:
+        command = self.compiler().cli()._command_()
+        while command.parent():
+          command = command.parent()
+        command.help()
     test:
     end method helpCommand;
 

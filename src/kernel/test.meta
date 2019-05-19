@@ -274,6 +274,7 @@ scope:
   native fixme scope<py>:
     import io
     StrStrClass = io.StringIO().__class__
+    MISSING = object()
   end native;    
   
   class TestCase #:
@@ -1731,298 +1732,6 @@ scope:
       self.assertFalse(mname in tc._fsinfo)
     end method revertFilesystem;
 
-    method assertDictContains #:
-        keyval iterate over subdata into (k,v) scope:
-          expr switch scope:
-            case [k not in data] scope:
-              @self.fail('Failed to find ${k} in dict');
-            case [data[k] != v] scope:
-              @self.fail('${k} = ${data[k]} != ${v}');
-
-        iterate subdata (k,v) scope:
-          expr switch scope:
-            case [k not in data] scope:
-              @self.fail('Failed to find ${k} in dict');
-            case [data[k] != v] scope:
-              @self.fail('${k} = ${data[k]} != ${v}');
-    params:
-      var data : map;
-      var subdata : map;
-    scope<py>:
-      for k, v in subdata.iteritems():
-        if k not in data:
-          self.fail('Failed to find %s in dict' % k)
-        elif data[k] != v:
-          self.fail('%s = %s != %s' % (k, data[k], v))
-    scope<js>:
-      throw new Error('TestCase.assertDictContains() not yet implemented');
-    scope<cc>:
-      throw metax::root::Error(
-        "TestCase.assertDictContains() not yet implemented");
-    end method assertDictContains;
-
-    method startswith params:
-      var prefix : str;
-      var strval : str;
-    scope<py>:
-      self.assertTrue(
-        strval.startswith(prefix),
-        'String\n  "%s"\ndoes not start with\n  "%s"' % (strval, prefix))
-    test<py>:
-      pass
-    scope<js>:
-      assertTrue(
-        'String\n  \"' + strval + '\"\ndoes not start with\n  \"' + prefix + '\"',
-        strval.startsWith(/** @type {!string} */ (prefix)));
-    scope<cc>:
-      throw metax::root::Error("TestCase.startswith() not yet implemented");
-    end method startswith;
-
-    method endswith params:
-      var first : str #:
-        If second is non-null, first is the suffix. If second is null, first
-        is the full string.
-      var second : str = null #:
-        If null, it is a request to print out first, which represents the
-        full string. If non-null, first is a suffix, and second is the
-        full string to search in.
-    scope<py>:
-      if second is None:
-        print(first)
-      else:
-        suffix = first
-        strval = second
-        self.assertTrue(
-          strval.endswith(suffix),
-          'String\n  "%s"\ndoes not end with\n  "%s"' % (strval, suffix))
-    scope<js>:
-      assertTrue(
-        'String\n  \"' + strval + '\"\ndoes not end with\n  \"' + suffix + '\"',
-        strval.endsWith(/** @type {!string} */ (suffix)));
-    scope<cc>:
-      throw metax::root::Error("TestCase.endswith() not yet implemented");
-    end method endswith;
-
-    method contains params:
-      var member : any;
-      var container : any;
-      var msg : str = null;
-    scope<py>:
-      rex = re.compile(r'.')
-      rcls = rex.__class__
-      if isinstance(member, rcls):
-        if isinstance(container, (list, tuple)):
-          found = False
-          for elem in container:
-            if member.search(elem):
-              found = True
-              break
-          self.assertTrue(
-            found, 'Failed to find regexp "%s" in %s' %
-            (member.pattern, container))
-        else:
-          self.assertIsNotNone(member.search(container))
-      else:
-        self.assertIn(member, container, msg=msg);
-    scope<js>:
-      if (msg) {
-        assertContains(msg, member, container);
-      } else {
-        assertContains(member, container);
-      }
-    scope<cc>:
-      throw metax::root::Error("TestCase.contains() not yet implemented");
-    end method contains;
-
-    method matches #:
-      A string value matches a regexp. 
-    params:
-      var restr : str #:
-        The regexp to match against (as a string).
-      var value : str #:
-        The value to match.
-    scope<py>:
-      m = re.search(restr, value)
-      if not m:
-        self.fail('Expected match failed:\n  %s\n  %s' % (restr, value))
-    scope<js>:
-      console.log('Fix TestCase.matches in Javascript');
-    scope<cc>:
-      throw metax::root::Error("TestCase.matches() not yet implemented");
-    end method matches;
-
-    method iseq #:
-      Compare an arbitrary two entities for equality (not pointer equality!)
-
-      NOTE: This method may not be implementable in C++. Decide whether we
-      want to keep it for use in other baselangs, or if allowing it
-      encourages people to use methods that won't work in <cc> and <*>.
-    params:
-      var item : any;
-      var expected : any = null;
-      var message : any = null;
-    scope<py>:
-      if expected is None:
-        /# This is a request to print out the item, rather than compare against
-        /# expected.
-        print(u'iseq: %s' % str(item))
-      else:
-        if message is None:
-          eval = str(expected).replace('\n', '\\n')
-          aval = str(item).replace('\n', '\\n')
-          message = u'"%s" != "%s"' % (eval, aval)
-        self.assertEqual(expected, item, message)
-    scope<js>:
-      if (message == null) {
-        assertEquals(expected, item);
-      } else {
-        assertEquals(message, expected, item);
-      }
-    scope<cc>:
-      throw metax::root::Error("TestCase.iseq() not yet implemented");
-    end method iseq;
-
-    method iseqint #:
-      Compare an arbitrary two entities for equality (not pointer equality!)
-
-      NOTE: This method may not be implementable in C++. Decide whether we
-      want to keep it for use in other baselangs, or if allowing it
-      encourages people to use methods that won't work in <cc> and <*>.
-    params:
-      var expected : int;
-      var item : int;
-      var message : any = null;
-    scope<py>:
-      if message is None:
-        eval = str(expected).replace('\n', '\\n')
-        aval = str(item).replace('\n', '\\n')
-        message = '"%s" != "%s"' % (eval, aval)
-      self.assertEqual(expected, item, message)
-    scope<js>:
-      if (message == null) {
-        assertEquals(expected, item);
-      } else {
-        assertEquals(message, expected, item);
-      }
-    scope<cc>:
-      throw metax::root::Error("TestCase.iseq() not yet implemented");
-    end method iseqint;
-
-    method noteq #:
-      Compare an arbitrary two entities for non-equality (not pointer equality!)
-
-      See comment in 'eq' about viability in C++ and ramifications on this
-      method.
-    params:
-      var expected : any;
-      var item : any;
-      var message : any = null;
-    scope<py>:
-      if message is None:
-        message = '%s == %s' % (str(expected), str(item))
-      self.assertNotEqual(expected, item, message)
-    scope<js>:
-      if (message == null) {
-        assertNotEquals(expected, item);
-      } else {
-        assertNotEquals(message, expected, item);
-      }
-    scope<cc>:
-      throw metax::root::Error("TestCase.noteq() not yet implemented");
-    end method noteq;
-
-    method iseqstr #:
-      Compare an arbitrary two entities for equality (not pointer equality!)
-
-      NOTE: This method may not be implementable in C++. Decide whether we
-      want to keep it for use in other baselangs, or if allowing it
-      encourages people to use methods that won't work in <cc> and <*>.
-    params:
-      var expected : &str;
-      var item : &str;
-      var message : str = null;
-    scope<py>:
-      if message is None:
-        message = '%s != %s' % (expected, item)
-      self.assertEqual(expected, item, message)
-    scope<js>:
-      if (message == null) {
-        assertEquals(expected, item);
-      } else {
-        assertEquals(message, expected, item);
-      }
-    scope<cc>:
-      throw metax::root::Error("TestCase.iseq() not yet implemented");
-      if (message == meta::NullStr()) {
-      } else {
-      }
-    test<py>:
-    end method iseqstr;
-
-    method noteqstr #:
-      Compare an arbitrary two entities for non-equality (not pointer equality!)
-    params:
-      var expected : &str;
-      var item : &str;
-      var message : str = null;
-    scope<py>:
-      if message is None:
-        message = '%s == %s' % (expected, item)
-      self.assertNotEqual(expected, item, message)
-    scope<js>:
-      if (message == null) {
-        assertNotEquals(expected, item);
-      } else {
-        assertNotEquals(message, expected, item);
-      }
-    scope<cc>:
-      throw metax::root::Error("TestCase.iseq() not yet implemented");
-      if (message == meta::NullStr()) {
-      } else {
-      }
-    end method noteqstr;
-
-    method iseqvec params:
-      var items : vec;
-      var expected : vec = null;
-      var message : str = null;
-    scope<py>:
-      if expected is None:
-        print('iseqvec:')
-        pprint.pprint(items)
-      else:
-        self.assertListEqual(expected, items, message)
-    scope<js>:
-      if (message == null) {
-        assertElementsEquals(expected, items);
-      } else {
-        assertElementsEquals(message, expected, items);
-      }
-    scope<cc>:
-      throw metax::root::Error("TestCase.iseqvec() not yet implemented");
-    end method iseqvec;
-
-    method iseqmap params:
-      var expected : any;
-      var data : any;
-      var msg : any = null;
-      var width : int = 30;
-    scope<py>:
-      if expected != data:
-        /# Don't use BytesIO, as one cannot write unicode to such.
-        fp = io.StringIO()
-        self.recursiveCompare('', expected, data, 0, fp=fp, valwidth=width)
-        self.fail(fp.getvalue())        
-    scope<js>:
-      if (msg) {
-        assertHashEquals(msg, expected, data);
-      } else {
-        assertHashEquals(expected, data);
-      }
-    scope<cc>:
-      throw metax::root::Error("TestCase.iseqmap() not yet implemented");
-    end method iseqmap;
-
     static
     method FormStr : str #:
       Return a string of exactly width 'width' from val.
@@ -2192,6 +1901,357 @@ scope:
         test.out())
     end method recursiveCompare;
 
+    method assertDictContains #:
+        keyval iterate over subdata into (k,v) scope:
+          expr switch scope:
+            case [k not in data] scope:
+              @self.fail('Failed to find ${k} in dict');
+            case [data[k] != v] scope:
+              @self.fail('${k} = ${data[k]} != ${v}');
+
+        iterate subdata (k,v) scope:
+          expr switch scope:
+            case [k not in data] scope:
+              @self.fail('Failed to find ${k} in dict');
+            case [data[k] != v] scope:
+              @self.fail('${k} = ${data[k]} != ${v}');
+    params:
+      var data : map;
+      var subdata : map;
+    scope<py>:
+      for k, v in subdata.iteritems():
+        if k not in data:
+          self.fail('Failed to find %s in dict' % k)
+        elif data[k] != v:
+          self.fail('%s = %s != %s' % (k, data[k], v))
+    scope<js>:
+      throw new Error('TestCase.assertDictContains() not yet implemented');
+    scope<cc>:
+      throw metax::root::Error(
+        "TestCase.assertDictContains() not yet implemented");
+    end method assertDictContains;
+
+    method startswith params:
+      var prefix : str;
+      var strval : str;
+    scope<py>:
+      self.assertTrue(
+        strval.startswith(prefix),
+        'String\n  "%s"\ndoes not start with\n  "%s"' % (strval, prefix))
+    test<py>:
+      pass
+    scope<js>:
+      assertTrue(
+        'String\n  \"' + strval + '\"\ndoes not start with\n  \"' + prefix + '\"',
+        strval.startsWith(/** @type {!string} */ (prefix)));
+    scope<cc>:
+      throw metax::root::Error("TestCase.startswith() not yet implemented");
+    end method startswith;
+
+    method endswith params:
+      var first : str #:
+        If second is non-null, first is the suffix. If second is null, first
+        is the full string.
+      var second : str = MISSING #:
+        If null, it is a request to print out first, which represents the
+        full string. If non-null, first is a suffix, and second is the
+        full string to search in.
+    scope<py>:
+      if second is MISSING:
+        print(first)
+      else:
+        suffix = first
+        strval = second
+        self.assertTrue(
+          strval.endswith(suffix),
+          'String\n  "%s"\ndoes not end with\n  "%s"' % (strval, suffix))
+    scope<js>:
+      assertTrue(
+        'String\n  \"' + strval + '\"\ndoes not end with\n  \"' + suffix + '\"',
+        strval.endsWith(/** @type {!string} */ (suffix)));
+    scope<cc>:
+      throw metax::root::Error("TestCase.endswith() not yet implemented");
+    end method endswith;
+
+    method contains params:
+      var member : any;
+      var container : any;
+      var msg : str = null;
+    scope<py>:
+      rex = re.compile(r'.')
+      rcls = rex.__class__
+      if isinstance(member, rcls):
+        if isinstance(container, (list, tuple)):
+          found = False
+          for elem in container:
+            if member.search(elem):
+              found = True
+              break
+          self.assertTrue(
+            found, 'Failed to find regexp "%s" in %s' %
+            (member.pattern, container))
+        else:
+          self.assertIsNotNone(member.search(container))
+      else:
+        self.assertIn(member, container, msg=msg);
+    scope<js>:
+      if (msg) {
+        assertContains(msg, member, container);
+      } else {
+        assertContains(member, container);
+      }
+    scope<cc>:
+      throw metax::root::Error("TestCase.contains() not yet implemented");
+    end method contains;
+
+    method raises #:
+      Confirm that the given method raises an exception.
+
+      Note that the python version accepts arbitrary positional and
+      keyword args while the javascript version does not. Need to get 
+      varargs supported in javascript before we can try implementing it.
+    params:
+      var eclass : class #:
+        The exception class raised
+      var func : &#function #:
+        The callable object
+      multi var args : vec #:
+        The positional args to pass to func.
+      multi var kwds : map #:
+        The keyword args to pass to func.
+    scope<py>:
+      self.assertRaises(eclass, func, *args, **kwds)
+    scope<js>:
+      /# TODO(wmh): goog.testing.asserts.assertThrows() is rather limited:
+      /#  - it only handles methods that that don't require any args
+      /#  - it only detects whether any exception is raised, not whether a
+      /#    specific exception is raised.
+      /# A better version of assertThrows() is certainly possible. Implement
+      /# it.
+      /* var e = */ assertThrows(func);
+      /# TODO(wmh): At the very least, we can compare the exception 'e' against
+      /# expected 'eclass'.
+    scope<cc>:
+      throw metax::root::Error("TestCase.raises() not yet implemented");
+    end method raises;
+
+    method matches #:
+      A string value matches a regexp. 
+    params:
+      var restr : str #:
+        The regexp to match against (as a string).
+      var value : str #:
+        The value to match.
+    scope<py>:
+      m = re.search(restr, value)
+      if not m:
+        self.fail('Expected match failed:\n  %s\n  %s' % (restr, value))
+    scope<js>:
+      console.log('Fix TestCase.matches in Javascript');
+    scope<cc>:
+      throw metax::root::Error("TestCase.matches() not yet implemented");
+    end method matches;
+
+    method iseq #:
+      Compare an arbitrary two entities for equality (not pointer equality!)
+
+      NOTE: This method may not be implementable in C++. Decide whether we
+      want to keep it for use in other baselangs, or if allowing it
+      encourages people to use methods that won't work in <cc> and <*>.
+    params:
+      var item : any;
+      var expected : any = MISSING;
+      var message : any = null;
+    scope<py>:
+      if expected is MISSING:
+        /# This is a request to print out the item, rather than compare against
+        /# expected.
+        print(u'iseq: %s' % str(item))
+      else:
+        if message is None:
+          eval = str(expected).replace('\n', '\\n')
+          aval = str(item).replace('\n', '\\n')
+          message = u'"%s" != "%s"' % (eval, aval)
+        self.assertEqual(expected, item, message)
+    scope<js>:
+      if (message == null) {
+        assertEquals(expected, item);
+      } else {
+        assertEquals(message, expected, item);
+      }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseq() not yet implemented");
+    end method iseq;
+
+    method iseqint #:
+      Compare an arbitrary two entities for equality (not pointer equality!)
+
+      NOTE: This method may not be implementable in C++. Decide whether we
+      want to keep it for use in other baselangs, or if allowing it
+      encourages people to use methods that won't work in <cc> and <*>.
+    params:
+      var item : int;
+      var expected : int = MISSING;
+      var message : any = null;
+    scope<py>:
+      if message is None:
+        eval = str(expected).replace('\n', '\\n')
+        aval = str(item).replace('\n', '\\n')
+        message = '"%s" != "%s"' % (eval, aval)
+      if expected is MISSING:
+        print(u'iseqint: %d' % item)
+      else:
+        self.assertEqual(expected, item, message)
+    scope<js>:
+      if (message == null) {
+        assertEquals(expected, item);
+      } else {
+        assertEquals(message, expected, item);
+      }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseq() not yet implemented");
+    end method iseqint;
+
+    method noteq #:
+      Compare an arbitrary two entities for non-equality (not pointer equality!)
+
+      See comment in 'eq' about viability in C++ and ramifications on this
+      method.
+    params:
+      var item : any;
+      var expected : any = MISSING;
+      var message : any = null;
+    scope<py>:
+      if message is None:
+        message = '%s == %s' % (str(expected), str(item))
+      if expected is MISSING:
+        print('noteq: %s' % item)
+      else:
+        self.assertNotEqual(expected, item, message)
+    scope<js>:
+      if (message == null) {
+        assertNotEquals(expected, item);
+      } else {
+        assertNotEquals(message, expected, item);
+      }
+    scope<cc>:
+      throw metax::root::Error("TestCase.noteq() not yet implemented");
+    end method noteq;
+
+    method iseqstr #:
+      Compare an arbitrary two entities for equality (not pointer equality!)
+
+      NOTE: This method may not be implementable in C++. Decide whether we
+      want to keep it for use in other baselangs, or if allowing it
+      encourages people to use methods that won't work in <cc> and <*>.
+    params:
+      var item : str;
+      var expected : str = MISSING;
+      var message : str = null;
+    scope<py>:
+      if message is None:
+        message = '%s != %s' % (expected, item)
+      if expected is MISSING:
+        print('iseqstr: %s' % item)
+      else:
+        self.assertEqual(expected, item, message)
+    scope<js>:
+      if (message == null) {
+        assertEquals(expected, item);
+      } else {
+        assertEquals(message, expected, item);
+      }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseq() not yet implemented");
+      if (message == meta::NullStr()) {
+      } else {
+      }
+    test<py>:
+    end method iseqstr;
+
+    method noteqstr #:
+      Compare an arbitrary two entities for non-equality (not pointer equality!)
+    params:
+      var expected : str;
+      var item : str;
+      var message : str = null;
+    scope<py>:
+      if message is None:
+        message = '%s == %s' % (expected, item)
+      self.assertNotEqual(expected, item, message)
+    scope<js>:
+      if (message == null) {
+        assertNotEquals(expected, item);
+      } else {
+        assertNotEquals(message, expected, item);
+      }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseq() not yet implemented");
+      if (message == meta::NullStr()) {
+      } else {
+      }
+    end method noteqstr;
+
+    method iseqvec params:
+      var items : vec;
+      var expected : vec = MISSING;
+      var message : str = null;
+    scope<py>:
+      if expected is MISSING:
+        print('iseqvec: %s' % str(items))
+      else:
+        elen = len(expected)
+        ilen = len(items)
+        n = max(elen, ilen)
+        lines = []
+        diffs = 0
+        for i in range(0, n):
+          eval = expected[i] if i < elen else 'missing'
+          val = items[i] if i < ilen else 'missing'
+          isdiff = eval != val
+          if isdiff:
+            diffs += 1
+          line = (
+            '  %4d  %1s  %-30s  %-30s' %
+            (i, '*' if isdiff else '', str(eval)[:30], str(val)[:30]))
+          lines.append(line)
+        if diffs:
+          print('\n'.join(lines))
+          self.fail(message)
+    scope<js>:
+      if (message == null) {
+        assertElementsEquals(expected, items);
+      } else {
+        assertElementsEquals(message, expected, items);
+      }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseqvec() not yet implemented");
+    end method iseqvec;
+
+    method iseqmap params:
+      var data : any;
+      var expected : any = MISSING;
+      var msg : any = null;
+      var width : int = 30;
+    scope<py>:
+      if expected is MISSING:
+        print('iseqmap:')
+        pprint.pprint(data)
+      elif expected != data:
+        /# Don't use BytesIO, as one cannot write unicode to such.
+        fp = io.StringIO()
+        self.recursiveCompare('', expected, data, 0, fp=fp, valwidth=width)
+        self.fail(fp.getvalue())        
+    scope<js>:
+      if (msg) {
+        assertHashEquals(msg, expected, data);
+      } else {
+        assertHashEquals(expected, data);
+      }
+    scope<cc>:
+      throw metax::root::Error("TestCase.iseqmap() not yet implemented");
+    end method iseqmap;
+
     method iseqtext params:
       var first : str;
       var second : str;
@@ -2271,12 +2331,12 @@ scope:
       Compare two float values for closeness.
     params:
       var f1 : double;
-      var f2 : double = null;
+      var f2 : double = MISSING;
       var delta : double = 0.00001;
       var msg : str = null;
     scope<py>:
-      if f2 is None:
-        print(f1)
+      if f2 is MISSING:
+        print('isapprox: %f' % f1)
       else:
         self.assertAlmostEqual(f1, f2, delta=delta, msg=msg)
     scope<js>:
@@ -2293,32 +2353,38 @@ scope:
       Compare two lists of float values for closeness.
     params:
       var lf1 : double;
-      var lf2 : double;
+      var lf2 : double = MISSING;
       var delta : double = 0.00001;
       var msg : str = null;
     scope<py>:
       /# TODO(wmh): Make this more robust
       /# TODO(wmh): Make a general purpose comparison method that can handle
       /# nested dicts/lists and supports approximate float comparisons.
-      len1 = len(lf1)
-      len2 = len(lf2)
-      if len1 != len2:
-        self.fail('list1 has %d element, list2 has %d elements' % (len1, len2))
+      if lf2 is MISSING:
+        print('isapproxvec: %s' % str(lf1))
       else:
-        for i in range(0, len1):
-          self.assertAlmostEqual(lf1[i], lf2[i], delta=delta, msg=msg)
+        len1 = len(lf1)
+        len2 = len(lf2)
+        if len1 != len2:
+          self.fail('list1 has %d element, list2 has %d elements' % (len1, len2))
+        else:
+          for i in range(0, len1):
+            self.assertAlmostEqual(lf1[i], lf2[i], delta=delta, msg=msg)
     scope<cc>:
       throw metax::root::Error("TestCase.isapproxvec() not yet implemented");
     end method isapproxvec;
 
     method islt params:
-      var expected : any;
       var item : any;
+      var expected : any = MISSING;
       var message : any = null;
     scope<py>:
-      if message is None:
-        message = '%s >= %s' % (str(expected), str(item))
-      self.assertLess(expected, item, message)
+      if expected is MISSING:
+        print('islt: %s' % item)
+      else:
+        if message is None:
+          message = '%s >= %s' % (str(expected), str(item))
+        self.assertLess(expected, item, message)
     scope<js>:
       if (message == null) {
         message = '' + expected + ' >= ' + item;
@@ -2329,13 +2395,16 @@ scope:
     end method islt;
 
     method isle params:
-      var expected : any;
       var item : any;
+      var expected : any = MISSING;
       var message : any = null;
     scope<py>:
-      if message is None:
-        message = '%s > %s' % (str(expected), str(item))
-      self.assertLessEqual(expected, item, message)
+      if expected is MISSING:
+        print('isle: %s' % item)
+      else:
+        if message is None:
+          message = '%s > %s' % (str(expected), str(item))
+        self.assertLessEqual(expected, item, message)
     scope<js>:
       if (message == null) {
         message = '' + expected + ' > ' + item;
@@ -2346,13 +2415,16 @@ scope:
     end method isle;
 
     method isgt params:
-      var expected : any;
       var item : any;
+      var expected : any = MISSING;
       var message : any = null;
     scope<py>:
-      if message is None:
-        message = '%s <= %s' % (str(expected), str(item))
-      self.assertGreater(expected, item, message)
+      if expected is MISSING:
+        print('isle: %s' % item)
+      else:
+        if message is None:
+          message = '%s <= %s' % (str(expected), str(item))
+        self.assertGreater(expected, item, message)
     scope<js>:
       if (message == null) {
         message = '' + expected + ' <= ' + item;
@@ -2363,13 +2435,16 @@ scope:
     end method isgt;
 
     method isge params:
-      var expected : any;
       var item : any;
+      var expected : any = MISSING;
       var message : any = null;
     scope<py>:
-      if message is None:
-        message = '%s < %s' % (str(expected), str(item))
-      self.assertGreaterEqual(expected, item, message)
+      if expected is MISSING:
+        print('isle: %s' % item)
+      else:
+        if message is None:
+          message = '%s < %s' % (str(expected), str(item))
+        self.assertGreaterEqual(expected, item, message)
     scope<js>:
       if (message == null) {
         message = '' + expected + ' < ' + item;
@@ -2379,42 +2454,14 @@ scope:
       throw metax::root::Error("TestCase.isge() not yet implemented");
     end method isge;
 
-    method raises #:
-      Confirm that the given method raises an exception.
-
-      Note that the python version accepts arbitrary positional and
-      keyword args while the javascript version does not. Need to get 
-      varargs supported in javascript before we can try implementing it.
-    params:
-      var eclass : class #:
-        The exception class raised
-      var func : &#function #:
-        The callable object
-      multi var args : vec #:
-        The positional args to pass to func.
-      multi var kwds : map #:
-        The keyword args to pass to func.
-    scope<py>:
-      self.assertRaises(eclass, func, *args, **kwds)
-    scope<js>:
-      /# TODO(wmh): goog.testing.asserts.assertThrows() is rather limited:
-      /#  - it only handles methods that that don't require any args
-      /#  - it only detects whether any exception is raised, not whether a
-      /#    specific exception is raised.
-      /# A better version of assertThrows() is certainly possible. Implement
-      /# it.
-      /* var e = */ assertThrows(func);
-      /# TODO(wmh): At the very least, we can compare the exception 'e' against
-      /# expected 'eclass'.
-    scope<cc>:
-      throw metax::root::Error("TestCase.raises() not yet implemented");
-    end method raises;
-
     method issame params:
       var obj1 : any;
-      var obj2 : any;
+      var obj2 : any = MISSING;
     scope<py>:
-      self.assertTrue(obj1 is obj2, "%s is not %s" % (repr(obj1), repr(obj2)))
+      if obj2 is MISSING:
+        print('issame: %s' % obj1)
+      else:
+        self.assertTrue(obj1 is obj2, "%s is not %s" % (repr(obj1), repr(obj2)))
     scope<js>:
       assertTrue(obj1 + ' is not ' + obj2, obj1 === obj2);
     scope<cc>:
@@ -2423,9 +2470,12 @@ scope:
 
     method notsame params:
       var obj1 : any;
-      var obj2 : any;
+      var obj2 : any = MISSING;
     scope<py>:
-      self.assertFalse(obj1 is obj2, "%s is %s" % (repr(obj1), repr(obj2)))
+      if obj2 is MISSING:
+        print('notsame: %s' % obj1)
+      else:
+        self.assertFalse(obj1 is obj2, "%s is %s" % (repr(obj1), repr(obj2)))
     scope<js>:
       assertFalse(obj1 + ' is ' + obj2, obj1 === obj2);
     scope<cc>:
@@ -2505,13 +2555,16 @@ scope:
     method isinst params:
       var obj : any #:
         The object to test.
-      var cls : any #:
+      var cls : any = MISSING #:
         The class the object is expected to be an instance of.
         In javascript, this is the constructor function.
     scope<py>:
-      self.istrue(
-        isinstance(obj, cls),
-        'Expecting %s to be an instance of %s' % (obj, cls))
+      if cls is MISSING:
+        print('isinst: %s is %s' % (obj, obj.__class__))
+      else:
+        self.istrue(
+          isinstance(obj, cls),
+          'Expecting %s to be an instance of %s' % (obj, cls))
     scope<js>:
       this.istrue(
         typeof obj == cls,

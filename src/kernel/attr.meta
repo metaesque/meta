@@ -11,17 +11,22 @@ scope:
 
     Attribute
       SimpleAttribute         --> value is a string
-        FeatureAttribute      --> value comes from a pre-defined construct-specific list
+        FeatureAttribute      --> value comes from a pre-defined 
+                                  construct-specific list
         IdAttribute           --> value is an identifier
         WordAttribute         --> value is a string containing no whitespace
-        StrAttribute          --> value is an unquoted string (TODO(wmh): This implies free-form parsing ... do we want to support it?)
+        StrAttribute          --> value is an unquoted string (TODO(wmh): This
+                                  implies free-form parsing ... do we want to
+                                  support it?)
       ExprAttribute           --> value is an Expr instance
-        LitStrAttribute       --> value is an Expr representing a literal string (e.g. single or double-quoted)
+        LitStrAttribute       --> value is an Expr representing a literal
+                                  string (e.g. single or double-quoted)
         NumAttribute          --> value is an Expr representing a literal number
       TypeAttribute           --> value is an Type instance
       BlockAttribute          --> value is a list
         SimpleBlock           --> value is a list of str
         ComplexBlock          --> value is a list of Construct
+        MultiBlock            --> value is a list of Block
   assocs:
     std assoc io;
   scope:
@@ -30,7 +35,8 @@ scope:
       The construct within which this attribute resides.
 
     field key : str #:
-      The canonical key. See litkey for the actual key/abbrev used in the source.
+      The canonical key. See litkey for the actual key/abbrev used in the
+      source.
 
     field litkey : str #:
       The key or an abbrev, as used in the input source.  A value of null means
@@ -227,6 +233,41 @@ scope:
 
       return result
     test:
+      test.defineAttributes()
+      fp = test.fp()
+      test.feature.write(fp=fp)
+      fp.write(u'\n')
+      test.id.write(fp=fp)
+      fp.write(u'\n')
+      test.num.write(fp=fp)
+      fp.write(u'\n')
+      test.word.write(fp=fp)
+      fp.write(u'\n')
+      test.expr.write(fp=fp)
+      fp.write(u'\n')
+      test.type.write(fp=fp)
+      fp.write(u'\n')
+      test.enum.write(fp=fp)
+      fp.write(u'\n')
+      test.simple.write(fp=fp)
+      fp.write(u'\n')
+      test.complex.write(fp=fp)
+
+      test.iseqtext("""\
+       >|gender male
+       >|person bob
+       >|count 42
+       >|default <special>
+       >|value "this is a test"
+       >|type vec<str>
+       >|fruit <apple|banana|cantelope>
+       >|comment:
+       >|  this is a
+       >|  test of a simple block
+       >|
+       >|scope:
+       >|""",
+       test.out())
     end method write;
 
     static
@@ -237,6 +278,9 @@ scope:
     scope:
       return val.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
     test:
+      test.iseq(
+        'a &lt; b &amp;&amp; c &gt; d',
+        metax.attr.Attribute.HtmlSafe('a < b && c > d'))
     end method HtmlSafe;
 
     static
@@ -303,26 +347,26 @@ scope:
       The path to this attribute within the metafile.
     scope:
       parent = self.parent()
-      if isinstance(parent, metax.meta.FileConstruct):
-        result = ''
-      else:
-        result = self.parent().path()
-        /# TODO(wmh): We cannot strip the colon off the key if the parent
-        /# construct defines both block and nonblock versions of the key.
-        key = self.key().rstrip(':')
-        result += '@' + key
-      return result.replace('@scope/', '/')
+      key = self.key()
+      /# Note that in this special situation, we ALWAYS add in the key of this
+      /# attribute. In particular, we need to add @scope because
+      /#   /nm.sp/Person
+      /# returns the construct named 'Person' within 'nm.sp', whereas
+      /#   /nm.sp/Person/@scope
+      /# returns the complex-block scope of Person.
+      result = parent.path() + '/@' + key.replace(':', '')
+      return result
     test:
-      /# Tested in ComplexBlock.child()
-      pass
-    end method path;
+      filecons = test.constructInCode('', name='oopl')
 
-    method htmlId : str #:
-      A unique id by which this block can be identified in HTML.
-    scope:
-      return '%s.%s%s' % (self.parent().fqn(), self.key(), self.basel() or '')
-    test:
-    end method htmlId;
+      for path in (
+        '/demo.tmp/@scope',
+        '/demo.tmp/Person/@scope',
+        '/demo.tmp/Person/bmi/@scope',
+      ):
+        test.iseq(path, filecons.child(path).path())
+
+    end method path;
 
     static
     method BasedAttr : str #:
@@ -340,6 +384,11 @@ scope:
       else:
         result = key + '<' + basel + '>'
       return result
+    test:
+      test.iseq('type<py>', metax.attr.Attribute.BasedAttr('type', 'py'))
+      test.iseq(
+        'comment<py>:',
+        metax.attr.Attribute.BasedAttr('comment:', 'py'))
     end method BasedAttr;
 
   end class Attribute;
@@ -547,10 +596,18 @@ scope:
     scope:
       self._code = code
       self._codetype = codetype
+    test:
+      test.defineAttributes()
+      test.expr.cacheCompilationResults('int', test.metatype)
     end method cacheCompilationResults;
 
     method getCompilationResults : tuple<str,str> scope:
       return (self._code, self._codetype)
+    test:
+      test.defineAttributes()
+      test.iseq((None, None), test.expr.getCompilationResults())
+      test.expr.cacheCompilationResults('int', test.metatype)
+      test.iseq(('int', test.metatype), test.expr.getCompilationResults())
     end method getCompilationResults;
 
   end class ExprAttribute;
@@ -664,9 +721,19 @@ scope:
         /# may want to make this case a tuple too.
         pass
       else:
-        raise TypeError('Invalid EnumAttribute value "%s"' % value)
+        raise TypeError(
+          'Invalid EnumAttribute value "%s" (%s)' % (value, type(value)))
       self._value = value
       return self
+    test:
+      test.defineAttributes()
+      test.iseq(['apple', 'banana', 'cantelope'], test.enum.value())
+      test.enum.valueIs(['apple', 'banana', 'brocolli', 'cantelope'])
+      test.iseq(['apple', 'banana', 'brocolli', 'cantelope'], test.enum.value())
+      test.enum.valueIs('<cantelope|banana|apple>')
+      test.iseq(['cantelope', 'banana', 'apple'], test.enum.value())
+      test.enum.valueIs(None)
+      test.isnull(test.enum.value())
     end method valueIs;
 
     method clone : Attribute #:
@@ -778,6 +845,15 @@ scope:
       test.iseq(2, test.simple.size())
     end method size;
 
+    method htmlId : str #:
+      A unique id by which this block can be identified in HTML.
+    scope:
+      return '%s.%s%s' % (self.parent().fqn(), self.key(), self.basel() or '')
+    test:
+      test.defineAttributes()
+      test.iseq('scope:.comment:', test.simple.htmlId())
+    end method htmlId;
+
   end class BlockAttribute;
 
   class SimpleBlock < BlockAttribute #:
@@ -854,7 +930,7 @@ scope:
     An attribute whose value is a list of Contruct.
   scope:
 
-    field value : vec<str> #:
+    field value : vec<Construct> #:
       A complex block is an ordered list of Construct. May be null if the
       value has not yet been initialized.
       See the _map field for a per-id mapping.
@@ -946,7 +1022,7 @@ scope:
       cmap = self._map
       if cid not in cmap:
         if default is metax.c.REQUIRED:
-          raise Error('Failed to find %s in %s' % (cid, sorted(cmap)))
+          raise metax.c.Error('Failed to find %s in %s' % (cid, sorted(cmap)))
           self.parent().metafile().error(
             "Request for unknown construct '%s'" % cid)
         else:
@@ -956,6 +1032,12 @@ scope:
         result = self._value.index(construct)
       return result
     test:
+      scope = test.constructInCode('/demo.tmp/Person/@scope', name='oopl')
+      test.iseq(0, scope.findIndex('height'))
+      test.iseq(1, scope.findIndex('weight'))
+      test.iseq(2, scope.findIndex('bmi'))
+      test.raises(metax.c.Error, scope.findIndex, 'missing')
+      test.isnull(scope.findIndex('missing', default=None))
     end method findIndex;
 
     method registerConstruct #:
@@ -1079,6 +1161,45 @@ scope:
       if register_in_metafile and metafile:
         metafile.registerConstructInMetaFile(construct)
     test:
+      test.captureStdout()
+      scope = test.constructInCode('/demo.tmp/Person/@scope', name='oopl')
+
+      test.iseqvec(
+        ['field height', 'field weight', 'method bmi'],
+        [c.kindid() for c in scope.value()])
+
+      /# Add a construct at the end of existing constructs.
+      cons1 = metax.meta.GenericConstruct(
+        'amethod', scope, test.context, 'method')
+      scope.registerConstruct(cons1)
+      test.iseqvec(
+        ['field height', 'field weight', 'method bmi', 'method amethod'],
+        [c.kindid() for c in scope.value()])
+
+      /# Add a construct before all constructs.
+      cons2 = metax.meta.GenericConstruct(
+        'afield', scope, test.context, 'field')
+      scope.registerConstruct(cons2, position='-')
+      test.iseqvec(
+        ['field afield', 
+         'field height', 'field weight', 'method bmi', 'method amethod'],
+        [c.kindid() for c in scope.value()])
+
+      /# Add a construct after a named construct.
+      cons3 = metax.meta.GenericConstruct('hack1', scope, test.context, 'hack')
+      scope.registerConstruct(cons3, position='+weight')
+      test.iseqvec(
+        ['field afield', 'field height', 'field weight', 'hack hack1',
+         'method bmi', 'method amethod'],
+        [c.kindid() for c in scope.value()])
+
+      /# Add a construct before a named construct.
+      cons4 = metax.meta.GenericConstruct('hack2', scope, test.context, 'hack')
+      scope.registerConstruct(cons4, position='-height')
+      test.iseqvec(
+        ['field afield', 'hack hack2', 'field height', 'field weight', 
+         'hack hack1', 'method bmi', 'method amethod'],
+        [c.kindid() for c in scope.value()])
     end method registerConstruct;
 
     method unregisterConstruct #:
@@ -1106,65 +1227,28 @@ scope:
           'Attempt to unregister non-existent %s from %s' %
           (construct.path(), self.keyStr()))
     test:
+      test.captureStdout()
+      scope = test.constructInCode('/demo.tmp/Person/@scope', name='oopl')
+
+      test.iseqvec(
+        ['field height', 'field weight', 'method bmi'],
+        [c.kindid() for c in scope.value()])
+
+      /# Register a construct within existing constructs.
+      cons1 = metax.meta.GenericConstruct(
+        'amethod', scope, test.context, 'method')
+      scope.registerConstruct(cons1, position='-weight')
+      test.iseqvec(
+        ['field height', 'method amethod', 'field weight', 'method bmi'],
+        [c.kindid() for c in scope.value()])
+
+      /# Now unregister it.
+      scope.unregisterConstruct(cons1)
+      test.iseqvec(
+        ['field height', 'field weight', 'method bmi'],
+        [c.kindid() for c in scope.value()])
+
     end method unregisterConstruct;
-
-    method child : any #:
-      Obtain a Construct or Attribute descendent node
-    params:
-      var spec : str #:
-        Format is:
-          <term> ::- <id> ['@' <attr> ]
-          <spec> ::- <term> | <spec> '/' <term>
-      var fp : ostream = null #:
-        If non-null, where to write failure information.
-    scope:
-      parts = spec.split('/')
-
-      if parts[0] == '':
-        /# The path is relative to the File construct.
-        block = self.parent().metafile().construct().rawattr('scope:')
-        parts.pop(0)
-      else:
-        block = self
-
-      m = len(parts) - 1
-      for i, part in enumerate(parts):
-        idattr = part.split('@')
-        if len(idattr) == 1:
-          id = idattr[0]
-          attr = None if i == m else 'scope'
-        else:
-          id, attr = idattr
-        construct = block.cons(id, default=None)
-        if construct is None:
-          result = None
-          if fp:
-            fp.write(u'Failed to find child construct %s' % id)
-          break
-        if attr is None:
-          /# This is only allowed for the last part, and is a request
-          /# to return the current construct rather than an attribute on
-          /# the construct.
-          assert i == m
-          result = construct
-          break
-        block = (
-          construct.rawattr(attr, default=None)
-          or construct.rawattr(attr + ':', default=None))
-        if not block:
-          result = None
-          if fp:
-            fp.write(u'Failed to find attribute %s' % attr)
-          break
-        result = block
-
-      return result
-    test:
-      test.defineAttributes()
-      block = test.complex
-      /# TODO(wmh): Need to define a more complex attribute with
-      /# sub-constructs with attributes.
-    end method child;
 
   end class ComplexBlock;
 
@@ -1486,7 +1570,7 @@ scope:
 
 
   test
-  class TestCase < metax.test.TestCase assocs:
+  class TestCase < metax.c_test.TestCase assocs:
     std assoc metastrap #:
       /# TODO(wmh): This is not actually std, but rather lib ... we need to
       /# establish an appropriate build target for it.
@@ -1503,9 +1587,12 @@ scope:
     scope:
       context = metax.c.Context(None, {}, None, None)
       parent = None
+
       construct = metax.meta.AttributeConstruct(
         'scope:', parent, context)
       test.construct = construct
+
+      test.metatype = metax.c.Type.Instance('int')
 
       test.feature = metax.attr.FeatureAttribute(
         construct, 'gender', 'male', line=10, col=2)

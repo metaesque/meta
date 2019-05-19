@@ -1,20 +1,25 @@
 namespace metax.c #:
   /# The implementation of Meta in Meta.
-  /#  - This file is implemented itself
-  /#  - The meta2 compiler does for .meta code what metac does for .meta code,
-  /#    but writes to <<repository_path>>/<metalang>/<baselang> instead of
+  /#
+  /#  - This codebase is implemented in itself. That is, it defines
+  /#    the Meta compiler, and the code produced by this code is what parses
+  /#    this code (there is a reason the project is named Meta, after all)
+  /# 
+  /#  - Meta source code compiled by this code is written into
+  /#    <<repository_path>>/<metalang>/<baselang>
   /#     - by convention, the notation <<var>> means something obtained from
   /#       ~/.config/metameta, and the notation <var> means something obtained
   /#       from flags.
-  /#  - To avoid confusion, until the old meta1 code has been fully removed:
-  /#     - meta2 code should not define namespace 'meta' anywhere. It should
-  /#       use 'metax' instead.
-  /#     - update: even after fully migrated, we will continue to use metax
-  /#       as the top-level namespace for meta, so that we can use the 
-  /#       pseudovar 'meta' to refer to metaclass instance without having
-  /#       them hide the metax namespace.
-  /#  - If .meta needs to rely on bootstrapping, it should use metastrap, not
-  /#    metameta.  TODO(wmh): How to enforce this?
+  /#
+  /#  - The top-level namespace for Meta is metax so that we can use the 
+  /#    pseudovar 'meta' to refer to metaclass instance without having them hide
+  /#    the namespace (if it were named 'meta' instead').
+  /#
+  /#  - The $METAROOT/lib/metastrap.py file is critically important to the
+  /#    proper functioning of Meta, and needs to exist in PYTHONPATH.
+  /#
+  /#  - The python code needs to work in both python2 and python3
+  /#      - see https://python-future.org/compatible_idioms.html
   /#
   /#  Life Of A MetaFile
   /#  - Create an instance of metax.c.Compiler, specifying metal and basel
@@ -23,7 +28,8 @@ namespace metax.c #:
   /#       they involve parsing a MetaFile.
   /#  - Invoke Compiler.parseMeta(), which
   /#     - creates a MetaFile
-  /#     - invokes MetaFile.parseMeta() with a metalang-specific Context instance.
+  /#     - invokes MetaFile.parseMeta() with a metalang-specific Context
+  /#       instance.
   /#  - MetaFile.parseMeta()
   /#     - creates a copy of the passed-in Context (every MetaFile has its own
   /#       Context instance so that the Context can store the metafile and
@@ -38,7 +44,8 @@ namespace metax.c #:
   /#     - repeatedly parses constructs via MetaFile.parseConstruct until
   /#       an explicit or implicit end-of-block is encountered.
   /#  - MetaFile.parseConstruct()
-  /#     - skips empty lines and updates precount (or postcount of parent if last)
+  /#     - skips empty lines and updates precount (or postcount of parent if
+  /#       last)
   /#     - consumes feature tokens until a primary key token is found
   /#     - obtains the primary attribute value handling optional values and
   /#       replacer semantics
@@ -72,7 +79,8 @@ namespace metax.c #:
   /#      - the file .${file}.${suffix}.files is created, containing all of the
   /#        files generated during compilation.  Used to detect old files that
   /#        should be deleted because of changes in the .meta file.
-  /#      - if ./.meta does not exist, it is made a symlink to <<repository_path>>
+  /#      - if ./.meta does not exist, it is made a symlink to
+  /#        <<repository_path>>
   /#      - for every namespace nm.sp defined within ${file}.meta
   /#         - for every class C defined within nm.sp
   /#            - ./.meta/oopl/${baselang}/nm/sp/${C}.${suff} is created
@@ -720,7 +728,9 @@ scope:
     Parses expressions of the following forms:
      - num        : [-+0-9]
      - id         : [a-zA-Z_]
-     - plist      : '(' ... ')'
+     - paren      : '(' ... ')'
+       - plist
+       - bool
      - str        : ' or \"
      - list       : '['
      - hash       : '{'
@@ -738,6 +748,9 @@ scope:
     params:
       var src : str #:
         The input string reprsentation.
+      var attribute : Attribute = null #:
+        The attribute the expr is associated with. Currently only required
+        when parsing expressions starting with '('
     scope:
       /# Since ExprParser assumes a MetaFile containing all lines to be
       /# parsed, we need to wrap our src string.  Rather than creating a new
@@ -751,7 +764,7 @@ scope:
       text = src + '\n'
       metafile.linesIs(Line.FromText(text))
       metafile.textIs(text)
-      expr = cls(metafile).parse()
+      expr = cls(metafile).parse(attribute=attribute)
       return expr
     end method StrExpr;
 
@@ -786,7 +799,7 @@ scope:
       cmap = {}
       cls.CharMap = cmap
       cmap['@'] = cls._parseCall
-      cmap['('] = cls._parsePList
+      cmap['('] = cls._parseParen
       cmap['<'] = cls._parseUnit
       cmap['{'] = cls._parseHash
       cmap['['] = cls._parseList
@@ -805,6 +818,8 @@ scope:
       cls.TERMCHARS = list(',;)]}')
 
       cls.LEGAL_OP_CHARS = frozenset(list('+-*/%=!<>|&^~'))
+
+      cls.BOOL_OP_RE = re.compile(r'^(?P<op>and|or|<|<=|>|>=|==)(?P<after>.)')
 
       /# NOTE: ExprParser._parseNum() relies on NUM_RE not being fixed at the
       /# end (e.g. do not add a '$').
@@ -845,7 +860,7 @@ scope:
     scope:
       return len(self.source().lines())
     test:
-      metafile = test.metafileFor('a \nb\ncd\n')
+      metafile = test.metafileFor(text='a \nb\ncd\n')
       eprs = metax.c.ExprParser(metafile)
       test.iseq(3, eprs.numrows())
     end method numrows;
@@ -855,7 +870,7 @@ scope:
     scope:
       return (self.row(), self.col(), self.peek())
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
       test.iseq((0, 0, 'a'), eprs.pos())
       eprs.set(row=2, col=1)
       test.iseq((2, 1, 'd'), eprs.pos())
@@ -867,7 +882,7 @@ scope:
     scope:
       return (self.line(), self.col())
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
       test.iseq(('a \n', 0), eprs.current())
       eprs.set(row=2, col=1)
       test.iseq(('cd\n', 1), eprs.current())
@@ -878,7 +893,7 @@ scope:
     scope:
       return self.line()[self.col()]
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
       test.iseq('a', eprs.peek())
       eprs.set(row=2, col=1)
       test.iseq('d', eprs.peek())
@@ -904,7 +919,7 @@ scope:
         self.colIs(col + 1)
       return result
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
       test.iseq('a', eprs.getc())
       test.iseq(' ', eprs.getc())
       test.iseq('\n', eprs.getc())
@@ -913,7 +928,7 @@ scope:
       test.iseq('c', eprs.getc())
       test.iseq('d', eprs.getc())
       test.iseq('\n', eprs.getc())
-      test.iseq(None, eprs.line())
+      test.isnull(eprs.line())
     end method getc;
 
     method set #:
@@ -932,14 +947,13 @@ scope:
       if row >= 0:
         self.rowIs(row)
         newline = self.source().lines()[row].line() + '\n'
-        /# print('***** HERE with %s and %s (%s)' % (self.source().__class__, newline, newline.__class__))
         self.lineIs(newline)
         if col < 0:
           col = 0
       if col >= 0:
         self.colIs(col)
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
       test.iseq((0, 0, 'a'), eprs.pos())
       eprs.set(row=2, col=1)
       test.iseq((2, 1, 'd'), eprs.pos())
@@ -953,7 +967,8 @@ scope:
       self.rowIs(srow)
       self.colIs(scol)
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('a \nb\ncd\n'), row=2, col=1)
+      eprs = metax.c.ExprParser(
+        test.metafileFor(text='a \nb\ncd\n'), row=2, col=1)
       eprs.set(row=0, col=0)
       test.iseq((0, 0, 'a'), eprs.pos())
       eprs.reset()
@@ -995,7 +1010,7 @@ scope:
       /# Reinstate position we entered this method at.
       self.set(row=crow, col=ccol)
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
 
       fp = test.newStr()
       eprs.summary(fp=fp, verbose=False)
@@ -1015,10 +1030,13 @@ scope:
       Record an error during parsing
     params:
       var msg : str;
+      var attribute : metax.attr.Attribute = null;
     scope:
+      /# TODO(wmh): Support attributes (more meaningful data in metafile
+      /# output).
       self.errors().append('R%dC%d: %s' % (self.row(), self.col(), msg))
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
       test.iseq([], eprs.errors())
       eprs.error('This is a test')
       test.iseq(['R0C0: This is a test'], eprs.errors())
@@ -1029,7 +1047,7 @@ scope:
     scope:
       self.errorsIs([])
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
       eprs.error('error1')
       eprs.error('error2')
       eprs.error('error3')
@@ -1043,7 +1061,7 @@ scope:
     scope:
       return '\n'.join(self._errors) if self._errors else None
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
       test.isnull(eprs.errorText())
       eprs.error('this is an error')
       test.iseq('R0C0: this is an error', eprs.errorText())
@@ -1094,7 +1112,7 @@ scope:
       return (self.line(), self.col())
     test:
       eprs = metax.c.ExprParser(
-        test.metafileFor('abc\n  def   more \n      \n  \n   abc\n'))
+        test.metafileFor(text='abc\n  def   more \n      \n  \n   abc\n'))
 
       /# Test normal skipping
       eprs.skipws()
@@ -1137,7 +1155,7 @@ scope:
       return result
     test:
       eprs = metax.c.ExprParser(
-        test.metafileFor('a lad had a fall\nin the hall\nwith a keg\n'))
+        test.metafileFor(text='a lad had a fall\nin the hall\nwith a keg\n'))
 
       test.iseq('lad had', eprs.text(0, 2, 0, 8))
       test.iseqtext('lad had a fall\nin the ha', eprs.text(0, 2, 1, 8))
@@ -1147,6 +1165,13 @@ scope:
 
     method parse : Expr #:
       Parse this expression.
+
+      Invariants:
+       - self.current() is the index of self.line() at which to start. This
+         character be be whitespace (it is consumed initially)
+       - upon return, self.current() will usually be exactly one char past
+         the end of the expression (e.g. it may be on whitespace, which is
+         not consumed at the end of this method).
 
       Returns:
         null is returned in two situations:
@@ -1162,6 +1187,13 @@ scope:
     params:
       var nonl : bool = false #:
         If true, do not go past newline
+      var attribute : Attribute = null #:
+        The attribute that this Expr is associated with. Currently optional,
+        but may become required. Useful in some situations for deciding how
+        to interpret syntax. For example, an expression starting with '('
+        can be either a plist, or a boolexpr. The only usecase for plist is
+        the 'super' attribute, so knowing the attribute would allow us to
+        efficiently determine which parsing method to use if '(' is seen.
     scope:
       result = None
       terms = self.terms()
@@ -1203,7 +1235,11 @@ scope:
         srow, scol, _ = self.pos()
 
         /# Invoke the kind-specific parsing function.
-        expr = func(self)
+        expr = func(self, attribute=attribute)
+
+        /# Special casing
+        if kind == 'paren':
+          kind = 'plist' if isinstance(expr, list) else 'bool'
 
         /# Establish result
         if expr is None:
@@ -1226,7 +1262,7 @@ scope:
 
       return result
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(' 1   apple"hello"\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text=' 1   apple"hello"\n'))
 
       test.iseq('<kind=num str=1 expr=1>', str(eprs.parse()))
       test.iseq('<kind=var str=apple expr=apple>', str(eprs.parse()))
@@ -1244,6 +1280,9 @@ scope:
 
       This will never advance the row, but will advance col if a number
       was found (if not found, col not affected).
+    params:
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
     scope:
       line, i = self.current()
       /# line[i] assumed to be in [-+0-9] without verification
@@ -1268,7 +1307,7 @@ scope:
 
       return expr
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('  \n  10\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='  \n  10\n'))
       eprs.set(row=1, col=2)
       test.iseq(10, eprs._parseNum())
       test.iseq((1, 4, '\n'), eprs.pos())
@@ -1311,6 +1350,9 @@ scope:
          much as possible by putting them behind accessors, and this notation
          does NOT hide them away as well as the callsite notation, so we are
          NOT supporting fully-qualified vars ... only callsites.
+    params:
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
     scope:
       line, i = self.current()
       /# Assumes line[i] is underscore or alpha without verifying
@@ -1325,7 +1367,7 @@ scope:
       return expr
     test:
       eprs = metax.c.ExprParser(
-        test.metafileFor('a val true meta!out a.bc.def.Hex\n'))
+        test.metafileFor(text='a val true meta!out a.bc.def.Hex\n'))
       eprs.set(row=0, col=0)
 
       self.iseq('a', eprs._parseVar())
@@ -1355,6 +1397,9 @@ scope:
       Parse a str.
 
       Current position must be a single or double quote.
+    params:
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
     scope:
       line, i = self.current()
       /# line[i] assumed to be either ' or "
@@ -1379,7 +1424,7 @@ scope:
       return expr
     test:
       eprs = metax.c.ExprParser(
-        test.metafileFor(
+        test.metafileFor(text=
           '  "this is a test"\n\'another test\'?  \n'))
       eprs.set(row=0, col=2)
       test.iseq('"this is a test"', eprs._parseStr())
@@ -1390,7 +1435,7 @@ scope:
     end method _parseStr;
 
     protected
-    method _parseGenericList : map #:
+    method _parseGenericList : vec<map> #:
       Parse a list of expressions delimited by start and end
     params:
       var schr : char #:
@@ -1399,6 +1444,8 @@ scope:
         The end-of-expr character.
       var default : bool = false #:
         If true, support default expressions for elements of kind 'id'.
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
     scope:
       srow, scol, _ = self.pos()
       line, i = self.current()
@@ -1491,19 +1538,273 @@ scope:
     end method _parseGenericList;
 
     protected
-    method _parsePList : map #:
-      Parse a parenthesized list of comma-separated expressions.
+    method _parseParen : any #:
+      Parse an expression starting with '('. This is either a comma-separated
+      list of expressions, or a bool expression. We use the attribute to
+      determine which.
+
+      The only use of 'list of comma-separated expresion' is the 'super'
+      attribute of method constructs, whereas the boolean expression form is
+      much more ubiquitous, especially in statement-level constructs.
+
+      There are four different ways to resolve the ambiguity:
+        1. Change super to use <a,b> instead of (a,b).
+            - not preferred, as parathentical syntax matches method call syntax
+        2. Assume it is a plist, and dynamically switch to parsing a boolexpr
+           if syntax is encountered that indicates it.
+            - problematic because some syntax can be interpreted as either
+              plist or boolexpr (e.g. '(a)')
+        3. Assume it is a boolexpr, and dynamically switch to parsing a plist
+           if syntax is encountered that indicates it (e.g. a comma after an
+           expr).
+            - problematic because some syntax can be interpreted as either
+              plist or boolexpr (e.g. '(a)')
+        4. Use context (i.e. the attribute within which the Expr resides) to
+           determine whether this is a plist or boolexpr
+            - Since the only plist is 'super', this seems like a safe approach
+              at least currently.
+
+      Currently implementing #4 above, by requiring that an attribute always
+      be provided when parsing an expression starting with '('
+    params:
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
+    scope:
+      if not attribute:
+        line, i = self.current()        
+        raise Error('Missing attribute keyword for paren expr %s' % line[i:])
+      if attribute.key() == 'super':
+        result = self._parsePList(attribute=attribute)
+      else:
+        result = self._parseBool(attribute=attribute)
+      return result
+    test:
+      attribute = metax.attr.ExprAttribute(None, 'super', None)
+      eprs = metax.c.ExprParser(test.metafileFor(text='(1, "hello", apple)\n'))
+      eprs.set(0, 0)
+      test.iseq('plist', eprs.parse(attribute=attribute).kind())
+
+      attribute2 = metax.attr.ExprAttribute(None, 'not_super', None)
+      eprs2 = metax.c.ExprParser(test.metafileFor(text='((a < 7) and (b > 10))\n'))
+      eprs2.set(0, 0)
+      test.iseq('bool', eprs2.parse(attribute=attribute2).kind())
+    end;
+
+    protected
+    method _parseBool : map #:
+      Parse a parenthesized list representing a boolean expression.
+
+      Returns:
+        List of maps describing the parsed boolean expression. Each element
+        is a 
+    params:
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
+    scope:
+      /# IMPORTTANT: To distinguish between _parseBool and _parsePList, this
+      /# method must return something other than a list, and this is checked
+      /# for in ExprParser.parse().
+      data = []
+      metafile = self.source()
+      debug = False
+
+      result = {
+        'ops': [],
+        'logic': 0,
+        'data': data,
+      }
+
+      def AddOp(op):
+        data.append(op)
+        result['ops'].append(op)
+        if op.isalpha() or op == '!':
+          result['logic'] += 1
+
+      /# Recognized syntax:
+      /#   <boolexpr> ::- '(' <bexpr> [ <op> <bexpr> ] ')'
+      /#   <bexpr>    ::- <expr> | <boolexpr>
+      /#   <op>       ::- '<'  | '>'   | '<=' | '>=' | '==' |
+      /#                  '&&' | 'and' | '||' | 'or'
+      srow, scol, _ = self.pos()
+      line, i = self.current()
+      assert line[i] == '('
+      /# NOTE: No array bounds checking is needed because all lines end in '\n'
+
+      /# Big-picture goal: scan until we encounter matching ')'
+      /#  - only the following is legal:
+      /#      '('  ['!'] <expr> [ <op>  ['!'] <expr> ]... ')'
+      /#  - with caveats:
+      /#     - More than 1 <op> are allowed only for 'and' and 'or' ... if
+      /#       the first op is not one of those, only one is allowed.
+      /#     - mixing negation with comparison operators is not allowed.
+
+      /# Advance past opening parent and whitespace.
+      self.colIs(i+1)
+      line, i = self.skipws()
+      c = line[i]
+
+      /# Parse an expression, optionally preceeded by negation.
+      if c == '!':
+        AddOp('!')
+        self.colIs(i+1)
+        if debug:
+          print('Found negation before first expr')
+      expr = self.parse(attribute=attribute)
+      if not expr:
+        /# Error will have been written to self.errors()
+        return None
+      if debug:
+        print('Found first expr %s' % expr)
+      data.append(expr)
+
+      /# Skip whitespace
+      line, i = self.skipws()
+      c = line[i]
+
+      /# Now parse zero or more <op> <expr> pairs.
+      /#  - each time through the loop, c should be non-whitespace.
+      while c != ')':
+        assert not c.isspace()
+
+        /# Parse an operator.
+        opstr = line[i:]
+        m = MetaExprParser.BOOL_OP_RE.match(opstr)
+        if m:
+          op = m.group('op')
+          after = m.group('after')
+          if not after.isalnum() and not after.isspace():
+            /# after is another symbol, which means the operator isn't legal.
+            self.error('Invalid operator "%s%s"' % (op, after))
+            result = None
+            break
+          else:
+            /# We have a valid operator.
+            AddOp(op)
+            i += len(op)
+            self.colIs(i)
+            if debug:
+              print('Found operator "%s"' % op)
+        else:
+          self.error('Expecting operator', attribute=attribute)
+          result = None
+          break
+
+        /# Now parse another expression, optionally preceeded by negation.
+        line, i = self.skipws()
+        c = line[i]
+        if c == '!':
+          AddOp('!')
+          self.colIs(i+1)
+          if debug:
+            print('Found negation')
+        rhs = self.parse(attribute=attribute)
+        if not rhs:
+          /# Error will have been written to self.errors()
+          result = None
+          break
+        else:
+          data.append(rhs)
+          /# Skip whitespace.
+          line, i = self.skipws()
+          c = line[i]
+          self.colIs(i+1)
+          if debug:
+            print('Found expr %s' % expr)
+
+      /# We only get here if we find a matching ')'. Advance past it.
+      if result:
+        self.colIs(i+1)
+
+      /# Consistency checks
+      /#  - cannot mix logical and comparison operators.
+      if result['logic'] and result['logic'] != len(result['ops']):
+        self.error('Cannot mix logic and comparison operators')
+        result = None
+
+      /# Now parse zero or more <op> <expr> pairs (if <op> is
+      return result
+    test:
+      attribute = metax.attr.ExprAttribute(None, 'someattr', None)
+
+      /# A simple single-var bool expression
+      eprs = metax.c.ExprParser(test.metafileFor(text=' (var)\n'))
+      eprs.set(0, 1)
+      test.iseq(
+        "{'logic': 0, 'data': [<kind=var str=var expr=var>], 'ops': []}",
+        str(eprs._parseBool(attribute=attribute)))
+      test.iseq([], eprs.errors())
+
+      /# A negated single-var bool expression with whitespace.
+      eprs = metax.c.ExprParser(test.metafileFor(text=' ( ! var )\n'))
+      eprs.set(0, 1)
+      test.iseq(
+        "{'logic': 1, 'data': ['!', <kind=var str=var expr=var>], 'ops': ['!']}",
+        str(eprs._parseBool(attribute=attribute)))
+      test.iseq([], eprs.errors())
+
+      /# A simple conjuncttion.
+      eprs = metax.c.ExprParser(test.metafileFor(text=' ( v1 and v2 )\n'))
+      eprs.set(0, 1)
+      test.iseq(
+        "{'logic': 1, 'data': [<kind=var str=v1 expr=v1>, 'and', <kind=var str=v2 expr=v2>], 'ops': ['and']}",
+        str(eprs._parseBool(attribute=attribute)))
+      test.iseq([], eprs.errors())
+
+      /# A conjuncttion of disjunctions.
+      eprs = metax.c.ExprParser(
+        test.metafileFor(text='((v1 or !v2 or v3) and (!v4 or v5 or v6))\n'))
+      eprs.set(0, 0)
+      test.iseq(
+        "{'logic': 1, 'data': [<kind=bool str=(v1 or !v2 or v3) expr={'logic': 3, 'data': [<kind=var str=v1 expr=v1>, 'or', '!', <kind=var str=v2 expr=v2>, 'or', <kind=var str=v3 expr=v3>], 'ops': ['or', '!', 'or']}>, 'and', <kind=bool str=(!v4 or v5 or v6) expr={'logic': 3, 'data': ['!', <kind=var str=v4 expr=v4>, 'or', <kind=var str=v5 expr=v5>, 'or', <kind=var str=v6 expr=v6>], 'ops': ['!', 'or', 'or']}>], 'ops': ['and']}",
+        str(eprs._parseBool(attribute=attribute)))
+      test.iseq([], eprs.errors())
+
+      /# Some arthimetic expressions.
+      eprs = metax.c.ExprParser(
+        test.metafileFor(text='((v1<v2) and (v3 > v4) or (v5 ==v6))\n'))
+      eprs.set(0, 0)
+      test.iseq(
+        "{'logic': 2, 'data': [<kind=bool str=(v1<v2) expr={'logic': 0, 'data': [<kind=var str=v1 expr=v1>, '<', <kind=var str=v2 expr=v2>], 'ops': ['<']}>, 'and', <kind=bool str=(v3 > v4) expr={'logic': 0, 'data': [<kind=var str=v3 expr=v3>, '>', <kind=var str=v4 expr=v4>], 'ops': ['>']}>, 'or', <kind=bool str=(v5 ==v6) expr={'logic': 0, 'data': [<kind=var str=v5 expr=v5>, '==', <kind=var str=v6 expr=v6>], 'ops': ['==']}>], 'ops': ['and', 'or']}",
+        str(eprs._parseBool(attribute=attribute)))
+      test.iseq([], eprs.errors())
+
+      /# Special modes.
+      eprs = metax.c.ExprParser(test.metafileFor(text='(3 < x < 7)\n'))
+      eprs.set(0, 0)
+      test.iseq(
+        "{'logic': 0, 'data': [<kind=num str=3 expr=3>, '<', <kind=var str=x expr=x>, '<', <kind=num str=7 expr=7>], 'ops': ['<', '<']}",
+        str(eprs._parseBool(attribute=attribute)))
+      test.iseq([], eprs.errors())
+
+      /# Error modes.
+      eprs = metax.c.ExprParser(test.metafileFor(text='(3 < x and 7)\n'))
+      eprs.set(0, 0)
+      test.isnull(eprs._parseBool(attribute=attribute))
+      test.iseq(
+        ['R0C13: Cannot mix logic and comparison operators'], eprs.errors())
+
+    end method _parseBool;
+
+    protected
+    method _parsePList : vec<map> #:
+      Parse a parenthesized list of comma-separated expressions OR a boolean
+      expression.
+
+      TODO(wmh): 
+    params:
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
     scope:
       return self._parseGenericList('(', ')', default=True)
     test:
       hello = '"hello"'
 
       /# The empty plist.
-      eprs = metax.c.ExprParser(test.metafileFor('()\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='()\n'))
       test.iseq([], eprs._parsePList())
 
       /# A simple single-line plist expression
-      eprs = metax.c.ExprParser(test.metafileFor(' (1, "hello", apple)\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text=' (1, "hello", apple)\n'))
       eprs.set(0, 1)
       test.iseq(
         '[<kind=num str=1 expr=1>, <kind=str str="hello" expr="hello">, <kind=var str=apple expr=apple>]',
@@ -1511,7 +1812,7 @@ scope:
 
       /# Now a multi-line plist expression
       eprs = metax.c.ExprParser(
-        test.metafileFor(
+        test.metafileFor(text=
           '  # python method call\n'
           '  self.f(1,\n'
           '         apple,\n'
@@ -1523,17 +1824,18 @@ scope:
         str(eprs._parsePList()))
 
       /# The same multi-line plist expression using parse() which invokes
-      /# _parsePlist().
+      /# _parsePlist(). Note that this requires an attribute.
+      attribute = metax.attr.ExprAttribute(None, 'super', None)
       eprs.set(1, 8)
       test.iseqtext(
         '<kind=plist str=(1,\n'
         '         apple,\n'
         '         "hello",\n'
         '        ) expr=[<kind=num str=1 expr=1>, <kind=var str=apple expr=apple>, <kind=str str="hello" expr="hello">]>',
-        str(eprs.parse()))
+        str(eprs.parse(attribute=attribute)))
 
       /# Test default values for id expressions.
-      eprs = metax.c.ExprParser(test.metafileFor('f(1, a, def=def)\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='f(1, a, def=def)\n'))
       eprs.set(0, 1)
       test.iseq(
         '[<kind=num str=1 expr=1>, <kind=var str=a expr=a>, <kind=var str=def expr=def default=<kind=var str=def expr=def>>]',
@@ -1543,17 +1845,20 @@ scope:
     protected
     method _parseList : map #:
       Parse a square-bracket list of comma-separated expressions.
+    params:
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
     scope:
       return self._parseGenericList('[', ']', default=False)
     test:
       hello = '"hello"'
 
       /# The empty list.
-      eprs = metax.c.ExprParser(test.metafileFor('[]\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='[]\n'))
       test.iseq([], eprs._parseList())
 
       /# A simple single-line plist expression
-      eprs = metax.c.ExprParser(test.metafileFor(' [1, "hello", apple]\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text=' [1, "hello", apple]\n'))
       eprs.set(0, 1)
       test.iseq(
         '[<kind=num str=1 expr=1>, <kind=str str="hello" expr="hello">, <kind=var str=apple expr=apple>]',
@@ -1561,7 +1866,7 @@ scope:
 
       /# Now a multi-line plist expression
       eprs = metax.c.ExprParser(
-        test.metafileFor(
+        test.metafileFor(text=
           '  # python method call\n'
           '  abc = [1,\n'
           '         apple,\n'
@@ -1588,6 +1893,9 @@ scope:
       Parse a unit literal.
 
       Current position must be a '<'.
+    params:
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
     scope:
       line, i = self.current()
       n = len(line)
@@ -1615,7 +1923,7 @@ scope:
       return quantity
     test:
       /# A simple single-line hash expression
-      eprs = metax.c.ExprParser(test.metafileFor('<1.87m>\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='<1.87m>\n'))
       res = eprs._parseUnit()
       test.iseq(' 1.87000 m', res.asStr())
       line, i = eprs.current()
@@ -1625,6 +1933,9 @@ scope:
     protected
     method _parseHash : map #:
       Parse a collection of key : value pairs.
+    params:
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
     scope:
       schr = '{'
       echr = '}'
@@ -1652,7 +1963,7 @@ scope:
 
         /# Parse a key. Note that parse() skips past initial whitespace,
         /# so we don't have to do so here.
-        key = self.parse()
+        key = self.parse(attribute=attribute)
 
         if key is None:
           /# This means one of two things:
@@ -1689,7 +2000,7 @@ scope:
 
         /# Parse a value. Note that parse() skips past initial whitespace,
         /# so we don't have to do so here.
-        value = self.parse()
+        value = self.parse(attribute=attribute)
 
         if value is None:
           /# This means one of two things:
@@ -1744,12 +2055,12 @@ scope:
 
     test:
       /# An empty hash.
-      eprs = metax.c.ExprParser(test.metafileFor('{}n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='{}n'))
       test.iseq([], eprs._parseHash())
 
       /# A simple single-line hash expression
       eprs = metax.c.ExprParser(
-        test.metafileFor(' {"a": 1, \'b\': 2, 3 : apple, "a" : "hello" } \n'))
+        test.metafileFor(text=' {"a": 1, \'b\': 2, 3 : apple, "a" : "hello" } \n'))
       eprs.set(0, 1)
       test.iseqtext(
         '[(<kind=str str="a" expr="a">, <kind=num str=1 expr=1>), (<kind=str str=\'b\' expr=\'b\'>, <kind=num str=2 expr=2>), (<kind=num str=3 expr=3>, <kind=var str=apple expr=apple>), (<kind=str str="a" expr="a">, <kind=str str="hello" expr="hello">)]',
@@ -1757,7 +2068,7 @@ scope:
 
       /# A multi-line hash expression
       eprs = metax.c.ExprParser(
-        test.metafileFor(
+        test.metafileFor(text=
           "data = {\n"
           "  'S': 1,\n"
           "  'H': 2,\n"
@@ -1799,6 +2110,8 @@ scope:
         If not null, it is a string, and representing the name of a variable
         that has previously been parsed. If provided, we are to skip the
         parsing of the receiver, because 'receiver' specifies the receiver.
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
     scope:
       line, i = self.current()
       /# No array bounds checking needed because all lines end with '\n'
@@ -1876,19 +2189,19 @@ scope:
       return expr
     test:
       /# Simple method invocation with no args
-      eprs = metax.c.ExprParser(test.metafileFor('@self.meth; \n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='@self.meth; \n'))
       test.iseq(
         {'rec': 'self', 'subcalls': [{'name': 'meth'}]},
         eprs._parseCall())
 
       /# Simple field get
-      eprs = metax.c.ExprParser(test.metafileFor('@self!fld; \n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='@self!fld; \n'))
       test.iseq(
         {'rec': 'self', 'subcalls': [{'name': 'fld', 'field': True}]},
         eprs._parseCall())
 
       /# Simple method invocation with two args
-      eprs = metax.c.ExprParser(test.metafileFor('@self.meth(a, 1); \n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='@self.meth(a, 1); \n'))
       test.iseq(
         "{'rec': 'self', 'subcalls': ["
         "{'args': [<kind=var str=a expr=a>, <kind=num str=1 expr=1>], "
@@ -1896,14 +2209,14 @@ scope:
         str(eprs._parseCall()))
 
       /# Simple field set
-      eprs = metax.c.ExprParser(test.metafileFor('@self!fld(1); \n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='@self!fld(1); \n'))
       test.iseq(
         "{'rec': 'self', 'subcalls': [{'field': True, 'args': [<kind=num str=1 expr=1>], 'name': 'fld'}]}",
         str(eprs._parseCall()))
 
       /# Nested method invocation.
       eprs = metax.c.ExprParser(
-        test.metafileFor('@self.meth1.meth2(a).meth3(b, 1); \n'))
+        test.metafileFor(text='@self.meth1.meth2(a).meth3(b, 1); \n'))
       test.iseq(
         "{'rec': 'self', 'subcalls': [{'name': 'meth1'}, {'args': [<kind=var str=a expr=a>], 'name': 'meth2'}, {'args': [<kind=var str=b expr=b>, <kind=num str=1 expr=1>], 'name': 'meth3'}]}",
         str(eprs._parseCall()))
@@ -1911,14 +2224,14 @@ scope:
       /# Nested method invocation with nested calls.
       /# expr = metax.c.ExprParser(['@test.iseq(2, 1);\n'])
       eprs = metax.c.ExprParser(
-        test.metafileFor('@test.iseq(@test!hex.q, 1);\n'))
+        test.metafileFor(text='@test.iseq(@test!hex.q, 1);\n'))
       test.iseq(
         "{'rec': 'test', 'subcalls': [{'args': [<kind=call str=@test!hex.q expr={'rec': 'test', 'subcalls': [{'field': True, 'name': 'hex'}, {'name': 'q'}]}>, <kind=num str=1 expr=1>], 'name': 'iseq'}]}",
         str(eprs._parseCall()))
 
       /# Nested method invocation with nested calls spanning multiple lines.
       eprs = metax.c.ExprParser(
-        test.metafileFor(
+        test.metafileFor(text=
           "        @test.iseq(\n"
           "          'Edge between <1,0,-1> (n) and <1,-1,0> (s) with center <0,-52>',\n"
           "          @edge.summary);\n"),
@@ -1931,6 +2244,9 @@ scope:
 
     method consumeOperator : map #:
       Consume an operator.
+    params:
+      var attribute : Attribute = null #:
+        The attribute associated with this expression.
     scope:
       legal = MetaExprParser.LEGAL_OP_CHARS
       line, i = self.current()
@@ -1948,7 +2264,7 @@ scope:
       /# Parse an arbitrary expression.
       /#  - we do not need to skip whitespace here, as it is skipped in parse()
       self.colIs(i)
-      rhs = self.parse()
+      rhs = self.parse(attribute=attribute)
 
       if rhs:
         result = {'op': op, 'rhs': rhs}
@@ -1971,7 +2287,7 @@ scope:
       return result
 
     test:
-      eprs = metax.c.ExprParser(test.metafileFor('1 + 2\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text='1 + 2\n'))
       eprs.parse()
       eprs.skipws()
       test.iseq(
@@ -1989,8 +2305,8 @@ scope:
     scope:
       return self.line().lstrip()[0] == '@';
     test:
-      eprs1 = metax.c.ExprParser(test.metafileFor('@self.meth; \n'))
-      eprs2 = metax.c.ExprParser(test.metafileFor('10 a\n'))
+      eprs1 = metax.c.ExprParser(test.metafileFor(text='@self.meth; \n'))
+      eprs2 = metax.c.ExprParser(test.metafileFor(text='10 a\n'))
       test.istrue(eprs1.isCallConstruct())
       test.isfalse(eprs2.isCallConstruct())
     end;
@@ -2042,7 +2358,7 @@ scope:
         parts.append('default=' + str(self._default))
       return '<' + ' '.join(parts) + '>'
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(' 1   apple"hello"\n'))
+      eprs = metax.c.ExprParser(test.metafileFor(text=' 1   apple"hello"\n'))
       expr = eprs.parse()
       test.iseq('<kind=num str=1 expr=1>', repr(expr))
     end method __repr__;
@@ -2384,6 +2700,13 @@ scope:
       self.bs = metax.c.BaseStreams()
       self.bs2 = metax.c.BaseStreams()
       self.bs2.initStreams('a', 'b', 'c')
+      self.bs2.addLine('b', 'testing')
+      self.bs2.addLine('b', 'testing')
+      self.bs2.addLines('b', ['more', 'testing'])
+      self.segment = metax.c.BaseSegment(
+          None, chunks=['indented', 'lines'], indent='  ')
+      self.bs2.addSegment('b', self.segment)
+      self.bs2.addOpaque('c', {'a': 1, 'b': 2})
     end;
 
     method clear #:
@@ -2459,6 +2782,21 @@ scope:
       test.iseqvec(['a', 'b', 'c'], test.bs2.streamNames())
     end method initStreams;
 
+    method newStream : tuple<vec,vec> #:
+      Initialize a stream, returning new stream and previous one (may be null).
+    params:
+      var name : str #:
+        Name of stream to query/initialize.
+    scope:
+      try:
+        previous = self.stream(name)
+      except metax.c.InternalError:
+        previous = None
+      current = self.stream(name, clear=True, create=True)
+      return current, previous
+    test:
+    end method newStream;
+
     method addLine #:
       Add a single line to a named stream.
     params:
@@ -2519,8 +2857,11 @@ scope:
       test.iseq([{'a': 1}], bs.stream('a'))
     end method addOpaque;
 
-    method addSegment #:
+    method addSegment : any #:
       Add a segment to a stream.
+
+      Returns:
+        The stream that the segment was added to.
     params:
       var name : str #:
         The stream to add to.
@@ -2532,6 +2873,13 @@ scope:
     scope:
       stream = self.stream(name, create=create)
       stream.append(segment)
+      return stream
+    test:
+      bs = test.bs2
+      test.iseq([], bs.stream('a'))
+      segment = metax.c.BaseSegment(None)
+      stream = bs.addSegment('seg', segment, create=True)
+      test.iseq(1, len(stream))
     end method addSegment;
 
     method flatten : str #:
@@ -2546,6 +2894,15 @@ scope:
     scope:
       lines, mapping = self.flattenWithMap(name, spaces=spaces, indent=indent)
       return '\n'.join([line.rstrip() for line in lines])
+    test:
+      test.iseq(
+       >|"""  testing
+       >|  testing
+       >|  more
+       >|  testing
+       >|    indented
+       >|    lines""",
+       test.bs2.flatten('b', spaces=1, indent=2))
     end method flatten;
 
     method flattenWithMap : tuple<str,vec<tuple<int,int>>> #:
@@ -2567,11 +2924,21 @@ scope:
       lines = []
       stream = self.stream(name)
 
-      segment = BaseSegment(stream)
+      segment = BaseSegment(None, chunks=list(stream))
       mapfile = MapFile(None, None)
       lines = []
       segment.flattenLines(lines, mapfile, indent=dentstr)
       return lines, mapfile.mapping()
+    test:
+      test.iseq(
+        (['  testing',
+          '  testing',
+          '  more',
+          '  testing',
+          '    indented',
+          '    lines'],
+         []),
+        test.bs2.flattenWithMap('b', spaces=1, indent=2))
     end method flattenWithMap;
 
     method flattenAll : str #:
@@ -2591,6 +2958,9 @@ scope:
           result += '\n\n' + stream + '\n'
           result += text
       return result
+    test:
+      out = test.bs2.flattenAll()
+      test.contains("  {'a': 1, 'b': 2}", out)
     end method flattenAll;
 
     method dump #:
@@ -2606,6 +2976,8 @@ scope:
         fp.write('%s%s\n%s\n' % (indent, '#' * 80, title))
       fp.write(self.flattenAll())
       fp.write('\n')
+    test:
+      
     end method dump;
 
   end class BaseStreams;
@@ -2685,6 +3057,9 @@ scope:
       else:
         raise ValueError('Stream does not know how to add to %s' % other.__class__)
       return self._data + o
+    test:
+      test.iseq(['a', 'b', 'a', 'b'], test.stream + test.stream)
+      test.iseq(['a', 'b', 1, 2, 3], test.stream + [1,2,3])
     end method __add__;
 
   end class Stream;
@@ -2692,6 +3067,8 @@ scope:
   class BaseSegment #:
     A collection of contiguous lines of baselang text originating at a specific
     line in a .meta file.
+  assocs:
+    lib assoc metax.meta;
   scope:
 
     field chunks : vec<any> #:
@@ -2735,6 +3112,13 @@ scope:
     clinit:
       cls.TMPL_RE = re.compile(
         '((?:^|\n) *)?\$\{([a-zA-Z0-9_-]+)(?:\?([^\}]*))?\}')
+    setup:
+      context = metax.c.Context(None, None, None, None)
+      fauxcons = metax.meta.FileConstruct('f', None, context)
+      test.attr = metax.attr.ComplexBlock(fauxcons, 'comment:', [], line=77, col=69)
+      test.segment = metax.c.BaseSegment(test.attr, chunks=['Hello'])
+      test.segment2 = metax.c.BaseSegment(
+        test.attr, chunks=['HPB', 'is a brat', '    '])
     end lifecycle;
 
     method show #:
@@ -2754,19 +3138,34 @@ scope:
           if metaline == -1 and attr:
             metaline = attr.line()
           fp.write(
-            '%s%2d: seg %s (%d)\n' %
+            u'%s%2d: seg %s (%d)\n' %
             (indent, i, attr.key() if attr else None, metaline))
           chunk.show(fp=fp, indent=indent + '  ', nostr=nostr)
         else:
           if not nostr:
-            fp.write('%s%2d: %s\n' % (indent, i, chunk))
+            fp.write(u'%s%2d: %s\n' % (indent, i, chunk))
     test:
+      test.segment2.addChunk(test.segment)
+      test.segment2.show(fp=test.fp())
+      out = test.out()
+      test.iseqtext(
+       >|""" 0: HPB
+       >| 1: is a brat
+       >| 2:     
+       >| 3: seg comment: (77)
+       >|   0: Hello
+       >|""",
+       out)
     end method show;
 
     method updateIndent params:
       var indent : str;
     scope:
       self._indent += indent
+    test:
+      test.iseq('', test.segment.indent())
+      test.segment.updateIndent('...')
+      test.iseq('...', test.segment.indent())
     end method updateIndent;
 
     method numLines #:
@@ -2782,9 +3181,12 @@ scope:
           assert '\n' not in chunk
           count += 1
       return count
+    test:
+      test.iseq(1, test.segment.numLines())
+      test.iseq(3, test.segment2.numLines())
     end method numLines;
 
-    method flattenLines : vec<str> #:
+    method flattenLines #:
       Obtain a sequence of lines from this segment and the meta/base mapping.
 
       This code produces a list of lines in baselanguage syntax, based on the
@@ -2861,7 +3263,8 @@ scope:
             /# We increment metaline by one to adjust from 0-based to 1-based.
             metaline = attribute.line() + 1
             mapping.append((baseline, metaline, fullid))
-          lines.append(indent + chunk if chunk else '')
+          /# Note that the str(chunk) is there tto handle opaque data.
+          lines.append(indent + str(chunk) if chunk else '')
 
       if strip_special:
         dentre = metax.c.SPECIAL_PREFIX_RE
@@ -2869,6 +3272,16 @@ scope:
           m = dentre.match(lines[i])
           if m:
             lines[i] = lines[i][m.end(0):]
+    test:
+      mapfile = metax.c.MapFile(None, None)
+      test.segment2.addChunk(test.segment)
+      test.iseq([], mapfile.mapping())
+
+      lines = []
+      test.segment2.flattenLines(lines, mapfile, indent='..')
+
+      test.iseq(['..HPB', '..is a brat', '..    ', '..Hello'], lines)
+      test.iseq([(4, 79, ':comment:')], mapfile.mapping())
     end method flattenLines;
 
     method flattenStr : str #:
@@ -2906,6 +3319,10 @@ scope:
       else:
         result = '\n'.join(lines)
       return result + '\n'
+    test:
+      test.iseq(
+        '  HPB\n  is a brat\n      \n',
+        test.segment2.flattenStr(indent='  '))
     end method flattenStr;
 
     method instantiate #:
@@ -3122,7 +3539,7 @@ scope:
       /# Parse the testdata/ex2.meta file
       ex2, scope, construct, path = test.getMetaFile(
         'oopl', 'ex2', debuglevel=0)
-      method = scope.child('/demo.cards0/Card/test')
+      method = ex2.find('/demo.cards0/Card/test')
       method_comment = method.rawattr('comment:')
       method_scope = method.rawattr('scope:')
 
@@ -3220,8 +3637,8 @@ scope:
           chunks[-1] += lines[0]
           chunks.extend(lines[1:])
     test:
-      attr = metax.attr.ComplexBlock(None, 'comment:', [], line=77, col=69)
-      segment = metax.c.BaseSegment(attr, chunks=['Hello'])
+      segment = test.segment
+      segment2 = test.segment2
 
       /# Add a simple line.
       test.iseq(['Hello'], segment.chunks())
@@ -3230,7 +3647,6 @@ scope:
       test.iseq('', segment.indent())
 
       /# Add a BaseSegment.
-      segment2 = metax.c.BaseSegment(attr, chunks=['HPB', 'is a brat', '    '])
       segment2.appendChunk(segment)
       test.iseq('    ', segment.indent())
       test.iseq(['HPB', 'is a brat', segment], segment2.chunks())
@@ -3395,6 +3811,11 @@ scope:
       if mapping is None:
         mapping = []
       self.mappingIs(mapping)
+    setup:
+      _, _, _, metac = test.cachedInfo()      
+      path = metac.fs().join(
+        metac.workspaceDirectory(), 'demo', 'cards0', '.__init__.py.map')
+      test.mapfile = metac.loadMapFile(path)
     end lifecycle;
 
     method addSubFile #:
@@ -3409,6 +3830,14 @@ scope:
       for baseline, metaline, fullid in mapfile.mapping():
         data.append((baseline + offset, metaline, fullid))
     test:
+      submapfile = metax.c.MapFile(
+        'a', 'b', mapping=[
+          (200, 10, 'a:scope'),
+          (217, 20, 'b:scope'),
+          (251, 30, 'c:scope'),
+      ])
+      test.mapfile.addSubFile(submapfile, 10)
+      /# Need to perform better tests here.
     end method addSubFile;
 
     method serialize #:
@@ -3487,6 +3916,9 @@ scope:
           meta_line = meta_start + diff
 
       return metapath, meta_line
+    test:
+      test.iseq(26, test.mapfile.baseToMeta(82)[1])
+      test.iseq(27, test.mapfile.baseToMeta(83)[1])
     end method baseToMeta;
 
   end class MapFile;
@@ -4030,6 +4462,9 @@ scope:
     scope:
       self._templates[name] = text
     test:
+      test.iseq({}, test.cons._templates)
+      test.cons.registerTemplate('ex', 'misc text')
+      test.iseq({'ex': 'misc text'}, test.cons._templates)
     end method registerTemplate;
 
     method templateNamed : str #:
@@ -4046,6 +4481,9 @@ scope:
           'Failed to find template named %s in %s' % (name, self.name()))
       return result
     test:
+      test.raises(metax.c.Error, test.cons.templateNamed, 'ex')
+      test.cons.registerTemplate('ex', 'misc text')
+      test.iseq('misc text', test.cons.templateNamed('ex'))
     end method templateNamed;
 
     method findTemplate : str #:
@@ -4064,6 +4502,11 @@ scope:
           'Failed to find template named %s in %s' % (name, self.name()))
       return result
     test:
+      test.raises(metax.c.Error, test.cons.templateNamed, 'ex')
+      test.cons.registerTemplate('ex1', 'misc text')
+      test.cons.registerTemplate('ex2', 'misc text2')
+      test.cons.registerTemplate('ex3', 'misc text3')
+      test.iseq('misc text2', test.cons.findTemplate(['missing', 'ex2', 'ex3']))
     end method findTemplate;
 
   end class ConsInfo;
@@ -4157,12 +4600,12 @@ scope:
       constructs/attributes by 'config' blocks in the lexical chain above the
       construct this context belongs to.
 
-      A MetaLanguageConstruct exists for each MetaLanguage, and its 'config' block
-      contains a collection of Construct constructs whose 'config' block
+      A MetaLanguageConstruct exists for each MetaLanguage, and its 'config'
+      block contains a collection of Construct constructs whose 'config' block
       contains a collection of Attribute constructs whose 'config' block
-      contains a collection of FeatureValue constructs. The information
-      within a Construct relevant to parsing the construct is summarized in
-      a ConsInfo instance.
+      contains a collection of FeatureValue constructs. The information within a
+      Construct relevant to parsing the construct is summarized in a ConsInfo
+      instance.
 
       Most constructs in most Meta Languages define a 'config' secondary
       attribute that allows one to change aspects of constructs that will
@@ -4420,6 +4863,7 @@ scope:
     scope:
       metafile = self.metafile()
       fp.write(u'Context: %s\n' % (metafile.path() if metafile else 'null'))
+      indent = indent.decode('utf8')
       subindent = indent + '  '
       consmap = self.consmap()
       for key in sorted(consmap):
@@ -4569,7 +5013,7 @@ scope:
          *T   -> pointer to T
          *#T  -> pointer to const T (cannot modify what var points to)
          #*T  -> const pointer to T (can change var to a different value)
-         #*#T -> const pointer to const T (cannot modify var or what it points to)
+         #*#T -> const pointer to const T (cannot modify var or what points to)
 
          &T   -> reference to T
          &#T  -> reference to constant T (cannot modify T, cannot modify ref)
@@ -4577,8 +5021,11 @@ scope:
                  this is the same as &T (and is disallowed to avoid clutter).
 
          @T   -> by-value T (copy if arg, guartanteed to be non-null if field)
-         @#T  -> copy of const T (no different than just @T in most cases, but may be useful for local vars where one wants to remind oneself not to modify something ... const int val)
-     no! #@T  -> const copy of T (same as @#T which is more canonical so this is disallowed)
+         @#T  -> copy of const T (no different than just @T in most cases, 
+                 but may be useful for local vars where one wants to remind
+                 oneself not to modify something ... const int val)
+     no! #@T  -> const copy of T (same as @#T which is more canonical so this
+                 is disallowed)
 
     Notes about unique_ptr, shared_ptr and weak_ptr.
           u*T -> std::unique_ptr<T>
@@ -4598,7 +5045,8 @@ scope:
 
     Other rules about types:
      no! &&T  -> cannot take reference to a reference
-         &*T  -> a reference to a pointer (so the pointer itself can be modified)
+         &*T  -> a reference to a pointer (so the pointer itself can be
+                 modified)
      no! *&T  -> a pointer to a reference is not allowed
      no! #&   -> use &#
      no! #@   -> use @#
@@ -4623,8 +5071,10 @@ scope:
           - for an arg, prefix with '&' (pass-by-ref) or '@' (pass-by-value)
      - Is T a class type and can variable can be null?
         - prefix with '*' or leave off (default is to prefix with '*')
-     - If the variable is a primitive type and one wants pass-by-refence semantics,
-        - prefix with '&' or '*' (boxed class will be used if lang does not support)
+     - If the variable is a primitive type and one wants pass-by-refence
+       semantics,
+        - prefix with '&' or '*' (boxed class will be used if lang does not
+          support)
      - Any '*' in the prefix can be prefixed with 'u' (unique ptr), 's'
        (shared ptr) or 'w' (weak ptr) to obtain implicit memory management,
        and can be further prefixed by '#' to indicate the pointer itself is
@@ -4642,7 +5092,8 @@ scope:
     ----------------------------------------------------------------------
     Type Analysis and Inference In Meta
 
-    Meta has the following data-structures useful for type analysis and inference
+    Meta has the following data-structures useful for type analysis and
+    inference
      - ClassConstruct maintains
         - the collection of all 'field' instances
         - the collection of all 'method' instances
@@ -4683,7 +5134,10 @@ scope:
           params = cls.ParseTypes(
             params_str, allow_invalid=allow_invalid,
             namespace_function=namespace_function)
-          native = (base in cls.Natives()) or base.startswith('meta!') or base[0] == '!'
+          native = (
+            (base in cls.Natives())
+            or base.startswith('meta!')
+            or base[0] == '!')
           primitive = base in cls.Primitives()
           if not prefix or prefix == '#':
             /# The rationale for what prefix to use when one is not explicit
@@ -4980,7 +5434,8 @@ scope:
         /# pair of types.
         'pair': {'args': ('*', '*')},
         /# immutable ordered container: tuple
-        /#  - a k-tuple can be specified with either no parameters or with k params.
+        /#  - a k-tuple can be specified with either no parameters or with k
+        /#    params.
         /#     - tuple
         /#     - tuple<int,str,Person>
         'tuple': {
@@ -5682,10 +6137,11 @@ scope:
       cls.TERM_RE = re.compile(
         r'((?P<end>end)(?:\s+(?P<kind>\S+)(?:\s+(?P<id>\S+))?)?)?;')
     setup:
-      /# testdata = metax.root.Object.Resource('testdata', fqn='metax.c.Meta')
-      _, _, _, compiler = test.cachedInfo(metal='meta')
-      text = 'MetaLanguage Test config:\nend MetaLanguage Test;\n'
-      self.metafile = metax.c.MetaFile('fauxpath', compiler, text)
+      test.text = (
+        'MetaLanguage Test config:\n'
+        'end MetaLanguage;\n'
+      )
+      test.metafile, test.context = test.schemaParser(test.text)
     end lifecycle;
 
     method set #:
@@ -5745,7 +6201,7 @@ scope:
       return (self._text, index, lnum, col, line)
     test:
       test.iseq(
-        ('MetaLanguage Test config:\nend MetaLanguage Test;\n', 0, 0, 0, test.metafile.line()),
+        ('MetaLanguage Test config:\nend MetaLanguage;\n', 0, 0, 0, test.metafile.line()),
         test.metafile.current())
     end method current;
 
@@ -6150,8 +6606,8 @@ scope:
     scope:
       if spec[0] == '/':
         spec = spec[1:]
-      scope = self.construct().rawattr('scope:')
-      result = scope.child(spec)
+      file_construct = self.construct()
+      result = file_construct.child(spec)
       return result
     test:
       cards1, scope, namespace, path = test.getMetaFile(
@@ -6169,6 +6625,8 @@ scope:
       self.classdeps().add(fqcn)
       /#print('Now have %d deps in %s' % (len(self.classdeps()), id(self)))
     test:
+      test.metafile.registerDependentClass('a.b.c')
+      test.iseq(set(['a.b.c']), test.metafile.classdeps())
     end method registerDependentClass;
 
     method registerConstructInMetaFile #:
@@ -6215,6 +6673,11 @@ scope:
           self.current_namespaceIs(construct)
 
     test:
+      metafile = test.metafile
+      construct = metax.meta.FileConstruct('dummy', None, test.context)
+      test.iseq({}, metafile.constructs())
+      metafile.registerConstructInMetaFile(construct)
+      test.iseq(construct, list(metafile.constructs()['File'])[0])
     end method registerConstructInMetaFile;
 
     method unregisterConstructInMetaFile #:
@@ -6225,10 +6688,17 @@ scope:
       conset = self.constructs().setdefault(construct.kind(), set())
       if construct not in conset:
         print('WARNING: Request to unregister non-registered construct %s within %s' % (
-          construct.path(), self.filename()))
+          construct.path(), self.path()))
       else:
         conset.remove(construct)
     test:
+      metafile = test.metafile
+      construct = metax.meta.FileConstruct('dummy', None, test.context)
+      test.iseq({}, metafile.constructs())
+      metafile.registerConstructInMetaFile(construct)
+      test.iseq(construct, list(metafile.constructs()['File'])[0])
+      metafile.unregisterConstructInMetaFile(construct)
+      test.iseq({'File': set([])}, metafile.constructs())
     end method unregisterConstructInMetaFile;
 
     meta
@@ -6381,7 +6851,7 @@ scope:
         '################################################################################\n'
         'lnum:index:in:line\n'
         '   0:    0: 0:MetaLanguage Test config:\n'
-        '   1:   26: 0:end MetaLanguage Test;\n'
+        '   1:   26: 0:end MetaLanguage;\n'
         '################################################################################\n',
         fp.getvalue())
     end method show;
@@ -7107,7 +7577,7 @@ scope:
         /#         - otherwise we assume it is an implicit termination and
         /#           detect the syntax error in parseConstruct.
 
-        if False and litkey is None:
+        if False and litkey == 'case':
           print(
             '****** HERE with litkey=%s key=%s basel=%s secondary=%s termcode=%d line=%d:%s' % 
             (litkey, key, basel, secondary, termcode, lnum, line.line()))
@@ -7219,7 +7689,7 @@ scope:
       elif type == 'expr':
         /# Obtain an Expr instance.
         eprs = ExprParser(self, row=self.lnum(), col=val_col)
-        value = eprs.parse()
+        value = eprs.parse(attribute=attribute)
         if value:
           self.lnumIs(eprs.row())
           line = self.line()
@@ -7321,6 +7791,7 @@ scope:
         line, index, _ = self.nextLine()
         attribute.valueIs([])
         legals = secondary.get('children', None)
+        /# self.debug('Parsing complex block', line=99, col=99)
         self.parseComplexBlock(attribute, indent + blockdent, legals=legals)
         value = attribute.value()
         /# The value of attribute and self.index() have already been properly
@@ -7484,7 +7955,7 @@ scope:
           '  end;\n'
           'end;\n'
         )
-        metafile = test.parserFor('Oopl', text, debuglevel=0)
+        metafile = test.metafileFor(text=text, metal='oopl', debuglevel=0)
         /#metafile.show()
         metafile.set(index=87, lnum=4)
         context = metafile.context()
@@ -8289,54 +8760,54 @@ scope:
           self.files().add(path)
         self.basefiles().add(basefile)
     test:
+      metafile = test.metafile
+      basefile = metax.fs.BaseFile('tmp/fauxfile', 'some contents\n')
+      metafile.registerFile(basefile)
     end method registerFile;
 
     method writeFiles #:
       Write the files this metafile writes to to a stream.
     params:
-      var path : str = null #:
-        The path to write to.  If None, write to stdout.
+      var fp : ostream = out #:
+        The stream to write to.
     scope:
-      fs = self.fs()
-      if path is None:
-        fp = sys.stdout
-      else:
-        fp = fs.open(path, 'w')
-
-      fp.write('%s\n' % self.filename())
+      fp.write(u'%s\n' % self.path())
       for path in sorted(self.files()):
         assert path == fs.realpath(path)
-        fp.write(path + '\n')
-
-      if path is None:
-        fs.close(fp)
+        fp.write(path.decode('utf8') + '\n')
+    test:
+      metafile = test.metafile
+      metafile.writeFiles(fp=test.fp())
+      test.iseq('fauxpath\n', test.out())
     end method writeFiles;
 
     method readFiles : set<str> #:
       Read files previously written with 'writeFiles'.
     params:
-      var path : str #:
-        The path to read from.
+      var ifp : istream #:
+        The stream to read from.
     scope:
-      fs = self.fs()
       result = set()
-      if fs.exists(path):
-        ifp = fs.open(path, 'r')
-        srcfilename = ifp.readline().strip()
-        if srcfilename != self.path():
-          /# This may be ok, but for now raising exception to explore when this
-          /# happens.
-          raise Error('Found "%s" vs "%s"' % (srcfilename, self.path()))
-        for line in ifp:
-          result.add(line.strip())
+      srcfilename = ifp.readline().strip()
+      if srcfilename != self.path():
+        /# This may be ok, but for now raising exception to explore when this
+        /# happens.
+        raise Error('Found "%s" vs "%s"' % (srcfilename, self.path()))
+      for line in ifp:
+        result.add(line.strip())
       return result
+    test:
+      metafile = test.metafile
+      ifp = test.fp(u'fauxpath\n/some/path/file1\n/some/other/path/file2\n')
+      res = metafile.readFiles(ifp)
+      test.iseq(set([u'/some/other/path/file2', u'/some/path/file1']), res)
     end method readFiles;
 
     method cleanupFiles #:
       Remove any files created last time that were not created this time.
     scope:
-      fs = self.fs()
       metac = self.compiler()
+      fs = metac.fs()
       flags = metac.cli()
       metadir = flags.metadir
       if metadir != metax.c.SPECIAL_CHILD_DIR:
@@ -8345,15 +8816,17 @@ scope:
         return
 
       /# Establish the file containing last times set of files.
-      baselang = self.baselang()
+      baselang = metac.baselang()
       path = self.path()
       pdir, filename = fs.split(path)
       basename, suffix = fs.splitext(filename)
-      logfile = fs.join(pdir, '.%s.%s.files' % (basename, baselang.suffix()))
+      logfile = fs.join(pdir, '.%s.%s.files' % (
+        basename, baselang.suffix() if baselang else ''))
       self.files().add(logfile)
 
       /# Obtain files written last time and this time.
-      old_files = self.readFiles(logfile)
+      with open(logfile, 'r') as fp:
+        old_files = self.readFiles(fp)
       new_files = self.files()
       del_files = old_files - new_files
 
@@ -8367,13 +8840,18 @@ scope:
           len(old_files), len(new_files), len(del_files)))
 
       /# Write the new set of files to disk for next time.
-      self.writeFiles(logfile)
+      with open(logfile, 'w') as fp:
+        self.writeFiles(fp)
 
       /# Delete any obsolete files
       for path in del_files:
         if fs.exists(path):
           print('CLEANUP: Removed obsolete %s' % path)
           fs.unlink(path)
+    test:
+      /# TODO(wmh): Cleanup.
+      print('Fix MetaFile.cleanupFiles() test')
+      /# test.metafile.cleanupFiles()
     end method cleanupFiles;
 
     method computeFileStats : map #:
@@ -8456,6 +8934,13 @@ scope:
       }
       return result
     test:
+      res = test.metafile.computeFileStats()
+      test.iseqmap(
+        {
+          'Files': 1, 'files': 0, '%files': 0, 'Bytes': 44, '%bytes': 0.0,
+          '%lines': 0.0, 'lines': 0, 'bytes': 0, 'Lines': 2, 'reallines': 0,
+        },
+        res)
     end method computeFileStats;
 
     method parseMeta : metax.meta.FileConstruct #:
@@ -8507,6 +8992,7 @@ scope:
       else:
         legals = metalang.toplevelConstructKinds()
 
+      self.debug('Metafile %s' % self.path(), line=0, col=0)
       self.parseComplexBlock(scope, 0, legals=legals)
       self.constructIs(file_construct)
 
@@ -8516,12 +9002,7 @@ scope:
 
       return file_construct
     test:
-      text = (
-        'MetaLanguage Test config:\n'
-        'end MetaLanguage;\n'
-      )
-      metafile, context = test.schemaParser(text)
-      file = metafile.parseMeta(context)
+      file = test.metafile.parseMeta(test.context)
       fp = test.newStr()
       file.write(fp=fp)
       out = fp.getvalue()
@@ -8545,6 +9026,10 @@ scope:
       self.phases().append('expand')
 
       D.expand.end()
+    test:
+      /# TODO(wmh): Verify this does something.
+      test.metafile.parseMeta(test.context)
+      test.metafile.expandMeta()
     end method expandMeta;
 
     method importMeta #:
@@ -8564,6 +9049,10 @@ scope:
 
       D.imports.end()
     test:
+      /# TODO(wmh): Verify this does something.
+      test.metafile.parseMeta(test.context)
+      test.metafile.expandMeta()
+      test.metafile.importMeta()
     end method importMeta;
 
     method translateMeta scope:
@@ -8577,6 +9066,11 @@ scope:
       self.phases().append('translate')
 
       D.translate.end()
+    test:
+      /# TODO(wmh): Verify this does something.
+      test.metafile.parseMeta(test.context)
+      test.metafile.expandMeta()
+      test.metafile.translateMeta()
     end method translateMeta;
 
     method compileMeta scope:
@@ -8590,6 +9084,12 @@ scope:
       self.phases().append('compile')
 
       D.compile.end()
+    test:
+      /# TODO(wmh): Verify this does something.
+      test.metafile.parseMeta(test.context)
+      test.metafile.expandMeta()
+      test.metafile.translateMeta()
+      test.metafile.compileMeta()
     end method compileMeta;
 
   end class MetaFile;
@@ -8639,7 +9139,8 @@ scope:
 
     meta
     field Current : Compiler #:
-      Initialized in the MetaxEntry meta-method to the instance created there-in.
+      Initialized in the MetaxEntry meta-method to the instance created
+      there-in.
 
     meta
     method Initialize #:
@@ -8652,8 +9153,9 @@ scope:
         to defining all metalang info in the associated schema.
     scope:
       if metadata:
-        /# No longer needed, as we can obtain all data from the schema.meta file now.
-        print('*************** NOTE: Passing deprecated METADATA into Compiler!')
+        /# No longer needed, as we can obtain all data from the schema.meta file
+        /# now.
+        print('************* NOTE: Passing deprecated METADATA into Compiler!')
         import pprint
         pprint.pprint(metadata)
         /# cls.METADATA.update(metadata)
@@ -8670,9 +9172,12 @@ scope:
       if 'src_root' not in config:
         errors.append('Must specify src_root (where Meta is installed)')
       elif not os.path.exists(config['src_root']):
-        errors.append('Invalid src_root %s (does not exist)' % config['src_root'])
+        errors.append(
+          'Invalid src_root %s (does not exist)' % config['src_root'])
       if not os.path.exists(config['repository_path']):
-        errors.append('Invalid repository_path %s (does not exist)' % config['repository_path'])
+        errors.append(
+          'Invalid repository_path %s (does not exist)' %
+          config['repository_path'])
       if errors:
         for error in errors:
           print('ERROR: %s' % error)
@@ -8745,7 +9250,7 @@ scope:
       importation code or not).
 
     lifecycle params:
-      var metal : str = 'Oopl';
+      var metal : str = 'oopl';
       var basel : str = null;
       var rootdir : str = null #:
         The directory that metadir is relative to. Normally null, in which
@@ -9224,12 +9729,22 @@ scope:
         /# on explicit test-classes provided by users.
         'metatestclass': False,
       }
+    setup:
+      /# Each test should invoke some variant of
+      /#    _, _, _, metac = test.cachedInfo(metal='oopl', basel='python')
+      /# specifying the desired return vals and args.
+      /#
+      /# A common call is:
+      /#  _, _, _, metac = test.cachedInfo(basel='python')
     end lifecycle;
 
     method cli : metax.cli.Values #:
       The command-line flags and args.
     scope:
       return metax.root.MetaObject.CLI()
+    test:
+      _, _, _, metac = test.cachedInfo(basel='python')
+      test.isinst(metac.cli(), metax.cli.Values)
     end method cli;
 
     method updateCLI #:
@@ -9249,6 +9764,10 @@ scope:
     scope:
       self.cli()._command_Is(command)
     test:
+      _, _, _, metac = test.cachedInfo(basel='python')
+      command = metax.cli.Command('fauxcmd')
+      metac.updateCLI(command)
+      test.issame(command, metac.cli()._command_())
     end method updateCLI;
 
     method registerClass #:
@@ -9266,6 +9785,11 @@ scope:
           (fqn, id(klass), id(classes[fqn]))))
       classes[fqn] = klass
     test:
+      _, _, _, metac = test.cachedInfo(basel='python')
+      klass = test.basics()
+      n = len(metac.classes().keys())
+      metac.registerClass(klass)
+      test.iseq(n+1, len(set(metac.classes().keys())))
     end method registerClass;
 
     method fs : metax.c.Filesystem #:
@@ -9273,6 +9797,9 @@ scope:
     scope:
       return self.filesystem()
       /# return self.__class__.Filesystem()
+    test:
+      _, _, _, compiler = self.cachedInfo(metal='meta')
+      test.isinst(compiler.fs(), metax.fs.Filesystem)
     end method fs;
 
     method metaRoot : str #:
@@ -9355,6 +9882,8 @@ scope:
     scope:
       return self.fs().join(self.repositoryPath(), self.basePath())
     test:
+      _, _, _, metac = test.cachedInfo(basel='python')
+      test.endswith('meta/oopl/python', metac.workspaceDirectory())
     end method workspaceDirectory;
 
     method verifyDirectory : bool #:
@@ -9415,6 +9944,9 @@ scope:
           fs.mkdir(metadir, mode=0o755)
 
       return result
+    test:
+      _, _, _, metac = test.cachedInfo(basel='python')
+      test.istrue(metac.verifyDirectory())
     end method verifyDirectory;
 
     method bootstrapContext : Context #:
@@ -9836,6 +10368,9 @@ scope:
 
       return result, metafile
     test:
+      metac = metax.c.Compiler(metal='oopl', basel='python')
+      metalang, metafile = metac.metalangFromSchema('meta')
+      test.iseq('meta', metalang.id())
     end method metalangFromSchema;
 
     method metalangToContext : Context #:
@@ -10072,6 +10607,7 @@ scope:
     params:
       var attribute_construct : metax.meta.AttributeConstruct;
     scope:
+      assert isinstance(attribute_construct, metax.meta.AttributeConstruct)
       /# Obtain the Construct within which the Attribute resides.
       construct_construct = attribute_construct.parent().parent()
       /# Check if the Construct has a 'parent'
@@ -10094,22 +10630,19 @@ scope:
         result = None
       return result
     test:
-      _, metalang, _, compiler = test.cachedInfo(basel='python')
+      _, metalang, _, compiler = test.cachedInfo(metal='oopl', basel='python')
       /# In Meta(Oopl), Construct 'class' inherits from '_oopl_' and
       /# has Attribute 'comment:'.
-      ac = metalang.parent().child('/oopl@config/class@config/comment:')
-      test.iseq('/oopl@config/class@config/comment:', ac.path())
+      ac = metalang.child('class@config/comment:@config')
+      test.iseq('/oopl/class@config/comment:@config', ac.path())
       acp = compiler.attributeParent(ac)
-      test.iseq('/oopl@config/_classic_@config/comment:', acp.path())
+      test.iseq('/oopl/_classic_@config/comment:@config', acp.path())
       acpp = compiler.attributeParent(acp)
-      test.iseq('/oopl@config/_symbol_@config/comment:', acpp.path())
+      test.iseq('/oopl/_symbol_@config/comment:@config', acpp.path())
       acppp = compiler.attributeParent(acpp)
-      test.iseq('/oopl@config/_oopl_@config/comment:', acppp.path())
+      test.iseq('/oopl/_oopl_@config/comment:@config', acppp.path())
       acpppp = compiler.attributeParent(acppp)
       test.isnull(acpppp)
-
-      /# In Meta(Oopl), Construct 'field' inherits from '_classic_' which
-      /# inherits from '_oopl_', and has Attribute 'comment:'.
     end method attributeParent;
 
     method basePath : str #:
@@ -10173,6 +10706,13 @@ scope:
             exists = True
       return result, exists
     test:
+      _, _, _, compiler = test.cachedInfo(metal='oopl')
+      fs = compiler.fs()
+      pypath = fs.join(
+        compiler.workspaceDirectory(), 'demo', 'cards0', '__init__.py')
+      expected_metapath = test.resourcePath('ex2')
+      metapath, _ = compiler.basePathToMeta(pypath)
+      test.iseq(expected_metapath, metapath)
     end method basePathToMeta;
 
     method loadMapFile : MetaFile #:
@@ -10181,13 +10721,13 @@ scope:
       This method is paired with MapFile.serialize().
     params:
       var path : str #:
-        The path to the .path file.
+        The path to the .map file.
     scope:
       mapping = []
       map_re = Compiler.MAP_RE
       fs = self.fs()
       with fs.open(path, 'r') as fp:
-        /# In meta2, the first line contains
+        /# The first line contains
         /#   <source>
         /# (where <source> is the source .meta file), and all subsequent lines
         /# contain
@@ -10223,6 +10763,14 @@ scope:
       result = MapFile(path, metapath, mapping)
       return result
     test:
+      _, _, _, metac = test.cachedInfo(basel='python')
+      fs = metac.fs()
+      path = fs.join(
+        metac.workspaceDirectory(), 'demo', 'cards0', '.Card.py.map')
+      mapfile = metac.loadMapFile(path)
+      test.iseq(
+        (8, 5, 'demo.cards0.Card:class'),
+        mapfile.mapping()[0])
     end method loadMapFile;
 
     method parseMeta : MetaFile #:
@@ -10365,6 +10913,13 @@ scope:
           warnings += len(metafile.warnings())
           metafiles.append(metafile)
       return metafiles, errors, warnings
+    test:
+      _, _, _, metac = test.cachedInfo(basel='python')
+      paths = []
+      for name in ('ex1', 'ex2', 'ex3', 'ex4'):
+        paths.append(test.resourcePath(name))
+      metafiles, _, _ = metac.getMetas(paths, compile=False)
+      test.iseq(4, len(metafiles))
     end method getMetas;
 
     method processMeta : tuple<MetaFile,int,int> #:
@@ -10444,6 +10999,10 @@ scope:
               metafile.stateIs('complete')
       return metafile, errors, warnings
     test:
+      _, _, _, metac = test.cachedInfo(basel='python')
+      path = test.resourcePath('ex1')
+      metafile, _, _ = metac.processMeta(path)
+      test.iseq(path, metafile.path())
     end method processMeta;
 
     method getMeta : MetaFile #:
@@ -10486,12 +11045,15 @@ scope:
 
       return result
     test:
+      metac = metax.c.Compiler(metal='oopl', basel='python')
+      path = test.resourcePath('ex1')
+      metafile = metac.getMeta(path, compile=False)
     end method getMeta;
 
     method writeSummary #:
-      Summarize the status of this MetaFile after parsing/compilation.
+      Summarize the status of the given MetaFiles after parsing/compiling.
 
-      Print out the number of constructs of each kind for each metafile in a
+      Prints out the number of constructs of each kind for each metafile in a
       table (rows are metafiles, columns are construct kinds, cells are integer
       counts).
     params:
@@ -10504,12 +11066,19 @@ scope:
       var groups : map = null #:
         Maps group name to list of meta file paths in the group.
     scope:
+      indent = u'' + indent
       fs = self.fs()
       flags = self.cli()
       show_counts = flags.summary_counts
       show_times = flags.summary_times
       show_files = flags.summary_files
       nofiles = flags.summary_nofiles
+
+      /# This produces
+      /#   AttributeError: 'str' object has no attribute 'decode'
+      /# when indent is a str. If errors occur trying to write to an io.StringIO,
+      /# do something else.
+      /#indent = indent.decode('utf8')
 
       if groups is None:
         groups = {}
@@ -10657,7 +11226,7 @@ scope:
             width += 1 + kwidth
         sep = indent + '-' * width + '\n'
         /# fp.write(sep)
-        fp.write('\n')
+        fp.write(u'\n')
 
         /# Print the title line
         parts = []
@@ -10762,6 +11331,17 @@ scope:
           line = TotalRow(totals, 'TOTAL', nmf)
           fp.write(indent + line + '\n')
         fp.write(sep)
+    test:
+      _, _, _, metac = test.cachedInfo(basel='python')
+      paths = []
+      for name in ('ex1', 'ex2', 'ex3', 'ex4'):
+        paths.append(test.resourcePath(name))
+      metafiles, _, _ = metac.getMetas(paths, compile=False)
+      metac.writeSummary(metafiles, fp=test.fp())
+      out = test.out()
+      test.contains(
+        'Group/File      Files files   %F   Lines   lines   %L    Bytes    bytes   %B',
+        out)
     end method writeSummary;
 
     method _parseArgs : map #:
@@ -11088,6 +11668,12 @@ scope:
             print('Not replacing ' + metafile_path)
             fs.unlink(new_path)
     test:
+      metac = metax.c.Compiler(metal='oopl', basel='python')
+      test.captureStdout()
+      path = test.resourcePath('ex2')
+      metac.canonicalize([path])
+      out = test.getStdout()
+      test.contains('No differences found', out)
     end method canonicalize;
 
     meta
@@ -11369,7 +11955,7 @@ scope:
           'new': 'python3',
         }
       }
-      if basebinary and basebinary[0] == '/' and os.path.exists(basebinary):
+      if basebinary and basebinary[0] == '/' and fs.exists(basebinary):
         rawexec = basebinary
       else:
         rawexec = rawmap.get(baselang.id(), {}).get(basebinary, None)
@@ -11454,226 +12040,10 @@ scope:
           else:
             if tests:
               self.formatBazelOutput(tests, showout=showout, showerr=showerr)
-
-    end method runUnitTests;
-
-    method processPythonTestOutput #:
-      Process the output of non-bazel execution of the python test harness.
-    params:
-      var stdout : str #:
-        The stdout produced by invoking a python test directly
-      var stderr : str #:
-        The stderr produced by invoking a python test directly
-      var cwd : str #:
-        The directory from which to process.
-      var namespace : str #:
-        The namespace under test.
-      var nofilt : bool = false #:
-        If true, do not filter the stdout/stderr, just print verbatim
-      var verbosity : int = 0 #:
-        0 = Show only errors
-        1 = Show one line for each method, and full errors
-    scope:
-      print('*************** DEPRECATED IN FAVOR of behavior processTestOutput')
-      ifp = io.StringIO(stderr or '')
-      efp = io.StringIO()
-      self.filterMetaOutput(cwd=cwd, ifp=ifp, ofp=efp)
-      filterr = efp.getvalue()
-
-      if nofilt:
-        if stdout:
-          dsep(title='stdout')
-          print(stdout)
-        if stderr:
-          dsep(title='stderr')
-          /#print(stderr)
-          print(filterr)
-        if stdout or stderr:
-          dsep(end=True)
-        return
-
-      /# Perform base-to-meta line mapping on stderr
-      outlines = stdout.split('\n')
-      errlines = filterr.split('\n')
-
-      /# Establish some vars.
-      outre = re.compile(
-        r'^(?P<fqn>\S+)\s+\.\.\.(?P<rest>.*)')
-      timere = re.compile(
-        r'^(?P<head>.*?)\s+(?P<us>\d+) us  (?:(?P<status>.*))?$')
-      failre = re.compile(
-        r'^(?P<status>FAIL|ERROR): test_(?P<method>\S+) \(\S+\.(?P<class>\S+)Test\)')
-      sepre = re.compile('^(?P<c>[=-])(?P=c){60,}')
-      ranre = re.compile(r'^Ran (?P<numtests>\d+) tests? in (?P<seconds>\S+)s')
-
-      def PrintStripped(data, prefix):
-        """Strip leading/trailing lines of whitespace from data list."""
-        i = 0
-        n = len(data)
-        if False:
-          /# We should NOT be stripping blank leading/trailing lines if they
-          /# represent actual output produced by the code ... if spurious
-          /# blank lines are being introduced, fix that issue rather than
-          /# stripping potentially valuable empty lines from actual output.
-          while i < n and not data[i].strip():
-            i += 1
-          while n > 0 and not data[n-1].strip():
-            n -= 1
-        for j in range(i, n):
-          print(prefix + data[j])
-
-      /# We'll add one dict per test to data, merging stdout and stderr.
-      /#   name: str
-      /#     fqn of test.
-      /#   time: int
-      /#     number of microseconds
-      /#   stdout: vec<str>
-      /#   stderr: vec<str>
-      data = []
-      /# datamap maps fqn name to the same dict stored in data for that fqn.
-      datamap = {}
-
-      /# Parse stdout
-      /#  - we are expecting lines of the form:
-      /#      <class>.<method>                   ...    <time> us  [<status>]
-      /#    optionally followed by output from a test method.
-      current_fqn = None
-      for line in outlines:
-        m = outre.match(line)
-        if m:
-          fqn = m.group('fqn')
-          item = {
-            'fqn': fqn, 'stdout': [], 'stderr': [], 'status': None,
-            'time': None}
-          rest = m.group('rest')
-          tm = timere.match(rest)
-          if tm:
-            /# We have a time for this test ... no output expected.
-            item['time'] = int(tm.group('us'))
-            item['status'] = tm.group('status')
-            current_fqn = None
-          else:
-            /# We did not find a time for this test, which means the test
-            /# produced some output on stdout. We consume it in subsequent
-            /# iterations through the loop, until we find a line ending in
-            /# a timespec.
-            current_fqn = fqn
-            item['stdout'].append(rest)
-          data.append(item)
-          datamap[fqn] = item
-        else:
-          if current_fqn is None:
-            /# We are not currently expecting output
-            if line.strip():
-              print('UNKNOWN STDOUT: %s' % line)
-          else:
-            /# This is stdout for current_fqn
-            item = datamap[current_fqn]
-            tm = timere.match(line)
-            if tm:
-              /# We've found the end of expected stdout
-              current_fqn = None
-              item['time'] = int(tm.group('us'))
-              item['status'] = tm.group('status')
-              head = tm.group('head')
-              if head:
-                item['stdout'].append(head)
-            else:
-              item['stdout'].append(line)
-
-      /# Parse stderr
-      /#  - we are expecting records of the form:
-      /#
-      /#      =================================================================
-      /#      ERROR: test_attrinfo (__main__.ContextTest)
-      /#      -----------------------------------------------------------------
-      /#      Traceback (most recent call last):
-      /#        File "metax/c_test/__init__.py", line 1610, in setUp
-      /#          _, _, _, compiler = self.cachedInfo(metal='meta')
-      /#      AttributeError: 'ContextTest' object has no attribute 'cachedInfo'
-      /#
-      /# - It is possible that we will encounter a class/method pair in stderr
-      /#   that is NOT present in stdout (not sure how, but it happens).
-      i = 0
-      N = len(errlines)
-      current_fqn = None
-      postamble = None
-      summary_data = {}
-      while i < N:
-        line = errlines[i]
-        i += 1
-        /# We ignore separator lines, as the line after seplines uniquely
-        /# identifies which section we are in (at least in output I've seen).
-        if sepre.match(line): continue
-        failm = failre.match(line)
-        ranm = ranre.match(line)
-
-        if failm:
-          d = failm.groupdict()
-          fqn = '%s.%s' % (d['class'], d['method'])
-          if not sepre.match(errlines[i]):
-            raise Error('Should have found separator line after "%s"' % line)
-          if fqn not in datamap:
-            item = {
-              'fqn': fqn, 'stderr': [], 'stdout': [], 'status': None,
-              'time': None
-            }
-            data.append(item)
-            datamap[fqn] = item
-          current_fqn = fqn
-        elif ranm:
-          /# End of tests ... grab all remaining output.
-          summary_data.update(ranm.groupdict())
-          assert not errlines[i].strip()
-          summary_data['status'] = errlines[i+1]
-          j = i+2
-          while j < len(errlines) and not errlines[j].strip():
-            j += 1
-          postamble = errlines[j:]
-          break
-        elif current_fqn is None:
-          print('UNKNOWN STDERR: %s' % line)
-        else:
-          /# A line of stderr for current fqn, if one exists.
-          item = datamap[current_fqn]
-          item['stderr'].append(line)
-
-      /# Merge the stdout and stderr into a single stream, in the same
-      /# format as used in the bazel-generated output.
-      sep = '-' * 70
-      show_nums = False
-      /# print(stdout)
-      last_printed_sep = False
-      for i, item in enumerate(data):
-        out = item['stdout']
-        err = item['stderr']
-        special = out or err
-
-        if special and not last_printed_sep: print(sep)
-
-        if special or verbosity:
-          prefix = '%3d) ' % i if show_nums else ''
-          print('%s%-40s ... %7d us   %s' % (
-            prefix, item['fqn'], item['time'] or -1, item['status']))
-
-        PrintStripped(out, ' |')
-        PrintStripped(err, 'E|')
-
-        if special:
-          print(sep)
-          last_printed_sep = True
-        elif verbosity:
-          last_printed_sep = False
-
-      if summary_data:
-        print('%-20s: %3d tests in %s seconds: %s' % (
-          namespace, int(summary_data['numtests']), summary_data['seconds'],
-          summary_data['status']))
-      if postamble:
-        for line in postamble:
-          print(line)
     test:
-    end method processPythonTestOutput;
+      /# Not sure how testable this is.
+      pass
+    end method runUnitTests;
 
     method fqnToTarget : tuple<str,str,str,str,vec<str>> #:
       Given a fully qualified namespace/class/method, obtain target info.
@@ -12719,6 +13089,12 @@ scope:
         'bazel', args, cwd=cwd, dryrun=dryrun, quiet=quiet, prompt=prompt,
         show=show)
     test:
+      _, _, _, compiler = self.cachedInfo(metal='oopl')
+      test.captureStdout()
+      rc, out, err = compiler.executeBazelCommand(['info'])
+      test.iseq(0, rc)
+      test.contains('committed-heap-size:', out)
+      test.iseq('', err)
     end method executeBazelCommand;
 
     method executeCommand : tuple<int,str,str> #:
@@ -12813,13 +13189,20 @@ scope:
 
       return rc, stdout, stderr
     test:
+      _, _, _, compiler = self.cachedInfo(metal='oopl')
+      test.captureStdout()
+      rc, out, err = compiler.executeCommand('ls', ['-l'])
+      test.iseq(0, rc)
+      test.iseq('', err)
     end method executeCommand;
 
-    method parseRepository : map #:
+    method parseRepository #:
       Parse a meta repository
     params:
       var repopath : str = null #:
         Which repository to parse. If null, the one from Config() is used.
+      var fp : ostream = out #:
+        Where output is sent.
     scope:
       if repopath is None:
         repopath = self.repositoryPath()
@@ -12847,7 +13230,7 @@ scope:
           continue
 
         if basel != 'python':
-          print('WARNING: Not yet handling parseRepository on %s' % basel)
+          fp.write(u'WARNING: Not yet handling parseRepository on %s\n' % basel)
           continue
 
         /# TODO(wmh): Ignore basel if it isn't a legal baselang for metaoopl.
@@ -12866,12 +13249,16 @@ scope:
                 pass
               else:
                 /# print path
-                self.parseRepositoryNamespace(base, path)
+                self.parseRepositoryNamespace(base, path, fp=fp)
             else:
               /# We do not expect any other top-level files.
-              print('ERROR: %s is unexpected' % path)
-
+              fp.write(u'ERROR: %s is unexpected\n' % path)
     test:
+      _, _, _, metaoopl = test.cachedInfo()
+      metaoopl.parseRepository(fp=test.fp())
+      out = test.out()
+      /# TODO(wmh): Do some checking on the output.
+      /# print out
     end method parseRepository;
 
     method parseRepositoryNamespace : map #:
@@ -12881,6 +13268,8 @@ scope:
         The fully qualified name of the namespace
       var path : str #:
         The repository path to parse as a namespace.
+      var fp : ostream = out #:
+        Where output is sent.
     scope:
       fs = self.fs()
 
@@ -12958,18 +13347,21 @@ scope:
           pass
         elif fs.islink(subpath):
           /# A symlink ... ignored?
-          print('SKIPPING link %s' % subpath)
+          fp.write(u'SKIPPING link %s\n' % subpath)
         else:
           /# This is either a class file, executable, or an error.
           self.parseRepositoryFile(
-            base, suffixes, errors, result['user'], testnmspmap=result['test'])
+            base, suffixes, errors, result['user'], testnmspmap=result['test'],
+            fp=fp)
           
       /# testdata contains all unprocessed files in the test namespace
       /# directory associated with this namespace directory.
       /#  - process each file as if it were a class file, populating
       /#    the test namespace result.
       for testbase in testdata.keys():
-        if self.parseRepositoryFile(testbase, suffixes, errors, result['test']):
+        if self.parseRepositoryFile(
+          testbase, suffixes, errors, result['test'], fp=fp
+        ):
           del testdata[testbase]
 
       if testdata:
@@ -12987,12 +13379,12 @@ scope:
 
       if errors:
         result['errors'] = errors
-        print('#' * 80)
-        print('%s: unrecognized files:' % path)
+        fp.write(u'#' * 80 + '\n')
+        fp.write(u'%s: unrecognized files:\n' % path)
         for subpath in sorted(errors):
-          print('  %s' % subpath)
-          print('    %s' % errors[subpath])
-        print('#' * 80)
+          fp.write(u'  %s\n' % subpath)
+          fp.write(u'    %s\n' % errors[subpath])
+        fp.write(u'#' * 80 + '\n')
 
       return result
     test:
@@ -13162,6 +13554,8 @@ scope:
         user data or test data depending on where it is called from.
       var testnmspmap : map = null #:
         the test namespace (if we are processing user namespace) or null.
+      var fp : ostream = out #:
+        Where output is sent.
     scope:
       result = False   # true if we successfully identified a file
       fs = self.fs()
@@ -13212,7 +13606,7 @@ scope:
           else:
             subname = nmspmap['name'] + '.' + base
             nmspmap['namespaces'][base] = self.parseRepositoryNamespace(
-              subname, fullpath)
+              subname, fullpath, fp=fp)
       elif m:
         data = m.groupdict()
 
@@ -13274,6 +13668,32 @@ scope:
           errors[base] = 'unrecognized namespace file'
       return result
     test:
+      _, _, _, metaoopl = test.cachedInfo()
+      root = metaoopl.repositoryPath()
+      fs = metaoopl.fs()
+      path = fs.join(root, 'oopl', 'python', 'metax', 'root')
+      suffixes = {'bld': 'bld', 'py': 'defn', 'py.map': 'map'}
+      errors = {}
+
+      /# Note that parseRepositoryNamespace() invokes parseRepositoryFile()
+      /# for each file found in the namespace dir.
+      nmspmaps = metaoopl.parseRepositoryNamespace('metax.root', path)
+      nmspmap = nmspmaps['user']
+
+      /# Parse .NewClass.py, which should add an entry to nmspmap['classes']
+      test.iseq(
+        ['Error', 'InternalError', 'Object', 'ObjectMetaRoot'],
+        sorted(nmspmap['classes'].keys()))
+      res = metaoopl.parseRepositoryFile(
+        '.NewClass.py', suffixes, errors, nmspmap)
+      test.iseq(
+        ['Error', 'InternalError', 'NewClass', 'Object', 'ObjectMetaRoot'],
+        sorted(nmspmap['classes'].keys()))
+      test.iseq(
+        {'user': {'defn': '.NewClass.py'}},
+        nmspmap['classes']['NewClass'])
+
+      /# TODO(wmh): There are many additional paths to be tested.
     end method parseRepositoryFile;
 
     method generateUmlDiagram #:
@@ -14101,22 +14521,25 @@ scope:
           print('NOTE: Created ' + tarpath)
     end method MakeSnapshot;
 
-    method maybeRecompileMeta : bool #:
+    method maybeRecompileMeta : trilean #:
       For a given python file, check if its meta source needs compiling.
 
       Returns:
-        True if compilation succeeded (or didn't happen), False if errors occurred.
+        True if compilation succeeded
+        False if errors occurred.
+        None if parsing did not happen
     params:
       var pyfile : str #:
         The python file to potentially update.
     scope:
+      result = None
       fs = self.fs()
-      result = True
       metafile_path, meta_exists = self.basePathToMeta(pyfile)
       if metafile_path:
         if meta_exists:
           metamodtime = fs.mtime(metafile_path)
           basemodtime = fs.mtime(pyfile)
+          /# print('%d=%s\n%d=%s' % (metamodtime, metafile_path, basemodtime, pyfile))
           if metamodtime > basemodtime:
             sys.stderr.write(
               'NOTE: compiling %s (%d seconds newer than %s)\n' %
@@ -14147,9 +14570,11 @@ scope:
               /# so that is the baselang we use.
               baselang = self.metalang().baselangNamed('python')
               self.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)
+              result = False
               sys.exit(1)
             else:
               if errors:
+                result = False
                 print('ERROR: Failed to compile %s' % metafile_path)
                 sys.exit(1)
               else:
@@ -14162,15 +14587,27 @@ scope:
                 /# though that the only way this happens is when a cosmetic
                 /# change is made to a meta file (a change that doesn't affect
                 /# the underlying python code that gets generated).
-                with fs.open(pyfile, 'a'):
-                  fs.touch(pyfile, None)
+                fs.touch(pyfile)
                 self.writeSummary([metafile])
+                result = True
         else:
           print('WARNING: metafile %s is missing' % metafile_path)
       else:
         if not pyfile.endswith('__init__.py'):
           print('WARNING: Failed to find metafile for %s' % pyfile)
       return result
+    test:
+      metac = metax.c.Compiler(metal='oopl', basel='python')
+      fs = metac.fs()
+      pypath = fs.join(
+        metac.workspaceDirectory(), 'demo', 'cards0', '__init__.py')
+      test.isnull(metac.maybeRecompileMeta(pypath))
+
+      /# Now we touch testdata/ex2.meta, which defines demo.cards0, and verify
+      /# that we recompile.
+      metapath = test.resourcePath('ex2')
+      fs.touch(metapath)
+      test.istrue(metac.maybeRecompileMeta(pypath))
     end method maybeRecompileMeta;
 
     method handleCompilationException : any #:
@@ -14181,7 +14618,12 @@ scope:
         The exception raised (currently unused).
     scope:
       text = traceback.format_exc()
-      if False:
+      if True:
+        print('#' * 70)
+        print(
+          'TODO(wmh): Add this output to the unittest for '
+          'metax.c.Compiler.handleCompilationException in parser.meta')
+        print(sys.exc_info())
         print('#' * 70)
         print(text)
         print('=' * 70)
@@ -14195,6 +14637,9 @@ scope:
       baselang = metaoopl.baselangNamed('python')
       self.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)
     test:
+      /# Waiting for good output
+      /# TODO(wmh): Fix this when we have some.
+      pass
     end method handleCompilationException;
 
     method generateHtml #:
@@ -14226,6 +14671,9 @@ scope:
       var showall : bool = false #:
         Show all attributes of all constructs.
     scope:
+      /# The list of paths created.
+      result = []
+
       /# Some useful vars
       cls = self.__class__
       fs = self.fs()
@@ -14408,6 +14856,7 @@ scope:
             fs.basename(metafile.path()), '_' + blsuffix +'.html')
           htmlpath = fs.join(htmldir, htmlbase)
           with fs.open(htmlpath, 'w') as fp:
+            result.append(htmlpath)
             html_params =  {
               'fontsize': fontsize,
               'allids': str(allids_json),
@@ -14482,6 +14931,7 @@ scope:
 
             /# Create the baselang .html file.
             with fs.open(html2path, 'w') as fp:
+              result.append(html2path)
               fp.write(
                 '<html>\n  <head>\n%s\n  </head>\n' % html_head)
               fp.write('  <body>\n')
@@ -14520,7 +14970,14 @@ scope:
               fp.write('</html>\n')
               if verbose:
                 print('Wrote ' + html2path)
+      return result
     test:
+      metac = metax.c.Compiler(metal='oopl', basel='python')
+      fs = metac.fs()
+      metapath = test.resourcePath('ex2')
+      test.iseq(
+        ['ex2_py.html', 'ex2_py_base.html'],
+        [fs.basename(path) for path in metac.generateHtml(metapath)])
     end method generateHtml;
 
     method monitorMetaFiles : any #:
@@ -14588,6 +15045,9 @@ scope:
         if round_seconds < seconds_between_rounds:
           time.sleep(seconds_between_rounds - round_seconds)
     test:
+      /# TODO(wmh): Need to mock out the timming code and establish a means
+      /# of terminating the execute.
+      pass
     end method monitorMetaFiles;
 
     command metac #:
@@ -15541,52 +16001,8 @@ scope:
       command shell #:
         An interactive shell within which any metac command can be invoked.
       scope:
-        if True:
-          /# New implementation based on metax.c.shell.Shell
-          shell = metax.c.shell.Shell(self)
-          shell.run()
-
-        else:
-          /# Old implementation ... no access to special logic
-          prompt = 'meta> '
-
-          flags = self.cli()
-          cmd = flags._command_()
-          while cmd.id() != 'main':
-            cmd = cmd.parent()
-          root = cmd
-          /#root.show()
-          /#root.show(mode='help')
-          parent = root.parent()
-
-          while True:
-            line = raw_input(prompt).strip()
-            if not line: continue
-            args = line.split()  # TODO(wmh): shlex
-            command = args[0]
-            cmd = root.instantiate([root.id()] + args, parent=parent)
-            if cmd.id() == 'main':
-              /# Failed to find a valid command.
-              print('Unknown command "%s"' % command)
-            else:
-              /# Command instantiation identified a command.
-
-              /# We update the global metax.cli.Values() instance with a
-              /# new Command.
-              self.updateCLI(cmd)
-
-              /# Individual commands should set this. In fact, consider
-              /# deleting this field.
-              self.argmapIs(None)
-
-              func_name = command + '_command'
-              method = getattr(self, func_name, None)
-              if method:
-                method()
-              elif command in ('quit', 'exit'):
-                break
-              else:
-                print('Unknown command "%s" (ignored)' % command)
+        shell = metax.c.shell.Shell(self)
+        shell.run()
       end command shell;
 
       named
@@ -15829,6 +16245,7 @@ scope:
       command __default__ #:
         Compile specified .meta files.
       scope:
+        fs = metac.fs()
         /# As a convenience, if all are .meta files or fqns, we assume the
         /# action is a combination of 'compile' and 'test.
         allargs = cli.rest
@@ -15854,7 +16271,8 @@ scope:
               and len(argmap['metafiles']) == 1
               and len(argmap['fqns']) == 0
             ):
-              sole_metafile = metac.metafiles()[argmap['metafiles'][0]]
+              sole_path = fs.realpath(argmap['metafiles'][0])
+              sole_metafile = metac.metafiles()[sole_path]
               for namespace in sole_metafile.constructs()['namespace']:
                 if namespace.isTest(): continue
                 /# Implicitly add all non-test namespaces in the sole metafile
@@ -15868,7 +16286,6 @@ scope:
         else:
           /# pprint.pprint(argmap)
           print('ERROR: Unknown command "%s"' % command)
-        fs = metac.fs()
         if cli.showfs or fs.kind() == 'memory':
           fp = sys.stdout
           fs.summarize(fp=fp)
@@ -15901,6 +16318,10 @@ scope:
       var metal -> metal;
       var basel -> basel = null;
     scope:
+    setup:
+      /# Intentionally using Meta(Meta) as that is faster to parse. Use
+      /# Meta(Meta) input, like testdata/ex1.meta, not ex2, ex3, or ex4.
+      test.metaenv = metax.c.MetaEnv('meta', basel='stub')
     end;
 
     method parseMeta : tuple<MetaFile,vec<Construct>> #:
@@ -15918,15 +16339,24 @@ scope:
         result = metafile.construct().attrval('scope:')
       return metafile, result
     test:
+      metapath = test.resourcePath('ex1')
+      metafile, constructs = test.metaenv.parseMeta(metapath)
+      test.iseq('MetaLanguage Test', constructs[0].kindfqn())
     end method parseMeta;
 
-    method compileMeta #:
+    method compileMeta : MetaFile #:
       Perform expansion, importation, translation and compilation.
+
+      Returns:
+        The MetaFile instnace. If a 'metafile' keyword is passed in, the return
+        will be the same. If not passed in, a new instance is created and
+        returned.
     params:
       var path : str = null #:
         The .meta file to process. Can be null if metafile provided.
       var metafile : MetaFile = null #:
-        A metafile
+        The MetaFile instance to compile into. If not present, a new instance
+        is created.
       var expand : bool = true #:
         If false, do not expand (or import or translate or compile)
       var imports : bool = true #:
@@ -15946,7 +16376,11 @@ scope:
         expand=expand, imports=imports, translate=translate, compile=compile)
       if metafile:
         assert newfile is metafile
+      return newfile
     test:
+      metapath = test.resourcePath('ex1')
+      metafile = test.metaenv.compileMeta(metapath)
+      test.isinst(metafile, metax.c.MetaFile)
     end method compileMeta;
 
   end class MetaEnv;
@@ -16105,6 +16539,10 @@ scope:
       self.children()[cid] = subnode
       return subnode
     test:
+      node = test.root
+      test.iseq([], node.children().keys())
+      node.addChild(test.method)
+      test.iseq(['show'], test.root.children().keys())
     end method addChild;
 
     method populate #:
@@ -16168,10 +16606,19 @@ scope:
 
     method list #:
       List the children of the current node
+    params:
+      var fp : ostream = out #:
+        Where to write output.
     scope:
       for cid, child in self.children().items():
-        print(cid)
+        fp.write(u'' + cid + '\n')
     test:
+      node = test.root
+      node.addChild(test.method)
+      test.iseq(['show'], test.root.children().keys())
+      node.list(fp=test.fp())
+      out = test.out()
+      test.iseq('show\n', out)
     end method list;
 
   end class MetaNode;
@@ -16189,12 +16636,16 @@ scope:
 
   test
   class TestCase < metax.test.TestCase assocs:
+    std assoc io;
     std assoc optparse;
     std assoc metastrap #:
       /# TODO(wmh): This is not actually std, but rather lib ... we need to
       /# establish an appropriate build target for it.
+    resource testdata path "./testdata";
     resource ex1 path "./testdata/ex1.meta";
     resource ex2 path "./testdata/ex2.meta";
+    resource ex3 path "./testdata/ex3.meta";
+    resource ex4 path "./testdata/ex4.meta";
     resource cards1 path "./testdata/cards1.meta";
     resource cards2 path "./testdata/cards2.meta";
     resource cards3 path "./testdata/cards3.meta";
@@ -16224,19 +16675,19 @@ scope:
         'Attribute', 'BaseLanguage', 'Construct', 'FeatureValue', 'File',
         'MetaLanguage', 'Template',
         'accessor', 'assoc', 'behavior', 'block',
-        'category', 'class', 'command',
+        'case', 'category', 'class', 'command',
         'field', 'flag',
         'lifecycle', 'loop', 'method', 'namespace', 'native',
-        'receiver', 'remark', 'resource', 'testx', 'var',
+        'receiver', 'remark', 'resource', 'switch', 'testx', 'var',
       ]
       self.metaoopl_consids2 = [
         'Attribute', 'BaseLanguage', 'Construct', 'FeatureValue', 'File',
         'MetaLanguage', 'Template',
         'accessor', 'assoc', 'behavior', 'block',
-        'category', 'class', 'command',
+        'case', 'category', 'class', 'command',
         'field', 'flag',
         'lifecycle', 'loop', 'method', 'namespace', 'native', 'receiver',
-        'remark', 'resource', 'testx', 'var',
+        'remark', 'resource', 'switch', 'testx', 'var',
       ]
 
       self._invoked_fixenv = False
@@ -16244,24 +16695,89 @@ scope:
       if metax.c.Compiler.CONFIG is None:
         metax.c.Compiler.CONFIG = metax.root.MetaObject.Config()
 
+      test.samples = {
+        'meta': """
+          >|MetaLanguage test name Test parent meta toplevel <special> config:
+          >|  Construct special clsname CC config:
+          >|    primary Attribute special : id = <required;
+          >|  scope:
+          >|  end Construct special;
+          >|
+          >|  BaseLanguage base name Base suffixes <base>;
+          >|end MetaLanguage;
+          >|""",
+        'oopl': """
+          >|namespace demo.tmp scope:
+          >|  class Person #:
+          >|    First line should be oneline summary.
+          >|    Subsequent lines are for more details and
+          >|    can be formatted in Meta(Doc) syntax.
+          >|  scope:
+          >|    field height : float;
+          >|    field weight : float;
+          >|    method bmi : float scope:
+          >|      return self.weight() / (self.height() ** 2)
+          >|    end;
+          >|  end;
+          >|
+          >|class Student < Person #:
+          >|  Intentionally at File scope rather than namespace scope.
+          >|scope:
+          >|end class Student;
+          >|""",
+        'statements': """
+          >|namespace demo.tmp scope:
+          >|  class Test scope:
+          >|    method test scope<*>:
+          >|      var f : int;
+          >|      var g : int = 17;
+          >|      var v : vec<int>;
+          >|
+          >|      loop l1 name i over v ::
+          >|        print(i)
+          >|
+          >|      loop j over v ::
+          >|        print(j)
+          >|
+          >|      switch s1 on f scope:
+          >|        case expr 1 ::
+          >|          f = 1
+          >|        case expr 2 ::
+          >|          f = 7
+          >|      end;
+          >|
+          >|      switch h scope:
+          >|        case expr 1 ::
+          >|          f = 1
+          >|        case expr 2 ::
+          >|          f = 7
+          >|      end;
+          >|    end method test;
+          >|  end class Test;
+          >|end namespace demo.tmp;
+          >|""",
+      }
     teardown:
       self.unfixenv()
     end lifecycle;
 
     method basics : Construct #:
       Create a compiler, context and construct.
+    params:
+      var metal : str = 'meta';
+      var basel : str = null;
     scope:
-      _, _, _, compiler = self.cachedInfo(metal='meta')
-      self.compiler = compiler
+      _, _, _, compiler = test.cachedInfo(metal=metal, basel=basel)
+      test.compiler = compiler
 
       context = compiler.bootstrapContext()
-      self.context = context
+      test.context = context
       metafile = metax.c.MetaFile('/faux/a.meta', compiler, 'fake text')
-      self.metafile = metafile
+      test.metafile = metafile
       /# Create
       /#   file a.meta scope:
       /#     namespace nm.sp scope:
-      /#       class Person scope:
+      /#       public class Person scope:
       /#       end;
       context.metafileIs(metafile)
       file = metax.meta.FileConstruct('a.meta', None, context)
@@ -16274,26 +16790,79 @@ scope:
       namespace.registerAttribute(namespace_scope)
       klass = metax.oopl.ClassConstruct('Person', namespace_scope, context)
       klass.namespaceIs(namespace)
+      feature = metax.attr.FeatureAttribute(klass, 'visibility', 'public', line=1, col=0)
+      klass.registerAttribute(feature)
+      primary = metax.attr.IdAttribute(klass, 'class', 'Person', line=1, col=10)
+      klass.registerAttribute(primary)
       namespace_scope.registerConstruct(klass)
-      self.construct = klass
       class_scope = metax.attr.ComplexBlock(klass, 'scope:', [], line=2, col=17)
       klass.registerAttribute(class_scope)
       klass.termcodeIs(3)
+
+      test.construct = klass
       return klass
     end method basics;
 
     method metafileFor : MetaFile #:
-      Obtain a MetaFile for provided text.
+      Obtain a parser for given text written in a specific metalang.
     params:
-      var text : str #:
-        The text of the metafile.
-      var metal : str = 'Oopl' #:
-        The metalang the text is implemented in.
+      var text : str = null #:
+        The text representing the metafile. Either this or 'name' must be
+        specified.
+      var name : str = null #:
+        The name of a key in test.samples (i.e. named text). Either this or
+        text must be specified.
+      var metal : str = 'oopl';
+      var basel : str = null;
+      var debuglevel : int = 0;
     scope:
-      _, _, _, compiler = self.cachedInfo(metal=metal)
-      metafile = metax.c.MetaFile('/faux/a.meta', compiler, text)
+      assert name is not None or text is not None, 'Must provide name or text'
+      _, metalang, context, compiler = self.cachedInfo(metal=metal, basel=basel)
+      context.compilerIs(compiler)
+      if text is None:
+        if not name:
+          raise Error('Must provide text or name')
+        text = test.samples[name]
+      metafile = metax.c.MetaFile(
+        '/faux/path.meta', compiler, text, debuglevel=debuglevel)
+      metafile.contextIs(context)
       return metafile
     end method metafileFor;
+
+    method constructInCode : metax.meta.Construct #:
+      Parse text representig a metafile and return a construct within it.
+    params:
+      var child : str #:
+        The path to the desired construct within the text.
+      var text : str = null #:
+        The text representing the metafile. Either this or 'name' must be
+        specified.
+      var name : str = null #:
+        The name of a key in test.samples (i.e. named text). Either this or
+        text must be specified.
+      var metal : str = 'oopl';
+      var basel : str = null;
+      var debuglevel : int = 0;
+    scope:
+      metafile = self.metafileFor(
+        text=text, name=name, metal=metal, basel=basel, debuglevel=debuglevel)
+      metafile.parseMeta(test.context)
+      if metafile.hasErrors(show=True):
+        return None
+      file_construct = metafile.construct()
+      if child:
+        fp = io.StringIO()
+        result = file_construct.child(child, fp=fp)
+        if result is None:
+          print('In constructInCode, child "%s" produced errors:' % child)
+          print(fp.getvalue())
+      else:
+        result = file_construct
+
+      test.metafile = metafile
+      return result
+    test:
+    end method constructInCode;
 
     method fixenv #:
       Set some required environment variables to faux values.
@@ -16403,7 +16972,7 @@ scope:
       test.defineAttributes()
       construct = test.construct
       construct.registerAttribute(test.feature)
-      primary = metax.c.IdAttribute(construct, construct.kind(), construct.id())
+      primary = metax.attr.IdAttribute(construct, construct.kind(), construct.id())
       construct.registerAttribute(primary)
       construct.registerAttribute(test.id)
       construct.registerAttribute(test.num)
@@ -16430,7 +16999,7 @@ scope:
       _, _, _, metameta = test.cachedInfo(metal='meta')
       fs = metameta.fs()
       if not fs.exists(result):
-        raise Error('Resource "%s" (%s) does not exist' % (name, result))
+        raise metax.c.Error('Resource "%s" (%s) does not exist' % (name, result))
       return result
     end method resourcePath;
 
@@ -16515,23 +17084,6 @@ scope:
     test:
     end method newTestSchema;
 
-    method parserFor : MetaFile #:
-      Obtain a parser for given text written in a specific metalang.
-    params:
-      var metal : str;
-      var text : str;
-      var debuglevel : int = 0;
-    scope:
-      _, _, _, compiler = self.cachedInfo(metal=metal)
-      metalang = compiler.metalang()
-      context = metalang.context()
-      context.compilerIs(compiler)
-      metafile = metax.c.MetaFile(
-        '/faux/path', compiler, text, debuglevel=debuglevel)
-      metafile.contextIs(context)
-      return metafile
-    end method parserFor;
-
     method context : Context #:
       Obtain a Context instance for use in a test.
     scope:
@@ -16543,7 +17095,7 @@ scope:
       Obtain a Compiler instance whose filesystem is setup to read from
       ./testdata/repo (writing disallowed by making the directory readonly).
     params:
-      var metal : str = 'Oopl';
+      var metal : str = 'oopl';
       var basel : str = 'python';
     scope:
       /# NOTE: We intentionally create a new instance each time this is
@@ -16551,7 +17103,8 @@ scope:
       /#  - Compiler and Filesystem construction is not that expensive
       /#  - this method won't be used all the time and it is best for us to
       /#    be in a clean slate for those test methods that really need it.
-      repo_path = metax.root.Object.Resource('test_repo', fqn='metax.c.Compiler')
+      repo_path = metax.root.Object.Resource(
+        'test_repo', fqn='metax.c.Compiler')
       compiler = metax.c.Compiler(
         metal=metal, basel=basel, kind='disk',
         rootdir=repo_path, metadir='.', repodir=repo_path)
@@ -16560,6 +17113,13 @@ scope:
 
     method cachedInfo : tuple<BaseLanguage,MetaLanguage,Context,Compiler> #:
       Obtain a cached set of important objects
+
+      SideEffects:
+        Sets each of the following fields on the testcase instance:
+          baselang
+          metalang
+          context
+          compiler
     params:
       var basel : str = null #:
         The name/id/alias/suffix of a baselang.
@@ -16568,14 +17128,14 @@ scope:
         the basel isn't for oopl.
     scope:
       if metal is None:
-        metal = 'Oopl'
-      else:
-        metal = metal.capitalize()
+        metal = 'oopl'
       if basel is None:
-        if metal == 'Oopl':
-          basel = 'python'
-        else:
-          basel = 'stub'
+        defaults = {
+          'meta': 'stub',
+          'oopl': 'python',
+          'doc': 'html',
+        }
+        basel = defaults[metal]
 
       key = '%s/%s' % (metal, basel)
 
@@ -16583,10 +17143,9 @@ scope:
       if compiler is None:
         compiler = metax.c.Compiler(metal=metal, basel=basel)
         baselang = compiler.baselang()
-        if baselang:
-          bls = set([basel, baselang.id(), baselang.name()] + baselang.suffixes())
-        else:
-          bls = ['stub']
+        bls = (
+          set([basel, baselang.id(), baselang.name()] + baselang.suffixes()) if baselang
+          else ['stub'])
         for bl in bls:
           xkey = '%s/%s' % (metal, bl)
           if xkey in COMPILERS:
@@ -16594,11 +17153,17 @@ scope:
               '****** Found %s for %s and %s' % (xkey, compiler, COMPILERS[xkey]))
           COMPILERS[xkey] = compiler
 
-      baselang = compiler.baselang()
-      metalang = compiler.metalang()
-      context = metalang.context()
+      test.compiler = compiler
+      test.baselang = compiler.baselang()
+      test.metalang = compiler.metalang()
+      test.context = test.metalang.context()
 
-      return baselang, metalang, context, compiler
+      if False:
+        print(
+          'basel=%s vs %s  metal=%s vs %s' %
+          (basel, test.baselang.id(), metal, test.metalang.id()))
+
+      return test.baselang, test.metalang, test.context, test.compiler
     test:
     end method cachedInfo;
 
@@ -16612,12 +17177,23 @@ scope:
       var init_lines : vec<str> = null #:
         If provided, the lines to use as the body of the initializer.
     scope:
+      /# IMPORTANT: DO NOT INVOKE metalangFor() or other service test methods
+      /# without being certain they will not modify test fields set here.
+      /# For example, we set self.baselang() here, but if you invoke
+      /# metalangFor() without specifying basel, test.baselang will be tromped
+      /# on (replaced with python regardless of what basenora is).
+      /# TODO(wmh): This is fragile code ... clean it up.
+
       if context is None:
         /# We need the baselang to ensure that the compiler has the correct
         /# baselang, used implicitly be various methods in various classes.
         baselang, _, context, _ = self.cachedInfo(basel=basenora)
       else:
         baselang = context.compiler().baselang()
+        if baselang.id() != basenora:
+          print(
+            '****** WARNING: base %s vs %s. This may indicate an error' %
+            (basenora, baselang.id()))
       assert baselang
 
       /# TODO(wmh): Initialized metalang?
@@ -16626,7 +17202,11 @@ scope:
 
       /# An expr to be used as the 'super' attribute of 'initializer' and
       /# 'method2'.
-      expr = metax.c.ExprParser(self.metafileFor('(a, b=1, c=false)\n')).parse()
+      dummy_attribute = metax.attr.ExprAttribute(None, 'super', None)
+      expr = metax.c.ExprParser(
+        self.metafileFor(
+          text='(a, b=1, c=false)\n', basel=baselang.id())).parse(
+            attribute=dummy_attribute)
 
       /# Define a FileConstruct.
       self.filecons = metax.meta.FileConstruct.NewFromData(
@@ -16684,13 +17264,11 @@ scope:
          {'var': 'b',
           'secondaries': [
             (':', MetaType('int')),
-            /# ('=', metax.c.ExprParser(self.metafileFor('1\n')).parse())
             ('=', metax.c.Expr('num', '1', 1)),
           ]},
          {'var': 'c',
           'secondaries': [
             (':', MetaType('bool')),
-            /# ('=', metax.c.ExprParser(self.metafileFor('1\n')).parse())
             ('=', metax.c.Expr('var', 'false', 'false')),
           ]},
         ],
@@ -16718,6 +17296,7 @@ scope:
       initializer.myclassIs(klass)
       self.initializer = initializer
       initializer.namespaceIs(self.namespace)
+
     end method defineClassAndMethods;
 
   end class TestCase;

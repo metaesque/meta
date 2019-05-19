@@ -1,0 +1,75 @@
+namespace demo.stmts scope:
+
+  class A scope:
+
+    field a : int;
+
+    lifecycle params:
+      var a -> a;
+    scope:
+    end;
+
+    new
+    method f : int #:
+      An instance method.
+    params:
+      var req : int;
+      var opt : A = null;
+    scope<*>:
+    test:
+    end method f;
+
+  end class A;
+
+  class B < A scope:
+
+    field b : str;
+
+    lifecycle params:
+      var a : int;
+      var b -> b = '';
+    super (a)
+    scope:
+    end;
+
+    override
+    method f : int #:
+      An instance method.
+    params:
+      var req : int;
+      var opt : A = null;
+    scope<*>:
+      var t : int = 1;
+      var container : vec<int>;
+
+      loop i over container ::
+        print(i)
+
+      loop j from 10 to 20 by 2 ::
+        print(j)
+
+      loop while expr1 ::
+        print(k)
+
+      loop ::
+        print('')
+      until expr2;
+
+      switch name a #:
+        dkdk
+      scope:
+        case expr 1 ::
+          v = 2
+        case expr 2 ::
+          v = 7
+      else:
+        v = 14;
+      end;
+
+    test:
+    end method f;
+ 
+  end class B;
+
+end namespace demo.stmts;
+

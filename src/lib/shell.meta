@@ -26,7 +26,7 @@ namespace metax.lib.shell #:
          - variables that are 'inherited' into subprocesses.
          - NOTE: As of 2018/01/02, env.var. support is minimal, since the
            code currently has no mechansim whereby one can invoke
-           subprocesses, and thus no real need  for env.vars.
+           subprocesses, and thus no real need for env.vars.
     - define aliases for commands
     - view command history
 
@@ -41,7 +41,8 @@ namespace metax.lib.shell #:
         root.add('symlink', 'docs.txt', link=readme)
         misc = root.add('dir', 'misc')
         home = root.add(
-          'dir', 'home', childvar='user', generator=Users, childvar=freshold=120)
+          'dir', 'home',
+          childvar='user', generator=Users, childvar=freshold=120)
         # In the above, the signature of Users is 
         #    Users(dir:Directory) : vec<Node>
         # and it should return a list of newly created Node instances that

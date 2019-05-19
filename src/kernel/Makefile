@@ -2,10 +2,7 @@ DIFF_FLAGS = -y --suppress-common-lines -W 160
 
 METAGROUP = "Meta"
 METAFILES = parser.meta attr.meta fs.meta cli.meta shell.meta logs.meta \
-	    root.meta test.meta \
-	    ../schema/meta/metameta.meta \
-	    ../schema/oopl/metaoopl.meta \
-	    ../schema/doc/metadoc.meta
+	    root.meta test.meta metameta.meta metaoopl.meta metadoc.meta
 
 include $(WMH)/Makefile.meta
 
@@ -73,10 +70,16 @@ meta-%:
 	metac -b $* root.meta test.meta
 
 up%:
-	cd ../schema/$*; metac schema $* schema.meta; metac meta$*.meta
+	cd ../schema/$*; metac meta$*.meta
+
+schema%:
+	cd ../schema/$*; metac schema $* schema.meta
 
 cup%:
-	cd ../schema/$*; metac --meta_version=current schema $* schema.meta; metac --meta_version=current meta$*.meta
+	cd ../schema/$*; metac --meta_version=current meta$*.meta
+
+cschema%:
+	cd ../schema/$*; metac --meta_version=current schema $* schema.meta
 
 # target fullmeta-%:
 #   Compile all code needed to compile Meta in the specified baselang.
