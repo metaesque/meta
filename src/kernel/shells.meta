@@ -1,10 +1,17 @@
 namespace metax.c.shell #:
   An interactive shell for exploring Meta.
+
+  NOTE: This file is named shells.meta rather than shell.meta because there is a
+  'shell' command provided by metac, and having both a command and a metafile
+  named 'shell' means that one must always remember to use 'metac shell.meta'
+  when wanting to compile. By making the names different, 'metac shell' invokes
+  the shell, and 'metac shells' compiles the code.
 scope:
 
   class Shell < metax.lib.shell.Shell assocs:
     std assoc io;
     std assoc os;
+    std assoc pprint;
   scope:
 
     field compiler : metax.c.Compiler #:
@@ -17,6 +24,46 @@ scope:
 
       self.rcfileIs(
         os.path.join(os.getenv('HOME'), '.config', 'metaxy', 'metarc'))
+
+      /# Add a new kind of variable (flag) to capture the flag values passed
+      /# to the metac invocation.
+      /#  - TODO(wmh): We may want to instead merge these values into 'context'
+      /#    variables so they can be used in interpolations.
+      /#  - TODO(wmh): Currently these flags are readonly (they can be set,
+      /#    but setting them does not affect the actual script). We should
+      /#    introduce a concept of readonly variable kinds so that users won't
+      /#    be puzzled by sets not taking effect. We should also generalize
+      /#    to allow sets to truly make changes.
+      self.defineKind('flag')
+      cli = compiler.cli()
+      assert cli, 'Compiler has not initialized cli'
+      cmd = cli._command_()
+      root = cmd.root()
+      for partnora, part in root.parts().items():
+        if part.name() != partnora: continue
+        if not part.isFlag(): continue
+        self.defineVariable(
+          part.name(), part.mytype(), kind='flag', default=part.value(),
+          readonly=True, summary=part.summary(), desc=part.desc())
+
+      /# Add a new kind of variable (config) to show the metac config vars.
+      /#  - TODO(wmh): We could fully parse the .config/metaxy/config.meta
+      /#    file so that we have access to types and docstrings to populate
+      /#    the defined variables with.
+      self.defineKind('config')
+      config = compiler.__class__.CONFIG
+      assert config, 'Compiler has not initialized config'
+      for cvar, cval in config.items():
+        if isinstance(cval, dict):
+          for k, v in cval.items():
+            subvar = '%s/%s' % (cvar, k)
+            self.defineVariable(
+              subvar, 'str', kind='config', default=v, readonly=True,
+              summary='fixme (parse config.meta)')
+        else:
+          self.defineVariable(
+            cvar, 'str', kind='config', default=cval, readonly=True,
+            summary='fixme (parse config.meta)')
 
       /# Register commands
       /#  - If the method associated with a command accepts arbitrary args,
@@ -76,7 +123,8 @@ scope:
                           /# file contents, etc.
                           /#
                           /# Possibilities:
-                          /#   meta --> file containing meta source code of method
+                          /#   meta --> file containing meta source code of
+                          /#            method
                           /#   py   --> file containing python source code
                           /#   cc   --> file containing c++ source code
                           /#   ...
@@ -97,6 +145,18 @@ scope:
           for metafile in self.compiler().metaorder()
         ]
       )
+    setup:
+      /# Important to get metac configured properly!
+      metax.c.Compiler.Bootstrap(['metac', 'shell'])
+
+      /# Define some variables in the testcase.
+      test.compiler = metax.c.Compiler(metal='oopl', basel='python')
+      test.shell = metax.c.shell.Shell(test.compiler)
+      test.outfp = test.fp()
+      test.shell.fpIs(test.outfp)
+      /# Although test.out() will work to obtain contents in test.outfp as long
+      /# as test.fp() is not invoked in the meantime, test.outfp.getvalue() is
+      /# always available to get the content written into shell.log().
     end lifecycle;
 
     override
@@ -165,25 +225,136 @@ scope:
           else:
             print('Unknown command "%s" (ignored)' % command)
       return result
+    test:
+      test.shell.dispatch('sym', [])
     end method dispatch;
 
     override
     method helpCommand #:
       Provide summary of commands.
-
-      This augments the parent implementation with the commands available
-      via command 'main' in metax.c.Compiler.
     params:
-      multi var args : vec;
+      multi var args : vec #:
+        Each arg is the name of a command to print help for. If no args
+        are specified, all commands are printed.
     scope:
-      super(Shell, self).helpCommand(*args)
+      /# This augments the parent implementation with the commands available
+      /# in the 'metac' binary (e.g. commands defined in metax.c.Compiler)
 
-      if False:
-        command = self.compiler().cli()._command_()
-        while command.parent():
-          command = command.parent()
-        command.help()
+      /# Where to write output.
+      fp = self.fp()
+
+      def MaxLine(line, width, mark='$'):
+        /# Return a line of at most width chars, indicating truncation via mark.
+        n = len(line)
+        if n > width:
+          line = line[:width - len(mark)] + mark
+        return line
+
+      /# There are two different kinds of commands available here:
+      /#  1: builtin commands provided by the shell itself.
+      /#  2: most of the commands available in the metac compiler.
+      builtin_commands = {}
+      compiler_commands = {}
+      
+      /# Add the shell commands:
+      for cmd, info in self._commands.items():
+        /# TODO(wmh): Currently, info is a map containing 'method' and
+        /# 'dispatcher', where the method accepts arbitrary position args but no
+        /# keyword args. We should reimplement that code to use the
+        /# Command/Flag/Arg functionality from metax.cli (i.e.
+        /# src/kernel/cli.meta)
+        builtin_commands[cmd] = info
+
+      /# Add the metac commands.
+      /#  - any metac command that has the same name as a builtin command is
+      /#    NOT available within the shell.
+      command = self.compiler().cli()._command_().root()
+      for command in sorted(command.order(), key=lambda command: command.name()):
+        cmd = command.name()
+        if cmd == '__default__': continue
+        if cmd in builtin_commands:
+          /# fp.write(u'WARN: compiler command %s is hidden by builtin\n' % cmd)
+          continue
+        compiler_commands[cmd] = command
+      
+      /# Print out the commands.
+      verbose = False
+      if args and args[0] == '-v':
+        args = args[1:]
+        verbose = True
+      if not args:
+        fp.write(u'usage:\n')
+        fp.write(u'  help [-v] all           help for all commands\n')
+        fp.write(u'  help [-v] builtins      help for builtin commands\n')
+        fp.write(u'  help [-v] compiler      help for compiler commands\n')
+        fp.write(u'  help <command>...       help for given command(s)\n')
+      else:
+        if len(args) == 1:
+          /# Check for the special words
+          arg = args[0]
+          if arg == 'all':
+            args = sorted(list(builtin_commands) + list(compiler_commands))
+          elif arg == 'builtins':
+            args = sorted(builtin_commands)
+          elif arg == 'compiler':
+            args = sorted(compiler_commands)
+          else:
+            verbose = True
+        else:
+          /# verbose False only makes sense for 'all', 'builtins', 'compiler'
+          verbose = True
+
+      /# Summary lines:
+      /#  - start with some indentation (currently 0 chars)
+      /#  - then 15 chars for the command name, followed by ': '
+      /#  - then maxwidth chars (terminal width - len(width) - 15 - len(': '))
+      indent = u''
+      maxwidth = self.columns() - len(indent) - 15 - 2
+      sepline = indent + '=' * 70 + '\n'
+
+      for cmd in args:
+        if cmd in builtin_commands:
+          /# A builtin command.
+          info = builtin_commands[cmd]
+          /# See metax.lib.Shell.helpCommand for more on this. If this was
+          /# reimplemented to use metax.cli.Command, things would be cleaner
+          /# and more flexible, but for now we hack it up.
+          method = info['method']
+          docstr = method.im_func.func_doc
+          lines = docstr.strip().split('\n')
+
+          if not verbose:
+            /# CODETANGLE(help_width) in src/lib/cli.meta
+            fp.write(
+              '%s%-15s: %s\n' % (indent, cmd, MaxLine(lines[0], maxwidth)))
+          else:
+            fp.write(sepline)
+            fp.write(u'%s%s:\n' % (indent, cmd))
+            for line in lines:
+              /# Note that when Meta generates docstrings, first line is
+              /# immediately after """, while subsequent lines are indented to
+              /# align with the start of the """, which is usually 4 spaces in
+              /# from left margin. We strip off this space, but that might pose
+              /# subtle problems in non-meta help methods in which indentation
+              /# is desired.
+              if line.startswith('    '):
+                line = line[4:]
+              fp.write('    ' + line + '\n')
+        elif cmd in compiler_commands:
+          /# A compiler command.
+          command = compiler_commands[cmd]
+          if not verbose:
+            summary = command.summary()
+            fp.write('%s%-15s: %s\n' % (indent, cmd, MaxLine(summary, maxwidth)))
+          else:
+            fp.write(sepline)
+            command.help(fp=fp, indent=indent, mode='help')
+        else:
+          fp.write('WARN: Ignoring unknown command "%s"' % cmd)
     test:
+      test.shell.helpCommand('all')
+      out = test.outfp.getvalue()
+      test.contains('history        : Show the history of commands.', out)
     end method helpCommand;
 
     method showMetaContext : any #:
@@ -192,7 +363,7 @@ scope:
       multi var args : vec;
     scope:
       dir = self.cwd()
-      nmsp = self.getctx('namespace', default=None)
+      nmsp = self.getctx('namespace', default=None, undef=None)
       if nmsp:
         /# If namespace is set, we know that cwd contains the construct,
         /# and we can obtain its context and print it.
@@ -201,6 +372,7 @@ scope:
           context = construct.context()
           context.show()
     test:
+      test.shell.showMetaContext()
     end method showMetaContext;
 
     method showHierarchy #:
@@ -214,7 +386,7 @@ scope:
       if args and args[0] in ('--below', '--b', '-b'):
         below = True
 
-      nmsp = self.getctx('namespace', default=None)
+      nmsp = self.getctx('namespace', default=None, undef=None)
       if nmsp:
         /# We know we are in a directory containing a 'construct'
         dir = self.cwd()
@@ -237,6 +409,7 @@ scope:
           else:
             print('Warning: no hierarchy action defined for %s' % dir.abspath())
     test:
+      test.shell.showHierarchy()
     end method showHierarchy;
 
     method showSymbols #:
@@ -249,7 +422,7 @@ scope:
     scope:
       if args:
         print('Warning; args ignored')
-      nmsp = self.getctx('namespace', default=None)
+      nmsp = self.getctx('namespace', default=None, undef=None)
       if nmsp:
         /# We know we are in a directory containing a 'construct'
         dir = self.cwd()
@@ -257,6 +430,7 @@ scope:
         if construct:
           construct.symbols().show()
     test:
+      test.shell.showSymbols()
     end method showSymbols;
 
     method _showHierarchy #:
@@ -275,6 +449,7 @@ scope:
         child = children[name]
         self._showHierarchy(child, subindent)
     test:
+      /# test.shell._showHierarchy()
     end method _showHierarchy;
 
     method generateMetafiles  #:

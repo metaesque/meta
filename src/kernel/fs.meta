@@ -152,6 +152,8 @@ scope:
     scope:
       return True
     test:
+      alice = test.hier()
+      test.istrue(alice.isdir())
     end method isdir;
 
     method register params:
@@ -185,7 +187,7 @@ scope:
           child.show(fp=fp, indent=subindent, details=details)
     test:
       alice = test.hier()
-      fp = test.newStr()
+      fp = test.fp()
       alice.show(fp=fp)
       home = alice.parent()
       root = home.parent()
@@ -231,7 +233,7 @@ scope:
     test:
       alice = test.hier()
       readme = alice.parent().child('bob', 'README')
-      fp = test.newStr()
+      fp = test.fp()
       readme.show(fp=fp)
       test.iseq('README\n', fp.getvalue())
     end method show;
@@ -271,10 +273,10 @@ scope:
     test:
       alice = test.hier()
       readme = alice.child('README')
-      fp = test.newStr()
+      fp = test.fp()
       readme.show(fp=fp)
       test.iseq('README@\n', fp.getvalue())
-      fp = test.newStr()
+      fp = test.fp()
       readme.show(fp=fp, details=True)
       test.iseq('README -> /home/bob/README\n', fp.getvalue())
     end method show;
@@ -301,12 +303,13 @@ scope:
       bazelified at all times.
       lib assoc fake_filesystem;
   assocs:
-    std assoc os;
     std assoc glob;
     std assoc io;
-    std assoc shutil;
+    std usertest assoc os;
+    std assoc re;
+    std usertest assoc shutil;
     std assoc tempfile;
-    std assoc time;
+    std usertest assoc time;
 
     test resource testdata path "./testdata/fs";
   scope:
@@ -321,10 +324,19 @@ scope:
         disk:
           use the underlying disk filesystem
         memory: 
-          do not write files to disk, but don't mock out I/O methods.
+          do not write files to disk, but don't mock out I/O methods. TODO(wmh):
+          Change this to 'readonly' ... it relies on a read-only disk filesystem
+          to acquire data, but all methods that modify the filesystem are
+          rewritten to have an effect on in-memory representations rather than
+          the disk. Subsequent reads of modified data should see the new data,
+          not the disk data. Decide whether we need two flavors of readonly
+          filesystems, one that simply raises errors when write-based
+          functionality is invoked, and the other that emulates such
+          functionality.
         emulate:
           do not write files to disk, and emulate all I/O methods so that
           code that uses os, open, glob, etc. writes to memory versions instead.
+          TODO(wmh): Is this needed, or can we remove support for this?
 
     field modules : vec<module> #:
       The modules to replace filesystem-related methods within.
@@ -383,6 +395,12 @@ scope:
     scope:
       return self.filemap().get(subpath, None)
     test:
+      fs = test.diskfs
+      metafile = test.metafile()
+      basefile = metax.fs.BaseFile('sub/b.meta', '', metafile=metafile)
+      fs.addFile(basefile)
+      basefile2 = fs.subpath('sub/b.meta')
+      test.issame(basefile2, basefile)
     end method subpath;
 
     method environ : map #:
@@ -390,6 +408,8 @@ scope:
     scope:
       return os.environ
     test:
+      res = test.diskfs.environ()
+      test.contains('HOME', res)
     end method environ;
 
     method getenv : str #:
@@ -405,6 +425,7 @@ scope:
         raise Error('Failed to find envar %s' % name)
       return result
     test:
+      test.iseq('/bin/bash', test.diskfs.getenv('SHELL'))
     end method getenv;
    
     method setenv : any #:
@@ -417,6 +438,8 @@ scope:
     scope:
       os.environ[name] = value
     test:
+      test.diskfs.setenv('BLAH', '1')
+      test.iseq('1', test.diskfs.getenv('BLAH'))
     end method setenv;
    
     method unsetenv : any #:
@@ -428,6 +451,9 @@ scope:
       if name in os.environ:
         del os.environ[name]
     test:
+      test.diskfs.setenv('BLAH', '1')
+      test.diskfs.unsetenv('BLAH')
+      test.isnull(test.diskfs.getenv('BLAH', default=None))
     end method unsetenv;
 
     method join : str #:
@@ -437,6 +463,7 @@ scope:
     scope:
       return os.path.join(*parts)
     test:
+      test.iseq('/a/b/c', test.diskfs.join('/a', 'b', 'c'))
     end method join;
 
     method split : tuple<str,str> #:
@@ -446,6 +473,7 @@ scope:
     scope:
       return os.path.split(path)
     test:
+      test.iseq(('/a/b', 'c'), test.diskfs.split('/a/b/c'))
     end method split;
 
     method splitext : tuple<str,str> #:
@@ -455,6 +483,7 @@ scope:
     scope:
       return os.path.splitext(path)
     test:
+      test.iseq(('/a/b/c', '.py'), test.diskfs.splitext('/a/b/c.py'))
     end method splitext;
 
     method splitall : tuple<str,str,str> #:
@@ -466,10 +495,9 @@ scope:
       basename, suffix = os.path.splitext(basesuff)
       return (dirname, basename, suffix)
     test:
-      fs = metax.fs.Filesystem(rootdir='/foo')
       test.iseq(
         ('/some/dir', 'base', '.suff'),
-        fs.splitall('/some/dir/base.suff'))
+        test.diskfs.splitall('/some/dir/base.suff'))
     end method splitall;
 
     method expandvars : str #:
@@ -480,6 +508,7 @@ scope:
     scope:
       return os.path.expandvars(value)
     test:
+      res = test.diskfs.expandvars('${HOME}/.config/${USER}')
     end method expandvars;
 
     method touch #:
@@ -497,6 +526,11 @@ scope:
       with open(path, 'a') as fp:
         os.utime(path, (atime or time.time(), mtime or time.time()))
     test:
+      tm = os.path.getmtime(test.filepath)
+      time.sleep(0.0001)
+      test.diskfs.touch(test.filepath)
+      tm2 = os.path.getmtime(test.filepath)
+      test.isgt(tm2 - tm, 0.0001)
     end method touch;
 
     method emulateIO #:
@@ -563,15 +597,24 @@ scope:
           module.tempfile = faux_tempfile
 
       /# print('***** HERE in emulateIO with %s' % faux_os.getenv('METAROOT'))
+    test:
+      /# TODO(wmh): Are we supporting this?  The readonly implementtiaon of
+      /# the filesystem will need something like this, although only half-way.
+      pass
     end method emulateIO;
 
     method undoMemory #:
       Reinstate module remaps.
     scope:
+      raise Error('Unused method?')
       origs = self.origs()
       for module in self.modules():
-        for key in orgs:
-          setattr(module, key, origs[key])
+        print('FIXME: %s' % module)
+        /# for key in orgs:
+        /#   setattr(module, key, origs[key])
+    test:
+      /# test.rofs.undoMemory()
+      pass
     end method undoMemory;
 
     method addFile : vec<str> #:
@@ -631,6 +674,8 @@ scope:
             mapfile.serialize(fp)
           result.append(mappath)
       return result
+    test:
+      test.rofs.addFile(test.basefile)
     end method addFile;
 
     method basefilePath : tuple<str,str> #:
@@ -655,6 +700,12 @@ scope:
         mroot = metac.repositoryPath()
         fullpath = self.join(mroot, basefile.subpath())
       return fullpath, mroot
+    test:
+      metafile = test.metafile()
+      basefile = metax.fs.BaseFile('some/path/a.meta', '', metafile=metafile)
+      fullpath, mroot = test.diskfs.basefilePath(basefile)
+      relpath = fullpath.replace(mroot, '')
+      test.iseq('/some/path/a.meta', relpath)
     end method basefilePath;
 
     method subfilePath : tuple<str,str> #:
@@ -679,6 +730,10 @@ scope:
       fullpath = self.realpath(self.join(mroot, subpath))
       /# print('metadir=%s mroot=%s subpath=%s fullpath=%s' % (metadir, mroot, basefile.subpath(), fullpath))
       return fullpath, mroot
+    test:
+      test.iseq(
+        ('/foo/.meta/b/file.txt', '/foo/.meta'),
+        test.diskfs.subfilePath('b/file.txt'))
     end method subfilePath;
 
     method open #:
@@ -698,6 +753,33 @@ scope:
       else:
         result = open(path, mode)
       return result
+    test:
+      ifp = test.diskfs.open(test.filepath, 'r')
+      contents = ifp.read()
+      ifp.close()
+      test.contains('This file should stay unchanged', contents)
+
+      ofp = test.diskfs.open(test.filepath, 'w')
+      ofp.write('This is a test')
+      ofp.close()
+      ifp = test.diskfs.open(test.filepath, 'r')
+      contents = ifp.read()
+      ifp.close()
+      test.iseq('This is a test', contents)
+
+      ifp = test.rofs.open(test.filepath, 'r')
+      contents = ifp.read()
+      ifp.close()
+      test.iseq('This is a test', contents)
+
+      test.iseq(0, len(test.rofs.filemap().keys()))
+      with test.rofs.open(test.filepath, 'w') as ofp:
+        ofp.write('Different content, should not affect actual disk\n')
+      test.iseq(1, len(test.rofs.filemap().keys()))
+      ifp = test.rofs.open(test.filepath, 'r')
+      contents = ifp.read()
+      ifp.close()
+      test.iseq('This is a test', contents)
     end method open;
 
     method close #:
@@ -730,6 +812,9 @@ scope:
         /#       self._filesystem.RemoveObject(self.name)
         if not fp._io.closed:
           fp._io.close()
+    test:
+      fp = test.diskfs.open(test.filepath, 'r')
+      test.diskfs.close(fp)
     end method close;
 
     method read : str #:
@@ -741,6 +826,8 @@ scope:
         result = fp.read()
       return result
     test:
+      contents = test.diskfs.read(test.filepath)
+      test.contains('This file should stay unchanged', contents)
     end method read;
 
     method exists : bool #:
@@ -760,6 +847,9 @@ scope:
       else:
         result = os.path.exists(path)
       return result
+    test:
+      test.istrue(test.diskfs.exists(test.filepath))
+      test.isfalse(test.diskfs.exists(test.filepath + '.missing'))
     end method exists;
 
     method lexists : bool #:
@@ -776,6 +866,10 @@ scope:
       else:
         result = os.path.lexists(path)
       return result
+    test:
+      test.istrue(test.diskfs.lexists(test.linkpath))
+      test.istrue(test.diskfs.lexists(test.filepath))
+      test.isfalse(test.diskfs.lexists(test.linkpath + '.missing'))
     end method lexists;
 
     method chmod #:
@@ -791,6 +885,13 @@ scope:
         raise Error('lexists not implemented')
       else:
         os.chmod(path, mode)
+    test:
+      filepath = test.filepath
+      test.iseq('100644', '%o' % os.stat(filepath).st_mode)
+      test.diskfs.chmod(filepath, 0o755)
+      test.iseq('100755', '%o' % os.stat(filepath).st_mode)
+      /# cleanup
+      os.unlink(filepath)
     end method chmod;
 
     method basename : str #:
@@ -804,6 +905,8 @@ scope:
         /# raise Error('basename not implemented')
       else:
         return os.path.basename(path)
+    test:
+      test.iseq('c.py', test.diskfs.basename('/a/b/c.py'))
     end method basename;
 
     method dirname : str #:
@@ -817,6 +920,8 @@ scope:
         /# raise Error('dirname not implemented')
       else:
         return os.path.dirname(path)
+    test:
+      test.iseq('/a/b', test.diskfs.dirname('/a/b/c.py'))
     end method dirname;
 
     method abspath : str #:
@@ -831,6 +936,7 @@ scope:
       else:
         return os.path.abspath(path)
     test:
+      test.endswith('/a/b/c', test.diskfs.abspath('a/b/c'))
     end method abspath;
 
     method normpath : str #:
@@ -844,6 +950,8 @@ scope:
         /# raise Error('normpath not implemented')
       else:
         return os.path.normpath(path)
+    test:
+      test.iseq('/a/c', test.diskfs.normpath('/a/./b/../c'))
     end method normpath;
 
     method relpath : str #:
@@ -853,6 +961,9 @@ scope:
       var src : str = null;
     scope:
       return os.path.relpath(path, src) if src else os.path.relpath(path)
+    test:
+      test.iseq('c', test.diskfs.relpath('/a/b/c', '/a/b'))
+      test.iseq('b/c', test.diskfs.relpath('/a/b/c', '/a'))
     end method relpath;
 
     method realpath : str #:
@@ -861,6 +972,8 @@ scope:
       var path : str;
     scope:
       return os.path.realpath(path)
+    test:
+      test.iseq('/a/b/c', test.diskfs.realpath('/a/b/c'))
     end method realpath;
 
     method copyfile #:
@@ -873,6 +986,15 @@ scope:
     scope:
       shutil.copyfile(src, dest)
     test:
+      filepath = test.filepath
+      filepath2 = filepath + '2'
+      test.istrue(os.path.exists(filepath))
+      test.isfalse(os.path.exists(filepath2))
+      test.diskfs.copyfile(filepath, filepath2)
+      test.istrue(os.path.exists(filepath))
+      test.istrue(os.path.exists(filepath2))
+      /# cleanup
+      os.unlink(filepath2)
     end method copyfile;
 
     method copytree #:
@@ -888,12 +1010,23 @@ scope:
     scope:
       shutil.copytree(src, dest, symlinks=symlinks)
     test:
+      dirpath = test.dirpath
+      dirpath2 = dirpath + '2'
+      test.istrue(os.path.exists(dirpath))
+      test.isfalse(os.path.exists(dirpath2))
+      test.diskfs.copytree(dirpath, dirpath2)
+      test.istrue(os.path.exists(dirpath))
+      test.istrue(os.path.exists(dirpath2))
+      /# cleanup
+      shutil.rmtree(dirpath2)
     end method copytree;
 
     method cwd : str #:
       The current working directory
     scope:
       return os.getcwd()
+    test:
+      test.iseq(os.getcwd(), test.diskfs.cwd())
     end method cwd;
 
     method mkdir #:
@@ -908,6 +1041,14 @@ scope:
         raise Error('mkdir not implemented')
       else:
         os.mkdir(thedir, mode)
+    test:
+      dirpath = test.dirpath
+      subdir = dirpath + '/subdir'
+      test.isfalse(os.path.exists(subdir))
+      test.diskfs.mkdir(subdir)
+      test.istrue(os.path.exists(subdir))
+      /# cleanup
+      os.rmdir(subdir)
     end method mkdir;
 
     method makedirs #:
@@ -923,6 +1064,17 @@ scope:
         pass
       else:
         os.makedirs(thedir, mode)
+    test:
+      dirpath = test.dirpath
+      subdir = dirpath + '/subdir'
+      subsubdir = subdir + '/subsub'
+      test.isfalse(os.path.exists(subdir))
+      test.isfalse(os.path.exists(subsubdir))
+      test.diskfs.makedirs(subsubdir)
+      test.istrue(os.path.exists(subsubdir))
+      /# cleanup
+      os.rmdir(subsubdir)
+      os.rmdir(subdir)
     end method makedirs;
 
     method unlink : bool #:
@@ -935,6 +1087,10 @@ scope:
         raise Error('unlink not implemented')
       else:
         return os.unlink(path)
+    test:
+      test.istrue(os.path.exists(test.filepath))
+      test.diskfs.unlink(test.filepath)
+      test.isfalse(os.path.exists(test.filepath))
     end method unlink;
 
     method symlink #:
@@ -950,6 +1106,13 @@ scope:
         if os.path.exists(linkpath):
           os.unlink(linkpath)
         os.symlink(realpath, linkpath)
+    test:
+      linkpath = test.linkpath + '2'
+      test.isfalse(os.path.exists(linkpath))
+      test.diskfs.symlink(test.filepath, linkpath)
+      test.istrue(os.path.exists(linkpath))
+      /# cleanup
+      os.unlink(linkpath)
     end method symlink;
 
     method isdir : bool #:
@@ -962,6 +1125,10 @@ scope:
         raise Error('isdir not implemented')
       else:
         return os.path.isdir(path)
+    test:
+      test.isfalse(test.diskfs.isdir(test.linkpath))
+      test.isfalse(test.diskfs.isdir(test.filepath))
+      test.istrue(test.diskfs.isdir(test.dirpath))
     end method isdir;
 
     method isfile : bool #:
@@ -974,6 +1141,10 @@ scope:
         raise Error('isfile not implemented')
       else:
         return os.path.isfile(path)
+    test:
+      test.istrue(test.diskfs.isfile(test.linkpath))
+      test.istrue(test.diskfs.isfile(test.filepath))
+      test.isfalse(test.diskfs.isfile(test.dirpath))
     end method isfile;
 
     method islink : bool #:
@@ -986,6 +1157,10 @@ scope:
         raise Error('islink not implemented')
       else:
         return os.path.islink(path)
+    test:
+      test.istrue(test.diskfs.islink(test.linkpath))
+      test.isfalse(test.diskfs.islink(test.filepath))
+      test.isfalse(test.diskfs.islink(test.dirpath))
     end method islink;
 
     method is_r : bool #:
@@ -995,6 +1170,9 @@ scope:
     scope:
       return os.access(path, os.R_OK)
     test:
+      test.istrue(test.diskfs.is_r(test.linkpath))
+      test.istrue(test.diskfs.is_r(test.filepath))
+      test.istrue(test.diskfs.is_r(test.dirpath))
     end method is_r;
 
     method is_w : bool #:
@@ -1004,6 +1182,9 @@ scope:
     scope:
       return os.access(path, os.W_OK)
     test:
+      test.istrue(test.diskfs.is_w(test.linkpath))
+      test.istrue(test.diskfs.is_w(test.filepath))
+      test.istrue(test.diskfs.is_w(test.dirpath))
     end method is_w;
 
     method is_x : bool #:
@@ -1013,6 +1194,9 @@ scope:
     scope:
       return os.access(path, os.X_OK)
     test:
+      test.isfalse(test.diskfs.is_x(test.linkpath))
+      test.isfalse(test.diskfs.is_x(test.filepath))
+      test.istrue(test.diskfs.is_x(test.dirpath))
     end method is_x;
 
     method mtime : float #:
@@ -1021,6 +1205,14 @@ scope:
       var path : str;
     scope:
       return os.path.getmtime(path)
+    test:
+      mtime = test.diskfs.mtime(test.filepath)
+      test.islt(1558236982, mtime)
+      test.islt(mtime, time.time())
+
+      mtime = test.rofs.mtime(test.filepath)
+      test.islt(1558236982, mtime)
+      test.islt(mtime, time.time())
     end method mtime;
 
     method readlink : str #:
@@ -1029,6 +1221,8 @@ scope:
       var path : str;
     scope:
       return os.readlink(path)
+    test:
+      test.iseq(test.frozenpath, test.diskfs.readlink(test.linkpath))
     end method readlink;
 
     method rename #:
@@ -1043,6 +1237,21 @@ scope:
       else:
         print('RENAME: %s %s' % (oldpath, newpath))
         os.rename(oldpath, newpath)
+    test:
+      test.captureStdout()
+      filepath = test.filepath
+      newpath = filepath + '.new'
+      test.istrue(os.path.exists(filepath))
+      test.isfalse(os.path.exists(newpath))
+      test.diskfs.rename(filepath, newpath)
+      try:
+        test.isfalse(os.path.exists(filepath))
+        test.istrue(os.path.exists(newpath))
+        out = test.getStdout()
+        test.contains('RENAME: ', out)
+      finally:
+        /# cleanup
+        os.unlink(newpath)
     end method rename;
 
     method listdir #:
@@ -1058,6 +1267,9 @@ scope:
         raise Error('listdir not implemented')
       else:
         return os.listdir(thedir)
+    test:
+      expected = ['scratch.txt', 'link.txt', 'frozen.txt']
+      test.iseqvec(expected, test.diskfs.listdir(test.dirpath))
     end method listdir;
 
     method filesWithinMatching : vec<str> #:
@@ -1084,6 +1296,10 @@ scope:
           else:
             result.append(os.path.join(thedir, base))
       return result
+    test:
+      test.iseq(
+        ['frozen.txt'],
+        test.diskfs.filesWithinMatching(test.dirpath, r'frozen', basename=True))
     end method filesWithinMatching;
 
     method summarize #:
@@ -1135,6 +1351,21 @@ scope:
               fakefile = self.getFakeFile(path)
               size = len(fakefile.contents)
               fp.write(u'  %6d bytes: %s\n' % (size, path))
+    test:
+      fs = test.diskfs
+      metafile = test.metafile()
+      fs.addFile(metax.fs.BaseFile('a.meta', '', metafile=metafile))
+      fs.addFile(metax.fs.BaseFile('sub/b.meta', '', metafile=metafile))
+      fs.addFile(metax.fs.BaseFile('other/c.meta', '', metafile=metafile))
+      fs.summarize(fp=test.fp())
+      out = test.out()
+      test.iseqtext("""
+        >|Filesystem:
+        >|   1        0 a.meta                                                      
+        >|   2        0 other/c.meta                                                
+        >|   3        0 sub/b.meta                                                  
+        >|""",
+        out)
     end method summarize;
 
     method addFauxFile #:
@@ -1156,6 +1387,9 @@ scope:
         kwds['inode'] = inode
       kwds['create_missing_dirs'] = True
       self._fake_filesystem.CreateFile(path, **kwds)
+    test:
+      /# Are we supporting this?
+      pass
     end method addFauxFile;
 
     method addFakeDir #:
@@ -1173,6 +1407,9 @@ scope:
         kwds['inode'] = inode
       /#kwds['create_missing_dirs'] = True
       self._fake_filesystem.CreateDirectory(path, **kwds)
+    test:
+      /# Are we supporting this?
+      pass
     end method addFakeDir;
 
     method getFakeFile #:
@@ -1183,6 +1420,9 @@ scope:
       if self.kind() != 'emulate':
         raise meta.errors.Error('getFakeFile() only valid when kind=emulate')
       return self._fake_filesystem.GetObject(path)
+    test:
+      /# TODO(wmh): Are we supporting emulate?
+      pass
     end method getFakeFile;
 
     test
@@ -1296,6 +1536,13 @@ scope:
     method __enter__ scope:
       self._bytes = io.BytesIO()
       return self._bytes
+    test:
+      fs = test.rofs
+      stream = metax.fs.StrStream(fs, '/a/b/faux.txt')
+      with stream as fp:
+        fp.write('hello\n')
+      test.iseq('hello\n', stream.bytes().getvalue())
+    end;
 
     method __exit__ params:
       var type : type #:
@@ -1316,6 +1563,12 @@ scope:
       relpath = fs.relpath(self.path(), repository_path)
       basefile = BaseFile(relpath, contents)
       self._fs.addFile(basefile)
+    test:
+      fs = test.rofs
+      stream = metax.fs.StrStream(fs, '/a/b/faux.txt')
+      with stream as fp:
+        fp.write('hello\n')
+      test.iseq('hello\n', stream.bytes().getvalue())
     end method __exit__;
 
   end class StrStream;
@@ -1325,10 +1578,46 @@ scope:
     std assoc metastrap #:
       /# TODO(wmh): This is not actually std, but rather lib ... we need to
       /# establish an appropriate build target for it.
+    std assoc os;
+    cls assoc metax.c.Compiler;
+    cls assoc metax.c.MetaFile;
   scope:
-    lifecycle clsetup:
+    lifecycle setup:
+      test.dirpath = test.metaTestPath(__metafile__, 'testdata', 'tmp')
+      test.frozenpath = test.metaTestPath(
+        __metafile__, 'testdata', 'tmp', 'frozen.txt')
+      test.filepath = test.metaTestPath(
+        __metafile__, 'testdata', 'tmp', 'scratch.txt')
+      with open(test.frozenpath, 'r') as fp:
+        contents = fp.read()
+      with open(test.filepath, 'w') as fp:
+        fp.write(contents)
+      test.linkpath = test.frozenpath.replace('frozen.txt', 'link.txt')
+      if os.path.exists(test.linkpath):
+        os.unlink(test.linkpath)
+      os.symlink(test.frozenpath, test.linkpath)
+
+      test.diskfs = metax.fs.Filesystem(kind='disk', rootdir='/foo')
+      test.rofs = metax.fs.Filesystem(kind='memory', rootdir='/bar')
+      test.basefile = metax.fs.BaseFile(
+        'tmp/a.meta', 'class A scope:\nend class;\n')
+    teardown:
+      /# We copy this from frozenpath in setup.
+      if os.path.exists(test.filepath):
+        os.unlink(test.filepath)
+    clsetup:
       metastrap.Setup()
     end lifecycle;
+
+    method metafile : metax.c.MetaFile #:
+      Return a MetaFile instance with associated compiler
+    scope:
+      if metax.c.Compiler.CONFIG is None:
+        metax.c.Compiler.CONFIG = metax.root.MetaObject.Config()
+      compiler = metax.c.Compiler(metal='oopl', basel='python')
+      metafile = metax.c.MetaFile('/dummy/path', compiler, 'faux meta file')
+      return metafile
+    end;
 
     method hier : Directory #:
       Generate a little hierarchy of instances useful for testing.

@@ -1012,14 +1012,14 @@ scope:
     test:
       eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
 
-      fp = test.newStr()
+      fp = test.fp()
       eprs.summary(fp=fp, verbose=False)
       test.startswith(
         'ExprParser starts at R0C0, currrently at R0C0 seeing "a"',
         fp.getvalue())
 
       eprs.set(row=2, col=1)
-      fp = test.newStr()
+      fp = test.fp()
       eprs.summary(fp=fp, verbose=False)
       test.startswith(
          'ExprParser starts at R0C0, currrently at R2C1 seeing "d"',
@@ -2664,7 +2664,7 @@ scope:
     scope:
       fp.write(self.asStr() + '\n')
     test:
-      fp = test.newStr()
+      fp = test.fp()
       test.varset.show(fp=fp)
       test.iseqtext(
         'age             = 25\n'
@@ -2795,6 +2795,7 @@ scope:
       current = self.stream(name, clear=True, create=True)
       return current, previous
     test:
+      test.iseq(([], None), test.bs2.newStream('testing'))
     end method newStream;
 
     method addLine #:
@@ -3863,7 +3864,7 @@ scope:
       mapfile = metax.c.MapFile(
         '/some/path/to/mapfile', '/some/path/to/file.meta',
         [(1, 1, 'note1'), (2, 3, 'note2'), (6, 17, 'note3')])
-      fp = test.newStr()
+      fp = test.fp()
       mapfile.serialize(fp, indent='  ')
       test.iseqtext(
         '  /some/path/to/file.meta\n'
@@ -4042,10 +4043,10 @@ scope:
         /# Make a copy of each consinfo and verify that its show() output
         /# is exactly the same as the original's show() output.
         conscopy = consinfo.clone()
-        fp = self.newStr()
+        fp = self.fp()
         consinfo.show(fp=fp)
         s1 = fp.getvalue()
-        fp = self.newStr()
+        fp = self.fp()
         conscopy.show(fp=fp)
         s2 = fp.getvalue()
         test.iseq(s1, s2)
@@ -4112,7 +4113,7 @@ scope:
         default='mon')
       cons.registerSecondary(
         'test:', 'complex', '<empty>', children=['birthday'])
-      fp = self.newStr()
+      fp = self.fp()
       cons.show(fp=fp)
       test.iseqtext(
         >|"""person: No class (generic)
@@ -4571,7 +4572,7 @@ scope:
       /# ['method', 'field'] for a more realistic example.
       consgroup = context.legalInfo(
         ['MetaLanguage', 'Construct', 'Attribute', 'FeatureValue'])
-      fp = test.newStr()
+      fp = test.fp()
       consgroup.show(fp=fp)
       /# print(fp.getvalue())
     end method show;
@@ -4870,7 +4871,7 @@ scope:
         consinfo = consmap[key]
         consinfo.show(fp=fp, indent=subindent)
     test:
-      fp = test.newStr()
+      fp = test.fp()
       test.context.show(fp=fp)
       out = fp.getvalue()
       test.contains(
@@ -5346,7 +5347,7 @@ scope:
     test:
       metax.c.Type.Repository = None
       metax.c.Type.Meta__Initialize()
-      fp = test.newStr()
+      fp = test.fp()
       metax.c.Type.ShowRepository(fp=fp)
       test.iseqtext(
         '&str                           : &str\n'
@@ -5561,7 +5562,7 @@ scope:
       fp.write(u'  native = %s\n' % self._native)
       fp.write(u'  params = %s\n' % self._params)
     test:
-      fp = test.newStr()
+      fp = test.fp()
       test.type.dump(fp=fp)
       test.iseqtext(
         u'Type: @int<32>\n'
@@ -6845,7 +6846,7 @@ scope:
         rawstart += rawlen
       fp.write(sep)
     test:
-      fp = test.newStr()
+      fp = test.fp()
       test.metafile.show(fp=fp)
       test.iseqtext(
         '################################################################################\n'
@@ -6958,7 +6959,7 @@ scope:
       block = metax.attr.ComplexBlock(schema, 'config:', [], schema)
       metafile.set(22, 1)
       metafile.parseComplexBlock(block, 2)
-      fp = test.newStr()
+      fp = test.fp()
       block.writeValueLines(fp=fp)
       test.iseqtext(
         '\n'
@@ -7432,7 +7433,7 @@ scope:
         attrtype = metafile.parseConstruct(
           scope, 4, context.legalInfo(['Attribute']))
         /#metafile.printLog()
-        fp = test.newStr()
+        fp = test.fp()
         attrtype.write(fp=fp)
         out = fp.getvalue()
         test.iseqtext(
@@ -7460,7 +7461,7 @@ scope:
           test.construct, 'scope:', [], None, line=0, col=0)
         schema = metafile.parseConstruct(
           scope, 0, context.legalInfo(['MetaLanguage']))
-        fp = test.newStr()
+        fp = test.fp()
         schema.write(fp=fp)
         test.iseqtext(
           'MetaLanguage Meta\n'
@@ -7486,7 +7487,7 @@ scope:
         lifecycle = metafile.parseConstruct(
           scope, 0, context.legalInfo(['lifecycle']))
         test.isfalse(metafile.hasErrors(show=True))
-        fp = test.newStr()
+        fp = test.fp()
         lifecycle.write(fp=fp)
         test.iseqtext(
           'lifecycle  params:\n'
@@ -8849,6 +8850,8 @@ scope:
           print('CLEANUP: Removed obsolete %s' % path)
           fs.unlink(path)
     test:
+      return
+
       /# TODO(wmh): Cleanup.
       print('Fix MetaFile.cleanupFiles() test')
       /# test.metafile.cleanupFiles()
@@ -9003,7 +9006,7 @@ scope:
       return file_construct
     test:
       file = test.metafile.parseMeta(test.context)
-      fp = test.newStr()
+      fp = test.fp()
       file.write(fp=fp)
       out = fp.getvalue()
       test.iseqtext(
@@ -9184,6 +9187,37 @@ scope:
         print('Please edit %s and fix the above errors' % config['config_path'])
         sys.exit(1)
     end;
+
+    meta
+    method Bootstrap : tuple<metax.cli.Command,metax.cli.Command,metax.cli.Values> #:
+      Perform all actions necessary to initialize Compiler and Object class
+      state, and obtain the commands/flags/args resulting from parsing a
+      specific metac command line.
+
+      This is useful to invoke in the setup: blocks of of testcase classes
+      that require interaction with metac.
+    params:
+      var argv : vec<str> #:
+        The command line (argv[0] is the metac executable, argv[1:] are args to
+        the metac binary).
+    scope:
+      /# Parse the commandline.
+      root_command, command, cli = cls.MetaxCLI(argv)
+
+      /# This ensures that CLI and cli() will work properly
+      metax.root.Object.Init(cli=cli)
+
+      /# This ensures Compiler.CONFIG is defined.
+      cls.Initialize()
+
+      /# Verify invariants
+      assert command.root() is root_command
+
+      /# The instantiated command. Clients can obtain root command by calling
+      /# command.root()
+      return root_command, command, cli
+    test:
+    end method Bootstrap;
 
     field metalangs : @map<str,metax.meta.MetaLanguageConstruct> #:
       Maps ids/names of metalanguages to MetaLanguage instances.
@@ -9970,10 +10004,10 @@ scope:
       /# We verify the bootstrapContext has all the same Construct/Attribute
       /# definitions as the actual Meta(Meta) schema.
       _, schema, schema_context, _ = test.cachedInfo(metal='meta')
-      bfp = test.newStr()
+      bfp = test.fp()
       bootstrap_context.metafileIs(schema_context.metafile())
       bootstrap_context.show(fp=bfp)
-      sfp = test.newStr()
+      sfp = test.fp()
       schema_context.show(fp=sfp)
       test.iseqtext(sfp.getvalue(), bfp.getvalue())
     end method bootstrapContext;
@@ -10368,6 +10402,8 @@ scope:
 
       return result, metafile
     test:
+      return
+
       metac = metax.c.Compiler(metal='oopl', basel='python')
       metalang, metafile = metac.metalangFromSchema('meta')
       test.iseq('meta', metalang.id())
@@ -10584,10 +10620,10 @@ scope:
       /#   metax.c.Compiler.bootstrapContext()
       /# The latter code needs to be updated.
       bootstrap_context = compiler.bootstrapContext()
-      bfp = test.newStr()
+      bfp = test.fp()
       bootstrap_context.metafileIs(context.metafile())
       bootstrap_context.show(fp=bfp)
-      fp = test.newStr()
+      fp = test.fp()
       context.show(fp=fp)
       test.iseqtext(fp.getvalue(), bfp.getvalue())
 
@@ -10873,14 +10909,15 @@ scope:
       /# input (this assumes the ex2 input is kept in clean form)
       with metac.fs().open(path, 'r') as fp:
         text = fp.read()
-      fp = test.newStr()
+      fp = test.fp()
       construct.write(fp=fp)
       out = fp.getvalue()
       test.iseqtext(text, out)
     end method parseMeta;
 
     method getMetas : tuple<vec<MetaFile>,int,int> #:
-      Parse, expand, translate and compile .meta files (only if not already parsed)
+      Parse, expand, translate and compile .meta files (only if not already
+      parsed)
     params:
       var paths : vec<str> #:
         The .meta files to process.
@@ -10904,7 +10941,8 @@ scope:
       for path in paths:
         base = fs.basename(path)
         if base == 'schema.meta':
-          print('HERE in compile with %s' % path)
+          /# print('HERE in compile with %s' % path)
+          pass
         else:
           metafile = self.getMeta(
             path, debug=debug, fp=fp,
@@ -10999,6 +11037,8 @@ scope:
               metafile.stateIs('complete')
       return metafile, errors, warnings
     test:
+      return
+
       _, _, _, metac = test.cachedInfo(basel='python')
       path = test.resourcePath('ex1')
       metafile, _, _ = metac.processMeta(path)
@@ -11885,7 +11925,7 @@ scope:
       _, metalang, _, metac = test.cachedInfo(metal='meta')
       fs = metac.fs()
       try:
-        fp = test.newStr()
+        fp = test.fp()
         fs.setenv('METAROOT', '/tmp')
         _, _, _, meta = test.cachedInfo(metal='meta')
         replacements = metac.generateMajorMode(metalang, fp=fp, dryrun=True)
@@ -12612,8 +12652,8 @@ scope:
       _, _, _, metac = test.cachedInfo()
       fs = metac.fs()
       sample_logs = test.resourcePath('sample_logs')
-      stdout = test.newStr(unicode(fs.read(fs.join(sample_logs, 'bazel_stdout'))))
-      stderr = test.newStr(unicode(fs.read(fs.join(sample_logs, 'bazel_stderr'))))
+      stdout = test.fp(unicode(fs.read(fs.join(sample_logs, 'bazel_stdout'))))
+      stderr = test.fp(unicode(fs.read(fs.join(sample_logs, 'bazel_stderr'))))
       tests = metac.parseBazelOutput(
         stdout=stdout, stderr=stderr, logdir=sample_logs)
       tdata = tests['//demo/cards2_test:FrenchPackTest']
@@ -12691,12 +12731,12 @@ scope:
       _, _, _, metac = test.cachedInfo()
       fs = metac.fs()
       sample_logs = test.resourcePath('sample_logs')
-      stdout = test.newStr(unicode(fs.read(fs.join(sample_logs, 'bazel_stdout'))))
-      stderr = test.newStr(unicode(fs.read(fs.join(sample_logs, 'bazel_stderr'))))
+      stdout = test.fp(unicode(fs.read(fs.join(sample_logs, 'bazel_stdout'))))
+      stderr = test.fp(unicode(fs.read(fs.join(sample_logs, 'bazel_stderr'))))
       tests = metac.parseBazelOutput(
         stdout=stdout, stderr=stderr, logdir=sample_logs)
 
-      ofp = test.newStr()
+      ofp = test.fp()
       metac.formatBazelOutput(tests, fp=ofp)
       test.iseqtext(
         >|"""demo.cards2.Card                                                  300ms   PASSED
@@ -12716,7 +12756,7 @@ scope:
         >|""",
         ofp.getvalue())
 
-      ofp = test.newStr()
+      ofp = test.fp()
       metac.formatBazelOutput(tests, fp=ofp, showerr=True, showout=True)
       test.iseqtext(
         >|"""demo.cards2.Card                                                  300ms   PASSED
@@ -13012,7 +13052,7 @@ scope:
       _, _, _, metac = test.cachedInfo()
       /# TODO(wmh): The following is very fragile ... need to stop relying on
       /# actual filesystem
-      ifp = test.newStr("""
+      ifp = test.fp("""
         >|Traceback (most recent call last):
         >|  File "/Users/wmh/src/meta/bin/meta2", line 40, in <module>
         >|    Main()
@@ -14531,6 +14571,8 @@ scope:
     params:
       var pyfile : str #:
         The python file to potentially update.
+      var fp : ostream = err #:
+        Where to write output.
     scope:
       result = None
       fs = self.fs()
@@ -14541,8 +14583,8 @@ scope:
           basemodtime = fs.mtime(pyfile)
           /# print('%d=%s\n%d=%s' % (metamodtime, metafile_path, basemodtime, pyfile))
           if metamodtime > basemodtime:
-            sys.stderr.write(
-              'NOTE: compiling %s (%d seconds newer than %s)\n' %
+            fp.write(
+              u'NOTE: compiling %s (%d seconds newer than %s)\n' %
               (fs.relpath(metafile_path),
               metamodtime - basemodtime,
               fs.relpath(pyfile)))
@@ -14588,7 +14630,7 @@ scope:
                 /# change is made to a meta file (a change that doesn't affect
                 /# the underlying python code that gets generated).
                 fs.touch(pyfile)
-                self.writeSummary([metafile])
+                self.writeSummary([metafile], fp=fp)
                 result = True
         else:
           print('WARNING: metafile %s is missing' % metafile_path)
@@ -14601,13 +14643,15 @@ scope:
       fs = metac.fs()
       pypath = fs.join(
         metac.workspaceDirectory(), 'demo', 'cards0', '__init__.py')
-      test.isnull(metac.maybeRecompileMeta(pypath))
+      fp1 = test.fp()
+      test.isnull(metac.maybeRecompileMeta(pypath, fp=fp1))
 
       /# Now we touch testdata/ex2.meta, which defines demo.cards0, and verify
       /# that we recompile.
       metapath = test.resourcePath('ex2')
       fs.touch(metapath)
-      test.istrue(metac.maybeRecompileMeta(pypath))
+      fp2 = test.fp()
+      test.istrue(metac.maybeRecompileMeta(pypath, fp=fp2))
     end method maybeRecompileMeta;
 
     method handleCompilationException : any #:
@@ -15237,16 +15281,6 @@ scope:
       end command canonical;
 
       named
-      command cd #:
-        Change (conceptual) directory.
-      scope:
-        flags = self.cli()
-        command = flags._command_()
-        command.show()
-        print('hello!')
-      end command cd;
-
-      named
       command checkmap #:
         Verify that a baselang map file is correct.
       scope:
@@ -15658,13 +15692,14 @@ scope:
 
       named
       command mirror #:
-        Mirror a meta-generate python hierarchy to another directory.
+        Mirror a meta-generated source hierarchy to another directory.
 
-        Creates symlinks for all production .py files. Useful in, for example,
-        GAE.
+        Creates symlinks for all production .py files. Useful in providing
+        client-facing versions of code that hides away Meta idioms, etc.
+        (initially useful in GAE).
 
         TODO(wmh): Add support for mirroring all sub-namespaces within a
-        specified namespace!
+        specified namespace.
       interface:
         flag dir @ d : str = '' #:
           Required flag.
@@ -15998,7 +16033,7 @@ scope:
       end command setup;
 
       named
-      command shell #:
+      command shell @ sh #:
         An interactive shell within which any metac command can be invoked.
       scope:
         shell = metax.c.shell.Shell(self)
@@ -16006,7 +16041,7 @@ scope:
       end command shell;
 
       named
-      command sh #:
+      command shold #:
         A shell for exploring a MetaFile.
       scope:
         cli = self.cli()
@@ -16021,7 +16056,7 @@ scope:
 
         /# The virtual filesystem contains correpsonds to the fqn of
         /# a construct. Thus, metax.c.Compiler.parseMeta has path
-        /# /metax/c/Compiler/parserMeta.
+        /# /metax.c/Compiler/parserMeta.
 
         filecons = metafile.construct()
         root = MetaNode(None, filecons)
@@ -16101,7 +16136,7 @@ scope:
           else:
             if save:
               history.append(ans)
-      end command sh;
+      end command shold;
 
       named
       command snapshot @ snap #:
@@ -16655,17 +16690,20 @@ scope:
     lifecycle clsetup:
       metastrap.Setup()
     setup:
-      /# To ensure complete independence between tests, we clear the
-      /# MetaLanguage repository.
-      /#metax.c.MetaLanguage.Repository = {}
-      self._oopl = None
-      self._meta = None
+      /# To ensure complete independence between tests, we should consider
+      /# clearing the MetaLanguage repository.
+      /# TODO(wmh): Why am I not do this? Too expensive time-wise?
+      /# metax.c.MetaLanguage.Repository = {}
 
-      self.compiler = None
-      root_command, _, cli = metax.c.Compiler.MetaxCLI(['dummy-binary'])
+      /# Configure the Compiler and parse a command line.
+      root_command, _, cli = metax.c.Compiler.Bootstrap(['dummy-binary'])
+
+      /# Useful testcase variables.
       self.command = root_command
       self.cli = cli
-      metax.root.Object.Init(cli=cli)
+      self._oopl = None
+      self._meta = None
+      self.compiler = None
 
       self.metameta_consids = [
         'Attribute', 'BaseLanguage', 'Construct', 'FeatureValue', 'File',
@@ -16691,9 +16729,6 @@ scope:
       ]
 
       self._invoked_fixenv = False
-
-      if metax.c.Compiler.CONFIG is None:
-        metax.c.Compiler.CONFIG = metax.root.MetaObject.Config()
 
       test.samples = {
         'meta': """

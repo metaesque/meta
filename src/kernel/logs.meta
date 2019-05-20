@@ -62,12 +62,22 @@ scope:
       if not quiet and self._level >= level:
         if msg:
           self._info(msg, prefix)
+    test:
+      log = test.log(level=0, dent=0)
+      log.sinfo(msg='starting')
+      log.einfo(msg='ending')
     end method einfo;
 
     method end #:
       Decrement indent by one.  Like einfo but without a logged message.
     scope:
       self._dent -= 1
+    test:
+      log = test.log(level=0, dent=0)
+      log.sinfo()
+      test.iseq(1, log.dent())
+      log.end()
+      test.iseq(0, log.dent())
     end method end;
 
     method info #:
@@ -79,6 +89,9 @@ scope:
     scope:
       if self._level >= level:
         self._info(msg, prefix)
+    test:
+      log = test.log(level=0, dent=0)
+      log.info('testing msg')
     end method info;
 
     method _info #:
@@ -103,23 +116,17 @@ scope:
           print('ERROR: prefix is %s DEFAULT is %s' % (prefix, DEFAULT))
         prefix += ': '
       self.fp().write((u'  ' * self._dent) + prefix + str(msg) + '\n')
+    test:
+      log = test.log(level=0, dent=0)
+      log._info('testing msg', prefix='  ')
     end method _info;
 
-    test
-    method log : metax.logs.SimpleLog params:
-      var dent : int = 0;
-      var level : int = 0;
-    scope:
-      fp = self.newStr()
-      result = metax.logs.SimpleLog(fp=fp, level=level)
-      result.dentIs(dent)
-      return result
-    end;
   end class SimpleLog;
 
   class SimpleLogs #:
     Maintain a named collection of SimpleLog instances.
   scope:
+
     field logs : @map #:
       Maps conceptual log names to SimpleLog instances.
 
@@ -140,6 +147,9 @@ scope:
     scope:
       for log in self._logs.values():
         log.levelIs(0)
+    test:
+      logs = test.logs()
+      logs.reset()
     end method reset;
 
     method newLog params:
@@ -153,6 +163,10 @@ scope:
       if fp is None:
         fp = self.fp()
       self._logs[name] = SimpleLog(level=level, fp=fp)
+    test:
+      logs = test.logs()
+      /# newLog is called twice in TestCase.logs().
+      test.iseq(2, len(logs.logs()))
     end method newLog;
 
     method __getattr__ #:
@@ -165,7 +179,32 @@ scope:
       if result is None:
         raise AttributeError('Failed to find a log named "%s"' % name)
       return result
+    test:
+      logs = test.logs()
+      logs.a.info('hello')
     end method;
   end class SimpleLogs;
+
+  test
+  class TestCase < metax.test.TestCase scope:
+
+    method log : metax.logs.SimpleLog params:
+      var dent : int = 0;
+      var level : int = 0;
+    scope:
+      fp = self.fp()
+      result = metax.logs.SimpleLog(fp=fp, level=level)
+      result.dentIs(dent)
+      return result
+    end;
+
+    method logs : metax.logs.SimpleLogs scope:
+      result = metax.logs.SimpleLogs()
+      result.newLog('a', fp=test.fp())
+      result.newLog('b', fp=test.fp())
+      return result
+    end method logs;
+
+  end class TestCase;
 
 end namespace metax.logs;

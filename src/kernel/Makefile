@@ -2,7 +2,8 @@ DIFF_FLAGS = -y --suppress-common-lines -W 160
 
 METAGROUP = "Meta"
 METAFILES = parser.meta attr.meta fs.meta cli.meta shell.meta logs.meta \
-	    root.meta test.meta metameta.meta metaoopl.meta metadoc.meta
+	    root.meta test.meta metameta.meta metaoopl.meta metadoc.meta \
+	    ../lib/markdown.meta ../lib/shell.meta ../lib/units.meta	
 
 include $(WMH)/Makefile.meta
 

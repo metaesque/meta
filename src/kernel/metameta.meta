@@ -1,1 +1,2898 @@
-../schema/meta/metameta.meta
+namespace metax.meta scope:
+
+  abstract
+  class Construct < metax.root.Object #:
+    @root: The abstract superclass of all Construct classes.
+    class Construct
+
+    Abstract root class of the Construct hierarchy. Each instance represents the
+    parsed representation of a syntactic construct obtained from a user-provided
+    meta file (or auto-generated internally).
+  assocs:
+    std assoc re;
+    std assoc io;
+  scope:
+
+    method kind : str scope:
+      /# Subclasses should override this method, so this kind should never be
+      /# seen.
+      return '_construct_'
+    test:
+      construct = test.basics(metal='oopl', basel='python')
+      test.iseq('class', construct.kind())
+    end method kind;
+
+    ro
+    field id : str #:
+      An identifier by which this construct can be uniquely identified among
+      all other constructs within the same parent ComplexBlock.
+
+    field parent : metax.attr.ComplexBlock #:
+      The complex block within which this construct resides.
+    scope:
+      accessor set scope:
+        if value is not None and not isinstance(value, metax.attr.ComplexBlock):
+          raise metax.c.Error('Construct.parentIs with %s (%s)' % (value, value.__class__))
+        self._parent = value
+
+    field context : metax.c.Context #:
+      The context within which this construct appears. The Context provides
+      access to the MetaFile and everything else needed to parse, expand
+      and compile a construct.
+
+    field order : @vec<metax.attr.Attribute> #:
+      The collection of Attribute instances making up this Construct, in
+      the order they appear in the source. Important when providing
+      construct canonicalization.
+
+    field attributes : @map<str,metax.attr.Attribute> #:
+      Maps attribute key (or abbrev) to Attribute instance. Note that
+      Attribute instances store their canonical key but do NOT store the
+      actual key/abbrev seen in the source (that key/abbrev is what is
+      used as the key in this attributes field).
+
+    field terminator : int = 0 #:
+      A field within which termcode and termline are encoded.
+      TODO(wmh): When packed semantics is available, we will not need to
+      define an explicit field for terminator, and can instead just define
+      fields termcode and termline.
+
+    field termcode : int = 16 #:
+      TODO(wmh): Change 16 to metax.c.TERM_UNINIT when meta properly supports it!
+      Encodes how this construct was terminated:
+        0 (or TERM_UNINIT) = implicit (no terminator specified)
+        1 = ';'
+        3 = 'end;'
+        7 = 'end <cons>;'
+       11 = 'end <id>;'
+       15 = 'end <cons> <id>;'
+       16+= uninitialized
+
+      The above values are based on the following bit mask semantics:
+        bit 0 = 0x1 = ';'
+        bit 1 = 0x2 = 'end'
+        bit 2 = 0x4 = <cons>
+        bit 3 = 0x8 = <id>
+      where bit i cannot be set unless all bits less than i are also set
+      (although this last part isn't really necessary ... maybe we want
+      to allow <id> to be present without allow <cons> to be present?)
+
+      TODO(wmh): Pack this field
+    end field termcode;
+
+    field precount : int = 0 #:
+      How many empty lines appear before this construct in the source file.
+      TODO(wmh): Pack this field
+
+    field autogen : bool #:
+      Set to true if this construct was auto-generated.
+      TODO(wmh): Make this an optional field or a packed field!
+
+    field metadata : map #:
+      A collection of key/value pairs representing information that not
+      every instance will need to maintain. Some keys include:
+        masked: Construct (if not present, is not replaced ... i.e. is active)
+          If present, it indicates that this construct should be ignored
+          in most situations (especially compilation), as the construct
+          is subsumed by the construct stored in the value.  For example,
+          when a class within a namespaces 'tests' block is moved into
+          the test namespace, the original construct is marked as masked.
+        masks: Construct (if not present, doesn't mask anyting)
+          Indicates that this construct replaces the construct stored in
+          the value. If this is set, the construct was auto-generated.
+        auto: bool (if not present, false)
+          True if this construct was auto-generated (not user-provided)
+
+      TOOD(wmh): This field is not currently being used in meta2. Consider
+      whether it should be used or deleted.
+    end field metadata;
+
+    lifecycle  params:
+      var uid -> id;
+      var parent -> parent;
+      var context -> context;
+      var precount -> precount = 0;
+    scope:
+      /# IMPORTANT: Subclasses (e.g. NamespaceConstruct) rely on this
+      /# constructor NOT registering the id ... they may need to change it.
+      if not isinstance(self, metax.meta.MetaLanguageConstruct):
+        assert context is not None, 'Construct %s has null context' % uid
+
+      /#if self.kind() == 'class':
+      /#  print('CREATING %s (%s)' % (uid, id(self)))
+    end;
+
+    method kindid : str #:
+      The kind and id of this construct.
+    scope:
+      return self.kind() + ' ' + self.id()
+    test:
+      construct = test.basics()
+      test.iseq('class Person', construct.kindid())
+    end method kindid;
+
+    method kindfqn : str #:
+      The kind and fqn of this construct.
+    scope:
+      return self.kind() + ' ' + self.fqn()
+    test:
+      construct = test.basics()
+      test.iseq('class nm.sp.Person', construct.kindfqn())
+    end method kindfqn;
+
+    method metafile : metax.meta.MetaFile #:
+      Obtain the metafile that this construct resides within.
+    scope:
+      return self._context._metafile
+    test:
+      construct = test.basics()
+      test.issame(test.metafile, construct.metafile())
+    end method metafile;
+
+    method compiler : metax.meta.Compiler #:
+      Obtain the compiler instance.
+    scope:
+      /# This is available via either metafile.compiler() or context.compiler().
+      return self._context._compiler
+    test:
+      construct = test.basics()
+      test.isinst(construct.compiler(), metax.c.Compiler)
+    end method compiler;
+
+    method metalang : metax.meta.MetaLanguageConstruct #:
+      Obtain the current metalang.
+    scope:
+      return self._context._compiler._metalang
+    test:
+      construct = test.basics()
+      test.isinst(construct.metalang(), metax.meta.MetaLanguageConstruct)
+    end method metalang;
+
+    method baselang : metax.meta.BaseLanguage #:
+      Obtain the current baselang.
+    scope:
+      return self._context._compiler._baselang
+    test:
+      construct = test.basics(metal='oopl', basel='python')
+      test.isinst(construct.baselang(), metax.meta.BaseLanguageConstruct)
+    end method baselang;
+
+    method primary : metax.attr.Attribute #:
+      The primary attribute for this construct.
+    scope:
+      return self._attributes.get(self.kind(), None)
+    test:
+      construct = test.basics()
+      test.iseq('class Person', construct.primary().asStr())
+    end method primary;
+
+    method clone : *metax.meta.Construct #:
+      Make a copy of this construct that shares no instrinsic state with its
+      prototype (but does share extrinsic state)
+    params:
+      var cloned_parent : metax.attr.ComplexBlock #:
+        The ComplexBlock within which the cloned version of self resides.
+    scope:
+      cls = self.__class__
+      result = cls(
+        self.id(), cloned_parent, self.context(), precount=self.precount())
+      for attribute in self.order():
+        cloned_attribute = attribute.clone(result)
+        result.registerAttribute(cloned_attribute)
+      result.termcodeIs(self.termcode())
+      return result
+    test:
+      _, _, _, meta = test.cachedInfo(metal='meta')
+      ex1, _, construct, _ = test.getMetaFile(
+        'meta', 'ex1', context=meta.bootstrapContext())
+      clone = construct.clone(None)
+      construct.verifyClone(clone)
+    end method clone;
+
+    method verifyClone #:
+      Verify that a clone is correct (different where it should be different,
+      and the same where it should be the same).
+
+      Raises:
+        Error: If the clone does not match expectations.
+    params:
+      var clone : *metax.meta.Construct #:
+        An instance returned by self.clone().
+    scope:
+      construct = self
+      construct2 = clone
+
+      r = re.compile(r'(\[\d+\])')
+
+      def StripNum(ln):
+        m = r.search(ln)
+        if m:
+          num = m.group(1)
+          result = ln[:m.start(0)] + ln[m.end(0):]
+        else:
+          result = ln
+          num = None
+        return (result, num)
+
+      def NewStr():
+        return io.StringIO()
+
+      assert construct is not construct2
+
+      /# Verify the string representations are identical.
+      fp = NewStr()
+      construct.write(fp=fp)
+      fp2 = NewStr()
+      construct2.write(fp=fp2)
+      assert fp.getvalue() == fp2.getvalue()
+
+      /# Now verify that all attributes different.
+      mode = {'pkey': 'user+', 'fkey': 'user+', 'skey': 'user+'}
+      fp = NewStr()
+      construct.write(fp=fp, mode=mode)
+      out = fp.getvalue()
+      fp2 = NewStr()
+      construct2.write(fp=fp2, mode=mode)
+      out2 = fp2.getvalue()
+
+      /# We parse each line of out and out2 in parallel, stripping out [\d+]
+      /# chunks and verifying that the numbers differ but the resulting lines
+      /# match.
+      lines = out.split('\n')
+      lines2 = out2.split('\n')
+      assert len(lines) == len(lines2)
+      for i in range(0, len(lines)):
+        line = lines[i]
+        line2 = lines2[i]
+
+        /# We remove successive [<num>] text from both line and line2, verifying
+        /# that <num> and <num2> are different.
+        while True:
+          line, num = StripNum(line)
+          line2, num2 = StripNum(line2)
+          if num is not None:
+            assert num != num2
+          else:
+            assert num2 is None
+            break
+        /# After removing all the [<num>] blocks, the lines should be identical.
+        assert line == line2
+    test:
+      /# This is a test method in its own right, but has been exposed at
+      /# user level so we can verify an arbitrary construct whenever we need to.
+      /# As a test method, it doesn't have a test of its own.
+      pass
+    end method verifyClone;
+
+    meta
+    method NewFromData : *metax.meta.Construct #:
+      Create a new construct from provided data.
+    params:
+      var id : str;
+      var context : metax.c.Context;
+      var parent : metax.attr.ComplexBlock = null #:
+        The block this contruct is being added to. Note that this may be null
+        (caller responsibility to register as desired). Note also that
+        registration happens at end of method if parent provided.
+      var features : vec<tuple<str,str>> = null #:
+        Key/value[/line] tuples for feature attributes.
+      var secondaries : vec<tuple<str,any>> = null #:
+        Key/value[/line] tuples pairs for secondary attributes. The values must
+        be of the proper type (e.g. if the type is 'type', the value must be a
+        Type, not a str), or can also be Attribute subclass instances
+        wrapping the proper value type (thus, 'scope:' can either be a
+        list of strings or a SimpleBlock, 'params:' can be a ComplexBlock, etc.
+        As a special case, 'params:' can be a list of tuples, in which case
+        ExecutableConstruct.CreateParams() is invoked with that list to
+        obtain the complex block.
+      var precount : *metax.meta.precount = 0 #:
+        How many empty lines appear before this construct in the source file.
+      var termcode : int = 15;
+      var position : str = null #:
+        The name of some construct in the new parent preceeded by '+'
+        (insert after) or '-' (insert before).  If the position is '+' or
+        null, insert at end.  If the position is '-', insert at beginning.
+      var primary_line : int = -1 #:
+        The line number of the primary token in the .meta file.
+    scope:
+      /# We reordered context and parent so this verifies things.
+      assert isinstance(context, metax.c.Context)
+
+      /# Create the construct.
+      construct = cls(id, parent, context, precount=precount)
+      consinfo = construct.consinfo()
+      if consinfo is None:
+        raise metax.c.Error(
+          'Construct %s is not legal in given context' % construct.kind())
+      metafile = construct.metafile()
+
+      /# Create the feature attributes
+      if features:
+        if not isinstance(features, list):
+          raise metax.c.Error('features must be list of tuples, not %s' % str(features))
+        legalfeatures = consinfo.features()
+        for ftup in features:
+          fkey = ftup[0]
+          fval = ftup[1]
+          line = ftup[2] if len(ftup) > 2 else -1
+          /# TODO(wmh): Validate that fkey and fval are legal!
+          /# TODO(wmh): Need to set line and col correctly for each attribute!
+          /# By passing litkey='', we are indicating that the feature key is
+          /# not to be shown explicitly.
+          feature = metax.attr.FeatureAttribute(construct, fkey, fval, litkey='', line=line)
+          construct.registerAttribute(feature)
+
+      /# Create the primary attribute
+      /#  - we pass None into CreateNewAttribute() for parent to indicatee
+      /#    primary, then set it afterward.
+      priminfo = consinfo.primary()
+      primary = metax.c.MetaFile.CreateNewAttribute(
+        None, consinfo, construct.kind(), value=id, metafile=metafile,
+        line=primary_line)
+      primary.parentIs(construct)
+      construct.registerAttribute(primary)
+
+      /# Create the secondary attributes
+      if secondaries:
+        if not isinstance(secondaries, list):
+          raise metax.c.Error('secondaries must be list of tuples, not %s' % str(secondaries))
+        legalseconds = consinfo.secondaries()
+        for stup in secondaries:
+          skey = stup[0]
+          sval = stup[1]
+          line = stup[2] if len(stup) > 2 else -1
+          if skey == 'params:' and isinstance(sval, list):
+            sval = metax.oopl.ExecutableConstruct.CreateParams(sval, context)
+
+          if sval is None:
+            /# An indication that this secondary is to not be generated at
+            /# all.  Useful when forming the tuples passed in as secondaries
+            /# from code that may or may not produce null values ... avoids
+            /# caller having to do checks.
+            /# print('**** WARNING: IGNORING %s (None) within %s' % (skey, construct.kindfqn()))
+            continue
+          elif isinstance(sval, metax.attr.Attribute):
+            secondary = sval
+            if len(stup) > 2:
+              secondary.lineIs(line)
+          else:
+            if '<*>' in skey:
+              /# If the attribute type is simplex, we need to convert it to 
+              /# complex.
+              info = consinfo.secondaries().get(skey, None)
+              type = info['type']
+              if type == 'simplex': type = 'complex'
+            else:
+              type = None
+            secondary = metax.c.MetaFile.CreateNewAttribute(
+              construct, consinfo, skey, value=sval, metafile=metafile,
+              type=type, line=line)
+          construct.registerAttribute(secondary)
+
+      construct.termcodeIs(termcode)
+      construct.autogenIs(True)
+
+      /# We intentionally register with parent at end of method so that there
+      /# is little diff between doing it within this method or within the
+      /# caller afterward.
+      /#  - it is possible that early registration will be needed for something
+      /#    but hopefully not.
+      if parent:
+        parent.registerConstruct(construct, position=position)
+        /# TODO(wmh): 
+        consparent = parent.parent()
+        if consparent and consparent.kind() == 'class':
+          construct.myclassIs(consparent)
+      elif position:
+        raise metax.c.Error('Specified position "%s" without parent' % position)
+
+      return construct
+    test:
+      _, _, context, _ = self.cachedInfo()
+
+      file_construct = metax.meta.FileConstruct.NewFromData(
+        'cards1.meta', context,
+        secondaries=[('scope:', [])])
+
+      namespace_construct = metax.oopl.NamespaceConstruct.NewFromData(
+        'cards1.meta', context, parent=file_construct.rawattr('scope:'),
+        secondaries=[
+          ('comment:', ['Playing cards.']),
+          ('scope:', []),
+        ])
+
+      class_construct = metax.oopl.ClassConstruct.NewFromData(
+        'Card', context, parent=namespace_construct.rawattr('scope:'),
+        features=[('visibility', 'public')],
+        secondaries=[
+          ('<', 'metax.root.Object'),
+          ('#:', [
+            'A card with suit and rank, belonging to a Deck.',
+            '',
+            'The Deck is responsible for display functionality.']),
+          ('scope:', []),
+        ])
+
+      fp = test.fp()
+      file_construct.write(fp=fp)
+      out = fp.getvalue()
+      test.iseqtext(
+        'File cards1.meta scope:\n'
+        '  namespace cards1.meta comment:\n'
+        '    Playing cards.\n'
+        '  scope:\n'
+        '    public class Card < metax.root.Object #:\n'
+        '      A card with suit and rank, belonging to a Deck.\n'
+        '\n'
+        '      The Deck is responsible for display functionality.\n'
+        '    scope:\n'
+        '    end class Card;\n'
+        '  end namespace cards1.meta;\n'
+        'end File cards1.meta;\n',
+        out)
+    end method NewFromData;
+
+    method isNamespace : bool scope:
+      return False
+    test:
+      pass
+
+    method isClass : bool scope:
+      return False
+    test:
+      pass
+
+    method isMethod : bool scope:
+      return False
+    test:
+      pass
+
+    method rawattr : metax.attr.Attribute #:
+      Obtain the attribute with given key.
+
+      This does not perform any baselang-specific logic ... use attr() for that.
+    params:
+      var key : str #:
+        The attribute key.
+      var default : any = False #:
+        The value to return if the key isn't present. If metax.c.REQUIRED, raises
+        MissingAttribute error.
+        TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issue.
+    scope:
+      if default is False:
+        default = metax.c.REQUIRED
+      result = self._attributes.get(key, default)
+      if result is metax.c.REQUIRED:
+        raise metax.c.MissingAttribute(
+          'rawattr: On %s failed to find required rawattr("%s")' % (self.kindid(), key))
+      return result
+    test:
+      construct = test.defineConstructs()
+      test.iseq('male', construct.rawattr('gender').value())
+      test.isnull(construct.rawattr('missing', default=None))
+      test.raises(metax.c.MissingAttribute, construct.rawattr, 'missing')
+    end method rawattr;
+
+    method rawval : any #:
+      Obtain the value of an attribute with a given key.
+
+      This does not perform any baselang-specific logic ... use attrval() for
+      that.
+    params:
+      var key : str #:
+        The attribute key.
+      var default : any = False #:
+        The value to return if the attribute isn't present.
+        If metax.c.REQUIRED, raises MissingAttribute error.
+        TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issue.
+    scope:
+      if default is False:
+        default = metax.c.REQUIRED
+      attribute = self._attributes.get(key, None)
+      if attribute is None:
+        if default is metax.c.REQUIRED:
+          raise metax.c.MissingAttribute(
+            'rawval: On %s failed to find required rawattr("%s")' %
+            (self.kindid(), key))
+        else:
+          result = default
+      else:
+        result = attribute.value()
+      return result
+    test:
+      construct = test.defineConstructs()
+      test.iseq('male', construct.rawval('gender'))
+      test.isnull(construct.rawval('missing', default=None))
+      test.raises(metax.c.MissingAttribute, construct.rawval, 'missing')
+    end method rawval;
+
+    method consinfo : metax.meta.ConsInfo #:
+      Obtain the consinfo for this construct.
+    scope:
+      return self.context().consinfo(self.kind())
+    test:
+      construct = test.constructInCode('demo.tmp/Person', name='oopl')
+      consinfo = construct.consinfo()
+      test.isinst(consinfo, metax.c.ConsInfo)
+    end method consinfo;
+
+    method attrinfo : *metax.meta.info #:
+      Obtain the attribute info for a given key.
+    params:
+      var key : str #:
+        The attribute key (or alias) that info is desired for
+    scope:
+      res = self.context().attrinfo(self.kind(), key)
+      if res[0] is None:
+        raise metax.c.Error('Failed to find key %s in %s' % (key, self.kind()))
+      return res
+    test:
+      construct = test.constructInCode('demo.tmp/Person', name='oopl')
+      attrinfo, consinfo = construct.attrinfo('scope:')
+      attrinfo.pop('empty')
+      attrinfo.pop('attribute')
+      test.iseqmap(
+        {
+          'valopt': False,
+          'cankey': 'scope:',
+          'default': '<empty>',
+          'children': ['lifecycle', 'method', 'field', 'native', 'category', 'remark', 'command'],
+          'keyopt': False,
+          'type': 'complex',
+          'autokey': None,
+        },
+        attrinfo)
+      test.issame(consinfo, construct.consinfo())
+    end method attrinfo;
+
+    method attrpair : tuple<metax.attr.Attribute,any> #:
+      Obtain the attribute with given key and its value.
+
+      Supports LOOKUP, EMPTY and REQUIRED semantics.
+    params:
+      var key : str #:
+        The attribute key.
+      var default : any = False #:
+        The value to return for the attribute if the key isn't present.
+        - if None, returns None for attr and value.
+        - if False or metax.c.REQUIRED, raises MissingAttribute error.
+        - if metax.c.LOOKUP, we perform lookup in the lexical context chain.
+           - it is inefficient to make this the default (more efficient to
+             use EMPTY or REQUIRED where they are valid).
+        - if metax.c.EMPTY, create a new Attribute with empty value.
+           - when an actual attribute is not needed if not present, it is best
+             to pass in None instead of EMPTY.
+        - else, it must be an Attribute instance (rarely the case)
+    scope:
+      if default is False:
+        default = metax.c.REQUIRED
+      /# TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issue.
+      attr = self.rawattr(key, default=None)
+      if attr is None:
+        /# No explicit value ... 'default' tells us what to do in this case.
+        if default is metax.c.LOOKUP:
+          info, _ = self.attrinfo(key)
+          attr = info['attribute']
+          /# TODO(wmh): Should 'attr' be cloned!!!??
+          if attr is None:
+            /# We've encountered an attr that should never be found during
+            /# lookup.
+            self.metafile().error(
+              'Failed to find attribute "%s"' % key,
+              line=self.primary().line())
+            /#print(info)
+            /#raise metax.c.Error(
+            /#  'Here with attr %s : %s in %s' %
+            /#  (key, info['type'], self.kindid()))
+        elif default is metax.c.EMPTY:
+          /# NOTE(wmh): This is a variant of code in ConsInfo.registerSecondary()
+          attrinfo, consinfo = self.attrinfo(key)
+          func = metax.c.MetaFile.AttrValueEmpty[attrinfo['type']]
+          try:
+            value = func()
+            /# TODO(wmh): Instead of creating a new Attribute every time, we
+            /# could maintain the empty Attribute instances in ConsInfo. The
+            /# 'attribute' key in ConsInfo dicts could then use this 'empty'
+            /# instance as well, which would remove the code redundancy between
+            /# here and ConsInfo.registerSecondary. Alternative, we can just be
+            /# careful about using metax.c.EMPTY ... only when truly needed.
+
+            /# print('****** HERE with key %s type %s value %s'  % (key, attrinfo['type'], str(value)))
+            attr = metax.c.MetaFile.CreateNewAttribute(
+              self, consinfo, key, key=key, value=value, typecheck=False,
+              /# Not necessary since we are passing in parent, but that may
+              /# change in the future in which case secondary must be set true
+              secondary=True)
+          except metax.c.InvalidAttributeType as e:
+            raise metax.c.MissingAttribute(
+              '*** Failed to find empty value for %s in %s (%s)' % (
+                key, self.kindid(), str(e)))
+        elif default is metax.c.REQUIRED:
+          raise metax.c.MissingAttribute(
+            'Failed to find %s in %s' % (key, self.kindid()))
+        else:
+          attr = default
+
+      /# TODO(wmh): If attr was found via LOOKUP, consider returning None
+      /# for attr (but keeping the value as-is). This signals the caller that
+      /# the attr cannot be used to form a meta-line number, so the caller
+      /# can use some other attribute (e.g. primary) instead.
+      return (attr, attr.value() if attr else None)
+    test:
+      cards1, scope, namespace, path = test.getMetaFile(
+        'oopl', 'cards1', debuglevel=0)
+
+      card = namespace.child('Card')
+      deck = namespace.child('Deck')
+
+      IGNORE = object()
+
+      def Chk(pair, cls=IGNORE, attr=IGNORE, key=IGNORE, value=IGNORE, head=IGNORE):
+        actual_attr, attrvalue = pair
+        if cls is not IGNORE:
+          test.isinst(actual_attr, cls)
+        if attr is not IGNORE:
+          test.iseq(attr, actual_attr)
+        if key is not IGNORE:
+          test.iseq(key, actual_attr.key())
+        if head is not IGNORE:
+          attrvalue = attrvalue[:head]
+        if value is not IGNORE:
+          test.iseq(value, attrvalue)
+
+      /# A feature attribute that exists in the source.
+      Chk(
+        card.attrpair('visibility'),
+        cls=metax.attr.FeatureAttribute, key='visibility', value='public')
+      /# A feature attribute that does not exist in source: None
+      Chk(
+        card.attrpair('presence', default=None),
+        attr=None, value=None)
+      /# A feature attribute that does not exist in source: LOOKUP.
+      Chk(
+        card.attrpair('presence', default=metax.c.LOOKUP),
+        cls=metax.attr.FeatureAttribute, key='presence', value='concrete')
+      /# A feature attribute that does not exist in source: EMPTY
+      test.raises(
+        metax.c.MissingAttribute,
+        card.attrpair, 'presence', default=metax.c.EMPTY)
+      /# A feature attribute that does not exist in source: REQUIRED
+      test.raises(
+        metax.c.MissingAttribute,
+        card.attrpair, 'presence', default=metax.c.REQUIRED)
+
+
+      /# A non-block attribute that exists in the source.
+      Chk(
+        card.attrpair('parent'),
+        cls=metax.attr.WordAttribute, key='parent', value='metax.root.Object')
+      /# A non-block attribute that does not exist in the source: None
+      Chk(
+        card.attrpair('testparent', default=None),
+        attr=None, value=None)
+      /# A non-block attribute that does not exist in the source: LOOKUP
+      Chk(
+        card.attrpair('testparent', default=metax.c.LOOKUP),
+        cls=metax.attr.WordAttribute, key='testparent', value='<special>')
+      /# A non-block attribute that does not exist in the source: EMPTY
+      Chk(
+        card.attrpair('testparent', default=metax.c.EMPTY),
+        cls=metax.attr.WordAttribute, key='testparent', value='')
+      /# A non-block attribute that does not exist in the source: REQUIRED
+      test.raises(
+        metax.c.MissingAttribute,
+        card.attrpair, 'testparent', default=metax.c.REQUIRED)
+
+
+      /# An block-valued attribute that exists in the source.
+      Chk(
+        namespace.attrpair('comment:'),
+        cls=metax.attr.SimpleBlock, key='comment:',
+        value=['Playing cards.', 'CONTENTS TESTED IN UNITTEST. DO NOT MODIFY.'])
+      /# A block-valued attribute that does not exist in source: None
+      Chk(
+        namespace.attrpair('preports:', default=None),
+        attr=None, value=None)
+      /# A block-valued attribute that does not exist in source: EMPTY
+      Chk(
+        namespace.attrpair('preports:', default=metax.c.EMPTY),
+        cls=metax.attr.SimpleBlock, value=tuple())
+      /# A block-valued attribute that does not exist in source: LOOKUP
+      Chk(
+        namespace.attrpair('preports:', default=metax.c.LOOKUP),
+        cls=metax.attr.SimpleBlock, value=tuple())
+      /# A block-valued attribute that does not exist in source: REQUIRED
+      test.raises(
+        metax.c.MissingAttribute,
+        namespace.attrpair, 'preports:', default=metax.c.REQUIRED)
+
+    end method attrpair;
+
+    method attrval : any #:
+      Obtain the value of an attribute with a given key.
+    params:
+      var key : str #:
+        The attribute key.
+      var default : any = False #:
+        The value to return if the attribute isn't present.
+        If metax.c.REQUIRED, raises MissingAttribute error.
+        TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issue.
+    scope:
+      if default is False:
+        default = metax.c.LOOKUP
+      attr, value = self.attrpair(key, default=default)
+      return value
+    test:
+      construct = test.defineConstructs()
+      test.iseq('male', construct.attrval('gender'))
+    end method attrval;
+
+    method attr : tuple<metax.attr.Attribute,any> #:
+      Obtain the attribute given a key.
+    params:
+      var key : str #:
+        The attribute key.
+      var default : any = False #:
+        TODO(wmh): Change from LOOKUP to REQUIRED?
+        The value to return if the attribute isn't present.
+        If metax.c.REQUIRED, raises MissingAttribute error.
+        TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issue.
+    scope:
+      if default is False:
+        default = metax.c.LOOKUP
+      attr, value = self.attrpair(key, default=default)
+      return attr
+    test:
+      construct = test.defineConstructs()
+      test.iseq('male', construct.attr('gender').value())
+    end method attr;
+
+    method allpairs : map #:
+      Obtain all key/value pairs.
+    params:
+      var stripcolon : bool = false #:
+        If true, remove the colon from block-valued keys. Note that if the
+        construct has two different attribute keys that differ only in colon,
+        one will tromp the other.
+      var simpletext : bool = false #:
+        If True, simple block values are converted to multi-line strings.
+      var ignore : vec<str> = null #:
+        Keys to ignore.
+    scope:
+      result = {}
+      for attribute in self.order():
+        key = attribute.key()
+        if ignore and key in ignore: continue
+
+        /#isfeat = isinstance(attribute, metax.c.FeatureAttribute)
+        /#isprim = key == self.kind()
+
+        value = attribute.value()
+        if isinstance(value, metax.c.Expr):
+          vkind = value.kind()
+          if vkind == 'str':
+            value = value.value()[1:-1]
+          else:
+            /# TODO(wmh): May need to perform additional special-casing based
+            /# on vkind.
+            value = value.value()
+        elif attribute.isComplexBlock():
+          constructs = value
+          value = []
+          for construct in constructs:
+            value.append(construct.allpairs(stripcolon=stripcolon, simpletext=simpletext))
+        elif attribute.isSimpleBlock():
+          if simpletext:
+            value = '\n'.join(value) + '\n'
+
+        if stripcolon:
+          if key[-1] == ':':
+            key = key[:-1]
+
+        result[key] = value
+      return result
+    test:
+      construct = test.constructInCode('demo.tmp/Person', name='oopl')
+      allpairs = construct.allpairs()
+      float_type = metax.c.Type.Instance('float')
+      test.iseq(
+        {
+          'scope:': [
+            {
+              'field': 'height',
+              'type': float_type,
+            },
+            {
+              'field': 'weight',
+              'type': float_type,
+            },
+            {
+              'scope:': ['return self.weight() / (self.height() ** 2)'],
+              'returns': float_type,
+              'method': 'bmi',
+            }
+          ],
+          'class': 'Person',
+          'comment:': [
+            'First line should be oneline summary.',
+            'Subsequent lines are for more details and',
+            'can be formatted in Meta(Doc) syntax.',
+          ]
+        },
+        allpairs)
+    end method allpairs;
+
+    method parentConstruct : *metax.meta.Construct #:
+      Obtain parent construct.
+    scope:
+      parent_block = self.parent()
+      parent_construct = parent_block.parent() if parent_block else None
+      return parent_construct
+    test:
+      construct = test.defineConstructs()
+      test.iseq('namespace nm.sp', construct.parentConstruct().kindid())
+    end method parentConstruct;
+
+    method child : any #:
+      Obtain a Construct or Attribute descendent node
+    params:
+      var spec : str #:
+        Format is:
+          <term> ::- <id> ['@' <attr> ]
+          <spec> ::- <term> | <spec> '/' <term>
+
+        If spec starts with '/', it is a request to find a child relative
+        to the file construct that this construct is contained within, else
+        it is relative to this construct.
+        
+        On the last <term> in spec, <id> is optional, and if not present, it is
+        a request to return an Attribute rather than a Construct. For example,
+        '/nm.sp/Person/bmi@scope' returns the 'bmi' method construct, while
+        '/nm.sp/Person/@scope' returns the scope of Person.
+      var fp : ostream = null #:
+        If non-null, where to write failure information.
+    scope:
+      /# If 'spec' starts with '/', it is a request to find a child relative
+      /# to the FileConstruct that this construct resides within.
+      terms = spec.split('/')
+      if terms[0] == '':
+        /# The path is relative to the File construct.
+        construct = self.metafile().construct()
+        terms.pop(0)
+      else:
+        construct = self
+
+      /# Now for each <term> in <spec> traverse down the lexical chain from
+      /# construct.
+      m = len(terms) - 1
+      for i, term in enumerate(terms):
+
+        /# Parse the term
+        idattr = term.split('@')
+        ialen = len(idattr)
+        assert ialen <= 2
+        id, attr = (idattr[0], idattr[1] if ialen == 2 else 'scope')
+        if not id and i < m:
+          /# Must specify id for all terms except last
+          if fp:
+            fp.write(u'Must specify id for all terms except last: %s' % spec)
+          construct = None
+          break
+
+        /# The <attr> in spec does NOT put a colon at the end of block-valued
+        /# attributes, so we implicitly search for both '<attr>:' and '<attr>'.
+        /# TODO(wmh): This is problematic with the advent of attributes like
+        /# '=' and '=:' ... there is no way to specify that we want '='.
+        attribute = (
+          construct.rawattr(attr + ':', default=None) or
+          construct.rawattr(attr, default=None))
+
+        if False:
+          print(
+            'id=%s attr=%s ids=%s' %
+            (id, attr, attribute.map().keys() if attribute else None))
+
+        if attribute is None:
+          /# Failed to find the specified attribute.
+          if fp:
+            fp.write(u'Did not find attribute %s: %s' % (attr, spec))
+          construct = None
+          break
+        elif not id:
+          /# The special case where the last <term> does not specify an id,
+          /# so we return the attribute.
+          construct = attribute
+          break
+        else:
+          construct = attribute.cons(id, default=None)
+          if construct is None:
+            /# Failedd to find the specified id.
+            if fp:
+              fp.write(u'Did not find construct %s: %s' % (id, spec))
+            construct = None
+            break
+
+      return construct
+    test:
+      filecons = test.constructInCode('', name='oopl')
+      namespace = filecons.child('demo.tmp')
+      test.notnull(namespace)
+
+      person1 = namespace.child('Person')
+      person2 = filecons.child('demo.tmp/Person')
+      person3 = namespace.child('/demo.tmp/Person')
+      test.notnull(person1)
+      test.issame(person1, person2)
+      test.issame(person1, person3)
+
+      method1 = namespace.child('Person/bmi')
+      method2 = filecons.child('demo.tmp/Person/bmi')
+      method3 = namespace.child('/demo.tmp/Person/bmi')
+      test.notnull(method1)
+      test.issame(method1, method2)
+      test.issame(method1, method3)
+
+      filecons2 = test.constructInCode('', name='meta')
+      test.isnull(filecons2.child('test/special'))
+      special = filecons2.child('test/special@config')
+      test.notnull(special)
+      specspec = filecons2.child('test/special@config/special@config')
+      test.iseq('Attribute test.special.special', specspec.kindfqn())
+    end method child;
+
+    method path : str #:
+      The path to this construct within the metafile, as used by child().
+    scope:
+      if isinstance(self, metax.meta.FileConstruct):
+        result = '/'
+      else:
+        parent = self.parent()
+        parentcons = parent.parent()
+        result = parentcons.path() + '/' + self.id()
+        key = parent.key()
+        if key != 'scope:':
+          result += '@' + key.replace(':', '')
+      return result
+    test:
+      filecons = test.constructInCode('', name='oopl')
+
+      namespace = filecons.child('/demo.tmp')
+      test.notnull(namespace)
+      test.iseq('/demo.tmp', namespace.path())
+
+      person = filecons.child('/demo.tmp/Person')
+      test.notnull(person)
+      test.iseq('/demo.tmp/Person', person.path())
+
+      method = filecons.child('/demo.tmp/Person/bmi')
+      test.notnull(method)
+      test.iseq('/demo.tmp/Person/bmi', method.path())
+
+      filecons2 = test.constructInCode('', name='meta')
+
+      construct = filecons2.child('/test/special@config')
+      test.notnull(construct)
+      test.iseq('/test/special@config', construct.path())
+
+      attribute = filecons2.child('/test/special@config/special@config')
+      test.notnull(attribute)
+      test.iseq('/test/special@config/special@config', attribute.path())
+    end method path;
+
+    method ancestor : *metax.meta.Construct #:
+      Obtain the nearest ancestor construct of a given kind.
+    params:
+      var kind : str #:
+        The kind of the ancestor construct desired.
+      var proper : bool = true #:
+        If true, do not consider self. If false, do consider self.
+    scope:
+      target = self.parent().parent() if proper else self
+      if isinstance(kind, re._pattern_type if sys.version_info[0] == 2 else re.Pattern):
+        while target and not kind.search(target.kind()):
+          target = target.parentConstruct()
+      else:
+        while target and target.kind() != kind:
+          target = target.parentConstruct()
+      return target
+    test:
+      construct = test.defineConstructs()
+      /# construct.write()
+      test.iseq('namespace nm.sp', construct.ancestor('namespace').kindid())
+      test.iseq('File a.meta', construct.ancestor('File').kindid())
+      test.isnull(construct.ancestor('method'))
+    end method ancestor;
+
+    method distance : int #:
+      Obtain the distance to the ancestor of specified kind.
+    params:
+      var kind : str #:
+        The kind of the ancestor construct desired.
+    scope:
+      result = -1
+      count = 0
+      target = self
+      while target:
+        if target.kind() == kind:
+          result = count
+          break
+        target = target.parentConstruct()
+        count += 1
+      return result
+    test:
+      construct = test.defineConstructs()
+      /# construct.write()
+      test.iseq('namespace nm.sp', construct.ancestor('namespace').kindid())
+      test.iseq('File a.meta', construct.ancestor('File').kindid())
+      test.isnull(construct.ancestor('method'))
+    end method distance;
+
+    method registerAttribute : any #:
+      Register an attribute with this construct, maintaining order.
+    params:
+      var attribute : metax.attr.Attribute #:
+        The attribute to register.
+      var position : str = null #:
+        A string that starts with '+' or '-' followed optionally by the name of
+        a pre-existing attribute key within the construct. If the position is
+        '+' or null, insert at end. If the position is '-', insert at beginning.
+        Otherwise, insert before (if first char is '-') or after (if first char
+        is '+') the attribute key identified by position.
+    scope:
+      key = attribute.key()
+      if attribute.isBlock():
+        assert key[-1] == ':'
+
+      /# If the attribute has a baselang selector, we need to encode the basel
+      /# in the key so that multiple baselangs can be stored together.
+      /#  - we do NOT use attribute.litkey() because that might contain
+      /#    an alias followed by a baselang selector, when we always want
+      /#    the canonical key and baselang selector.
+      /#  - we don't both to try to insert the baselang selector before the
+      /#    final ':' (for block-valued attributes), nor do we use the <>
+      /#    syntax ... we just add ':' + basel to the end of the canonical
+      /#    key.
+      basel = attribute.basel()
+      key2 = None
+      if basel:
+        cankey = key
+        key += '.' + basel
+        /# By adding 'attribute' to _attributes at key 'key', we ensure that
+        /# we can maintain multiple baselangs for the same key.  However, when
+        /# expanding and translating, we only care about attributes associated
+        /# with a specific baselang. When code invokes Construct.attr(key),
+        /# it is a request to find the baselang-specific attribute with
+        /# canonical key 'key', but we store baselang-specific attributes
+        /# using the non-canonical key. When resolving baselang-specific
+        /# attributes, the order is always:
+        /#    scope<py>:
+        /#  before
+        /#    scope<*>:
+        /#  before
+        /#    scope:
+        /#
+        /# We also introduce a rule that 'scope:' cannot appear explicitly if
+        /# either of 'scope<xx>:' or 'scope<*>:' appears explicitly. By doing
+        /# so, we can, here in registerAttribute, always ensure that the
+        /# canonical key exists in a construct if the baselang-specific key
+        /# is introduced, by checking basel against self.baselang().suffix().
+        baselang = self.baselang()
+        if basel == '*' or (baselang and baselang.hasSuffix(basel)):
+          /# The base language qualifier matches a known suffix.
+          /#  - if the canonical key is already registered, we have multiple
+          /#    eligible keys for this same attribute and report an error.
+          /#  - otherwise we register both key and cankey.
+          if cankey in self._attributes:
+            self.metafile().error(
+              'Cannot specify both %s and %s in same construct' %
+              (cankey, attribute.litkey()))
+          else:
+            /# We should add cankey to _attributes too.
+            key2 = cankey
+
+      if key in self._attributes:
+        self.metafile().error(
+          'Found duplicate key %s in %s' % (key, self.kindid()),
+          line=attribute.line())
+        attribute = None
+      else:
+        /# Register the attribute in the specified key(s).
+        self._attributes[key] = attribute
+        if key2:
+          self._attributes[key2] = attribute
+
+        order = self._order
+        if position is None or position == '+':
+          order.append(attribute)
+
+        elif position == '-':
+          order.insert(0, attribute)
+
+        else:
+          /# We are to insert before or after a pre-existing attribue.
+          index = None
+          aid = position[1:]
+          for i, attr in enumerate(order):
+            if attr.key() == aid:
+              index = i
+              break
+          if index is None:
+            self.metafile().error(
+              'Failed to insert %s before missing %s' % (key, aid),
+              line=attribute.line())
+            raise metax.c.Error('Here')
+          elif position[0] == '+':
+            order.insert(index + 1, attribute)
+          elif position[0] == '-':
+            order.insert(index, attribute)
+          else:
+            raise metax.c.Error('Invalid position "%s"' % position)
+
+        if attribute.isBlock():
+          attribute.parentIs(self)
+    tests:
+      testx basics scope:
+        construct = test.defineConstructs()
+        /# defineConstructs() invokes registerAttribute() for a feature, primary
+        /# and multiple secondaries.
+        test.iseqvec(
+          ['visibility', 'class', 'scope:', 'gender', 'person', 'count', 'default',
+           'value', 'type', 'fruit', 'comment:'],
+          [c.key() for c in construct.order()])
+
+      testx multilang scope:
+        /# Register scope<py>: and scope<cc>: and verify that 'scope:' provides
+        /# access to scope<py>: (because current baselang is python) and that
+        /# the canonicalized version of construct matches expectations.
+        text = 'method f scope<py>:\nscope<cc>:\nend;\n'
+        metafile = test.metafileFor(
+          text=text, metal='oopl', basel='python', debuglevel=0)
+        construct = metax.oopl.MethodConstruct.NewFromData(
+          'f', metafile.context())
+        attribute = metax.attr.ComplexBlock(
+          construct, 'scope:', [], litkey='scope<py>:')
+        attribute.baselIs('py')
+        attribute2 = metax.attr.ComplexBlock(
+          construct, 'scope:', [], litkey='scope<cc>:')
+        attribute2.baselIs('cc')
+        construct.registerAttribute(attribute)
+        construct.registerAttribute(attribute2)
+        test.iseqvec(
+          ['method', 'scope:', 'scope:.cc', 'scope:.py'],
+          sorted(construct._attributes.keys()))
+        test.issame(attribute, construct.attr('scope:'))
+        fp = test.fp()
+        construct.write(fp=fp)
+        test.iseqtext(
+          >|"""method f scope<py>:
+          >|scope<cc>:
+          >|end method f;
+          >|""",
+          fp.getvalue())
+    end method registerAttribute;
+
+    method unregisterAttribute : metax.attr.Attribute #:
+      Remove the attribute with given key.
+
+      Returns:
+        The removed attribute.  Returns null if 'key' does not represent an
+        attribute on self.
+    params:
+      var key : str;
+    scope:
+      result = None
+      order = self._order
+      attrs = self._attributes
+      if key in attrs:
+        result = attrs.pop(key)
+        order.remove(result)
+      return result
+    test:
+      construct = test.defineConstructs()
+      scope = construct.unregisterAttribute('scope:')
+      test.iseq('scope:', scope.key())
+      gender = construct.unregisterAttribute('gender')
+      test.iseq('male', gender.value())
+      test.isnull(construct.unregisterAttribute('missing'))
+    end method unregisterAttribute;
+
+    method linkParent #:
+      Link parent.
+    params:
+      var parent : *metax.meta.Construct;
+    scope:
+      self.parentIs(parent)
+    test:
+      construct = test.defineConstructs()
+      block = metax.attr.ComplexBlock(None, 'scope:', [])
+      construct.linkParent(block)
+      test.issame(block, construct.parent())
+    end method linkParent;
+
+    method unlinkParent #:
+      Unlink parent.
+    params:
+      var parent : *metax.meta.Construct;
+    scope:
+      assert self._parent is parent
+      self.parentIs(None)
+    test:
+      construct = test.defineConstructs()
+      parent = construct.parent()
+      test.notnull(parent)
+      construct.unlinkParent(parent)
+      test.isnull(construct.parent())
+    end method unlinkParent;
+
+    method changeParent #:
+      Move myself out of my current parent into the new parent.
+    params:
+      var new_parent : metax.attr.ComplexBlock #:
+        The parent to move this construct into.
+      var position : str = null #:
+        The name of some construct in the new parent preceeded by '+'
+        (insert after) or '-' (insert before).  If the position is '+' or
+        null, insert at end.  If the position is '-', insert at beginning.
+    scope:
+      parent = self.parent()
+      parent.unregisterConstruct(self)
+      new_parent.registerConstruct(self, position=position)
+      /# TODO(wmh): Find myclass = new_parent.parent().ancestor('class')
+      /# and set self.myclassIs(myclass)
+    test:
+      /# Note that we do not perform the moving of file-scoped classes into
+      /# preceeding namespaces until expandMeta() is invoked, so by parsing
+      /# our 'oopl' sample (but not expanding it), we have Person within
+      /# nm.sp, but Student within File, so we can move Student into the
+      /# namespace.
+      metafile = test.metafileFor(name='oopl')
+      metafile.parseMeta(test.context)
+      file_construct = metafile.construct()
+      file_scope = file_construct.attr('scope:')
+      namespace_construct = file_scope.cons('demo.tmp')
+      namespace_scope = namespace_construct.attr('scope:')
+      person = namespace_scope.cons('Person')
+      student = file_scope.cons('Student')
+
+      /# Verify expectations before changing parent.
+      test.issame(file_scope, student.parent())
+      test.issame(namespace_scope, person.parent())
+      test.iseq(1, namespace_scope.size())
+      test.iseq(2, file_scope.size())
+
+      /# Now move Student into the namespace.
+      student.changeParent(namespace_scope)
+      test.issame(namespace_scope, student.parent())
+      test.iseq(2, namespace_scope.size())
+      test.iseq(1, file_scope.size())
+
+      /# TODO(wmh): There are more things to test here, especially related
+      /# to the undone updating of myclass!
+    end method changeParent;
+
+    method write : int #:
+      Serialize this construct.
+
+      Returns:
+        For now, always -1, but this may change in the future.
+    params:
+      var fp : ostream = out #:
+        Where to write output.
+      var indent : str = '' #:
+        How much indentation before each line.
+      var mode : map = null #:
+        A mechanism for controlling how the output is generated.
+          form: str
+            controls overall form of output. Values:
+              code: render as parsable code
+              html: render as HTML
+          details: str
+            controls how much detail is provided. Values:
+              user: show the details specified by the user
+              all: show all attributes
+          [fps]key: str
+            controls how feature (s), primary (p) and secondary (s) attribute
+            keys are rendered. Values:
+              no: do not show key
+              user: show user version (which may mean not showing)
+              show: show canonical key
+              alias: show first alias if present else canonical
+            If any value ends with '+' it is a request to ...??
+          [fps]val: str
+            controls how feature (f), primary (p) and secondary (s) attribute
+            values are rendered. Values:
+              no: do not show value
+              user: show user value
+              TODO(wmh): Define others?
+          uplift: bool
+            If true and self is namespace, the scope: attribute are not 
+            printed, but each child is printed, at the same level as self
+            (i.e. not indented).
+          term: map
+            code: int (always use this termcode)
+            min: int (minimum termcode)
+            max: int (maximum termcode)
+    scope:
+      if mode is None: mode = {}
+      uplift = mode.get('uplift', False)
+      if uplift and not self.kind() == 'namespace':
+        /# For now, uplifting is only relevant for namespaces, but we may also
+        /# support it for classes (uplifting methods and fields) later.
+        uplift = False
+      details = mode.get('details', 'user')
+
+      /# Add blank lines before the construct
+      fp.write(u'\n' * self.precount())
+
+      construct = self
+      if details == 'all':
+        /# We are to show all attributes.
+        kind = self.kind()
+        context = self.context()
+        metafile = context.metafile()
+        consinfo = context.consinfo(kind)
+        corder = consinfo.order()
+
+        /# We make a copy of this construct so that we can modify aspects of
+        /# it without affected the actual object.
+        tmp_block = metax.attr.ComplexBlock(None, 'scope:', [])
+        construct = self.clone(tmp_block)
+        copyord = construct.order()
+
+        order = []
+        aline = -100
+        sline = 10000
+        for key in corder:
+          attribute = construct.attr(key)
+          if attribute is None:
+            /# So far, this only appears to be happening for attributes of
+            /# type 'expr', when the default value is <special> (not when
+            /# default is <empty>).  Note that field default and _executable_ super
+            /# have <empty> while flag default and var default have <special>
+            /# have a proper empty instance (TODO(wmh): fix)
+            attribute = metax.attr.ExprAttribute.EmptyMap.get(key, None)
+            if attribute is None:
+              raise metax.c.Error('Unexpected null key %s' % key)
+
+          if attribute.isFeature():
+            attribute.lineIs(aline)
+            aline += 1
+            order.append(attribute)
+          else:
+            if attribute in copyord:
+              order.append(attribute)
+            else:
+              if attribute.value() is None:
+                /# This happens for 'default' in 'var', which is marked in the
+                /# schema as having default <special> and ConsInfo.registerSecondary()
+                /# sets the value to None in such cases.
+                /# 
+                /# For now, we do not add these attributes.
+                /# print('**** HERE with none %s %s for %s' % (attribute, key, construct.kindfqn()))
+                pass
+              else:
+                attribute.lineIs(sline)
+                sline += 1
+                order.append(attribute)
+        /# We ensure the construct is terminated readably.
+        if attribute.isBlock():
+          construct.termcodeIs(7)
+
+      else:
+        /# We are only showing attributes explicitly specified in the source.
+        order = construct.order()
+
+      prev = None
+      numc = 0
+      special = None
+      for i, attribute in enumerate(order):
+        if uplift and attribute.key() == 'scope:':
+          special = attribute
+          continue
+        /# Write the attribute
+        preattr = construct.preAttrStr(attribute, prev, numc, indent)
+        fp.write(unicode(preattr))
+        numc = attribute.write(fp=fp, indent=indent, mode=mode)
+        /# Prepare for next iteration
+        prev = attribute
+
+      /# Print the terminator
+      /#  - if the last attribute was multi-lined, insert indentation.
+      term_str = construct.termStr(
+        mode=mode, lastattr=prev, indent=indent, update=True)
+      fp.write(term_str)
+
+      if special:
+        /# We print out the special children without indentation.
+        for child in special.value():
+          child.write(fp=fp, indent=indent, mode=mode)
+
+      /# Number of lines/chars written is unknown
+      return -1
+    test:
+      construct = test.defineConstructs()
+
+      fp = test.fp()
+      construct.write(fp=fp)
+      test.iseqtext(
+        'visibility public class Person\n'
+        'scope:\n'
+        'gender male person bob count 42 default <special> value "this is a test"\n'
+        'type vec<str>\n'
+        'fruit <apple|banana|cantelope>\n'
+        'comment:\n'
+        '  this is a\n'
+        '  test of a simple block\n'
+        'end class;\n',
+        fp.getvalue())
+
+      _, _, _, meta = test.cachedInfo(metal='meta')
+      ex1, _, construct, _ = test.getMetaFile(
+        'meta', 'ex1', context=meta.bootstrapContext())
+      fp = test.fp()
+      construct.write(fp=fp)
+      out = fp.getvalue()
+
+      fp = test.fp()
+      construct.write(fp=fp, mode={'pkey': 'user+'})
+      out = fp.getvalue()
+    end method write;
+
+    method writeIndex : vec<str> #:
+      Add this construct to a hierarchy list.
+    params:
+      var level : int = 0 #:
+        Current level (number of parents processed).  0 means initial
+        invcation.
+      var adj : int = 0 #:
+        When computing the 'indent' value, a certain number of repeats of
+        delim are used, based on the sum of level and adj.  Useful for example
+        when minlevel is specified and one wants to remove excess levels of
+        indentation by passing adj=-minlevel.
+      var output : vec<str> = null #:
+        Where to write output.
+      var form : str = null #:
+        A description of what should be printed out for each construct.
+        Certain variables are interpolated:
+         - line: the line number
+         - indent: replaced with delim*level
+         - kind: the construct kind
+         - id: the construct id
+         - fqn: the construct fqn
+         - sep: arbitrary constant string specified as param in 'sep'
+      var delim : str = null #:
+        What to use as the indent indicator (per level).
+        TODO(wmh): The default value should be '  ', but Meta currently
+        types the 'default' attribute as 'word' instead of 'expr' and thus
+        cannot properly parse '  '!
+      var sep : str = '' #:
+        What to replace the named value 'sep' with in the formatted line.
+      var minlevel : int = 0 #:
+        Do not print an entry if level less than this.
+      var maxlevel : int = 100000 #:
+        Do not print an entry if level greater than this.
+      var width : int = 60 #:
+        How much width to reserve for text before the suffix (if present)
+      var suffix : str = null #:
+        If present, another format string to print, after primary text
+        is aligned to width chars. Same escapes available as in 'form'.
+      var filter : regexp = null #:
+        If present, only display a summary line if level is less than 3
+        or if the summary line contains the specified regexp.
+    scope:
+      if form is None:
+        form = '%(line)4d  %(indent)s%(kind)s %(id)s'
+      if delim is None:
+        delim = '  '
+
+      if output is None:
+        if level != 0:
+          raise metax.c.Error('Error: output null and level %d' % level)
+        output = []
+
+      scope_attr, scope = self.attrpair('scope:', default=None)
+
+      if level >= minlevel and level <= maxlevel:
+        data = {
+          'line': self.primary().line() + 1,
+          'indent': delim * (level + adj),
+          'kind': self.kind(),
+          'id': self.id(),
+          'fqn': self.fqn(),
+          'sep': sep,
+        }
+        summary = form % data
+        matches = filter and re.search(filter, summary)
+
+        if filter and (level > 2 or not scope or self.kind() == 'native') and not matches:
+          /# We are filtering, and the current line doesn't match the filter,
+          /# so we don't show it.
+          pass
+        else:
+          output.append(summary)
+
+      if scope:
+        if self.kind() in ('File', 'namespace', 'class', 'behavior'):
+          sublevel = level + 1
+
+          currdex = len(output)
+          for child in scope:
+            child.writeIndex(
+              level=sublevel, adj=adj, output=output, form=form, delim=delim,
+              sep=sep, minlevel=minlevel, maxlevel=maxlevel,
+              width=width, suffix=suffix, filter=filter)
+
+          /# print('For "%s" there were %d children and %s' % (output[-1], len(output) - currdex, matches))
+          if len(output) <= currdex and filter:
+            /# We are filtering, and there was no match amongst any children,
+            /# so we remove this entry too.
+            if not matches and output:
+              output.pop()
+              pass
+
+      return output
+    test:
+      construct = test.constructInCode('demo.tmp/Person', name='oopl')
+      construct.writeIndex()
+      output = construct.writeIndex()
+      test.iseqvec(
+        [
+          '   3  class Person',
+          '   8    field height',
+          '   9    field weight',
+          '  10    method bmi',
+        ],
+        output)
+    end method writeIndex;
+
+    method asStr : str #:
+      Return a string representation of self.
+    scope:
+      fp = io.StringIO()
+      self.write(fp=fp)
+      return fp.getvalue()
+    test:
+      construct = test.basics()
+      test.iseq('visibility public class Person\nscope:\nend;\n', construct.asStr())
+    end method asStr;
+
+    method termstr : str #:
+      The terminator string to use for self.
+    params:
+      var context : metax.c.Context = null;
+    scope:
+      if not context:
+        context = self.context()
+      termcode = self.termcode()
+
+      if termcode == 0 or termcode == metax.c.TERM_UNINIT:
+        result = u''
+      else:
+        items = []
+        if termcode & 0x2:
+          items.append(context.token('end'))
+        if termcode & 0x4:
+          items.append(self.kind())
+        if termcode & 0x8:
+          items.append(self.id())
+        result = u' '.join(items)
+        if termcode & 0x1:
+          result += context.token('term')
+      return result
+    test:
+      construct = test.basics()
+      for tc, termstr in (
+        (0, ''), (1, ';'), (3, 'end;'), (7, 'end class;'),
+        (15, 'end class Person;'),
+      ):
+        construct.termcodeIs(tc)
+        test.iseq(termstr, construct.termstr())
+    end method termstr;
+
+    method termStr : str #:
+      The properly indented and mode-modified terminator string.
+    params:
+      var mode : map = null #:
+        See write() for details.
+      var lastattr : metax.attr.Attribute = null #:
+        The previous attribute.
+      var indent : str = '' #:
+        Indentation to add (not always used).
+      var update : bool = false #:
+        If true, update mode if html.
+    scope:
+      if mode:
+        form = mode.get('form', 'code')
+        html = form == 'html'
+      else:
+        html = False
+      indent = unicode(indent)
+
+      result = u''
+      termcode = self.termcode()
+      if termcode > 0 and termcode != metax.c.TERM_UNINIT:
+        if termcode == 1:
+          if lastattr and lastattr.isBlock():
+            result = indent + self.termstr() + '\n'
+          else:
+            result = self.termstr() + '\n'
+        else:
+          /# TODO(wmh): Sometimes we need a newline, sometimes we dont
+          if lastattr and lastattr.isBlock():
+            /# If the last attribute was a block, we do not need to add
+            /# a newline, but otherwise we do.
+            pass
+          else:
+            result = u'\n'
+          termstr = self.termstr()
+          if html:
+            termstr = '<span class="face-end">' + termstr + '</span>'
+            if update:
+              htmlid = self.fqn()
+              cout = mode.setdefault('out', {}).setdefault('construct', {})
+              cout.setdefault('all', []).append(htmlid)
+              cout.setdefault(self.kind(), []).append(htmlid)
+
+          result += indent + termstr + '\n'
+      return result
+    test:
+      construct = test.basics()
+      for tc, termstr in (
+        (0, ''), (1, ';\n'), (3, '\nend;\n'), (7, '\nend class;\n'),
+        (15, '\nend class Person;\n'),
+      ):
+        construct.termcodeIs(tc)
+        test.iseq(termstr, construct.termStr())
+    end method termStr;
+
+    method preAttrStr : str #:
+      The text to insert before an attribute is written.
+    params:
+      var attribute : metax.attr.Attribute #:
+        The attribute for which pre-text is desired.
+      var prevattr : metax.attr.Attribute #:
+        The previous attribute. Null if first attribute.
+      var numc : int #:
+        Number of characters written so far.
+      var indent : str #:
+        Indentation to insert.
+    scope:
+      /# Determine if we need a space, newline or nothing before this
+      /# attribute:
+      /#  - if this is the first attribute, add nothing
+      /#  - if mode is 0:
+      /#     - if previous attribute was on a different line, insert newline,
+      /#       else space
+      /#  - if mode is 1:
+      /#     - if the string representation of 'attribute', plus the
+      /#       text already written on the first line, exceeds the maximum
+      /#       column width, insert a newline else space.
+      if prevattr is None:
+        result = indent
+      else:
+        if numc < 0:
+          /# The attribute was multi-lined, which means it was a block
+          /# attribute (or multi-line expr). Newline should already be added,
+          /# so we need to add indent.
+          result = indent
+        elif attribute.line() != prevattr.line():
+          /# The previous attribute is on a different line.
+          result = u'\n' + indent
+        else:
+          result = u' '
+      return result
+    test:
+      construct = test.basics()
+      primary = construct.primary()
+      scope = construct.attr('scope:')
+      test.iseq('  ', construct.preAttrStr(primary, None, 0, '  '))
+      test.iseq('\n  ', construct.preAttrStr(scope, primary, 10, '  '))
+    end method preAttrStr;
+
+    method fqn #:
+      Compute a fully-qualified id. Only meaningful for constructs in
+      scope blocks.
+    params:
+      var terminal : str = 'File' #:
+        Which construct terminates the search.
+      var noauto : bool = false #:
+        If true, and an ancestor has auto-assigned id, it is not added to
+        the list.
+    scope:
+      revlist = []
+      obj = self
+      while obj:
+        if obj.kind() == terminal:
+          break
+        id = obj.id() or '?'
+        if noauto and metax.c.Context.IsAutoId(id):
+          pass
+        else:
+          revlist.append(id)
+        obj = obj.parent()
+        if obj:
+          obj = obj.parent()
+      return '.'.join(reversed(revlist))
+    test:
+      construct = test.basics()
+      test.iseq('nm.sp.Person', construct.fqn())
+    end method fqn;
+
+    method splitComment : tuple<str,str> #:
+      Obtain the comment: of this construct and return a summary and desc.
+
+      In various constructs, the comment is often structure as a one-line
+      summary followed by a multi-line description. This method provides
+      a means of obtaining summary and desc strings for that use-case .
+    scope:
+      comment = self.attrval('comment:', default=None)
+      if comment is not None:
+        n = len(comment)
+        summary = comment[0].strip()
+        if not summary.endswith('.') and n > 1 and comment[1].strip():
+          /# If the first line doesn't end with a period, and the second line
+          /# is not empty, we add a bit of flavor to the summary.
+          summary += '...'
+        desc = '\n'.join(comment[1:]).strip()
+      else:
+        summary = ''
+        desc = ''
+      return summary, desc
+    test:
+      construct = test.constructInCode('demo.tmp/Person', name='oopl')
+      test.iseq(
+        ('First line should be oneline summary.',
+         'Subsequent lines are for more details and\n'
+         'can be formatted in Meta(Doc) syntax.'),
+        construct.splitComment())
+    end method splitComment;
+
+    abstract
+    method expandMeta #:
+      Perform all actions needed to expand this construct (and its children).
+    params:
+      var output : vec<Construct> = null #:
+        Where to write constructs created during expansion.  Does NOT
+        include transitively created constructs. If null, do not accumulate.
+    end method expandMeta;
+
+    method importMeta : vec<BaseFile> #:
+      Import dependent metafiles and link data-structures based on resulting
+      constructs. For most constructs this is a noop ... really only meaningful
+      for files, namespaces and classes, so we provide a default noop
+      implementation.
+    scope:
+      /# noop
+    test:
+      pass
+    end method importMeta;
+
+    abstract
+    method translateMeta : vec<BaseFile> #:
+      Perform all actions needed to translate this construct into a specific
+      baselang.
+    end method translateMeta;
+
+    method compileMeta : vec<BaseFile> #:
+      Perform all actions needed to compile the baselang code associated with
+      this construct. For most constructs this is a noop ... really only
+      meaningful for files, namespaces and classes, so we provide a default noop
+      implementation.
+    scope:
+      /# noop
+    test:
+      pass
+    end method compileMeta;
+
+  end class Construct;
+
+  abstract
+  class MetaConstruct < Construct #:
+    @MetaConstruct: Abstract construct from which all Meta(Meta) constructs inherit.
+
+    IMPORTANT: Before implementing this construct in metax.meta, we need to
+    deal with circularity issues introduced by having metax.c need metax.meta
+    and metax.meta need metax.c (if we move MetaConstruct before we move
+    BaseLanguageConstruct, etc.). Try moving BaseLanguageConstruct first.
+  scope:
+
+    method kind : str scope:
+      return '_meta_'
+    test:
+      pass
+    end method kind;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      /# print('**** MetaConstruct no expansion needed for %s' % self.kindid())
+      pass
+    test:
+      pass
+    end method expandMeta;
+
+    override
+    method translateMeta
+    scope:
+    test:
+      pass
+    end method translateMeta;
+
+  end class MetaConstruct;
+
+  class MetaLanguageConstruct < MetaConstruct #:
+    @MetaLanguage: defines the collection of constructs for the metalang.
+  assocs:
+    std usertest assoc os;
+    resource metameta path "../schema/meta/schema.meta";
+    resource metaoopl path "../schema/oopl/schema.meta";
+    resource metadoc path "../schema/doc/schema.meta";
+  scope:
+
+    method kind : str scope:
+      return 'MetaLanguage'
+    test:
+      test.iseq('MetaLanguage', test.construct.kind())
+    end method kind;
+
+    field name : str #:
+      The human-presentable name of this Meta language. It is what is inserted
+      for X in Meta(X).
+
+    field metalangparent : *metax.meta.MetaLanguageConstruct #:
+      The parent MetaLanguage of this MetaLanguage. Only null for Meta(Meta).
+
+    field toplevel : vec<str> #:
+      The list of construct kinds that are legal at top-level within .meta files
+      implemented in this MetaLanguage. The toplevel kinds of ancestor languages
+      are also legal and do not need to be explicitly specified here.
+
+    field baselangs : @map<str,BaseLanguage> #:
+      The collection of BaseLanguage instances supported by this
+      MetaLanguage.  A key is added for the id, name, aliases and
+      suffix(es) of the language.
+
+    field baselist : @vec<BaseLanguage> #:
+      The collection of BaseLanguage instances in this MetaLanguage.
+
+    field basesels : @map<str,str> #:
+      Maps suffix to BaseLanguage for legal suffixes that can appear in
+      attribute key selectors. Only the first suffix associated with each
+      BaseLanguage is allowed here.
+
+    field consmap : @map<str,class> #:
+      Maps construct kind to subclass of Construct.  If a particular
+      construct id is not present, GenericConstruct is assumed.
+
+    lifecycle  params:
+      var id : str;
+      var parent : metax.attr.ComplexBlock #:
+        Should always be null.  Required so that the MetaLanguage initializer
+        matches the Construct initializer.
+      var context : metax.c.Context #:
+        Should always be null.  Required so that the MetaLanguage initializer
+        matches the Construct initializer.
+      var precount : int = 0 #:
+        Should always be zero. Required so that the MetaLanguage initializer
+        matches the Construct initializer.
+    super (id, parent, context, precount=precount)
+    scope:
+      /# The special Meta* baselang suffix is always legal.
+      self.basesels()['*'] = None
+
+      /# IMPORTANT: This construct is not properly initialized until
+      /# postCreationInitialization() is invoked, which cannot be invoked
+      /# until the name, toplevel and metalangparent fields have been
+      /# initialized.
+    setup:
+      test.metafile = test.metafileFor(
+        name='meta', metal='oopl', basel='python')
+      test.metafile.parseMeta(test.context)
+      test.file = test.metafile.construct()
+      test.construct = test.file.attr('scope:').cons('test')
+    end lifecycle;
+
+    method postCreationInitialization #:
+      Perform post-creation initialization
+    scope:
+      /# This code relies on certain code having been executed that is
+      /# currently implemented in metax.c.Compiler.metalangNamed().
+      name = self.name()
+      assert name is not None
+      toplevel = self.toplevel()
+      assert toplevel is not None
+      uid = self.id()
+
+      metalangparent = self.metalangparent()
+      if uid != 'meta':
+        assert metalangparent is not None
+
+      if metalangparent:
+        toplevel = metalangparent.toplevel() + toplevel
+        self.toplevelIs(toplevel)
+
+        /# Inherit parent constructs into self.
+        pmap = metalangparent.consmap()
+        for kind, ccls in pmap.items():
+          self.registerConstructClass(kind, ccls)
+    test:
+      /# TODO(wmh): The code in postCreationInitialization() relies on
+      /# metax.c.Compiler.metalangNamed() having been invoked. Write
+      /# the contents of test.construct to a tmp file, then invoke
+      /# test.construct.compiler().metalangNamed('test', <path>) on it.
+      /# That will, among other things, invoke postCreationInitialization().
+      print('Fix MetaLanguageConstruct.postCreationInitialization test')
+      if False:
+        construct = test.construct
+        tmppath = 'fixme'
+        with open(tmppath, 'w') as fp:
+          construct.write(fp=fp)
+        /# The following invokes postCreationInitialization()
+        metalang = construct.compiler().metalangNamed('test', tmppath)
+    end method postCreationInitialization;
+
+    method registerConstructClass #:
+      Associate a construct with a subclass of Construct.
+    params:
+      var kind : str #:
+        A construct kind.
+      var cls : class<Construct> #:
+        The subclass of Construct to use to represent instances of
+        construct 'kind'.
+    scope:
+      /# print('Registering %s %s for %s' % (kind, cls.__name__, self.id()))
+      /# FIXME(wmh)
+      /# assert issubclass(cls, metax.meta.Construct)
+      self._consmap[kind] = cls
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      test.iseqvec(test.metaoopl_consids, sorted(metaoopl._consmap))
+    end method registerConstructClass;
+
+    method getConstructClass : class<Construct> #:
+      Obtain the construct class to use for instances of constructs of
+      kind 'kind'.
+    params:
+      var kind : str #:
+        A construct kind.
+    scope:
+      return self._consmap.get(kind, None)
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      conscls = metaoopl.getConstructClass('Construct')
+      test.issame(metax.meta.ConstructConstruct, conscls)
+    end method getConstructClass;
+
+    method registerBase #:
+      Add a BaseLanguage to this MetaLanguage
+    params:
+      var base : *metax.meta.BaseLanguage #:
+        The baselanguage to add.
+    scope:
+      bases = self.baselangs()
+      suffixes = base.suffixes()
+      name = base.name()
+      for key in [base.id(), base.name(), base.name().lower()] + list(suffixes):
+        current = bases.get(key, None)
+        if current and current is not base:
+          raise metax.c.InternalError(
+            "Attempt to register base %s with key '%s' already used by %s"
+            % (base.id(), key, current.id()))
+        bases[key] = base
+      if suffixes:
+        self.basesels()[suffixes[0]] = base
+      self.baselist().append(base)
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      test.iseqvec(
+        ['C++', 'Javascript', 'Python'],
+        sorted([baselang.name() for baselang in metaoopl.baselist()]))
+    end method registerBase;
+
+    method baselangNamed : *metax.meta.BaseLanguage #:
+      The BaseLanguage instance associated with a given name.
+    params:
+      var nora : str #:
+        The name, alias, suffix or id of the baselang desired.
+    scope:
+      return self.baselangs().get(nora, None)
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      ooplpy = metaoopl.baselangNamed('Python')
+      test.isinst(ooplpy, metax.oopl.OoplPython)
+    end method baselangNamed;
+
+    method toplevelConstructKinds : vec<str> #:
+      The list of construct kinds that can appear at top-level within a
+      meta file implemented in this meta language.
+    scope:
+      return self.toplevel()
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      test.iseqvec(
+        ['MetaLanguage', 'File', 'namespace', 'class'],
+        metaoopl.toplevelConstructKinds())
+    end method toplevelConstructKinds;
+
+    method isValidBase : bool #:
+      Determine if a given string is a valid string to appear within a
+      attribute key selector to identify a baselang.
+    params:
+      var basesel : str #:
+        The baselang selector found within an attribute key.
+    scope:
+      return basesel in self.basesels()
+    test:
+      _, metaoopl, _, _ = test.cachedInfo()
+      test.istrue(metaoopl.isValidBase('py'))
+      test.istrue(metaoopl.isValidBase('js'))
+      test.isfalse(metaoopl.isValidBase('xx'))
+    end method isValidBase;
+
+    method preExpandFileConstruct #:
+      Perform pre-expand actions on FileConstruct (move classes defined in File
+      scope into closest preceeding namespace scope).
+    params:
+      var file_construct : metax.meta.FileConstruct;
+    scope:
+      children = file_construct.attrval('scope:')
+      /# We perform a special analysis to move file-level class constructs into
+      /# implicit namespaces.
+      /#  - IMPORTANT: I initially planned to implement this insert-class-into-namespace
+      /#    logic in NamespaceConstruct.expandMeta() and ClassConstruct.expandMeta().
+      /#    Unfortunately, doing so causes NamespaceConstruct.expandMeta() to
+      /#    be invoked on the test namespace before the test methods from the
+      /#    implicit class are added to it, meaning no test methods are
+      /#    produced and state is uninitialized causing the compiler to crash.
+      /#    By performing the operation here, we can get the constructs into
+      /#    the expected state before we do any expansion. As an added benefit,
+      /#    the logic is in one place instead of scattered across two methods.
+      /#  - NOTE: it would be nice if FileConstruct was meta-langugage-agnostic,
+      /#    but this code is inherently Meta(Oopl)-centric. Move it into a
+      /#    metalanguage template method and invoke the method on the metalang.
+      current_namespace = None
+      for child in list(children):
+        /# IMPORTANT: Must iterate over list(children) because it is modified
+        /# within the loop by child.changeParent().
+        ckind = child.kind()
+        if ckind == 'namespace':
+          current_namespace = child
+          namespace_scope = child.attr('scope:', default=None)
+          if namespace_scope is None:
+            /# TODO(wmh): How to indicate that this attribute is implicitly
+            /# added, and should not be used during canonicalization?
+            /#  - do we add an implicit field to ComplexBlock? Or to NamespaceConstruct?
+            scope = metax.attr.ComplexBlock(None, 'scope:', [])
+            /# print('Added new scope to %s' % child.kindfqn())
+            child.registerAttribute(scope)
+        elif ckind == 'class':
+          /# We have a File-level class ... move it into namespace.
+          if current_namespace is None:
+            metafile.error(
+              'Must specify a namespace before a class can be defined',
+              line=file_construct.primary().line())
+            /# TODO(wmh): Is it safe to return so early?
+            return
+          else:
+            child.namespaceIs(current_namespace)
+            nmsp_scope = current_namespace.attr('scope:')
+            child.changeParent(nmsp_scope)
+            if False:
+              print('Implicitly added %s to %s' % (
+               child.kindfqn(), current_namespace.kindfqn()))
+            /#current_namespace._setClassVariant(child)
+    test:
+      /# Parse Meta(Oopl) that contains Person within a namespace, and Student
+      /# at File level below that namespace.
+      metafile = test.metafileFor(
+        name='oopl', metal='oopl', basel='python')
+      metafile.parseMeta(test.context)
+      file_construct = metafile.construct()
+      file_scope = file_construct.attr('scope:')
+      namespace_construct = file_scope.cons('demo.tmp')
+      pre_student = file_scope.cons('Student')
+
+      /# Before invoking preExpandFileConstruct, the namespace has one child.
+      scope = namespace_construct.attr('scope:')
+      test.iseq(['Person'], sorted(scope.map().keys()))
+      person = scope.cons('Person')
+      test.issame(file_construct, pre_student.parentConstruct())
+
+      /# After invoking preExpandFileConstruct, the namespace has two children.
+      test.construct.preExpandFileConstruct(file_construct)
+      test.iseq(['Person', 'Student'], sorted(scope.map().keys()))
+      post_student = scope.cons('Student')
+      test.issame(namespace_construct, post_student.parentConstruct())
+    end method preExpandFileConstruct;
+
+    method generateMeta #:
+      Create a meta file representing a namespace of all construct classes.
+    params:
+      var verbose : bool = false #:
+        If true, print out some details.
+    scope:
+      metac = self.compiler()
+      fs = metac.fs()
+      metal = self.id()
+
+      /# TODO(wmh): Generalize this.
+      metaoopl = metac.metalang()
+      assert metaoopl.id() == 'oopl'
+
+      /###
+      /# Generate the .meta code.
+      config_attr, config = self.attrpair('config:')
+      nmsp = self.attrval('nmsp') or ('metax.%s' % metal)
+
+      context = metaoopl.context()
+      file = metax.meta.FileConstruct.NewFromData(
+        'faux.meta', context, secondaries=[('scope:', [])])
+      namespace = metax.oopl.NamespaceConstruct.NewFromData(
+        nmsp, context,
+        parent=file.attr('scope:'), secondaries=[('scope:', [])])
+      nscope = namespace.attr('scope:')
+      nscope.postcountIs(1)
+
+      /# Intentionally adding '.gen' suffix to force client to move the
+      /# file to production .meta.  After implementing all Meta code inside
+      /# .meta files and using them for a year, it was deemed too cumbersome,
+      /# as having code in schema.meta files:
+      /#  - has different syntax (Construct vs class), translate: vs
+      /#    translateMeta, etc
+      /#  - breaks emacs construct summaries
+      /#  - schema files are in different hierarchy, slowing down access
+      /# It is deemed better to have the .meta code in .meta files, and
+      /# so use 'metac schema' only to generate an initial stub. We can look
+      /# into addressing the above issues some other time.
+      outbase = 'meta%s.meta.gen' % (self.id())
+      if verbose:
+        print('Generating ' + outbase)
+
+      errors = 0
+      for construct in config:
+        kind = construct.kind()
+        if kind == 'Construct':
+          /# Establish name of class associated with this construct.
+          clsname = construct.className()
+
+          /# Establish name of parent of class associated with this construct.
+          parent_clsname = construct.attrval('pclsname', default=None)
+          if parent_clsname is None:
+            cpname = construct.attrval('parent', default=None)
+            if cpname is None:
+              parent_clsname = 'metax.meta.Construct'
+            else:
+              /# cpname is a *construct* name ... we obtain it and convert to class name.
+              parent_construct = config_attr.cons(cpname)
+              parent_clsname = parent_construct.className()
+
+          /# The scope: of the construct is a simple block, because it is
+          /# written in Meta(Meta). But the code in scope: should contain
+          /# Meta(Oopl) classic constructs (those that appear within classes).
+          /# We create a class construct and parse these scope blocks into
+          /# the scope: of the newly created classes.
+          cscope = construct.attr('scope:', default=None)
+          if cscope:
+
+            if verbose:
+              print(
+                '  construct %-10s class %-20s parent %s' %
+                (construct.id(), clsname, parent_clsname))
+
+            assocscope = construct.attr('associations:', default=None)
+
+            lnum = 0
+            features = []
+            presence = construct.attrval('presence', default=None)
+            if presence:
+              features.append(('presence', presence, lnum))
+              lnum += 1
+            pnum = lnum
+            secondaries = []
+            secondaries.append(('<', parent_clsname, lnum))
+            secondaries.append(('#:', construct.attrval('comment:', default=None) or [], lnum))
+            if assocscope:
+              lnum += 1
+              secondaries.append(('assocs:', [], lnum))
+            lnum += 1
+            secondaries.append(('scope:', [], lnum))
+
+            klass = metax.oopl.ClassConstruct.NewFromData(
+              clsname, context, parent=nscope, precount=1,
+              features=features,
+              primary_line=pnum,
+              secondaries=secondaries)
+            kscope = klass.attr('scope:')
+            kscope.postcountIs(1)
+
+            /# We parse the lines of Meta(Oopl) text into classic constructs
+            /# within the new class scope.
+            text = '\n'.join(cscope.value())
+            metafile = metax.c.MetaFile('faux_path', metac, text)
+            metafile.contextIs(context)
+            metafile.parseComplexBlock(kscope, 0, legals=None)
+            if metafile.hasErrors(show=True):
+              errors += 1
+
+            /# We do the same for the lines in assocscope, which is treated
+            /# as a simple block in Meta(Meta) but is complex in Meta(Oopl)
+            if assocscope:
+              ascope = klass.attr('associations:')
+              atext = '\n'.join(assocscope.value())
+              metafile = metax.c.MetaFile('faux_path', metac, atext)
+              metafile.contextIs(context)
+              metafile.parseComplexBlock(ascope, 0, legals=None)
+              if metafile.hasErrors(show=True):
+                errors += 1
+
+            /# Add the kind() method if not already present.
+            kind_method = kscope.cons('kind', default=None)
+            if kind_method is None:
+              kind_method = metax.oopl.MethodConstruct.NewFromData(
+                'kind', context, parent=kscope, precount=1,
+                secondaries=[
+                  (':', metax.c.Type.Instance('str')),
+                  ('scope:', ["return '%s'" % construct.id()]),
+                ],
+                position='-',
+              )
+            else:
+              /# print('WARNING: Found explicit kind() method for %s' % construct.kindfqn())
+              pass
+
+            /# Now consider the expand:, import:, translate:, compile: constructs.
+            /#  - The MetaLanguage construct provides convenience attributes for
+            /#    defining expandMeta(), importMeta(), translateMeta() and
+            /#    compileMeta()
+            /#  - We auto-generate the correct signatures and insert the
+            /#    code within the associated attribute, but only if there
+            /#    isn't already a definition for the method in queston.
+            for mbase in ('expand', 'import', 'translate', 'compile'):
+              mname = mbase + 'Meta'
+              mkey = mbase + ':'
+              mattr, mlines = construct.attrpair(mkey, default=None)
+              if mattr is None:
+                /# No explicit definition was provided, so no method is needed.
+                /# Note that the top-level expandMeta and translateMeta are
+                /# abstract and thus required, while importMeta and compileMeta
+                /# have defaults. However, there can be a rich hierarchy of
+                /# classes and a parent class may have provided a default, so we
+                /# leave it to the user and compiler to enforce.
+                /#
+                /# At one point I provided default implementations for expand
+                /# and translate if they weren't given, but that actually causes
+                /# errors if a class relies on an inherited implementation, so
+                /# I no longer do that.
+                continue
+
+              method = kscope.cons(mname, default=None)
+              if method is None:
+                /# No explicit method of the current name has been provided,
+                /# so we create it here.
+                features = [('extensibility', 'override', 0)]
+                secondaries = []
+                if mbase == 'expand':
+                  secondaries.append(
+                    ('params:', [
+                     {'var': 'output', 'termcode': 0, 'secondaries': [
+                       (':', metax.c.Type.Instance('vec<metax.c.Construct>')),
+                       ('=', metax.c.Expr('var', 'null', 'null')),
+                       ('#:', ['Where to write constructs created during expansion.']),
+                     ]}], 1))
+                secondaries.append(('scope:', mlines, 2))
+                method = metax.oopl.MethodConstruct.NewFromData(
+                  mname, context, parent=kscope, precount=1, primary_line=1,
+                  features=features, secondaries=secondaries)
+                if verbose:
+                  print('    method %s' % mname)
+          else:
+            print('WARNING: No scope for %s' % construct.kindfqn())
+        elif kind == 'BaseLanguage':
+          /# Create base language instances.
+          clsname = construct.className()
+
+          /# Establish name of parent of class associated with this baselang.
+          /#  - TODO(wmh): Remove pclsname when fully moved.
+          parent_clsname = construct.attrval('pclsname', default=None)
+          if parent_clsname is None:
+            cpname = construct.attrval('parent', default=None)
+            if cpname is None:
+              parent_clsname = 'metax.meta.BaseLanguageConstruct'
+            else:
+              /# cpname is a baselang *construct* name ... we obtain it and
+              /# convert to class name.
+              parent_construct = config_attr.cons(cpname)
+              parent_clsname = parent_construct.className()
+
+          /# The scope: of the construct is a simple block, because it is
+          /# written in Meta(Meta). But the code in scope: should contain
+          /# Meta(Oopl) classic constructs (those that appear within classes).
+          /# We create a class construct and parse these scope blocks into
+          /# the scope: of the newly created classes.
+          cscope = construct.attr('scope:', default=None)
+          if cscope:
+            if verbose:
+              print(
+                '  baselang  %-10s class %-20s parent %s' %
+                (construct.id(), clsname, parent_clsname))
+
+            lnum = 0
+            features = []
+            presence = construct.attrval('presence', default=None)
+            if presence:
+              features.append(('presence', presence, lnum))
+              lnum += 1
+            klass = metax.oopl.ClassConstruct.NewFromData(
+              clsname, context, parent=nscope, precount=1,
+              features=features,
+              primary_line=lnum,
+              secondaries=[
+                ('<', parent_clsname, lnum),
+                ('#:', construct.attrval('comment:', default=None) or [], lnum),
+                ('scope:', [], lnum+1),
+              ])
+            kscope = klass.attr('scope:')
+            kscope.postcountIs(1)
+
+            /# We parse the lines of Meta(Oopl) text into classic constructs
+            /# within the scope of the newly created BaseLanguage subclass
+            /# instance.
+            text = '\n'.join(cscope.value())
+            metafile = metax.c.MetaFile('faux_path', metac, text)
+            metafile.contextIs(context)
+            metafile.parseComplexBlock(kscope, 0, legals=None)
+            if metafile.hasErrors(show=True):
+              errors += 1
+
+        else:
+          raise metax.c.Error('Invalid construct %s' % construct)
+
+      /# Now add any code in the metalanguage-level scope block
+      /#  - treated as simple block in Meta(Meta), but interpreted as
+      /#    namespace scope block here in Meta(Oopl)
+      ml_lines = self.attrval('scope:', default=None)
+      if ml_lines:
+        text = '\n'.join(ml_lines)
+        metafile = metax.c.MetaFile('faux_path', metac, text)
+        metafile.contextIs(context)
+        metafile.parseComplexBlock(nscope, 0, legals=None)
+        if metafile.hasErrors(show=True):
+          errors += 1
+
+      /# Write the .meta file
+      outpath = outbase  # put this someplace more predicitably then current dir
+      if not errors:
+        if fs.exists(outpath):
+          fs.chmod(outpath, 0o600)
+        with open(outpath, 'w') as cfp:
+          /#namespace.termcodeIs(1)
+          /#namespace.write(fp=cfp, mode={'uplift': True})
+          namespace.write(fp=cfp)
+        if fs.exists(outpath):
+          if verbose:
+            print('Wrote ' + outpath)
+          fs.chmod(outpath, 0o400)
+      else:
+        print('Not writing %s due to errors' % outpath)
+      /# Compile the .meta file to verify that it is working properly.
+      /# print('######################\n# IMPORTANT: Execute this!\n######################\n%% metac %s' % outpath)
+      /# import os
+      /# os.system('metac %s' % outpath)
+    test:
+      /# We want to write into src/kernel/testdata/tmp, but cannot use
+      /# testMetaPath() because mtameta.meta is symlinked and __metafile__ 
+      /# expands to src/schema/meta/metameta.meta.
+      mlcons = test.construct
+      newdir = mlcons.compiler().metaPath(
+        'src', 'kernel', 'testdata', 'tmp')
+      oldcwd = os.getcwd()
+      try:
+        os.chdir(newdir)
+        mlcons.generateMeta()
+        outpath = os.path.join(newdir, 'metaTest.meta.gen')
+        test.exists(outpath)
+        with open(outpath, 'r') as fp:
+          out = fp.read()
+        test.contains('method kind : str scope:', out)
+        /# Cleanup so that the next time we run this test it is meaningful to
+        /# check for existence of the generated file.
+        os.unlink(outpath)
+      finally:
+        os.chdir(oldcwd)
+    end method generateMeta;
+
+  end class MetaLanguageConstruct;
+
+  class ConstructConstruct < MetaConstruct #:
+    @Construct: The construct used to define constructs.
+
+    The construct used to define new constructs within a MetaLanguage config
+    block, and the construct used to modify/augment a pre-existing construct
+    within the complex blocks of constructs that define a 'config' block.
+
+    Any construct that contains one or more complex blocks should always provide
+    a complex-valued 'config' attribute within which Construct instances can
+    appear to change aspects of the construct within all complex blocks of the
+    construct.
+  scope:
+    
+    lifecycle setup:
+      test.construct = test.constructInCode(
+        'test/special@config', name='meta', metal='meta')      
+    end;
+
+    method kind : str scope:
+      return 'Construct'
+    test:
+      test.iseq('Construct', test.construct.kind())
+    end method kind;
+
+    method className : str #:
+      The fully qualified name of the class implementing this construct.
+    scope:
+      result = self.attrval('clsname', default=None)
+      if result is None:
+        cid = self.id()
+        result = cid[0].capitalize() + cid[1:] + 'Construct'
+      return result
+    test:
+      test.iseq('CC', test.construct.className())
+    end method className;
+
+  end class ConstructConstruct;
+
+  class TemplateConstruct < MetaConstruct #:
+    @Template: how to describe the format of a construct in a baselang.
+  scope:
+
+    method kind : str scope:
+      return 'Template'
+    test:
+      test.basics()
+      construct = metax.meta.TemplateConstruct('tmpl', None, test.context)
+      test.iseq('Template', construct.kind())
+    end method kind;
+
+  end class TemplateConstruct;
+
+  class AttributeConstruct < MetaConstruct #:
+    @Attribute: A key/value pair defined on a construct.
+  scope:
+
+    method kind : str scope:
+      return 'Attribute'
+    end method kind;
+
+  end class AttributeConstruct;
+
+  class FeatureValueConstruct < MetaConstruct #:
+    @FeatureValue: a single legal value for a feature (includes aliases).
+
+    Each Construct can have zero or more feature attributes (which appear before
+    the primary key). Each feature attribute has a feature key whose value comes
+    from a pre-defined set of string values. The FeatureValue construct allows
+    one to define an individual value, provide documentation for its semantics,
+    allows for aliases to be introduced (useful when wanting to perform
+    renamings), etc.
+  scope:
+
+    method kind : str scope:
+      return 'FeatureValue'
+    test:
+      _, _, context, _ = test.cachedInfo()
+      featvalcons = metax.meta.FeatureValueConstruct(
+        'public', None, context)
+      test.iseq('FeatureValue', featvalcons.kind())
+    end method kind;
+
+  end class FeatureValueConstruct;
+
+  class FileConstruct < MetaConstruct #:
+    @File: A file containing Meta syntax.
+
+    A construct containing all constructs within a .meta file. This construct is
+    often NOT explicitly provided (in which case it is implicitly defined). It
+    can, however, be useful to explicit define this construct in situations
+    where one wants to customize constructs and attributes appearing anywhere in
+    the file.
+  scope:
+
+    lifecycle setup:
+      test.metafile = test.metafileFor(name='oopl', metal='oopl', basel='python')
+      test.metafile.parseMeta(test.context)
+      test.construct = test.metafile.construct()
+    end;
+
+    method kind : str scope:
+      return 'File'
+    test:
+      test.iseq('File', test.construct.kind())
+    end method kind;
+
+    field current : *metax.meta.Construct #:
+      The current top-level construct.
+      Exact semantics depends on the Meta language being parsed. In Meta(Oopl),
+      this is a NamespaceConstruct, and is used to establish which namespace
+      to add a class that is a file level.
+
+    method path : str #:
+      The path to this construct within the metafile.
+    scope:
+      return ''
+    test:
+      test.iseq('', test.construct.path())
+    end method path;
+
+    override
+    method expandMeta params:
+      var output : vec<metax.c.Construct> = null #:
+        Where to write constructs created during expansion.
+    scope:
+      metax.c.D.expand.sinfo(self.id())
+      metafile = self.metafile()
+      metalang = self.metalang()
+
+      metalang.preExpandFileConstruct(self)
+      children = self.attrval('scope:')
+
+      /# Now expand all children.
+      /#  - It is EXTREMELY important that we make a copy of children to
+      /#    iterate over, because the scope is dynamically modified during
+      /#    iteration!
+      for child in list(children):
+        child.expandMeta()
+
+      metax.c.D.expand.end()
+    test:
+      test.construct.expandMeta()
+    end method expandMeta;
+
+    override
+    method importMeta
+    scope:
+      metax.c.D.imports.sinfo(self.id())
+
+      debug = False
+
+      /# We obtain the set of metafiles that this metafile depends on that
+      /# have not already been parsed.
+      metapaths = set()
+      metafile = self.metafile()
+      metac = metafile.compiler()
+      existing_classes = metac.classes()
+      existing_metafiles = metac.metafiles()
+      fs = metac.fs()
+      baselang = metac.baselang()
+      if debug:
+        print('HERE in FileConstruct.importMeta for %s' % metafile.path())
+      for fqn in metafile.classdeps():
+        if fqn in existing_classes:
+          /# We already have the class parsed, so we do not need to check its
+          /# meta file.
+          pass
+        else:
+          class_path = fs.join(metac.repositoryPath(), baselang.classPath(fqn))
+          meta_path, meta_exists = metac.basePathToMeta(class_path)
+
+          /# Canonicalize path
+          if meta_path is None:
+            /# This can happen, for example, when a user specifies 
+            /#   cls assoc <class>;
+            /# when <class> is not a legal class.
+            klass = metac.classes().get(fqn, None)
+
+            /# TODO(wmh): Decide how to enable/disable this.
+            if False:
+              metafile.warning(
+                'Failed to find class %s' % fqn,
+                line=klass.primary().line() if klass else -1)
+          elif meta_exists:
+            meta_path = fs.realpath(meta_path)
+
+          /# Register metafile
+          if debug:
+            print('  %s = %s' % (fqn, meta_path))
+          if meta_path in existing_metafiles:
+            pass
+          elif meta_path:
+            metapaths.add(meta_path)
+
+      /# We import all of the dependent metafiles.
+      for meta_path in metapaths:
+        if debug:
+          print('  *** Loading %s' % meta_path)
+        metafile = metac.getMeta(
+          meta_path, expand=True,
+          /# I suspect there are times where we will need to perform a
+          /# recursive invocation of imports, but am not yet clear whether it
+          /# is better to do it depth-first (here) or breadth-first (by
+          /# iterating within this method until no more metafiles exist).
+          /# Prelminary experiments with setting this to True were causing us
+          /# to load the same file multiple times, but that may be fixed
+          /# (and if not, can be fixed).
+          imports=False,
+          /# We definitely don't need to translate or compile these classes.
+          translate=False, compile=False)
+        if debug:
+          print('  *** Loaded %s' % metafile.path())
+
+      /# Establish which metafiles need to be transitively loaded due to
+      /# additional unresolved dependencies in the above code.
+      /#  - TODO(wmh): what needs to be done here?
+
+      /# Now we have our children perform post-import actions.
+      scope, children = self.attrpair('scope:')
+      user_children = list(children)
+      for child in user_children:
+        child.importMeta()
+
+      metax.c.D.imports.end()
+    test:
+      test.construct.importMeta()
+    end method importMeta;
+
+    override
+    method translateMeta
+    scope:
+      metax.c.D.translate.sinfo(self.id())
+      scope, children = self.attrpair('scope:')
+      for child in children:
+        child.translateMeta()
+      metax.c.D.translate.end()
+    test:
+      /# TODO(wmh): This created
+      /#   $WMH/lib/meta/oopl/python/demo/tmp[_test]
+      /# Avoid writing to the real directory hierarchy
+      print('Fix Construct.translateMeta test')
+      if False:
+        test.construct.expandMeta()
+        test.construct.translateMeta()
+    end method translateMeta;
+
+    override
+    method compileMeta
+    scope:
+      metax.c.D.compile.sinfo(self.id())
+      scope, children = self.attrpair('scope:')
+      for child in children:
+        child.compileMeta()
+      metax.c.D.compile.end()
+    test:
+      /# test.construct.compileMeta()
+      pass
+    end method compileMeta;
+
+  end class FileConstruct;
+
+  class BaseLanguageConstruct < MetaConstruct #:
+    @BaseLanguage: A pre-existing language augmented by its MetaLanguage.
+
+    Each instance of BaseLanguage identifies a pre-existing language that is
+    supported by this MetaLanguage.
+  scope:
+
+    field name : str #:
+      A human-readable name for this base lang. Anything is allowed.
+
+    field suffixes : vec<str> #:
+      A list of suffixes associated with this baselang.
+
+    field basekey : str #:
+      The priviledged suffix (the one used in attribute key params).
+
+    field keywords : @vec<str> #:
+      The keywords of this baselang.
+
+    field configs : @map #:
+      A collection of var/value pairs. A particular Meta language will often
+      require that each base language of that meta language define the same
+      set of variables, with baselang-specific values. Used in the code.
+
+    field pseudovars : @map #:
+      Maps meta-level pseudovars to baselang equivalents.
+
+    field metalang : metax.meta.MetaLanguageConstruct #:
+      The metalang this baselang belongs to.
+      Initialized in postCreationInitiatialization().
+
+    lifecycle setup:
+      test.construct = test.constructInCode(
+        'test/base@config', name='meta', metal='meta')
+    end;
+
+    method kind : str scope:
+      return 'BaseLanguage'
+    test:
+      test.iseq('BaseLanguage', test.construct.kind())
+    end;
+
+    method postCreationInitialization #:
+      Perform post-creation initialization
+    params:
+      var metalang : metax.meta.MetaLanguageConstruct = null;
+      var name : str = null;
+      var suffixes : vec<str> = null;
+    scope:
+      /# TODO(wmh): When we have migrated fully to a construct-based
+      /# implementation of BaseLanguageConstruct, this method can be cleaned
+      /# up by not testing the fields against None first.
+      if self.metalang() is None:
+        if metalang is None:
+          metalang = self.parent().parent()
+        self.metalangIs(metalang)
+
+      if self.name() is None:
+        if name is None:
+          name = self.attrval('name', default=None) or self.id().capitalize()
+        self.nameIs(name)
+
+      if self.suffixes() is None:
+        if suffixes is None:
+          suffixes = self.attrval('suffixes')
+        self.suffixesIs(suffixes)
+    test:
+      test.construct.postCreationInitialization()
+    end method postCreationInitialization;
+
+    method rawsuffix : str #:
+      The suffix to use for a given location
+    params:
+      var location : str = 'defn';
+    scope:
+      suffixes = self.suffixes()
+      if location == 'defn':
+        result = suffixes[0]
+      elif location == 'decl':
+        result = suffixes[1] if len(suffixes) > 1 else suffixes[0]
+      else:
+        raise metax.c.Error('Unknown suffix location "%s"' % location)
+      return result
+    test:
+      _, metalang, _, _ = test.cachedInfo()
+      py = metalang.baselangNamed('python')
+      cpp = metalang.baselangNamed('cpp')
+      test.iseq('py', py.rawsuffix())
+      test.iseq('py', py.rawsuffix(location='decl'))
+      test.iseq('cc', cpp.rawsuffix())
+      test.iseq('h', cpp.rawsuffix(location='decl'))
+    end method rawsuffix;
+
+    method suffix : str #:
+      The suffix to use for a given location
+    params:
+      var location : str = 'defn';
+    scope:
+      return '.' + self.rawsuffix(location=location)
+    test:
+      _, metalang, _, _ = test.cachedInfo()
+      py = metalang.baselangNamed('python')
+      cpp = metalang.baselangNamed('cpp')
+      test.iseq('.py', py.suffix())
+      test.iseq('.py', py.suffix(location='decl'))
+      test.iseq('.cc', cpp.suffix())
+      test.iseq('.h', cpp.suffix(location='decl'))
+    end method suffix;
+
+    method hasSuffix : bool #:
+      Detemine if this baselang is associated with the specified suffix.
+    params:
+      var suffix : str #:
+        A suffix (without '.') to match against
+    scope:
+      return suffix in self._suffixes
+    test:
+      _, metalang, _, _ = test.cachedInfo()
+      py = metalang.baselangNamed('python')
+      cpp = metalang.baselangNamed('cpp')
+      test.istrue(py.hasSuffix('py'))
+      test.isfalse(py.hasSuffix('cc'))
+      test.istrue(cpp.hasSuffix('h'))
+      test.istrue(cpp.hasSuffix('cc'))
+      test.isfalse(cpp.hasSuffix('py'))
+    end method hasSuffix;
+
+    method config : any #:
+      Obtain a config var by value.
+    params:
+      var name : str;
+      var default : any = -666;
+    scope:
+      /# TODO(wmh): Support exprs of for metax.c.REQUIRED!
+      if default == -666:
+        default = metax.c.REQUIRED
+      result = self._configs.get(name, default)
+      if result is metax.c.REQUIRED:
+        raise metax.c.Error(
+          'Failed to find config var "%s" in baselang %s' %
+          (name, self.name()))
+      return result
+    test:
+      test.construct.updateConfigs({'a': 1, 'b': 2})
+      test.iseq(1, test.construct.config('a', default='misc'))
+      test.iseq('misc', test.construct.config('c', default='misc'))
+      test.raises(metax.c.Error, test.construct.config, 'c')
+    end method config;
+
+    method updateConfigs #:
+      Add key/value pairs to configs.
+    params:
+      var configs : map;
+    scope:
+      self.configs().update(configs)
+    test:
+      configs = {'a': 1, 'b': 2}
+      test.construct.updateConfigs(configs)
+      test.iseq(configs, test.construct.configs())
+      test.construct.updateConfigs({'b': 3, 'c': 4})
+      test.iseq({'a': 1, 'b': 3, 'c': 4}, test.construct.configs())
+    end method updateConfigs;
+
+    method className : str #:
+      The fully qualified name of the class implementing this construct.
+    scope:
+      result = self.attrval('clsname', default=None)
+      if result is None:
+        cid = self.id()
+        metalang = self.ancestor('MetaLanguage')
+        result = metalang.attrval('name') + cid.capitalize()
+      return result
+    test:
+      _, _, _, compiler = self.cachedInfo(metal='oopl')
+      metalang = compiler.metalang()
+      config = metalang.attr('config:')
+      namespace = config.cons('namespace')
+      test.iseq('NamespaceConstruct', namespace.className())
+      root = config.cons('_oopl_')
+      test.iseq('OoplConstruct', root.className())
+    end method className;
+
+  end class BaseLanguageConstruct;
+
+  class GenericConstruct < Construct #:
+    A construct that can be used to represent any construct kind, but which
+    does not have any kind-specific fields.
+  scope:
+    field kind : str #:
+      The kind of the construct.
+
+    lifecycle  params:
+      var id : str;
+      var parent : metax.attr.ComplexBlock;
+      var context : metax.c.Context;
+      var kind -> kind;
+    super (id,parent,context)
+    scope:
+      if id != 'Person':
+        print('CREATING GenericConstruct for %s %s' % (kind, id))
+        /# raise metax.c.Error('blah')
+    end lifecycle;
+
+  end class GenericConstruct;
+
+  test
+  class TestCase < metax.c_test.TestCase scope:
+  end;
+
+end namespace metax.meta;

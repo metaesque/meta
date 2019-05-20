@@ -103,9 +103,26 @@ scope:
         char is '+') the attribute key identified by position.
     scope:
       parent = self.parent()
-      parent.unregisterAttribute(self)
+      parent.unregisterAttribute(self.key())
       new_parent.registerAttribute(self, position=position)
     test:
+      test.defineAttributes()
+      construct = test.construct
+      construct.registerAttribute(test.feature)
+      construct.registerAttribute(test.id)
+      construct.registerAttribute(test.word)
+      test.iseqvec(
+        ['default', 'gender', 'person'], 
+        sorted(construct.attributes()))
+
+      construct2 = metax.meta.AttributeConstruct(
+        'scope:*', None, test.context)
+      test.iseqvec([], sorted(construct2.attributes()))
+
+      test.id.changeParent(construct2)
+
+      test.iseqvec(['default', 'gender'], sorted(construct.attributes()))
+      test.iseqvec(['person'], sorted(construct2.attributes()))
     end method changeParent;
 
     method write : int #:
@@ -1391,7 +1408,7 @@ scope:
     test:
       test.defineAttributes()
       mode = {}
-      fp = test.newStr()
+      fp = test.fp()
       test.iseq(4, test.feature.writeValueLines(fp=fp, indent='..', mode=mode))
       fp.write(u'\n')
       test.iseq(3, test.id.writeValueLines(fp=fp, indent='..', mode=mode))
@@ -1449,7 +1466,7 @@ scope:
       return len(val)
     test:
       test.defineAttributes()
-      fp = test.newStr()
+      fp = test.fp()
       test.iseq(16, test.expr.writeValueLines(fp=fp, indent='..'))
       test.iseq('"this is a test"', fp.getvalue())
 
@@ -1459,7 +1476,7 @@ scope:
       return len(val)
     test:
       test.defineAttributes()
-      fp = test.newStr()
+      fp = test.fp()
       test.iseq(24, test.enum.writeValueLines(fp=fp, indent='..'))
       test.iseq('<apple|banana|cantelope>', fp.getvalue())
 
@@ -1471,7 +1488,7 @@ scope:
       return len(val)
     test:
       test.defineAttributes()
-      fp = test.newStr()
+      fp = test.fp()
       test.iseq(8, test.type.writeValueLines(fp=fp, indent='..', mode={}))
       test.iseq('vec<str>', fp.getvalue())
 
@@ -1517,7 +1534,7 @@ scope:
       return -1
     test:
       test.defineAttributes()
-      fp = test.newStr()
+      fp = test.fp()
       test.simple.writeValueLines(fp=fp, indent='..', mode={})
       out = fp.getvalue()
       test.iseqtext(
@@ -1561,7 +1578,7 @@ scope:
       return -1
     test:
       test.defineAttributes()
-      fp = test.newStr()
+      fp = test.fp()
       test.complex.writeValueLines(fp=fp, indent='..')
       /# Add some constructs to the complex block to test this properly.
       test.iseqtext('\n', fp.getvalue())
@@ -1586,6 +1603,7 @@ scope:
       Create some test attribute instances.
     scope:
       context = metax.c.Context(None, {}, None, None)
+      test.context
       parent = None
 
       construct = metax.meta.AttributeConstruct(

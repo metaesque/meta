@@ -27,12 +27,12 @@ namespace metax.cli #:
   Examples:
 
   - The command line
-      % meta2 -L oopl -b py canonical --expand flags.meta2 metax.cli
+      % metac -L oopl -b py canonical --expand flags.metac metax.cli
     is represented by:
-     - A Command instance whose name is 'meta2', with flags -L and -b.
+     - A Command instance whose name is 'metac', with flags -L and -b.
      - A Command instance whose name is 'canonical', with flag --expand
-       and positional args 'flags.meta2' and 'metax.cli'
-        - this command is a 'child' of the 'meta2' command.
+       and positional args 'flags.metac' and 'metax.cli'
+        - this command is a 'child' of the 'metac' command.
      - A meta program that was invoked via a Meta-generated Entry() method
        will have the (instantiated) command-line information available in
        Meta().CLI(), 
@@ -72,6 +72,7 @@ scope:
   assocs<py>:
     usertest std assoc datetime;
     std assoc logging;
+    std assoc os;
     std assoc re;
   assocs<cc>:
     std assoc iostream;
@@ -266,8 +267,8 @@ scope:
     scope<py>:
       return delim.join(self.names())
     test<py>:
-      test.iseq('meta2', test.command.fqn())
-      test.iseq('meta2_canonical', test.subcommand.fqn())
+      test.iseq('metac', test.command.fqn())
+      test.iseq('metac_canonical', test.subcommand.fqn())
       test.iseq('deps', test.intflag.fqn())
       test.iseq('length', test.arg2.fqn())
     end method fqn;
@@ -293,6 +294,16 @@ scope:
       test.istrue(test.arg4.isArg())
       test.isfalse(test.strflag.isArg())
     end method isArg;
+
+    method terminalSize : int #:
+      Establish size of current terminal
+    scope:
+      /# https://stackoverflow.com/questions/566746/how-to-get-linux-console-window-width-in-python
+      rows, columns = os.popen('stty size', 'r').read().split()
+      return int(columns)
+    test:
+      pass
+    end method terminalSize;
 
   end class Part;
 
@@ -390,14 +401,15 @@ scope:
         Where to write output.
       var indent : str = '' #:
         Indentation before each line.
-      var full : bool = false #:
-        If true, print out full help.
+      var mode : str = 'summary' #:
+        How much detail to print out. Legal values are:
+          summary: provide a one-line summary
+          help: provide help for the part
+          helpfull: provide detailed help for the part.
       var commands : vec<str> = null #:
         The subcommand(s) for which help is desired. If null or empty,
         top-level help is produced.
     scope<py>:
-      mode = 'helpfull' if full else 'help'
-
       command = self
       if commands:
         for nora in commands:
@@ -416,34 +428,31 @@ scope:
     test<py>:
       fp = test.fp()
       test.command.help(fp=fp)
-      test.command.help(fp=fp, full=True)
-      test.iseqtext(
-        >|"""meta2:
-        >|  --baselang|b : str = "<special>"
-        >|    The baselang to compile into.
-        >|  --metadir : str = ".meta2"
-        >|    The subdir to write code to.
-        >|  --metalang|L : str = "oopl"
-        >|    The metalang the code is defined in.
-        >|  canonical:
-        >|    Canonicalize the specified meta files and report diffs.
-        >|    --expand|e : bool = False
-        >|      If true, invoke expandMeta() before canonicalizing
-        >|meta2:
+      test.command.help(fp=fp, mode='helpful')
+      test.iseqtext("""\
+        >|metac          : None
+        >|metac:
         >|  --baselang|b : str = "<special>"
         >|    The baselang to compile into.
         >|    If this is <special>, a metalang-specific default is used
-        >|  --metadir : str = ".meta2"
+        >|  --metadir : str = ".metac"
         >|    The subdir to write code to.
-        >|    A value of .meta2 is treated specially, being symlinked to repo
+        >|    A value of .metac is treated specially, being symlinked to repo
         >|  --metalang|L : str = "oopl"
         >|    The metalang the code is defined in.
-        >|
         >|  canonical:
         >|    Canonicalize the specified meta files and report diffs.
+        >|    --baselang|b : str = "<special>"
+        >|      The baselang to compile into.
+        >|      If this is <special>, a metalang-specific default is used
         >|    --expand|e : bool = False
         >|      If true, invoke expandMeta() before canonicalizing
         >|      By default, expandMeta() invokes parseMeta() but not expandMeta().
+        >|    --metadir : str = ".metac"
+        >|      The subdir to write code to.
+        >|      A value of .metac is treated specially, being symlinked to repo
+        >|    --metalang|L : str = "oopl"
+        >|      The metalang the code is defined in.
         >|""",
         test.out())
     end method help;
@@ -1053,57 +1062,63 @@ scope:
       testx t1 scope<py>:
         command = test.faux
         test.iseq('faux', command.fqn())
-        command.show(fp=test.fp())
+        command.show(fp=test.fp(), mode='help')
         before = test.out()
 
         res = command.instantiate(
           ['./person', '--name', 'Alice', '--gender=female', '--deps', '1',
            '-h', '1.63', 'image', '300'],
           start=True)
-        res.show(fp=test.fp())
+        res.show(fp=test.fp(), mode='help')
         after = test.out()
         test.iseqvec(['./person', 'image'], res.names())
 
-        test.iseqtext(
-          >|"""faux:
+        test.iseqtext("""\
+          >|faux:
           >|  A command with a flag and arg of each type.
-          >|  --deps                 0                              none       =         
-          >|  --dob                  1980-05-17 00:00:00            none       1980-05-1$
-          >|  --gender               undef                          none       =         
-          >|  --height               1.87                           none       =         
-          >|  --name                 Bob                            none       =         
-          >|  --version              .*                             none                 
+          >|  --deps : int = 0
+          >|    Number of dependents.
+          >|  --dob|d : date = 1980-05-17
+          >|    Date of birth.
+          >|  --gender : enum<undef|female|male|trans> = undef
+          >|    Gender of person
+          >|  --height|h : real = 1.87
+          >|    Height in meters.
+          >|  --name : str = "Bob"
+          >|    The name of the person
+          >|  --version|r : regexp = 
+          >|    Version to use.
+          >|  image:
+          >|    Image processing.
+          >|  list:
+          >|    Image listing
           >|""",
           before)
 
-        test.iseqtext(
-          >|"""image:
+        test.iseqtext("""\
+          >|image:
           >|  Image processing.
-          >|  --deps                 1                              =          0         
-          >|  --dob                  1980-05-17 00:00:00            none       1980-05-1$
-          >|  --gender               female                         =          undef     
-          >|  --height               1.63                           =          1.87      
-          >|  --name                 Alice                          =          Bob       
-          >|  --version              .*                             none                 
-          >|  width                  300                            =          None      
-          >|  length                 600                            None       =         
-          >|  color                  red                            None       =         
           >|""",
           after)
 
         res = command.instantiate(['./person', 'list', 'a', 'b', 'c'], debug=False)
-        res.show(fp=test.fp())
+        res.show(fp=test.fp(), mode='helpful')
 
-        test.iseqtext(
-          >|"""list:
+        test.iseqtext("""\
+          >|list:
           >|  Image listing
-          >|  --deps                 1                              =          0         
-          >|  --dob                  1980-05-17 00:00:00            none       1980-05-1$
-          >|  --gender               female                         =          undef     
-          >|  --height               1.63                           =          1.87      
-          >|  --name                 Alice                          =          Bob       
-          >|  --version              .*                             none                 
-          >|  files                  ['a', 'b', 'c']                None       []        
+          >|  --deps : int = 0
+          >|    Number of dependents.
+          >|  --dob|d : date = 1980-05-17
+          >|    Date of birth.
+          >|  --gender : enum<undef|female|male|trans> = undef
+          >|    Gender of person
+          >|  --height|h : real = 1.87
+          >|    Height in meters.
+          >|  --name : str = "Bob"
+          >|    The name of the person
+          >|  --version|r : regexp = 
+          >|    Version to use.
           >|""",
           test.out())
 
@@ -1112,16 +1127,16 @@ scope:
         test.iseq('list', res2.name())
 
         /# The following code sets of a similar situation to what is used in
-        /# actual code between the 'meta2' executable front-end and the
+        /# actual code between the 'metac' executable front-end and the
         /# metax.c.Compiler.MetaxEntry() entry point.
-        /#  - we create a Command instance in 'meta2' to parse some initial flags
+        /#  - we create a Command instance in 'metac' to parse some initial flags
         /#  - then we call metax.c.Compiler.MetaxEntry which creates another Command
-        /#    instance (linked to the command created in 'meta2' so its flags
+        /#    instance (linked to the command created in 'metac' so its flags
         /#    can be seen) and various child Command instances.
         /#  - then we instantiate the top-level command created within
         /#    metax.c.Compiler.MetaxEntry WITHOUT passing 'parent' in (which means
         /#    the name field will be tromped, and was hiding an error in logic).
-        top_command = metax.cli.Command('meta2')
+        top_command = metax.cli.Command('metac')
         command = metax.cli.Command(
           'main', parent=top_command, 
           summary='The public interface to the Meta compiler.')
@@ -1191,6 +1206,7 @@ scope:
     scope<py>:
       return 'Command %s' % self.name()
     test<py>:
+      test.iseq('Command faux', test.faux.title())
     end method title;
 
   end class Command;
@@ -1200,7 +1216,7 @@ scope:
     Abstract superclass of Flag and Arg.
   scope:
 
-    field mytype : @str #:
+    field mytype : str #:
       The type of the part. Legal values are:
         str
         bool
@@ -1374,6 +1390,7 @@ scope:
     scope<py>:
       return 'Flag --%s : %s' % (self.name(), self.mytype())
     test<py>:
+      test.iseq('Flag --name : str', test.strflag.title())
     end method title;
 
   end class Flag;
@@ -1469,6 +1486,7 @@ scope:
     scope<py>:
       return 'Arg %s : %s' % (self.name(), self.mytype())
     test<py>:
+      test.iseq('Arg width : int', test.arg1.title())
     end method title;
 
   end class Arg;
@@ -1480,35 +1498,38 @@ scope:
       Where to write output.
     var indent : str = "" #:
       The indentation to insert before each line of output.
-    var mode : str = 'summary' #:
+    var mode : str = 'help' #:
       How much details to show.  Possible values are:
         summary: provide a one-line summary
         help: provide help for the part
         helpfull: provide detailed help for the part.
   scope:
     receiver Command scope<py>:
-      fp.write(u'%s%s:\n' % (indent, self.name()))
-      summary = self.summary()
-      if summary:
-        fp.write(u'%s  %s\n' % (indent, summary))
-      if sys.version_info.major < 3:
-        indent = unicode(indent)
+      indent = u'' + indent
       subindent = indent + '  '
 
       if mode == 'summary':
-        parts = self.allParts()
+        /# One line summary (no flags, no args, no long-winded description)
+        /# CODETANGLE(help_width) in src/kernel/shell.meta (not
+        /# lib/kernel/shell.meta)
+        fp.write(u'%s%-15s: %s\n' % (indent, self.name(), self.summary()))
+
       else:
-        parts = self.parts()
+        /# Multi-line help
+        fp.write(u'%s%s:\n' % (indent, self.name()))
+        summary = self.summary()
+        if summary:
+          fp.write(u'%s  %s\n' % (indent, summary))
+        parts = self.allParts() if 'ful' in mode else self.parts()
 
-      for flagname in sorted(parts):
-        part = parts[flagname]
-        if part.name() != flagname: continue   # skip aliases
-        /# flags and args are both recorded in parts, but we only want to
-        /# show flags here.
-        if part.isFlag():
-          part.show(fp=fp, indent=subindent, mode=mode)
+        for flagname in sorted(parts):
+          part = parts[flagname]
+          if part.name() != flagname: continue   # skip aliases
+          /# flags and args are both recorded in parts, but we only want to
+          /# show flags here.
+          if part.isFlag():
+            part.show(fp=fp, indent=subindent, mode=mode)
 
-      if 'help' in mode:
         /# Intentionally listing in order instead of alphabetically, in case
         /# the order is important (user can order them alphabetically if
         /# order isn't important).
@@ -1517,17 +1538,24 @@ scope:
             fp.write(u'\n')
           command.show(fp=fp, indent=subindent, mode=mode)
 
-      for arg in self.args():
-        if 'help' not in mode or not arg.ismulti or 'full' in mode:
-          arg.show(fp=fp, indent=subindent, mode=mode)
+        for arg in self.args():
+          if 'help' not in mode or not arg.ismulti or 'full' in mode:
+            arg.show(fp=fp, indent=subindent, mode=mode)
     test<py>:
       fp = test.fp()
-      test.command.show(fp=fp)
-      test.iseqtext(
-        >|"""meta2:
-        >|  --baselang             <special>                      none       =         
-        >|  --metadir              .meta2                         none       =         
-        >|  --metalang             oopl                           none       =         
+      test.command.show(fp=fp, mode='help')
+      test.iseqtext("""\
+        >|metac:
+        >|  --baselang|b : str = "<special>"
+        >|    The baselang to compile into.
+        >|  --metadir : str = ".metac"
+        >|    The subdir to write code to.
+        >|  --metalang|L : str = "oopl"
+        >|    The metalang the code is defined in.
+        >|  canonical:
+        >|    Canonicalize the specified meta files and report diffs.
+        >|    --expand|e : bool = False
+        >|      If true, invoke expandMeta() before canonicalizing
         >|""",
         test.out())
     end receiver Command;
@@ -1566,15 +1594,15 @@ scope:
         if summary:
           fp.write(u'%s  %s\n' % (indent, summary))
         desc = self.desc()
-        if desc and 'full' in mode:
+        if desc and 'ful' in mode:
           for line in desc.split('\n'):
             fp.write(u'%s  %s\n' % (indent, line))
 
       else:
         fp.write(u'%sERROR: Unknown mode %s\n' % (indent, summary))
     test<py>:
-      fp = test.newStr()
-      test.baselang.show(fp=fp)
+      fp = test.fp()
+      test.baselang.show(fp=fp, mode='summary')
       test.iseqtext(
         '--baselang             <special>                      none       '
         '=         \n',
@@ -1602,15 +1630,15 @@ scope:
         symbols = '|'.join([self.name()] + self.aliases())
         fp.write('%s%s: %s\n' % (indent, symbols, self.summary() or ''))
         desc = self.desc()
-        if desc and 'full' in mode:
+        if desc and 'ful' in mode:
           for line in desc.split('\n'):
             fp.write('%s  %s\n' % (indent, line))
 
       else:
         fp.write('%sERROR: Unknown mode %s\n' % (indent, summary))
     test<py>:
-      fp = test.newStr()
-      test.baselang.show(fp=fp)
+      fp = test.fp()
+      test.baselang.show(fp=fp, mode='summary')
       test.iseq(
         '--baselang             <special>                      none       '
         '=         \n',
@@ -1684,6 +1712,10 @@ scope:
           else:
             part.valueIs(value)
     test<py>:
+      command = test.faux.instantiate(
+        ['./person', '--name', 'Charles', 'list', 'a', 'b', 'c'])
+      values = metax.cli.Values(command)
+      values.name = 'Chuck'
     end method __setattr__;
 
   end class Values;
@@ -1691,7 +1723,7 @@ scope:
   test
   class TestCase < metax.test.TestCase scope:
     lifecycle setup:
-      command = metax.cli.Command('meta2')
+      command = metax.cli.Command('metac')
       test.command = command
       test.baselang = command.newFlag(
         'baselang', 'str', '<special>', aliases='b',
@@ -1701,9 +1733,9 @@ scope:
         'metalang', 'str', 'oopl', aliases='L',
         summary='The metalang the code is defined in.')
       test.metadir = command.newFlag(
-        'metadir', 'str', '.meta2',
+        'metadir', 'str', '.metac',
         summary='The subdir to write code to.',
-        desc="A value of .meta2 is treated specially, being symlinked to repo")
+        desc="A value of .metac is treated specially, being symlinked to repo")
 
       test.subcommand = command.newCommand(
         'canonical', aliases='can',

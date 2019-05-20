@@ -55,7 +55,7 @@ namespace demo.stmts scope:
         print('')
       until expr2;
 
-      switch name a #:
+      switch a #:
         dkdk
       scope:
         case expr 1 ::

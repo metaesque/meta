@@ -1,0 +1,4 @@
+This file should stay unchanged. It is copied into ./scratch.txt within
+metax.fs_test.TestCase (in src/kernel/fs.meta) before each test, so that
+tests have a real file they can interact with safely (deleting, modifying,
+etc as they choose).

@@ -172,6 +172,8 @@ scope:
       if resources is not None:
         Object.ResourceMap().update(resources)
         logging.info('metax.root.Object.Init: ResourceMap initialized.')
+    test<py>:
+      metax.root.Object.Init()
     scope<cc>:
       if (cli != nullptr) {
         Object::CLIIs(cli);
@@ -191,6 +193,8 @@ scope:
         The value associated with the resource.
     scope:
       Object.ResourceMap()[name] = path
+    test:
+      metax.root.Object.RegisterResource('a', '/a/b/c')
     end;
 
     meta
