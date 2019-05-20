@@ -355,10 +355,22 @@ scope:
         if dim_power:
           if negate:
             dim_power = -dim_power
-          result = Quantity.Encode(result, start, PowerBits, dim_power, incr=True)
+          result = Quantity.Encode(
+            result, start, PowerBits, dim_power, incr=True)
         start += PowerBits
       return result
     test:
+      UE = metax.units.Quantity.DimensionEncoding
+      PB = metax.units.Quantity.PowerBits()
+      ADE = metax.units.Quantity.AddDimensionEncodings
+      zeros = UE({})
+      e = UE({'length': 1, 'time': -2})
+      test.iseq(2290648713, e)
+      e2 = ADE(e, e)
+      test.iseq(2290648202, e2)
+      e3 = ADE(e, e, negate=True)
+      test.iseq(zeros, e3)
+      /# test.iseq(Q.AddDimensionEncodings(1, 5))
     end method AddDimensionEncodings;
 
     static field Re : regexp #:
@@ -891,6 +903,7 @@ scope:
     scope:
       return self.__class__(self.value(), self.powers())
     test:
+      res = test.q1.clone()
     end method clone;
 
     method subclone : metax.units.Quantity #:

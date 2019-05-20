@@ -61,7 +61,7 @@ One can specify a table with an optional preceeding title with:
 Table: Fruit
 
 | Fruit     | Count |
-|:-------- | ----:|
+| :-------- | ----: |
 | Apple     |     3 |
 | Banana    |     1 |
 | Cantelope |     2 |

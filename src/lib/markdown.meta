@@ -183,7 +183,7 @@ scope:
       return self.parseLines(lines, parent=parent, debug=debug)
     test:
       simple = test.parseMarkdown('simple_md')
-      fp = test.newStr()
+      fp = test.fp()
       simple.show(fp=fp)
       test.contains(
         'This document highlights some markdown features.', fp.getvalue())
@@ -841,7 +841,7 @@ scope:
       subitem = sublist.item(0)
 
       /# Format the file in ascii and compare it with a golden file.
-      fp = test.newStr()
+      fp = test.fp()
       root.show(fp=fp)
       golden = metax.root.Object.Resource(
         'simple_golden', fqn='metax.lib.markdown_test.TestCase')
@@ -898,7 +898,7 @@ scope:
 
       /# TODO(wmh): finish up this test by ensuring that html support
       /# in C.show() is implemented for all subclasses C of Text.
-      fp = test.newStr()
+      fp = test.fp()
       section.show(fp=fp, aspect='ascii')
       golden = metax.root.Object.Resource(
         'raw_txt_golden', fqn='metax.lib.markdown_test.TestCase')
@@ -906,7 +906,7 @@ scope:
 
       /# TODO(wmh): finish up this test by ensuring that html support
       /# in C.show() is implemented for all subclasses C of Text.
-      fp = test.newStr()
+      fp = test.fp()
       section.show(fp=fp, aspect='html')
       golden = metax.root.Object.Resource(
         'raw_html_golden', fqn='metax.lib.markdown_test.TestCase')
@@ -1075,7 +1075,7 @@ scope:
         >|""".split('\n'),
         101,
         section)
-      fp = test.newStr()
+      fp = test.fp()
       result.show(fp=fp, aspect='html')
       
       test.iseqtext(
@@ -1110,7 +1110,7 @@ scope:
       return book
     test:
       /# NOTE: test.parseBook() invokes test.md.loadBook()
-      book = test.parseBook(['metax.markdown_test.TestCase.simple_md'])
+      book = test.parseBook(['metax.lib.markdown_test.TestCase.simple_md'])
       test.iseq(1, len(book.children()))
     end method loadBook;
 
@@ -2954,7 +2954,7 @@ scope:
       for block in self.blocks():
         block.show(fp=fp, indent=indent, aspect=aspect, parser=parser)
     test:
-      fp = test.newStr()
+      fp = test.fp()
       test.group.show(fp=fp)
     end;
 
@@ -2991,7 +2991,7 @@ scope:
       else:
         print 'ERROR: Unknown aspect %s for Table.show()' % aspect
     test:
-      fp = test.newStr()
+      fp = test.fp()
       test.p2.show(fp=fp, aspect='ascii')
       test.iseqtext(
         >|"""**Some Title**. This is an example paragraph with a
@@ -2999,7 +2999,7 @@ scope:
         >|""",
         fp.getvalue())
 
-      fp = test.newStr()
+      fp = test.fp()
       test.p2.show(fp=fp, aspect='html')
       test.iseqtext(
         >|"""<p><b>Some Title</b>. This is an example paragraph with a
@@ -3027,7 +3027,7 @@ scope:
         print 'ERROR: Unknown aspect %s for Table.show()' % aspect
     test:
       quote = metax.lib.markdown.Quote(test.section, ['> quote', '> more quote'])
-      fp = test.newStr()
+      fp = test.fp()
       quote.show(fp=fp)
       test.iseqtext('> quote\n> more quote\n', fp.getvalue())
     end receiver Quote;
@@ -3098,7 +3098,7 @@ scope:
     test:
       test.makeLists()
 
-      fp = test.newStr()
+      fp = test.fp()
       test.ul.show(fp=fp, aspect='html')
       test.iseqtext(
         >|"""<ul>
@@ -3174,11 +3174,11 @@ scope:
     test:
       test.makeLists()
 
-      fp = test.newStr()
+      fp = test.fp()
       test.item3.show(fp=fp, aspect='ascii')
       test.iseqtext(' ? Cantelope\n', fp.getvalue())
 
-      fp = test.newStr()
+      fp = test.fp()
       test.item3.show(fp=fp, aspect='html')
       test.iseqtext('<li>\nCantelope\n</li>\n', fp.getvalue())
     end receiver ListItem;
@@ -3234,7 +3234,7 @@ scope:
       else:
         print(u'ERROR: Unknown aspect %s for Table.show()' % aspect)
     test:
-      fp = test.newStr()
+      fp = test.fp()
       test.code.show(fp=fp, aspect='ascii')
       test.iseqtext(
         '~~~python\n'
@@ -3245,7 +3245,7 @@ scope:
         '~~~\n',
         fp.getvalue())
 
-      fp = test.newStr()
+      fp = test.fp()
       test.code.show(fp=fp, aspect='html')
       test.iseqtext(
         '<pre><code class="python">if a == 1:\n'
@@ -3273,13 +3273,13 @@ scope:
       else:
         print(u'ERROR: Unknown aspect %s for Table.show()' % aspect)
     test:
-      fp = test.newStr()
+      fp = test.fp()
       test.hr.show(fp=fp, aspect='ascii')
       test.iseq(
         '\n----------------------------------------------------------------------\n',
         fp.getvalue())
 
-      fp = test.newStr()
+      fp = test.fp()
       test.hr.show(fp=fp, aspect='html')
       test.iseq('\n<hr/>\n', fp.getvalue())
     end receiver HR;
@@ -3305,7 +3305,7 @@ scope:
       else:
         print 'ERROR: Unknown aspect %s for Table.show()' % aspect
     test:
-      fp = test.newStr()
+      fp = test.fp()
       test.html.show(fp=fp)
       test.iseq('<p>blah</p>\n', fp.getvalue())
     end receiver HTML;
@@ -3464,7 +3464,7 @@ scope:
         print 'ERROR: Unknown aspect %s for Table.show()' % aspect
     test:
       table, errors = self.newTable()
-      fp = test.newStr()
+      fp = test.fp()
       table.show(fp=fp, indent='...', aspect='ascii')
       test.iseqtext(
         >|r"""...Table: Table Title
@@ -3478,7 +3478,7 @@ scope:
         fp.getvalue())
 
       test.maxDiff = None
-      fp = test.newStr()
+      fp = test.fp()
       table.show(fp=fp, aspect='tex')
       test.iseqtext(
         >|r"""\begin{table}[h!]
@@ -3505,7 +3505,7 @@ scope:
         >|        | :-: |
         >|        | ![](http://tny.im/7r1 300x) |
         >|""".rstrip().split('\n'))
-      fp = test.newStr()
+      fp = test.fp()
       table.show(fp=fp, aspect='html')
     end receiver Table;
 
@@ -3708,7 +3708,7 @@ scope:
       test.iseq(1, block1.prelines())
       test.iseq(2, block2.prelines())
 
-      fp = test.newStr()
+      fp = test.fp()
       section.show(fp=fp)
       test.iseqtext("""
         >|## SubSection A
@@ -3853,7 +3853,7 @@ scope:
           paths.append(spec)
         else:
           path = metax.root.Object.Resource(spec)
-          print 'HERE with %s and %s' % (spec, path)
+          /# print 'HERE with %s and %s' % (spec, path)
           if os.path.exists(path):
             paths.append(path)
           else:

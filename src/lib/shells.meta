@@ -58,10 +58,17 @@ scope:
   class Error < metax.root.Error;
 
   nometanotest
+  class InternalError < Error;
+
+  nometanotest
+  class UndefinedVariable < Error;
+
+  nometanotest
   class InvalidDirectoryError < Error;
 
   native scope:
     REQUIRED = object()
+    DEFAULT = object()
     UNDEF = object()
   end;
 
@@ -72,15 +79,13 @@ scope:
     domain-specific functionality.
   assocs:
     std assoc logging;
-    std assoc os;
+    std usertest assoc os;
     std assoc re;
+    std usertest assoc pprint;
     std assoc shlex;
     std assoc subprocess;
+    std assoc time;
   scope:
-
-    meta
-    lifecycle scope:
-      meta.HISTORY_RE = re.compile('^\s*!(-?\d+|!)\s*$')
 
     field history : @vec #:
       Maintains a history of commands executed.
@@ -92,26 +97,51 @@ scope:
     field fp : ostream = out #:
       Where to write output.
 
-    field vars : map scope:
-      accessor get test:
-        sh = test.shell
-        test.iseq({
-          'shell': {
-            'prompt': {
-              'desc': '',
-              'type': str,
-              'name': 'prompt',
-              'value': 'goosh> ',
-              'summary': 'The string to print when prompting for input'
-              }
-            },
-          'context': {},
-          'env': {},
-        }, sh.vars())
-    end field vars;
+    field columns : int #:
+      The number of columns in the connected terminal (only relevant to fp
+      if fp is that terminal, of course).
+
+    field vars : map #:
+      Matains vars of various kinds. Maps kinds to variable names to maps
+      containing:
+        kind: str
+          Kind of variable ('shell', 'context', 'env', etc.)
+        name: str
+          Name of variable
+        type: function
+          Function accepting string that returns typed repr or TypeError.
+        default: any
+          Default value (properly typed)
+        summary: str
+          One-line summary of variable
+        desc: str
+          Multi-line summary of variable
+        readonly: bool or function
+          Indicates variable is readonly. If it is a function, the value
+          returned by getvar() is produced by invoking this function with
+          the Shell instance as its sole argument.
+        value: any
+          The current value of the variable
+        time: float
+          The last time the value was updated as a unix timestamp.
 
     field commands : map #:
-      A mapping from command name to method implementing the command.
+      A mapping from command name to map containing:
+        method : method
+          The method implementing the command. The method should accept any
+          number of args (but zero keyword args).
+        dispatcher : method (optional)
+          If present, a method used to dispatch the 'method' method.
+          It should be a function accepting three args:
+            name: str
+              The name of the method (i.e. the value of the 'name' param above).
+            method: method
+              The method object (i.e. the value of the 'method' param above)
+            args: vec<str>
+              The args found after the prompt, to be passed to the method.
+
+      TODO(wmh): This simple (and limited) mechanism should be replaced with the
+      Comamnd/Flag/Arg hiearchy defined in metax.cli (i.e. src/kernel/cli.meta)
     scope:
       accessor get test:
         sh = test.shell
@@ -203,10 +233,12 @@ scope:
       self._vars = {
         'env': {},
         'context': {},
-        'shell': {}
+        'shell': {},
+        /# Note that subclasses can add arbitrary new kinds to this field
+        /# via defineKind().
       }
       self.defineVariable(
-        'prompt', str, default='goosh> ',
+        'prompt', str, default='wsh> ',
         summary='The string to print when prompting for input')
 
       /# The 'commands' field maps command names to methods.
@@ -253,6 +285,34 @@ scope:
       if rcfile is None:
         rcfile = os.path.join(os.getenv('HOME', '/'), '.wshrc')
       self.rcfileIs(rcfile)
+
+      /# Establish column width
+      /#   TODO(wmh): If we went to python3-only, we could use
+      /#   shutil.get_terminal_size()
+      rows, columns = os.popen('stty size', 'r').read().split()
+      self.columnsIs(int(columns))
+
+    clinit:
+      cls.HISTORY_RE = re.compile('^\s*!(-?\d+|!)\s*$')
+
+      def Bool(v):
+        vv = v.lower()
+        if vv in ('1', 't', 'true', 'y', 'yes'):
+          result = True
+        elif vv in ('0', 'f', 'false', 'n', 'no'):
+          result = False
+        else:
+          raise TypeError('Invalid boolean value "%s"' % v)
+        return result
+
+      cls.TYPE_FUNCS = {
+        'str': str,
+        'int': int, 
+        'bool': Bool,
+        'float': float,
+        'double': float,
+        /# TODO(wmh): Handle 'real<17>', etc.
+      }
     end lifecycle;
 
     method log params:
@@ -276,6 +336,10 @@ scope:
       var groups : vec;
     scope:
       self._directory_families.append((regexp, groups))
+    test:
+      test.iseq(1, len(test.shell._directory_families))
+      test.shell.registerDirectoryFamily('/cell/<cell>', ('special',))
+      test.iseq(2, len(test.shell._directory_families))
     end method registerDirectoryFamily;
 
     method registerDirectoryGenerator #:
@@ -286,6 +350,7 @@ scope:
     params:
       var genspec : str;
     scope:
+      raise Error('Is this code dead?')
       freshold = 10
       spec_re = re.compile('^<(\S+?)(?::(\S+?)(?:\@(\d+))?)?>')
       parts = genspec.split('/')
@@ -300,11 +365,21 @@ scope:
             if not freshold:
               freshold = 3600
             generator = getattr(self, genname)
-            child = Directory(dir, subname, freshold, generator)
+            child = DynamicDirectory(dir, subname, 'fixme', generator, freshold)
           else:
             /# Literal directory component
             child = Directory(dir, part, freshold, None)
           self.log('part = %s\n', part)
+    test:
+      /# I think this method is unused (it is broken as of 2019-05-18 and has
+      /# no obvious callers).
+      return
+
+      sh = test.shell
+      fs = sh.filesystem()
+      fs.listChildren()
+      sh.registerDirectoryGenerator('/domain/<domain>')
+      fs.listChildren()
     end method registerDirectoryGenerator;
 
     method defineCommand #:
@@ -332,39 +407,106 @@ scope:
       test.istrue('alias' in sh._commands)
     end method defineCommand;
 
+    method defineKind #:
+      Define a new kind of variable.
+
+      After invoking this for <kind>, calls to defineVariable passing <kind>
+      as the value of the 'kind' param will be legal.
+    params:
+      var kind : str #:
+        The new kind
+    scope:
+      vars = self.vars()
+      if kind in vars:
+        raise Error('Kind %s is already registered' % kind)
+      vars[kind] = {}
+    test:
+      sh = test.shell
+      test.iseq(['context', 'env', 'shell'], sorted(sh._vars.keys()))
+      sh.defineKind('flag')
+      test.iseq(['context', 'env', 'flag', 'shell'], sorted(sh._vars.keys()))
+    end method defineKind;
+
     method defineVariable #:
       Define a new variable within the shell.
     params:
       var name : str #:
         Name of variable
       var type : any #:
-        A python type or a lambda that accepts a value and returns
-        True if the value is of the \"type\", False otherwise
+        A callable function that accepts a string value and returns the
+        type-correct representation of that value if it is legal, or raises
+        TypeError if not legal.
+        TODO(wmh): Do we want to all this to be one of a set of string values
+        that get converted to appropriate functions?
       var kind : str = 'shell' #:
-        One of:
+        Known kinds include:
           'context' --> directory context variable
           'shell'   --> a \"normal\" variable   
           'env'     --> environment variable
-      var default : any = null #:
-        The default value for this variable
+        But subclasses can add arbitrary new kinds as they choose. For
+        example, The metax.c.shell.Shell subclass adds kind 'flag' to
+        capture flag values.
+      var readonly : any = null #:
+        If not null, it is an indication that the variable is readonly. If
+        it is the value True, it is a normal readonly variable. However, it
+        can also be a function that accepts a single arg (a Shell instance)
+        and returns a value. This is useful for variables whose values come
+        from external sources (time, terminal width, random number, etc.)
+      var default : any = REQUIRED #:
+        The default value for this variable. If it is the special value
+        REQUIRED, an error is raised in var() if that value would be returned.
       var summary : str = '' #:
         A one-line summary for the variable
       var desc : str = '' #:
         A multi-line description of the variable.
     scope:
-      self._vars[kind][name] = {
-        'name': name, 'type': type, 'summary': summary, 'desc': desc }
-      if kind == 'shell':
-        self.setvarCommand(name, default)
+      if not callable(type):
+        /# Convert the string-valued type into a function that does type
+        /# conversion/checking.
+        typestr = type
+        type = self.__class__.TYPE_FUNCS.get(type, None)
+        if type is None:
+          /# TODO(wmh): Fix this:
+          /#  - If type == 'enum<val1,val2,...>', create a lambda that verifies
+          /#    that the value is one of those listed in the enum.
+          /#  - If type == 'list<T>', the value should already be a list, and 
+          /#    we need only recursively validate the type of each element.
+          print(
+            'WARNING: In metax.lib.shell.Shell, type %s not yet handle' %
+            typestr)
+          type = str
+      assert callable(type)
+
+      info = {
+        'kind': kind,
+        'name': name,
+        'type': type,
+        'default': default,
+        'summary': summary,
+        'desc': desc,
+      }
+      if readonly:
+        info['readonly'] = readonly
+      kvars = self._vars.get(kind, None)
+      if kvars is None:
+        raise Error('Invalid kind %s' % kind)
+      kvars[name] = info
     test:
       sh = test.shell
       sh.defineVariable(
         'home', str, kind='shell', summary='example varible',
         default='', desc='description of example variable')
-      test.iseq(
-        {'desc': 'description of example variable', 'type': str,
-         'name': 'home', 'value': '', 'summary': 'example varible'},
-        sh._vars['shell']['home'])
+      vinfo = sh._vars['shell']['home']
+      test.iseqmap(
+        {
+          'kind': 'shell', 
+          'name': 'home',
+          'type': str,
+          'default': '',
+          'summary': 'example varible',
+          'desc': 'description of example variable',
+       },
+       vinfo)
     end method defineVariable;
 
     method run scope:
@@ -377,15 +519,24 @@ scope:
 
       while True:
         /# Obtain the command.
-        sys.stdout.write(self.getvar('prompt'))
+        sys.stdout.write(self.getsh('prompt'))
         /# Read a line - an empty result means EOF
         line = sys.stdin.readline()
+
+        /# EOF means quit (but we process it so that cleanup happens.
         if not line:
           line = 'quit'
+        else:
+          /# Empty lines are ignored
+          line = line.strip()
+          if not line: continue
 
         /# process commands
         for command, args in self.split(line):
           self.runCommand(command, args)
+    test:
+      /# Highlevel interactive command. Not testing here.
+      pass
     end method run;
 
     method split : vec<tuple<str,vec<str>>> #:
@@ -521,9 +672,12 @@ scope:
           method = info['method']
           dispatcher = info['dispatcher']
           if dispatcher:
-            result = dispatcher(command, method, args)
+            res = dispatcher(command, method, args)
           else:
-            result = method(*args)
+            res = method(*args)
+          /# Currently NOT returning 'res' as result, although it makes sense
+          /# to do so if we clean up the command methods to always return
+          /# something meaningful.
         except Error as e:
           self.log('%s: %s\n', e.__class__.__name__, str(e))
         except IndexError as e:
@@ -537,6 +691,10 @@ scope:
         sys.stderr.write("Unknown command '%s' - ignored.\n" % command)
       return result
     test:
+      sh = test.shell
+      test.iseq({}, sh._aliases)
+      test.istrue(sh.dispatch('alias', ['ls', 'ls -F']))
+      test.iseq({'ls': 'ls -F'}, sh._aliases)
     end method dispatch;
 
     remark #:
@@ -574,7 +732,7 @@ scope:
       sh.aliasCommand('this', 'is', 'test')
       test.iseqtext(
         'ERROR: Currently requiring exactly two args to alias\n',
-        test.out.getvalue())
+        test.outfp.getvalue())
     end method aliasCommand;
 
     method printAliasesCommand #:
@@ -592,7 +750,7 @@ scope:
       test.iseqtext(
         'h                    = history\n'
         'ls                   = ls -F\n',
-        test.out.getvalue())
+        test.outfp.getvalue())
     end method printAliasesCommand;
 
     method pwdCommand #:
@@ -606,7 +764,7 @@ scope:
       sh.pwdCommand()
       test.iseqtext(
         '/\n',
-        test.out.getvalue())
+        test.outfp.getvalue())
     end method pwdCommand;
 
     method historyCommand #:
@@ -632,7 +790,7 @@ scope:
       test.iseqtext(
         "    0  alias ls 'ls -F'\n"
         '    1  set a 1\n',
-        test.out.getvalue())
+        test.outfp.getvalue())
     end method historyCommand;
 
     method catCommand #:
@@ -669,7 +827,7 @@ scope:
       test.iseqtext(
         "    0  alias ls 'ls -F'\n"
         '    1  set a 1\n',
-        test.out.getvalue())
+        test.outfp.getvalue())
     end method catCommand;
 
     method quitCommand #:
@@ -723,7 +881,7 @@ scope:
         'quit           : Exit the shell.\n'
         'set            : Set a shell variable to a given value.\n'
         'vars           : Print all variables.\n',
-        test.out.getvalue())
+        test.outfp.getvalue())
     end method helpCommand;
 
     method listDirCommand #:
@@ -749,8 +907,8 @@ scope:
       sh.listDirCommand()
       test.iseqtext(
         'subdir  subfile\n',
-        test.out.getvalue())
-      out = self.newStr()
+        test.outfp.getvalue())
+      out = self.fp()
       sh._fp = out
       sh.listDirCommand('-F')
       test.iseqtext(
@@ -827,14 +985,21 @@ scope:
               break
           else:
             raise InvalidDirectoryError('Directory %s has no child %s' % (dir.abspath(), part))
+    test:
+      sh = test.shell
+      fs = sh.filesystem()
+      fs.add('dir', 'domain')
+      sh.changeDirCommand('domain')
+      /# More tests here.
     end method changeDirCommand;
 
     method setvarCommand #:
       Set a shell variable to a given value.
       
       This is invoked if the command encountered at the prompt is 'set', with
-      all subsequent words being treated as args.  Two idioms are supported:
+      all subsequent words being treated as args.
       
+      Two idioms are supported:
         set <var> <value>
       and
         set <var> '=' <value>
@@ -852,36 +1017,7 @@ scope:
         value = args[0]
         if value == '=':
           value = args[1]
-        var_info = vars[var]
-
-        /# Verify that the value matches the specified type.  The 'type' field in
-        /# var_info can be any of the following python types:
-        /#   function: accepts the value and returns True if it matches the type
-        /#   type: the value must be of this specified python type
-        /#   set: the value must be in the given set
-        var_type = var_info['type']
-        /# print('var=%s var_info=%s var_type=%s' % (var, var_info, var_type))
-        if type(var_type) is type:
-          try:
-            value = var_type(value)
-            valid = True
-          except ValueError:
-            valid = False
-            type_desc = 'special'
-        elif isinstance(var_type, set):
-          valid = var in var_type
-          type_desc = repr(var_type)
-        elif isinstance(var_type, type):
-          valid = isinstance(value, var_type)
-          type_desc = var_type.__name__
-        else:
-          raise Error("Variable '%s' has unknown type specifier %s" % (var,
-                                                                       var_type))
-        if valid:
-          var_info['value'] = value
-        else:
-          raise Error("Variable '%s' of type %s cannot be assigned '%s'" %
-                      (var, var_type, value))
+        self.setvar('shell', var, value)
       else:
         raise Error("Attempt to set the value of undefined variable '%s'" % var)
     test:
@@ -898,96 +1034,316 @@ scope:
     params:
       multi var args : vec;
     scope:
-      num_re = re.compile('^\d+$|^\d*\.\d+$')
       kinds = self._vars
       for kind in sorted(kinds):
-        kind_vars = kinds[kind]
-        if kind_vars:
+        kvars = kinds[kind]
+        if kvars:
           self.log('\n%s variables:\n' , kind)
-          for var in sorted(kind_vars.keys()):
-            value = kind_vars[var] if kind == 'context' else kind_vars[var]['value']
-            if not num_re.match(str(value)):
-              value = "'%s'" % value
-            self.log('  %-15s = %s\n', var, value)
+          for var in sorted(kvars.keys()):
+            value = self.getvar(kind, var)
+            self.log('  %-15s = %s\n', var, repr(value))
     test:
       sh = test.shell
       sh.defineVariable('a', int, default=0, summary='test var')
-      sh.setvarCommand('a', '1')
+      sh.defineVariable('cell', str, kind='context', default='qa')
       sh.printVarsCommand()
-      test.iseqtext(
-        '\n'
-        'shell variables:\n'
-        '  a               = 1\n'
-        "  prompt          = 'goosh> '\n",
-        test.out.getvalue())
+      test.iseqtext("""
+        >|context variables:
+        >|  cell            = 'qa'
+        >|
+        >|shell variables:
+        >|  a               = 0
+        >|  prompt          = 'wsh> '
+        >|""",
+        test.outfp.getvalue())
     end method printVarsCommand;
 
     remark #:
       ----------------------------------------------------------------------
       Service methods
 
+    protected
+    method _info : map #:
+      Get all info associated with a variable.
+    params:
+      var kind : str #:
+        The kind of variable desird.
+      var var : str #:
+        The variable name.
+      var undef : any = REQUIRED #:
+        Note that this is NOT a default for the value of the variable, but
+        rather a default for variable info returned if the variable is not
+        defined. If this is REQUIRED or DEFAULT, an error is raised.
+    scope:
+      vars = self._vars
+      kvars = vars.get(kind, None)
+      if kvars is None:
+        raise Error('Invalid kind %s' % kind)
+      vinfo = kvars.get(var, undef)
+      if vinfo is REQUIRED or vinfo is DEFAULT:
+        raise UndefinedVariable('Undefined variable %s (%s)' % (var, kind))
+      return vinfo
+    test:
+      sh = test.shell
+      sh.defineVariable(
+        'width', int, kind='shell', default=70, summary='desired output width')
+      sh.defineVariable(
+        'termwidth', int, kind='shell', default=75,
+        readonly=lambda sh: int(os.popen('stty size', 'r').read().split()[1]),
+        summary='current terminal width')
+      sh.defineVariable('cell', str, kind='context', default='qa')
+      sh.defineVariable('HOME', str, kind='env', default='/home/bob')
+      
+      test.iseqmap(
+        {
+          'kind': 'shell',
+          'name': 'width',
+          'default': 70,
+          'summary': 'desired output width',
+          'type': int,
+          'desc': '',
+        },
+        sh._info('shell', 'width'))
+
+      test.iseq(
+        {
+          'kind': 'context',
+          'name': 'cell', 
+          'default': 'qa',
+          'summary': '',
+          'type': str,
+          'desc': '',
+        },
+        sh._info('context', 'cell'))
+
+      test.raises(
+        metax.lib.shell.UndefinedVariable, sh._info, 'context', 'missing')
+
+      test.isnull(sh._info('context', 'missing', undef=None))
+    end method _info;
+
     method getvar : any #:
-      Obtain  the value of a shell variable.
+      Obtain the (typed) value of a variable (of any kind) with default support.
 
       Each variable has an associated type, and the return value is typed
       accordingly.
 
-      This is only for shell variables ... use getctx() for context variables.
+      Raises:
+        Error: If the variable does not exist.
+    params:
+      var kind : str #:
+        The kind of variable desird.
+      var var : str #:
+        The variable name.
+      var default : any = DEFAULT #:
+        The value to return if the var is defined but not yet initialized.
+        If REQUIRED, raises an error in this situation.
+        If DEFAULT, uses the default specified when the variable was defined
+        via defineVariable() (which by default is also REQUIRED, and thus
+        also raises an error).                              
+      var undef : any = REQUIRED #:
+        The default value to return from _info if the variable is not defined
+        at all.
+         - If REQUIRED, raises an error.
+         - If DEFAULT, currently same as REQUIRED (raises an error).
+         - If not a dict, it is assumed to be the value to return for the
+           variable itself, but if it is a dict, it is assumed to contain all
+           the keys normally returned from self._info() included either
+           'value' or 'default', from which the actual value is obtained.
+    scope:
+      /# NOTE: There are two levels at which defaults can be interpreted.
+      /#  1. For a defined but uninitialized variable, what to return (default)
+      /#  2. For an undefined variable, what to return (undef)
+      vinfo = self._info(kind, var, undef=undef)
 
-      TODO(wmh): why not have this method support all kinds of vars, instead
-      of just shell vars?
-      TODO(wmh): add support for obtaining env vars. Should they be accessible
-      via getvar, or do we add a getenv()?
+      if vinfo is REQUIRED or vinfo is DEFAULT:
+        /# This should not happen currently, as we should instead raise an
+        /# error in _info.
+        raise InternalError('How did we get here?')
+
+      elif not isinstance(vinfo, dict):
+        result = vinfo
+
+      elif 'value' not in vinfo:
+        /# Defined but uninitialized (or generatable)
+        readonly = vinfo.get('readonly', None)
+        if readonly and callable(readonly):
+          /# We have a dynamic generator.
+          result = readonly(self)
+        elif default is DEFAULT:
+          result = vinfo['default']
+        else:
+          result = default
+
+      else:
+        result = vinfo['value']
+
+      /# The result can take on a value of REQUIRED if the var doesn't have an
+      /# explicit value and either:
+      /#  - the 'default' param of this method was specified as REQUIRED
+      /#    (which means we do NOT pay attention to default values and require
+      /#    that the variable be explicitly set in order to be valid).
+      /#  - when the variable was defined in defineVariable(), no explicit
+      /#    default was specified (which implicitly sets the default to
+      /#    REQUIRED).
+      if result is REQUIRED:
+        raise Error(
+          'Variable %s (%s) is uninitialized and required' % (var, kind))
+
+      return result
+    test:
+      sh = test.shell
+      sh.defineVariable(
+        'width', int, kind='shell', default=70, summary='desired output width')
+      sh.defineVariable(
+        'termwidth', int, kind='shell', default=75,
+        readonly=lambda sh: int(os.popen('stty size', 'r').read().split()[1]),
+        summary='current terminal width')
+      sh.defineVariable('cell', str, kind='context', default='qa')
+      sh.defineVariable('HOME', str, kind='env', default='/home/bob')
+
+      test.iseq(70, sh.getvar('shell', 'width'))
+      test.iseq(sh.columns(), sh.getvar('shell', 'termwidth'))
+      test.iseq('qa', sh.getvar('context', 'cell'))
+      test.iseq('/home/bob', sh.getvar('env', 'HOME'))
+    end method getvar;
+
+    method setvar : any #:
+      Set the value of a variable, with type conversion and type checking.
+    params:
+      var kind : str #:
+        The kind of variable being set.
+      var var : str #:
+        Name of variable being set.
+      var value : any #:
+        Actual (typed) value or string representation of the value to set.
+      var undef : any = REQUIRED #:
+        The default value to return if the variable is not defined at all.
+        If REQUIRED, raises an error.
+        If DEFAULT, currently same as REQUIRED (raises an error).
+        If not a dict, it is assumed to be the value to return for the variable
+        itself, but if it is a dict, it is assumed to contain all the keys
+        normally returned from self._info().
+    scope:
+      /# See getvar() for details on undef vs default.
+      vinfo = self._info(kind, var, undef=undef)
+
+      if vinfo is REQUIRED or vinfo is DEFAULT:
+        /# This should not happen currently, as we should instead raise an
+        /# error in _info.
+        raise InternalError('How did we get here?')
+
+      elif not isinstance(vinfo, dict):
+        result = vinfo
+
+      elif vinfo.get('readonly', None):
+        self.log(
+          'Variable %s (%s) is readonly (not setting value to %s)',
+          var, kind, value)
+
+      else:
+        /# Verify that the value matches the specified type. The 'type' field in
+        /# vinfo should be a callable that accepts a string and returns a typed
+        /# value or raises TypeError if the input is invalid.
+        typer = vinfo['type']
+        try:
+          value = typer(value)
+        except TypeError as e:
+          raise Error(
+            'Invalid value "%s" for %s (%s): %s' % (value, var, kind, e))
+
+        vinfo['value'] = value
+        /# Record when the value was last updated.
+        vinfo['time'] = time.time()
+    test:
+      sh = test.shell
+      sh.defineVariable(
+        'width', int, kind='shell', default=70, summary='desired output width')
+      sh.defineVariable(
+        'termwidth', int, kind='shell', default=75,
+        readonly=lambda sh: int(os.popen('stty size', 'r').read().split()[1]),
+        summary='current terminal width')
+      sh.defineVariable('cell', str, kind='context', default='qa')
+      sh.defineVariable('HOME', str, kind='env', default='/home/bob')
+
+      test.iseq(70, sh.getvar('shell', 'width'))
+      sh.setvar('shell', 'width', 50)
+      test.iseq(50, sh.getvar('shell', 'width'))
+
+      test.iseq('qa', sh.getvar('context', 'cell'))
+      sh.setvar('context', 'cell', 'nj')
+      test.iseq('nj', sh.getvar('context', 'cell'))
+
+      test.iseq('/home/bob', sh.getvar('env', 'HOME'))
+      sh.setvar('env', 'HOME', '/home/alice')
+      test.iseq('/home/alice', sh.getvar('env', 'HOME'))
+
+      /# Modifying a readonly variable produces error message.
+      test.iseq(sh.columns(), sh.getvar('shell', 'termwidth'))
+      sh.setvar('shell', 'termwidth', 90)
+      test.iseq(
+        'Variable termwidth (shell) is readonly (not setting value to 90)',
+        test.outfp.getvalue())
+    end method setvar;
+
+    method getsh : any #:
+      Obtain the (typed) value of a shell variable.
+
+      This is only for shell variables ... use getctx() for context variables,
+      or getvar() for arbitrary kinds.
 
       Raises:
         Error: If the variable does not exist.
     params:
       var var : str #:
         The variable name.
+      var default : any = DEFAULT #:
+        The value to return if the var is not set. If REQUIRED, raises an error.
+      var undef : any = REQUIRED #:
+        The value returned from _info() if variable not defined at all. See
+        getvar() for more on differences between default and undef, when they
+        are the same and when they differ.
     scope:
-      vars = self._vars['shell']
-      if var in vars:
-        return vars[var]['value']
-      else:
-        raise Error("Attempt to access undefined variable '%s'" % var)
+      return self.getvar('shell', var, default=default, undef=undef)
     test:
       sh = test.shell
       sh.defineVariable('a', int, default=0, summary='test var')
       sh.setvarCommand('a', '1')
-      test.iseq('goosh> ', sh.getvar('prompt'))
-      test.iseq(1, sh.getvar('a'))
-    end method getvar;
+      test.iseq('wsh> ', sh.getsh('prompt'))
+      test.iseq(1, sh.getsh('a'))
+    end method getsh;
 
-    method getctx : any #:
+    method getctx : map #:
       Obtain the value of a context variable.
 
       Each variable has an associated type, and the return value is typed
       accordingly.
 
-      This is only for shell variables ... use getctx() for context variables.
-
-      TODO(wmh): why not have this method support both shell and context vars?
-      TODO(wmh): decide what to do about env vars (keep/document or remove?)
-
       Raises:
         Error: If the variable does not exist.
     params:
       var var : str #:
         The variable name.
-      var default : any = REQUIRED #:
+      var default : any = DEFAULT #:
         The value to return if the var is not set. If REQUIRED, raises an error.
+      var undef : any = REQUIRED #:
+        The value returned from _info() if variable not defined at all. See
+        getvar() for more on differences between default and undef, when they
+        are the same and when they differ.
     scope:
-      vars = self._vars['context']
-      if var in vars:
-        return vars[var]
-      else:
-        raise Error("Attempt to access undefined context variable '%s'" % var)
+      return self.getvar('context', var, default=default, undef=undef)
+    test:
+      sh = test.shell
+      sh.defineVariable('cell', str, kind='context', default='qa')
+      test.iseq('qa', sh.getctx('cell'))
     end method getctx;
 
     method context : map #:
       Obtain the current collection of context var/value pairs.
     scope:
       return self._vars['context']
+    test:
+      test.iseq({}, test.shell.context())
     end method context;
 
     method executeShellCommand #:
@@ -1101,6 +1457,8 @@ scope:
       self.nameIs(name)
       self._parent = None  # needed because parentIs() expects it to be defined.
       self.parentIs(parent)
+    setup:
+      test.defineFiles()
     end lifecycle;
 
     method abspath : str #:
@@ -1136,16 +1494,15 @@ scope:
 
     method isSymlink scope:
       return False
+    test:
+      test.iseq(False, test.root.isSymlink())
+      test.iseq(False, test.dir.isSymlink())
+      test.iseq(False, test.subdir.isSymlink())
+      test.iseq(False, test.file.isSymlink())
+      test.iseq(False, test.subfile.isSymlink())
+      test.iseq(True, test.link.isSymlink())
     end method isSymlink;
 
-    test
-    lifecycle setup:
-      test.root = metax.lib.shell.Directory(None, '')
-      test.dir = metax.lib.shell.Directory(test.root, 'dir')
-      test.subdir = metax.lib.shell.Directory(test.dir, 'subdir')
-      test.subfile = metax.lib.shell.File(test.dir, 'subfile')
-      test.file = metax.lib.shell.File(test.root, 'file')
-    end lifecycle;
   end class Node;
 
   class Directory < Node #:
@@ -1167,12 +1524,16 @@ scope:
         A string representing a unique (base) name within the parent
     super (parent, name)
     scope:
+    setup:
+      test.defineFiles()
     end lifecycle;
 
     protected
     method refresh #:
       Conditionally re-generate my list of children.
     scope:
+    test:
+      test.root.refresh()
     end method refresh;
 
     method isGenerator scope:
@@ -1278,6 +1639,8 @@ scope:
     scope:
       /# This is its own method so that we easily control it during unit tests.
       return int(os.getenv('COLUMNS', '70')) - 5
+    test:
+      test.islt(60, test.root.terminalWidth())
     end method terminalWidth;
 
     meta protected
@@ -1297,12 +1660,12 @@ scope:
       if not files:
         return ''
       numfiles = len(files)
-      /# We know that we can format the listing using numfiles rows (one file per
-      /# row) regardless of the width specified. We have the method
-      /# formatListingUsing(), which determines whether the files can be formatted
-      /# using a given number of rows. We could linearly try rowsize 1, rowsize 2,
-      /# all the way up to row size numfiles. But we can do better with a binary
-      /# search.
+      /# We know that we can format the listing using numfiles rows (one file
+      /# per row) regardless of the width specified. We have the method
+      /# formatListingUsing(), which determines whether the files can be
+      /# formatted using a given number of rows. We could linearly try rowsize
+      /# 1, rowsize 2, all the way up to row size numfiles. But we can do better
+      /# with a binary search.
       start = 1
       end = numfiles
 
@@ -1574,6 +1937,8 @@ scope:
       /# parent when non-null.
       return result
     test:
+      test.root.add('dir', 'domain')
+      /# More tests here.
     end method add;
 
     method info : any #:
@@ -1618,16 +1983,10 @@ scope:
       test.iseq(1, d.info('a'))
     end method info;
 
-    test
-    lifecycle setup:
-      /# the root directory
-      test.defineFiles()
-    end lifecycle;
-
   end class Directory;
 
   class DynamicDirectory < Directory #:
-    Represents a directory in which its content is dynamically created.
+    Represents a directory whose content is dynamically created.
 
     A special 'generator' function produces the dynamic content, and an
     associated freshness value (freshold) is maintained (previously computed
@@ -1637,19 +1996,19 @@ scope:
     Note that it does not make sense to call add() on an instance of
     this class, because such an invocation is a static child (the existence
     of which will go away the first time the generating directory is refreshed).
-    Any such child directories must be specified in the generator.
+    Any child directories must be specified in the generator.
   assocs:
     usertest std assoc datetime;
     usertest std assoc time;
   scope:
 
     field generator : method #:
-      The contents of the directory are produced by invoking this method Accepts
-      a single Directory as argument, and returns the list of Node
+      The contents of the directory are produced by invoking this method.
+      Accepts a single Directory $dir as argument, and returns the list of Node
       instances that that Directory should have as children. The objects should
       already be registered as children of the directory argument, and should be
-      in the children() map of that argument (both of which happens
-      automatically if one uses arg.add() to create the children).
+      in the children() map of $dir (both of which happens automatically if one
+      uses $dir.add() to create the children).
 
     field childvar : str #:
       The name of the context variable associated with the children of this
@@ -1682,6 +2041,12 @@ scope:
       /# children that have generators. Instead, directories are made "active"
       /# ONLY be 'cd'ing into them, and 'cd' (aka changeDirCommand) is
       /# responsible for the initial (and all subsequent) refreshes.
+    test:
+      test.iseqvec(
+        ['hier', 'file', 'dir'],
+        test.root.children().keys())
+    setup:
+      test.defineFiles(generator=True)
     end lifecycle;
 
     method isGenerator scope:
@@ -1789,11 +2154,38 @@ scope:
       test.istrue(test.gendir.updated() >= d)
     end method refresh;
 
-    test
-    lifecycle setup:
-      test.defineFiles(generator=True)
-    end;
   end class DynamicDirectory;
+
+  class FilesystemDirectory < DynamicDirectory #:
+    A dynamically generated directory based on a filesystem path somehow
+    associated with the path of this directory.
+  scope:
+    lifecycle #:
+      Initialize an instance.
+    params:
+      var parent : Directory;
+      var name : str;
+      var childvar -> childvar;
+      var generator -> generator;
+      var freshold -> freshold;
+    super (parent, name)
+    scope:
+      self._updated = datetime.datetime.fromtimestamp(0)
+      /# IMPORTANT: We do NOT invoke _refresh() within this constructor, as this
+      /# would result in an exponential initialization of all transitive
+      /# children that have generators. Instead, directories are made "active"
+      /# ONLY be 'cd'ing into them, and 'cd' (aka changeDirCommand) is
+      /# responsible for the initial (and all subsequent) refreshes.
+    test:
+      test.iseqvec(
+        ['hier', 'file', 'dir'],
+        test.root.children().keys())
+    setup:
+      test.defineFiles(generator=True)
+    end lifecycle;
+    
+
+  end class FilesystemDirectory;
 
   class File < Node #:
     Represents a terminal file, which the shell can interact with.
@@ -1829,25 +2221,33 @@ scope:
 
     method isSymlink scope:
       return True
+    test:
+      test.defineFiles()
+      test.istrue(test.link.isSymlink())
+      test.isfalse(test.subfile.isSymlink())
     end method isSymlink;
 
     method __getattr__ params:
       var name : str;
     scope:
-      /# TODO(wmh): This is rather fragile, as it delegates to self._link
-      /# for all methods not defined in Node, but does NOT delegate
-      /# for those methods that ARE defined in Node, which might
-      /# mean we don't invoke the desired method.  Might want to use
-      /# __getattribute__ instead!
+      /# TODO(wmh): This is rather fragile, as it delegates to self._link for
+      /# all methods not defined in Node, but does NOT delegate for those
+      /# methods that ARE defined in Node (because Symlink is a subclass of Node
+      /# and thus inherits all those methods, so __getattr__ won't be called for
+      /# them. This means we may often NOT be calling the desired method. Might
+      /# want to use __getattribute__ instead!
       return getattr(self._link, name)
+    test:
+      /# TODO(wmh): I don't think this method can every be invoked meaingfully.
+      pass
     end method __getattr__;
   end class Symlink;
 
   test
   class TestCase < metax.test.TestCase scope:
     lifecycle setup:
-      test.out = self.newStr()
-      sh = metax.lib.shell.Shell(fp=test.out)
+      test.outfp = test.fp()
+      sh = metax.lib.shell.Shell(fp=test.outfp)
       test.shell = sh
       sh.registerDirectoryFamily('/dir/([^/]+)', ('special',))
     end lifecycle;
@@ -1861,7 +2261,8 @@ scope:
       test.dir = metax.lib.shell.Directory(root, 'dir')
       test.subdir = metax.lib.shell.Directory(test.dir, 'subdir')
       test.file = metax.lib.shell.File(root, 'file')
-      test.subfile = metax.lib.shell.Directory(test.dir, 'subfile')
+      test.subfile = metax.lib.shell.File(test.dir, 'subfile')
+      test.link = metax.lib.shell.Symlink(test.dir, 'link', test.subfile)
 
       if generator:
         def GenMethod(p):
