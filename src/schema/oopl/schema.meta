@@ -1590,12 +1590,12 @@ config:
   config:
 
     primary
-    Attribute loop : id = <auto> replacer name #:
+    Attribute loop : id = <auto> replacer on #:
       The name of the loop. The value is implicitly mapped onto the 'name'
       attribute if a 'name' does not exist.
 
     secondary
-    Attribute name : id = <empty> #:
+    Attribute on : id = <empty> #:
       The name of the variable to use. This is normally not explicitly
       specified, as we 
 
@@ -1672,7 +1672,7 @@ config:
       attribute if a 'name' does not exist.
 
     secondary
-    Attribute expr : expr = <empty> #:
+    Attribute expr : expr = <empty> aliases <is> #:
       The name of the variable to use. This is normally not explicitly
       specified, as we can obtain it from id.
 

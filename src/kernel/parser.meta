@@ -3283,6 +3283,22 @@ scope:
 
       test.iseq(['..HPB', '..is a brat', '..    ', '..Hello'], lines)
       test.iseq([(4, 79, ':comment:')], mapfile.mapping())
+
+      /# Verify that nested basesegments perform indentation as expected.
+      s1 = metax.c.BaseSegment(None, indent='  ')
+      s1.addChunk('if a:')
+      s2 = metax.c.BaseSegment(None, indent='  ')
+      s1.addChunk(s2)
+      s2.addChunk('b = 1')
+      s2.addChunk('if b:')
+      s3 = metax.c.BaseSegment(None, indent='  ')
+      s3.addChunk('c = 1')
+      s2.addChunk(s3)
+      lines = []
+      s1.flattenLines(lines, mapfile)
+      test.iseqtext(
+        '  if a:\n    b = 1\n    if b:\n      c = 1',
+        '\n'.join(lines))
     end method flattenLines;
 
     method flattenStr : str #:
@@ -3597,8 +3613,6 @@ scope:
     method appendChunk #:
       Add a string or BaseSegment to the end of the last line in self.chunks(),
       handling multi-line strings and BaseSegment instances.
-
-      This is addToLast in old code.
     params:
       var chunk : any #:
         str or BaseSegment
@@ -3664,10 +3678,37 @@ scope:
         segment.chunks())
     end method appendChunk;
 
+    method addLine #:
+      Add a single string line (no newline!) to myself.
+    params:
+      var line : str #:
+        The line to add. Caller responsibility to ensure no newline in it.
+    scope:
+      self._chunks.append(line)
+    test:
+      segment = test.segment
+      test.iseq(['Hello'], segment.chunks())
+      segment.addLine('World!')
+      test.iseq(['Hello', 'World!'], segment.chunks())
+    end method addLine;
+
+    method addLines #:
+      Add multiple string lines (each with no newline!) to myself.
+    params:
+      var lines : vec<str> #:
+        The lines to add. Caller responsibility to ensure no newline in them.
+    scope:
+      assert isinstance(lines, list)
+      self._chunks.extend(lines)
+    test:
+      segment = test.segment
+      test.iseq(['Hello'], segment.chunks())
+      segment.addLines(['how are you', 'doing today?'])
+      test.iseq(['Hello', 'how are you', 'doing today?'], segment.chunks())
+    end method addLines;
+
     method addChunk #:
       Add a new str or BaseSegment to my list of items.
-
-      This is appendItem in old code.
     params:
       var chunk : any #:
         The str or BaseSegment to add to self.chunks(). If null, nothing is
@@ -3983,6 +4024,7 @@ scope:
         type: str
         keyopt: bool
         valopt: bool
+        replacer: str (optional)
     field autokeys : @map #:
       Maps single-char to secondary key, for those secondary attributes that
       are uniquely identified by the first character in the value (and thus
@@ -4005,15 +4047,9 @@ scope:
       var valopt : bool = false #:
         If true, the primary attribute does not require an explicit value
         (a value is auto-generated if not provided).
-      var replacer : str = null #:
-        The name of a valopt secondary key that be given the value after the
-        primary in situations where the secondary key does not appear
-        explicitly.
     scope:
       primary_data = {
         'cankey': name, 'type': type, 'keyopt': False, 'valopt': valopt}
-      if replacer:
-        primary_data['replacer'] = replacer
       prims = [name]
       if aliases: prims.extend(aliases)
       primary = self.primary()
@@ -4022,6 +4058,21 @@ scope:
     setup:
       self.cons = metax.c.ConsInfo('person', 'id', None)
     end lifecycle;
+
+    method setReplacer #:
+      Set a replacer for the primary key.
+    params:
+      var replacer : str #:
+        The name of a secondary attribute to assign the id value to.
+    scope:
+      data = self.primary()[self.name()]
+      data['replacer'] = replacer
+    test:
+      cons = test.cons
+      test.isnull(cons.primary()['person'].get('replacer', None))
+      cons.setReplacer('on')
+      test.iseq('on', cons.primary()['person'].get('replacer', None))
+    end method setReplacer;
 
     method clone : ConsInfo #:
       Create a copy of myself.
@@ -5628,6 +5679,19 @@ scope:
       test.iseq('<str,a.A>', metax.c.Type.Instance('map<str,a.A>').paramStr())
     end method paramStr;
 
+    method isIntegral : bool #:
+      Determine if the type is int or uint. A pointer to an int is not
+      considered integral.
+    scope:
+      return self.base() in ('int', 'uint') and self.prefix() == '@'
+    test:
+      test.istrue(metax.c.Type.Instance('int').isIntegral())
+      test.istrue(metax.c.Type.Instance('uint<17>').isIntegral())
+      test.isfalse(metax.c.Type.Instance('*int').isIntegral())
+      test.isfalse(metax.c.Type.Instance('float').isIntegral())
+      test.isfalse(metax.c.Type.Instance('nm.sp.A').isIntegral())
+    end method isIntegral;
+
     method isPrimitive : bool #:
       Determine if the base type is primitive.  Note that a pointer to a pointer
       to a primitive is considered primitive.
@@ -6195,11 +6259,10 @@ scope:
     method current : tuple<str,int,int,Line> #:
       Obtain the text and current index, lineno, column and Line.
     scope:
-      lnum = self._lnum
       line = self.line()
       index = self._index
       col = index - line.start()
-      return (self._text, index, lnum, col, line)
+      return (self._text, index, self._lnum, col, line)
     test:
       test.iseq(
         ('MetaLanguage Test config:\nend MetaLanguage;\n', 0, 0, 0, test.metafile.line()),
@@ -7074,10 +7137,10 @@ scope:
       primary_data = consinfo.primary()[primary_litkey]
       valopt = primary_data['valopt']
       replacer = primary_data.get('replacer', None)
+      replacer_attribute = None
       /# Keys represent all legal secondary key tokens
       secondaries = consinfo.secondaries()
       /# The value of an implicit-key secondary
-      replacer_value = None
 
       /#print('HERE with litkey %s valopt %s' % (primary_litkey, valopt))
 
@@ -7106,19 +7169,87 @@ scope:
       else:
         word, _, next_index = self.peekWord(index)
         if valopt:
-          if replacer:
-            /# word is probably the value of the secondary attribute 'replacer'.
-            /#  - TODO(wmh): we need to create the replacer Attribute!
-            primary_value = context.autoId()
-            replacer_value = word
-            raise Error('Not yet implementing replacers')
-          elif word in secondaries:
+          if word in secondaries:
             /# CODETANGLE(baselang_keys)
             /# word is a secondary key, so we autoassign a primary value
             /#  - we avoid updating index, so that the secondary attribute
             /#    code below will properly handle the secondary key we've
             /#    found.  We could do a bit of optimization on this...
+            /#
+            /# Note that normally we allow attribute values that contain the
+            /# same text as a key (e.g. Construct Construct, var var, etc.)
+            /# but NOT when the value is optional.
             primary_value = context.autoId()
+
+          elif replacer:
+            /# There are two possibilities here: the attribute key specified
+            /# in 'replacer' is either explicitly specified within this
+            /# construct or not. In the former case, 'word' is the identifier
+            /# as normal. However, in the latter case, 'word' is the value
+            /# (or start of the value) to be assigned with the attribute
+            /# identified in replacer, and we are to:
+            /#  - autoassign an id.
+            /#  - implicitly create a secondary attribute for the implicit
+            /#    replacer.
+            /#
+            /# Since constructs are registered by id, it is important for us
+            /# to know *now* (not later) what the correct id is, so rather than
+            /# parsing all secondaries to verify that the replacer attribute
+            /# isn't explicitly specified, we require that if an explicit
+            /# id is needed for a construct with a replacer, the replacer
+            /# attribute *must* be explicitly specified immediately after
+            /# the primary value. Thus, we can simple peek at the second
+            /# word (the one starting at next_index). If it matches replacer,
+            /# word is an explicit id, else it is part of the replacer value.
+            text = self._text
+            if text[next_index] == '\n':
+              /# When an explicit identifier is needed for a construct with
+              /# replacer semantics, the replacer attribute must not only appear
+              /# after the id, but must (for now at least) also appear on the
+              /# same line. So, a newline means no explicit replacer.
+              found_replacer = False
+            else:
+              /# We peek forward.
+              word2, _, next_index2 = self.peekWord(next_index)
+              if word2 == replacer:
+                /# There *is* an explicit replacer attribute, so 'word' is
+                /# the identifier and we don't need to do anything special.
+                found_replacer = True
+              else:
+                /# There is no explicit replacer, so 'word' is part of the
+                /# implicit replacer value and we auto-assign the id.
+                found_replacer = False
+
+            if found_replacer:
+              /# There is an explicit replacer attribute after 'word', so
+              /# 'word' is an explicit primary id.
+              primary_value = word
+
+            else:
+              /# We are to auto-assign the primary id and create an implicit
+              /# attribute for the replacer attribute.
+              primary_value = context.autoId()
+      
+              /# Parse the value of the implicit replacer attribute. It starts
+              /# at index 'index'.
+              /#  - we create a faux construct instance, which is needed in
+              /#    parseSecondaryAttribute to:
+              /#     - set termcode of context (irrelevant)
+              /#     - obtain context when parsing blocks (irrelevant)
+              /#     - register attribute (intentionally disabled when an
+              /#       explicit_key is provided)
+              /#  - must remember to change the parent!
+              construct_class = consinfo._construct_class
+              dummy_construct = construct_class(primary_value, None, context)
+
+              /# Import to set index before (so that parsing starts at proper
+              /# place), and obtain index after (so that later code sets index
+              /# properly).
+              self.indexIs(index)
+              replacer_attribute, errtok = self.parseSecondaryAttribute(
+                dummy_construct, consinfo, indent, explicit_key=replacer)
+              index = self.index()
+
           else:
             /# word is the primary_value
             primary_value = word
@@ -7127,6 +7258,14 @@ scope:
           /# word must be the primary value.
           primary_value = word
           index = next_index
+          if replacer:
+            /# A replacer attribute should not exist if the primary
+            /# attribute isn't optional.
+            /# TODO(wmh): This check should happen during parsing of the
+            /# metaschema, not here.
+            metafile.error(
+              '%s %s is not optional but has replacer %s' %
+              (primary_litkey, word, replacer))
 
       self.debug(
         '  id "%s"' % primary_value,
@@ -7282,6 +7421,10 @@ scope:
       construct.registerAttribute(primary)
       construct.termcodeIs(TERM_UNINIT)
 
+      /# If there is an implicit replacer attribute parsed, add it.
+      if replacer_attribute:
+        replacer_attribute.changeParent(construct)
+
       /# Now parse secondary attributes.
       while True:
         line = self.line()
@@ -7301,12 +7444,8 @@ scope:
             construct.termcodeIs(0)
             break
 
-        try:
-          attribute, errtok = self.parseSecondaryAttribute(
-            construct, consinfo, indent)
-        except ValueError as e:
-          print('**************** HERE with %s' % construct.kindfqn())
-          raise e
+        attribute, errtok = self.parseSecondaryAttribute(
+          construct, consinfo, indent)
         if not attribute:
           /# There are two possible reasons for attribute to be null:
           /#  1. end-of-construct (explicit or implicit)
@@ -7495,6 +7634,24 @@ scope:
           'scope:\n'
           'end;\n',
           fp.getvalue())
+
+      testx replacer scope:
+        /# Verify that replacer semantics works.
+        text = (
+          'case (i > 10) ::\n'
+          '  j += 3\n'
+          'end;\n'
+        )
+
+        _, schema, context, compiler = test.cachedInfo()
+        metafile = metax.c.MetaFile('fauxpath', compiler, text)
+        metafile.contextIs(context)
+        scope = metax.attr.ComplexBlock(None, 'scope:', [], line=0, col=0)
+
+        loop = metafile.parseConstruct(scope, 0, context.legalInfo(['case']))
+        test.isfalse(metafile.hasErrors(show=True))
+        /# loop.write()
+
     end method parseConstruct;
 
     method parseSecondaryAttribute : tuple<metax.attr.Attribute,str> #:
@@ -7529,6 +7686,14 @@ scope:
       var indent : int #:
         The indent at which secondary attributes that start a new line are
         required to be indented at.
+      var explicit_key : str = null #:
+        If present, it implies many things:
+         - the second attribute key has already been parsed, and self.index()
+           is at the start of the value (whitespace already skipped)
+         - the litkey and cankey are the same (and specified by explicit_key)
+         - the resulting Attribute instance is NOT registered with the
+           construct (normally it is registered ... caller responsible to
+           register the attribute if explicit_key is provided).
     scope:
       debug = False
       assert construct.termcode() == TERM_UNINIT
@@ -7539,9 +7704,32 @@ scope:
       text = self.text()
       context = construct.context()
 
-      /# Obtain the secondary key (or terminator)
-      litkey, key, basel, secondary, value_start, termcode = self.peekSecondaryToken(
-        construct, index, context, consinfo)
+      if explicit_key:
+        /# Normally, 'index' is the start of the attribute key, and we parse
+        /# both key and value in this method. However, if explicit_key is
+        /# non-null, it is an indication that the key has been parsed and index
+        /# is the start of the attribute value (whitespace already skpped).
+        litkey = explicit_key
+        key = explicit_key
+        basel = None
+        value_start = index
+        termcode = TERM_UNINIT
+        secondaries = consinfo.secondaries()
+        secondary = secondaries.get(explicit_key, None)
+        if secondary is None:
+          self.error('internal error ... unexpected replacer', line=self.line())
+          /# TODO(wmh): Return both null may break caller.
+          return (None, None)
+        elif secondary['cankey'] != explicit_key:
+          self.error(
+            'internal error ... unexpected replacer cankey', line=self.line())
+          /# TODO(wmh): Return both null may break caller.
+          return (None, None)
+
+      else:
+        /# Obtain the secondary key (or terminator)
+        litkey, key, basel, secondary, value_start, termcode = self.peekSecondaryToken(
+          construct, index, context, consinfo)
 
       /# Check for special-case end-of-parsing
       if line.indent() != indent:
@@ -7652,7 +7840,8 @@ scope:
       /# Register the attribute with the construct
       /#  - we do not need the value to properly register anything other
       /#    than the primary attribute.
-      construct.registerAttribute(attribute)
+      if not explicit_key:
+        construct.registerAttribute(attribute)
 
       /# Parse the value based on the attribute value type and current char.
       /#  - the type will never be 'feature' here.
@@ -7982,6 +8171,7 @@ scope:
           ['method', 'scope:', 'scope:.cc', 'scope:.py'],
           sorted(construct._attributes))
         test.issame(attribute2, construct.attr('scope:'))
+
     end method parseSecondaryAttribute;
 
     method parseEnd : tuple<int,int> #:
@@ -8279,7 +8469,7 @@ scope:
       Returns:
        0) token : str
          The secondary token or null if no secondary
-       1) key : str
+       1) cankey : str
          The canonical secondary token (or null)
        2) basel : str
          The baselang selector (null for no selector, '*' for Meta* else baselang suffix)
@@ -10561,6 +10751,9 @@ scope:
               replacer = AttrVal(attribute, 'replacer', default=None)
               comment  = AttrVal(attribute, 'comment',  default=None)
 
+              if replacer:
+                consinfo.setReplacer(replacer)
+
               if False and aliases:
                 print('%s is %s : %s = %s (%s) [%s]' % (construct.kindfqn(), akey, type, default, aliases, consinfo.primary()))
 
@@ -11374,7 +11567,7 @@ scope:
     test:
       _, _, _, metac = test.cachedInfo(basel='python')
       paths = []
-      for name in ('ex1', 'ex2', 'ex3', 'ex4'):
+      for name in ('ex1', 'ex2', 'ex3'):
         paths.append(test.resourcePath(name))
       metafiles, _, _ = metac.getMetas(paths, compile=False)
       metac.writeSummary(metafiles, fp=test.fp())
@@ -11431,6 +11624,8 @@ scope:
       var resolve : bool = false #:
         If true, a valid metafile or fqn is to be resolved into a construct
         (available as third element of the triples in result['pair']). If
+      var verbose : bool = false #:
+        If true, print out details of the parsing.
     scope:
       fs = self.fs()
       cli = self.cli()
@@ -11509,6 +11704,8 @@ scope:
       else:
         for arg in args:
           suffmatch = metax.c.SUFFIX_RE.match(arg)
+          if verbose:
+            print('Compiler._parseArg: working on %s:' % arg)
 
           argmatch = None if suffmatch else ImplicitMatches(arg) 
 
@@ -11518,9 +11715,11 @@ scope:
             construct = PathToConstruct(abspath)
             details.append(
               {'arg': abspath, 'kind': 'metafile', 'construct': construct})
+            if verbose:
+              print('  is metafile')
           elif argmatch:
             if len(argmatch) > 1:
-              print('WARNING: multiple matches for %s: %s' % (arg, ' '.join(argmatch)))
+              print('  WARNING: multiple matches for %s: %s' % (arg, ' '.join(argmatch)))
               details.append({
                 'arg': arg,
                 'path': None,
@@ -11539,9 +11738,11 @@ scope:
                 'kind': 'metafile',
                 'construct': construct,
               })
+              if verbose:
+                print('  implicit match')
           elif False and suffmatch:
             if errors:
-              print('Meta file %s does not exist (ignored)' % arg)
+              print('  metafile %s does not exist (ignored)' % arg)
             bad_paths.append(arg)
             details.append({
               'arg': arg,
@@ -11558,7 +11759,7 @@ scope:
             /#    (almost always the case!), we should actually be looking for
             /#    'nm.sp.ClassTest.test_methname' in 
             /#    $repo/nm/sp_test/.ClassTest.py.map instead!
-            tdata = baselang.fqnToTarget(arg)
+            tdata = baselang.fqnToTarget(arg, verbose=verbose)
             if tdata.get('error', None) is None:
               final_path = fs.join(rootdir, tdata['path'])
               fqn = arg
@@ -11575,9 +11776,11 @@ scope:
                 'kind': 'fqn',
                 'construct': construct,
               })
+              if verbose:
+                print('  is fqn (%s)' % final_path)
             elif suffmatch:
-              if errors:
-                print('Meta file %s does not exist (ignored)' % arg)
+              if errors or verbose:
+                print('  metafile %s does not exist (ignored)' % arg)
               bad_paths.append(arg)
               details.append({
                 'arg': arg,
@@ -11594,6 +11797,8 @@ scope:
                 'path': None,
                 'construct': None,
               })
+              if verbose:
+                print('  is unknown')
         assert len(details) == len(args), '%s not same size as %s' % (details, args)
       result = {
         'metafiles': metafile_paths,
@@ -12100,7 +12305,8 @@ scope:
       var debug : bool = false #:
         Turn on debugging.
     scope:
-      print('***************** DEPRECATED IN FAVOR OF behavior fqnToTarget')
+      raise Error(
+        '***************** DEPRECATED IN FAVOR OF behavior fqnToTarget')
 
       fs = self.fs()
       baselang = self.baselang()
@@ -16285,7 +16491,8 @@ scope:
         /# action is a combination of 'compile' and 'test.
         allargs = cli.rest
         command = allargs[0] if allargs else None
-        argmap = theCompiler._parseArgs(allargs, implicit=True)
+        argmap = theCompiler._parseArgs(
+          allargs, implicit=True, verbose=cli.verbosity > 1)
         if (
           not argmap['args']
           and not argmap['badfiles']
@@ -16318,6 +16525,8 @@ scope:
 
             if argmap['fqns']:
               metac._test_command()
+        elif argmap['args']:
+          print('ERROR: Unknown args: %s' % ' and '.join(argmap['args']))
         else:
           /# pprint.pprint(argmap)
           print('ERROR: Unknown command "%s"' % command)
@@ -16768,7 +16977,7 @@ scope:
           >|      var g : int = 17;
           >|      var v : vec<int>;
           >|
-          >|      loop l1 name i over v ::
+          >|      loop l1 on i over v ::
           >|        print(i)
           >|
           >|      loop j over v ::
@@ -16825,7 +17034,8 @@ scope:
       namespace.registerAttribute(namespace_scope)
       klass = metax.oopl.ClassConstruct('Person', namespace_scope, context)
       klass.namespaceIs(namespace)
-      feature = metax.attr.FeatureAttribute(klass, 'visibility', 'public', line=1, col=0)
+      feature = metax.attr.FeatureAttribute(
+        klass, 'visibility', 'public', line=1, col=0)
       klass.registerAttribute(feature)
       primary = metax.attr.IdAttribute(klass, 'class', 'Person', line=1, col=10)
       klass.registerAttribute(primary)

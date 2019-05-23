@@ -33,6 +33,104 @@ namespace metax.oopl scope:
     test:
     end method myclassIs;
 
+    method _statementCode : metax.c.BaseSegment #:
+      A service method used by statement-level constructs when implementing
+      their translateMeta method. Although more intuitively placed in the
+      StatementConstruct class, there are some constructs (e.g. BlockConstruct)
+      that can appear within an executable scope that do not inherit from
+      StatementConstruct (but do inherit from OoplConstruct).
+    params:
+      var start_lines : vec<str> #:
+        The initial code at the same indentation level as the code above it.
+        For example, if we are compiling a for loop, this would represent the
+        baselang code for the start of the loop (e.g. 'for i in ...:' in python)
+      var scope : metax.attr.BlockAttribute #:
+        The block representing the indented code. This may be a simple block
+        or complex block.
+      var end_lines : vec<str> = null #:
+        Code to be added after the lines in 'scope', at the same indentation
+        level as start_lines (not the same as scope). If you want to insert
+        lines at same indentation as scope, add the indentation to the lines
+        in end_lines first.
+      var indent : str = '  ' #:
+        How much indentation to add for the lines in the scope block. The
+        default (two spaces) captures the common case, but in some situations
+        there are no start_lines and the scope provides lines at the same
+        indentation level as the parent construct, in which case indent will
+        be set to '' by the caller.
+      var segment : metax.c.BaseSegment = null #:
+        The segment to add to. If not specified, obtained from the last chunk in
+        the 'current-body' stream.
+    scope:
+      statement = self
+
+      /# The 'current-body' stream contains all text in the current method,
+      /# into which statement-level constructs are to be added. The caller
+      /# is required to ensure that the last element of the current-body
+      /# stream is ALWAYS a BaseSegment, properly indented, into which
+      /# statements are to add their appropriate code.
+      if not segment:
+        segment = statement.metafile().streams().stream('current-body')[-1]
+      assert isinstance(segment, metax.c.BaseSegment)
+
+      /# The 'precount' field of statement establishes how many blank lines
+      /# appeared before the statement in the meta code. We print out the same
+      /# number of blank lines in the baselang code.
+      for i in range(statement.precount()):
+        segment.addLine('')
+
+      /# The 'start_lines' arg contains a list of lines to be added at the
+      /# same indentation level as the current code.
+      /#  - for now we simply add these lines to the current segment, but it
+      /#    would be more general/flexible if we created a BaseSegment with zero
+      /#    indentation that contains these lines. Doing so would allow nested
+      /#    code to insert code *before* the statement in situations where that
+      /#    is necessary, by either obtaining the second last entry in the
+      /#    current-body stream, or the parent stream of the last stream, if we
+      /#    decide to nest them. If the latter, note that we would need to
+      /#    extend BaseSegment to allow them to maintain a parent BaseSegment.
+      segment.addLines(start_lines)
+
+      /# Now handle the scope.
+      if scope.isComplexBlock():
+        /# Statements expect that the 'current-body' stream will contain as its
+        /# last element a BaseSegment into which the statement is to be
+        /# compiled. So we create such a BaseSegment, indented properly, and
+        /# recurse.
+        subsegment = metax.c.BaseSegment(scope, indent=indent)
+        segment.addChunk(subsegment)
+        for stmt in scope.value():
+          stmt.translateMeta()
+      else:
+        /# We have a simple block, which means we do not need to recursively
+        /# compile sub-statement constructs. However, we do need to make sure we
+        /# get the indentation correct. There are two ways we can handle this:
+        /#   1. Add each line of the scope to 'segment' with a manually
+        /#      inserted two-space indentation .
+        /#   2. Create a BaseSegment representing the lines in the scope
+        /#      (with the desired indentation passed into the BaseSegment),
+        /#      and add this sub-segment to 'segment'.
+        /# The pro (and con) of #2 is that it will result in an entry being
+        /# added to the mapfile, which both inflates the mapfile significantly
+        /# (not so good) and increases the chances that the meta-to-base 
+        /# line number mapping is kept correct (as long as we pass in the
+        /# correct attribute to the sub-segment).  For now, we are going with
+        /# #2, and we see how this impacts performance, etc.
+        segment.addChunk(
+          metax.c.BaseSegment(scope, chunks=scope.value(), indent=indent))
+
+      /# Now the end_lines
+      /#  - these are added at the same indentation level as start_lines,
+      /#    one indentation level smaller than the lines in scope.
+      /#  - caller can add indentation before these lines manually to add
+      /#    indentation at the level of scope.
+      if end_lines:
+        segment.addLines(end_lines)
+
+      return segment
+    test:
+    end method _statementCode;
+
     override
     method expandMeta params:
       var output : vec<metax.c.Construct> = null #:
@@ -1585,6 +1683,7 @@ namespace metax.oopl scope:
 
     lifecycle  clinit:
       cls.DummySuperAttribute = metax.attr.ExprAttribute(None, 'super', None)
+      cls.DummyNonSuperAttribute = metax.attr.ExprAttribute(None, 'hack', None)
 
     method kind : str scope:
       return 'class'
@@ -4953,12 +5052,20 @@ namespace metax.oopl scope:
       if scope_attr and scope_attr.isComplexBlock():
         metafile = self.metafile()
         streams = metafile.streams()
-        /# TODO(wmh): By tromping on this each time, we preclude having
-        /# 'method' constructs within method scopes (something we want to
-        /# support).  Conditionally initialize the stream so taht we don't
-        /# tromp on a stream already in place (but we *do* want to reset the
-        /# stream if this is a top-level method within a class).
+        /# TODO(wmh): By tromping on this each time, we preclude having 'method'
+        /# constructs within method scopes (something we want to support). We
+        /# need to conditionally initialize the stream so that we don't tromp on
+        /# a stream already in place (but we *do* want to reset the stream if
+        /# this is a top-level method within a class). Consider maintaining a
+        /# stack of streams.
         streams.initStreams('current-body')
+        /# Every nested block in the method is represented by a BaseSegment, and
+        /# sub-constructs add to the last segment found in current-body. This
+        /# allos us to handle arbitrary levels of indentation, as long as
+        /# the order of lines in the meta source correspond to order of lines
+        /# in baselang.
+        segment = metax.c.BaseSegment(scope_attr, indent='')
+        streams.addSegment('current-body', segment)
         for stmt in scope_attr.value():
           stmt.translateMeta()
         scope_lines = streams.stream('current-body')
@@ -6712,6 +6819,36 @@ namespace metax.oopl scope:
       pass
     end method kind;
 
+    method useSwitch : any #:
+      Service method of SwitchConstruct and CaseConstruct for establishing
+      whether to use a baselang case statement or not.
+    params:
+      var switch_ : SwitchConstruct #:
+        The switch to check.
+      var baselang : BaseLanguageOopl #:
+        The baselang being complied to.
+    scope:
+      on_attr, on = switch_.attrpair('on', default=None)
+      if on_attr:
+        /# If the on variable has integral type, we can perform an actual
+        /# baselang switch statement if the baselang has it. But if the on
+        /# variable is any other type, we perform implicit equality testing.
+        
+        /# TODO(wmh): Find the variable identified by 'on' in the symbol table
+        /# of the parent construct, and obtain its type.
+        ontype = metax.c.Type.Instance('nm.sp.A')
+        switch_level = baselang.config('switch_level')
+        if ontype.isIntegral():
+          result = switch_level >= 1
+        else:
+          result = switch_level >= 2
+      else:
+        /# No language handles bool expressions via switch statements.
+        result = False
+      return result
+    test:
+    end method useSwitch;
+
   end class StatementConstruct;
 
   class BlockConstruct < SymbolConstruct #:
@@ -6799,22 +6936,22 @@ namespace metax.oopl scope:
       segments = streams.stream('current-body')
       expr = self.attrval('default', None)
 
-      /# TODO(wmh): Establish what this should be. If each new lexical level
-      /# adds a segment to current-body, and we insert text within that
-      /# segment, we shouldn't need to ever deal with indentation!
-      indent = u''
+      /# Every statement is added to the last BaseSegment in segments, which
+      /# is required to exist and be a BaseSegment, not a string.
+      segment = segments[-1]
+      assert isinstance(segment, metax.c.BaseSegment)
 
       if expr:
-        code, codetype = baselang.compileExpr(expr, metafile, indent=indent)
+        code, codetype = baselang.compileExpr(expr, metafile, indent='')
       else:
         /# We are to assign a type-specific default to the var.
         codetype = self.attrval('type')
         code = baselang.defaultValue(codetype)
 
-      segments.append('%s = %s' % (self.id(), code))
+      segment.addLine('%s = %s' % (self.id(), code))
     test:
       metafile = test.metafile
-      segments, previous = metafile.streams().fpeam('current-body')
+      segments, previous = metafile.streams().newStream('current-body')
       test.var1.translateMeta()
       test.var2.translateMeta()
       test.var3.translateMeta()
@@ -6858,85 +6995,148 @@ namespace metax.oopl scope:
     override
     method translateMeta
     scope:
+      metafile = self.metafile()
       /# There are numerous variants of a loop, dictated by which secondary
       /# attributes exist.  Existence is checked for in the following order:
       /#  - If 'to' exists, a numeric loop is generated, with 'from' and 'by'
       /#    considered and taking on values 0 and 1 respectively if not given
       /#    (all other non-scope attributes ignored).
-      /#  - 
-      metafile = self.metafile()
-      streams = metafile.streams()
-      segments = streams.stream('current-body')
+      /#  - If 'over' exists, an iteration of a container is generated, and
+      /#    both 'while' and 'until' are ignored.
+      /#  - If 'while' exist, compile the expr and loop, checking at start of
+      /#    loop for the bool. Still deciding whether an 'until' clause can
+      /#    be added to a 'while' or if they are exclusive.
+      /#  - If 'until' exist, compile the expr and loop infinitely, checking
+      /#    at end of loop for the bool (if the baselang doesn't support
+      /#    until directly).
+      scope_attr, scope = self.attrpair('scope:', default=metax.c.EMPTY)
 
       /# TODO(wmh): The 'loop' construct specifies that the primary attribute
       /# has replacer semantics (the id is implicitly transfered to the 'name'
       /# attribute and the id is auto-assigned if there is no explicit 'name'.
-      /# However, that is not work ... fix it and clean up this code.
-      name = self.attrval('name', default=None)
+      /# However, that is not working ... fix it and clean up this code.
+      name = self.attrval('on', default=None)
       if name is None:
         name = self.id()
 
-      for i in range(self.precount()):
-        segments.append('')
-
-      scope_attr, scope = self.attrpair('scope:', default=metax.c.EMPTY)
-      to_attr, to_expr = self.attrpair('to', default=None)
-
       /# If 'to' exists, generate numeric loop (consider 'from' and 'by', ignore
       /# all others).
+      to_attr, to_expr = self.attrpair('to', default=None)
       if to_attr:
         to_val = to_expr.value()
         from_expr = self.attrval('from', default=None)
         from_val = from_expr.value() if from_expr else '0'
         by_expr = self.attrval('by', default=None)
         by_val = by_expr.value() if by_expr else '1'
-        segments.append(
-          'for %s in range(%s, %s, %s):' % (name, from_val, to_val, by_val))
-        if scope_attr.isComplexBlock():
-          pass
-        else:
-          segments.append(metax.c.BaseSegment(to_attr, chunks=scope, indent='  '))
+
+        self._statementCode(
+          ['for %s in range(%s, %s, %s):' % (name, from_val, to_val, by_val)],
+          scope_attr)
 
       else:
         over_attr, over_expr = self.attrpair('over', default=None)
         if over_attr:
-          /# If 'over' exists, generate loop over enuemration, ignoring all other
-          /# attributes.
-          segments.append('for %s in %s:' % (name, over_expr.value()))
-          if over_attr.isComplexBlock():
-            print('ERROR: Not yet handling complex loops')
-          else:
-            segments.append(
-              metax.c.BaseSegment(over_attr, chunks=scope, indent='  '))
+          /# If 'over' exists, generate loop over enuemration, ignoring all
+          /# other attributes.
+          self._statementCode(
+            ['for %s in %s:' % (name, over_expr.value())], scope_attr)
+
         else:
           while_attr, while_expr = self.attrpair('while', default=None)
           if while_attr:
             /# If 'while' exists, generate while loop, ignoring all others.
             /# TODO(wmh): Consider allowing both 'while' and 'until' in same
             /# statement.
-            /# TODO(wmh): Need to define a bool_expr, and provide code to
-            /# convert them to baselanguages.
-            segments.append('while %s:' % while_expr.value())
-            segments.append(
-              metax.c.BaseSegment(while_attr, chunks=scope, indent='  '))
+            assert while_expr.kind() == 'bool'
+            baselang = metafile.compiler().baselang()
+            boolstr, mtype = baselang.compileExpr(while_expr, metafile)
+            /# TODO(wmh): If the result is multilined, we need to split it into
+            /# lines. Would be better if compileExpr or some variant returned
+            /# a list of lines.
+            assert '\n' not in boolstr
+            self._statementCode(['while %s:' % boolstr], scope_attr)
+
           else:
             until_attr, until_expr = self.attrpair('until', default=None)
             if until_attr:
               /# Generate do ... until loop.
-              segments.append('while True:')
-              segments.append(
-                metax.c.BaseSegment(while_attr, chunks=scope, indent='  '))
-              segments.append('  if %s: break' % until_expr.value())
+              assert until_expr.kind() == 'bool'
+              baselang = metafile.compiler().baselang()
+              boolstr, btype = baselang.compileExpr(until_expr, metafile)
+              assert '\n' not in boolstr
+              self._statementCode(
+                ['while True:'],
+                scope_attr,
+                end_lines=['  if %s: break' % boolstr])
+
             else:
               metafile.error('Useless loop', line=self.primary().line())
     test:
-      metafile = test.metafile
-      segments, previous = metafile.streams().fpeam('current-body')
 
-      test.loop1.translateMeta()
+      /# Test loop from ... to ...
+      test.checkStatement("""\
+        >|namespace hack.stmts scope:
+        >|  class A scope:
+        >|    method f scope<*>:
+        >|      loop l1 on i from 1 to 10 scope:
+        >|        print(i)
+        >|""",
+        /# Path
+        '/hack.stmts/A/f/l1',
+        /# Output
+        >|"""\
+        >|for i in range(1, 10, 1):
+        >|  print(i)
+        >|""")
 
-      test.iseq(
-        segments)
+      /# Test loop from ... to ...
+      test.checkStatement("""\
+        >|namespace hack.stmts scope:
+        >|  class A scope:
+        >|    method f scope<*>:
+        >|      loop l2 on j over values scope:
+        >|        print(j)
+        >|""",
+        '/hack.stmts/A/f/l2',
+        """\
+        >|for j in values:
+        >|  print(j)
+        >|""")
+
+      /# Test while.
+      test.checkStatement("""\
+        >|namespace hack.stmts scope:
+        >|  class A scope:
+        >|    method f scope<*>:
+        >|      loop l3 while ((3 < i < 10) and (j == 10)) scope:
+        >|        print(i)
+        >|        i += 1
+        >|""",
+        '/hack.stmts/A/f/l3',
+        """\
+        >|while ((3 < i) and (i < 10) and (j == 10)):
+        >|  print(i)
+        >|  i += 1
+        >|""", verbose=False)
+
+      /# Test until.
+      test.checkStatement("""\
+        >|namespace hack.stmts scope:
+        >|  class A scope:
+        >|    method f scope<*>:
+        >|      loop l3 scope:
+        >|        print(i)
+        >|        i += 1
+        >|      until ((3 < i < 10) and (j == 10));
+        >|""",
+        '/hack.stmts/A/f/l3',
+        """\
+        >|while True:
+        >|  print(i)
+        >|  i += 1
+        >|  if ((3 < i) and (i < 10) and (j == 10)): break
+        >|""", verbose=False)
+
     end method translateMeta;
 
   end class LoopConstruct;
@@ -6969,39 +7169,82 @@ namespace metax.oopl scope:
     method translateMeta
     scope:
       metafile = self.metafile()
-      streams = metafile.streams()
-      segments = streams.stream('current-body')
+      baselang = metafile.compiler().baselang()
 
-      else_attr, else_lines = self.attrpair('else:', None)
-      scope = self.attrval('scope:', default=None)
-      if scope is None:
+      /# There are numerous variants of a switch, dictated by which secondary
+      /# attributes are explicitly defined on the construct.
+      /#  - If 'on' is specified, we will be comparing the value of the
+      /#    variable identified by 'on' in each case.
+      /#  - If 'on' is not specified (or specified with a special value to
+      /#    indicate it is not really there ... needed in situations where we
+      /#    want an explicit id (e.g. not auto-assigned) but do not want an
+      /#    'on' attribute, which the id is replacer'ed to).
+      scope_attr, scope = self.attrpair('scope:', default=None)
+      if scope_attr is None:
         metafile.error(
           'Must provide at least one case', attr=self.primary().line())
+        return None
+
+      /# Establish the variable we are switching on, if any, and the else.
+      /#  - TODO(wmh): Consider removing the 'else' attribute in favor of
+      /#    a case with no expr. There are pros and cons both ways:
+      /#     - using a case allows for easy switching of order, but if one
+      /#       doesn't add an expr the no-expr case will grab all results
+      /#       (unless we have Meta verify that no-expr case only appears as
+      /#       last one).
+      /#     - using else clearly highlights the specialness of the default
+      on_attr, on = self.attrpair('on', default=None)
+      else_attr, else_lines = self.attrpair('else:', None)
+
+      /# Generate the iniital switch code and recurse over case children.
+      /#  - need to know whether baselang supports switch or not.
+      use_switch = self.useSwitch(self, baselang)
+      if use_switch:
+        /# TODO(wmh): baselangs have different syntax.
+        segment = self._statementCode(['switch (%s) {' % on], scope_attr)
       else:
-        name_attr, name = self.attrpair('name', default=None)
+        /# There is no switch-level lines, each case is implemented as an
+        /# if/elif, and they are not indented relative to the current segment.
+        segment = self._statementCode([], scope_attr, indent='')
 
-        for i in range(self.precount()):
-          segments.append('')
+      /# Handle the default.
+      if else_attr:
+        if use_switch:
+          self._statementCode(['default:'], else_attr)
+        else:
+          /# TODO(wmh): Exact syntax is baselang specific.
+          self._statementCode(['else:'], else_attr)
 
-        for i, case in enumerate(scope):
-          kw = 'elif' if i else 'if'
-          expr = case.attrval('expr')
-          ekind = expr.kind()
-          if ekind == 'num':
-            expr_code = '%s == %s' % (name, expr.value())
-          else:
-            expr_code = '%s fixme' % name
+      /# Add termination.
+      if use_switch:
+        /# TODO(wmh): Exact syntax is baselang specific.
+        segment.addLine('}')
 
-          segments.append('%s %s:' % (kw, expr_code))
-          scope_attr, scope = case.attrpair('scope:')
-          segments.append(
-            metax.c.BaseSegment(scope_attr, chunks=scope, indent='  '))
-
-        if else_attr:
-          segments.append('else:')
-          segments.append(
-            metax.c.BaseSegment(else_attr, chunks=else_lines, indent='  '))
-
+    test:
+      test.checkStatement("""\
+        >|namespace hack.stmts scope:
+        >|  class A scope:
+        >|    method f scope<*>:
+        >|      switch s1 on h scope:
+        >|        case c1 is 1 ::
+        >|          f = 1
+        >|        case c2 is 2 ::
+        >|          f = 7
+        >|      else:
+        >|        f = 99
+        >|""",
+        /# find switch
+        '/hack.stmts/A/f/s1',
+        /# expected output
+        """\
+         >|if h == 1:
+         >|  f = 1
+         >|elif h == 2:
+         >|  f = 7
+         >|else:
+         >|  f = 99
+         >|""",
+      )
     end method translateMeta;
 
   end class SwitchConstruct;
@@ -7019,8 +7262,88 @@ namespace metax.oopl scope:
     override
     method translateMeta
     scope:
-      print('HERE compiling if %s' % self.fqn())
+      metafile = self.metafile()
+      baselang = metafile.compiler().baselang()
 
+      /# Must have an 'expr' attribute.
+      /#  - or do we want to have a case without 'expr' be the final 'else'
+      /#    clause?
+      expr_attr, expr = self.attrpair('expr', default=None)
+      if expr_attr is None:
+        metafile.error('missing required expr', attr=self.primary())
+        return
+      estr, etype = baselang.compileExpr(expr, metafile)
+      
+      /# Must have a 'scope' attribute
+      scope_attr = self.attr('scope:', default=None)
+      if scope_attr is None:
+        metafile.error('missing required scope', attr=self.primary())
+        return
+
+      /# Whether the parent 'switch' has an 'on' attribute controls how this
+      /# case will be translated.
+      switch_ = self.parentConstruct()
+      if switch_.kind() != 'switch':
+        metafile.error('expecting switch parent', attr=self.primary())
+        return
+      on_attr, on = switch_.attrpair('on', default=None)
+      if not on_attr and expr.kind() != 'bool':
+        /# No 'on' variable means each expr is a boolexpr that guards the
+        /# case block.
+        metafile.error('expecting bool expr', attr=self.primary())
+        return
+
+      /# Most code paths below require us to know whether this is the first
+      /# case in the parent or not.
+      switch_scope = switch_.attrval('scope:')
+      isfirst = self is switch_scope[0]
+
+      /# Establish whether to use switch...case or if..elif..else.
+      use_switch = self.useSwitch(switch_, baselang)
+
+      /# Now generate the code.
+      if use_switch:
+        /# We are generating a switch/case statement.
+        /# TODO(wmh): The exact case syntax differs between baselangs.
+        self._statementCode('case %s:' % estr, scope_attr)
+      else:
+        /# TODO(wmh): Define ifelseSyntax behavior in BaseLanguageOopl and
+        /# subclasses. Returns list of lines representing the if or elif block
+        /# depending on if first or not
+        if expr.kind() != 'bool':
+          estr = '%s == %s' % (on, estr)
+        ifsyn = ['%sif %s:' % ('' if isfirst else 'el', estr)]
+        /# ifsyn = baselang.ifelseSyntax(estr, isfirst)
+        self._statementCode(ifsyn, scope_attr)
+    test:
+      code = """\
+        >|namespace hack.stmts scope:
+        >|  class A scope:
+        >|    method f scope<*>:
+        >|      switch s1 on h scope:
+        >|        case c1 is 1 ::
+        >|          f = 1
+        >|        case c2 is 2 ::
+        >|          f = 7
+        >|"""
+
+      test.checkStatement(
+        code, 
+        '/hack.stmts/A/f/s1/c1',
+        """\
+        >|if h == 1:
+        >|  f = 1
+        >|""",
+      )
+
+      test.checkStatement(
+        code, 
+        '/hack.stmts/A/f/s1/c2',
+        """\
+        >|elif h == 2:
+        >|  f = 7
+        >|""",
+      )
     end method translateMeta;
 
   end class CaseConstruct;
@@ -7119,6 +7442,12 @@ namespace metax.oopl scope:
       clteardown : map
         same as setup but represents the method used to cleanup an entire
         TestCase instance after invoking all tests on it.
+
+      switch_level: int
+        indicates what kind of switch statement is supported by the baselang:
+          0 = no switch (e.g. Python)
+          1 = ordinal switch only (e.g. C++)
+          2 = generic value switch (e.g. javascript)
   scope:
 
     field metatypes : map #:
@@ -7157,7 +7486,10 @@ namespace metax.oopl scope:
       means an arbitrary number of template args are allowed, and they will
       be named 'T1', 'T2', etc. and have type any.
 
-    lifecycle  clinit:
+    lifecycle #:
+      TODO(wmh): Add params: (to pass to super) and a scope: block that
+      provides default values for every config variable.
+    clinit:
       cls.SpecialREIs(re.compile(
         r'^(?P<indent>\s*)Meta:(?P<action>[a-zA-Z0-9_<>]+):\s*(?P<text>.*)'))
 
@@ -7673,9 +8005,27 @@ namespace metax.oopl scope:
       expr_var = metax.c.ExprParser(test.metafileFor(text='apple\n')).parse()
       Chk('apple', None, ooplpy.compileExpr(expr_var, metafile))
 
-      expr_params = metax.c.ExprParser(test.metafileFor(text='(a, b=1)\n')).parse(
-        attribute=metax.attr.ExprAttribute(None, 'super', None))
+      expr_params = metax.c.ExprParser(
+        test.metafileFor(text='(a, b=1)\n')).parse(
+          attribute=metax.oopl.ClassConstruct.DummySuperAttribute)
       Chk('(a, b=1)', [None, None], ooplpy.compileExpr(expr_params, metafile))
+
+      expr_bool1 = metax.c.ExprParser(
+        test.metafileFor(text='(a)\n')).parse(
+          attribute=metax.oopl.ClassConstruct.DummyNonSuperAttribute)
+      Chk('a', 'bool', ooplpy.compileExpr(expr_bool1, metafile))
+
+      expr_bool2 = metax.c.ExprParser(
+        test.metafileFor(text='( ! a )\n')).parse(
+          attribute=metax.oopl.ClassConstruct.DummyNonSuperAttribute)
+      Chk('(!a)', 'bool', ooplpy.compileExpr(expr_bool2, metafile))
+
+      expr_bool3 = metax.c.ExprParser(
+        test.metafileFor(text='(3 < a < 7)\n')).parse(
+          attribute=metax.oopl.ClassConstruct.DummyNonSuperAttribute)
+      Chk(
+        '((3 < a) and (a < 7))', 'bool',
+        ooplpy.compileExpr(expr_bool3, metafile))
 
       expr_list = metax.c.ExprParser(
         test.metafileFor(text='[false, true, null, 1, a]\n')).parse()
@@ -7688,7 +8038,7 @@ namespace metax.oopl scope:
           ooplpy.compileExpr(expr_map, metafile))
     end method compileExpr;
 
-    method _compileExpr : *metax.oopl.Type #:
+    method _compileExpr : metax.oopl.Type #:
       Compile an Expr instance into a baselang.
 
       Returns: Type
@@ -7794,6 +8144,73 @@ namespace metax.oopl scope:
 
         lines[-1] += result
 
+      elif kind == 'bool':
+        /# Compile a boolean expression.
+        /#  - syntax is similar across most base languages, except some diffs
+        /#    in operators (python uses 'and' and 'or' vs '&&' and '||', etc)
+        metatype = metax.c.Type.Instance('bool')
+        emeta = expr.value()
+        edata = emeta['data']
+        n = len(edata)
+
+        /# print('BOOL: n=%d edata=%s' % (n, edata))
+        if n == 1:
+          /# Must be an expression
+          if not isinstance(edata[0], metax.c.Expr):
+            metafile.error('Found 1 element in expr but not Expr: %s' % str(edata))
+            /# FIX ME
+            lines.append('bool error ?')
+          else:
+            code, btype = self.compileExpr(
+              edata[0], metafile, executable=executable)
+            if btype and btype is not metatype:
+              metafile.error('expression returned non bool %s' % str(btype))
+            else:
+              /# We do not need to wrap code in (), as code will be properly
+              /# wrapper per the baselang.
+              lines[-1] += code
+              /# print('LINES: %s' % str(lines))
+        elif n == 2:
+          /# Must be unary operator followed by expression, and only unary
+          /# operator is '!'
+          if edata[0] != '!':
+            metafile.error(
+              'Found 2 elements in expr but 2nd is not Expr: %s' % str(edata))
+          elif not isinstance(edata[1], metax.c.Expr):
+            metafile.error(
+              'Found 2 elements in expr but 2nd is not Expr: %s' % str(edata))
+          else:
+            code, btype = self.compileExpr(
+              edata[1], metafile, executable=executable)
+            if btype and btype is not metatype:
+              metafile.error('expression returned non bool %s' % str(btype))
+            else:
+              lines[-1] += '(!%s)' % code
+        else:
+          /# Must be expr op [expr op]...
+          parts = []
+          i = 1
+          code1, btype1 = self.compileExpr(
+            edata[0], metafile, executable=executable)
+          while i < n:
+            op = edata[i]
+            if not isinstance(op, basestring):
+              metafile.error('Expecting arg %d of %s to be op' % (i, edata))
+              break
+            e2 = edata[i+1]
+            if not isinstance(e2, metax.c.Expr):
+              metafile.error('Expecting arg %d of %s to be expr' % (i+1, edata))
+              break
+            code2, btype2 = self.compileExpr(
+              e2, metafile, executable=executable)
+            parts.append('(%s %s %s)' % (code1, op, code2))
+            i += 2
+            code1 = code2
+          if parts:
+            /# TODO(wmh): If adding all of the parts to last line would exceed
+            /# maximum line width, wrap to subsequent lines with proper
+            /# indentation.
+            lines[-1] += '%s' % ' and '.join(parts)
       elif kind == 'op':
         /# TODO(wmh): Currently blindly dumping verbatim operators, but we
         /# need to do type analysis on lhs, establish the operators defined on
@@ -8042,6 +8459,7 @@ namespace metax.oopl scope:
         raise metax.c.Error('Invalid expr kind "%s"' % kind)
 
       if metafile.numErrors() > numerrs:
+        metafile.hasErrors(show=True)
         print('WARNING: Ignoring _compileExpr result due to errors')
         result = None
 
@@ -8867,6 +9285,8 @@ namespace metax.oopl scope:
         'teardown': {'name': 'tearDown'},
         'clsetup': {'name': 'setUpClass', 'level': 'meta'},
         'clteardown': {'name': 'tearDownClass', 'level': 'meta'},
+
+        'switch_level': 0,
       })
 
       self.pseudovarsIs({
@@ -9014,6 +9434,9 @@ namespace metax.oopl scope:
 
         /# specific to this baselang.
         'use_es2015': True,
+
+        /# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/switch
+        'switch_level': 2,
       })
 
       self.pseudovarsIs({
@@ -9194,6 +9617,9 @@ namespace metax.oopl scope:
         'clsetup': {'name': 'SetUpTestCase', 'level': 'static'},
         'teardown': {'name': 'TearDown', 'dispatch': 'virtual'},
         'clteardown': {'name': 'TearDownTestCase', 'level': 'static'},
+
+        /# https://en.cppreference.com/w/cpp/language/switch
+        'switch_level': 1,
       })
 
       self.pseudovarsIs({
@@ -12128,6 +12554,8 @@ namespace metax.oopl scope:
     var fqn : str #:
       The fully qualified namespace[.class[.method]] for which a target is
       desired.
+    var verbose : bool = false #:
+      If true, print out details of verification process.
   scope:
     receiver BaseLanguageOopl #:
       This implementation is applicable to baselanguages that have per-class
@@ -12161,6 +12589,8 @@ namespace metax.oopl scope:
       else:
         result['namespace'] = '.'.join(nmsps)
         testbase = metax.oopl.NamespaceConstruct.TestifyName(nmsps[-1])
+        if verbose:
+          print('  namespace is %s' % result['namespace'])
 
         /# NOTE: We can determine whether the namespace is terminal (has classes)
         /# based on whether the _test version of the namespace exists.
@@ -12203,19 +12633,32 @@ namespace metax.oopl scope:
             if namespace_terminal:
               result['test_path'] = fs.relpath(
                 fs.join(namespace_test_path, tstbase), rootdir)
+            if verbose:
+              print('  class is %s' % class_candidate)
 
             i += 1
             if i < k:
               /# The fqn is a method.
-              /# To validate this, we can parse/grep tfile
-              method_name = parts[i]
-              verified = False
 
-              with fs.open(tfile, 'r') as mfp:
+              /# We can verify the specified method is valid by parse the
+              /# class map file (tfile). However, the specified fqn may also
+              /# include a testx suffix, so it is better to search in the
+              /# testclass mapfile for the test method instead.
+              method_name = parts[i]
+              test_namespace = NamespaceConstruct.TestifyName(
+                result['namespace'])
+              test_ndir = NamespaceConstruct.TestifyName(ndir)
+              test_class = ClassConstruct.TestifyName(class_candidate)
+              test_method = ExecutableConstruct.TestifyName(method_name)
+              ttfile = '%s/.%s%s.map' % (test_ndir, test_class, map_suffix)
+              verified = False
+              test_fqn = '%s.%s.%s' % (test_namespace, test_class, test_method)
+              with fs.open(ttfile, 'r') as mfp:
                 for line in mfp:
-                  if fqn in line:
+                  if test_fqn in line:
                     verified = True
                     break
+
               if verified:
                 result['kind'] = 'method'
                 result['method'] = method_name
@@ -12226,8 +12669,10 @@ namespace metax.oopl scope:
                 else:
                   result['test_arg'] = metax.oopl.ExecutableConstruct.TestifyName(method_name)
               else:
-                result['error'] = '%s is not a method within %s' % (
-                  method_name, fqn)
+                if verbose:
+                  print('  failed to find %s in %s' % (test_fqn, ttfile))
+                result['error'] = '%s is not a method within %s.%s' % (
+                  method_name, result['namespace'], class_candidate)
             else:
               /# The fqn is a class.
               result['kind'] = 'class'
@@ -13798,6 +14243,71 @@ namespace metax.oopl scope:
 
   test
   class TestCase < metax.c_test.TestCase scope:
+
+    method checkStatement : OoplConstruct #:
+      Compile a meta program, find a statement construct within it, invoke
+      translateMeta on that statement, and verify resulting output.
+
+      Note that the return type is OoplConstruct rather than StatementConstruct
+      because some constructs that can appear within method scope can also
+      appear elsewhere and are thus not subclases of StatementConstruct
+      (e.g. BlockConstruct). TODO(wmh): Can we remove this inconsistency?
+
+      TODO(wmh): Generalize to be useful for expandMeta, importMeta and
+      compileMeta as well. Or do they not produce output we can easily test?
+    params:
+      var code : str #:
+        The meta-syntax code to be parsed.
+      var mxpath : str #:
+        A path identifying a statement construct within the parsed meta code.
+      var expected : str = null #:
+        The expected baselang output. If null, print out the output rather
+        than check against it (and also print out the construct identified by
+        mxpath).                               
+      var verbose : bool = false #:
+        If true, print out the identified statement construct and the output
+        produced by invoking translateMeta().
+    scope:
+      /# Parse namespace/class/method/loop constructs and find the loop by
+      /# xpath.
+      statement = test.constructInCode(mxpath, text=code)
+      if not statement:
+        print('#' * 80)
+        print(code)
+        print('#' * 80)
+        /# test.metafile.hasErrors(show=True)
+        test.fail('Failed to parse code')
+
+      /# Conditionally print out the statement.
+      if verbose or expected is None:
+        print('=' * 80)
+        print('construct at %s:' % mxpath)
+        statement.write(indent='  ')
+
+      /# Setup the stream expected by translateMeta().
+      metafile = statement.metafile()
+      segments, _ = metafile.streams().newStream('current-body')
+      segment = metax.c.BaseSegment(None)
+      segments.append(segment)
+
+      /# Invoke translateMeta on the statement
+      statement.translateMeta()
+
+      /# Validate output.
+      output = segment.flattenStr()
+      if verbose or expected is None:
+        print('=' * 80)
+        print('Output produced by translateMeta:')
+        print(output)
+        print('=' * 80)
+      if expected is not None:
+        test.iseqtext(expected, output)
+
+      /# Return statement to allow further testing.
+      return statement
+    test:
+    end method checkStatement;
+   
   end;
 
 end namespace metax.oopl;

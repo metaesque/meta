@@ -889,6 +889,7 @@ scope:
       
         -F  = prefix dirs with /, etc.
         -l  = long listing (one line per file)
+        -a  = show . files.
     params:
       multi var args : vec;
     scope:
@@ -896,9 +897,23 @@ scope:
       /# current directory - i.e. ignores args).
       dir = self._cwd
       annotate = False
-      if args and args[0] == '-F':
-        annotate = True
-      dir.listChildren(fp=self._fp, annotate=annotate)
+      hidden = False
+      detailed = False
+      args = list(args)
+      while args and args[0][0] == '-':
+        flag = args.pop(0)
+        if flag == '-F':
+          annotate = True
+        elif flag == '-a':
+          hidden = True
+        elif flag == '-l':
+          detailed = True
+        else:
+          print('WARNING: Ignoring unknown flag %s' % flag)
+      if args:
+        print('WARNING: The ls command currently ignores arguments')
+      dir.listChildren(
+        fp=self._fp, annotate=annotate, hidden=hidden, detailed=detailed)
     test:
       sh = test.shell
       root = sh.filesystem()
@@ -1418,7 +1433,8 @@ scope:
           name = self.name()
           current_parent = self.parent()
           if current_parent:
-            /# We are already in a different parent, so we remove ourselves from it.
+            /# We are already in a different parent, so we remove ourselves from
+            /# it.
             if name in current_parent.children():
               del current_parent.children()[name]
           self._parent = value
@@ -1593,6 +1609,9 @@ scope:
         If non-None, a string glob that names must match against
       var annotate : bool = false #:
         If True, suffix names with '/' if directories
+      var hidden : bool = false #:
+        By default, do not show children starting with '.'. If this is true,
+        do show them.
     scope:
       /# Ensure that my children are up-to-date
       self.refresh()
@@ -1600,6 +1619,8 @@ scope:
       /# Print out my children.
       data = []
       for child_name in sorted(self.children()):
+        if not hidden and child_name[0] == '.':
+          continue
         if regexp and not re.match(regexp, child_name):
           continue
         child = self.children()[child_name]
@@ -1730,8 +1751,8 @@ scope:
       widths = []
       total = 0
       while i < n:
-        /# Amongst the words that will appear in the current column, determine the
-        /# maximum length.
+        /# Amongst the words that will appear in the current column, determine
+        /# the maximum length.
         col_width = 0
         for j in range(0, numrows):
           index = i + j
@@ -1745,8 +1766,8 @@ scope:
         widths.append(col_width)
 
         /# Increment the total width of the line needed to display all words.
-        /# Note that if we've already processed a column, we need to add 'colspace'
-        /# between columns as well.
+        /# Note that if we've already processed a column, we need to add
+        /# 'colspace' between columns as well.
         if total > 0:
           total += colspace
         total += col_width
@@ -1903,7 +1924,7 @@ scope:
       else:
         if generator or freshold > -1:
           raise Error(
-            'Non-dir children should not specify childvar, generator or freshold')
+            'Non-dir children must not specify childvar, generator or freshold')
         if kind == 'file':
           result = File(self, name)
         elif kind == 'symlink':
@@ -2154,38 +2175,68 @@ scope:
       test.istrue(test.gendir.updated() >= d)
     end method refresh;
 
-  end class DynamicDirectory;
-
-  class FilesystemDirectory < DynamicDirectory #:
-    A dynamically generated directory based on a filesystem path somehow
-    associated with the path of this directory.
-  scope:
-    lifecycle #:
-      Initialize an instance.
+    meta
+    method FilesystemGenerator : any #:
+      Returns a function suitable for use as the generator of a filesystem file
+      dictated by the current path of this direc
     params:
-      var parent : Directory;
-      var name : str;
-      var childvar -> childvar;
-      var generator -> generator;
-      var freshold -> freshold;
-    super (parent, name)
+      var prefix : str #:
+        The prefix within the virtual filesystem where the real filesystem is
+        to be mirrored.
+      var freshold : int = 60 #:
+        How long virtual representations of data are considered valid for.
+        Note that 'cd' may perform updates of parent directories, so setting
+        freshold to 0 can incur some expense.
     scope:
-      self._updated = datetime.datetime.fromtimestamp(0)
-      /# IMPORTANT: We do NOT invoke _refresh() within this constructor, as this
-      /# would result in an exponential initialization of all transitive
-      /# children that have generators. Instead, directories are made "active"
-      /# ONLY be 'cd'ing into them, and 'cd' (aka changeDirCommand) is
-      /# responsible for the initial (and all subsequent) refreshes.
+      if isinstance(prefix, Directory):
+        raise Error(
+          'FilesystemGenerator was invoked as a generator rather than a '
+          'generator of the generator.\nCall the method, do not just reference '
+          "it. And don't forget to pass in a prefix")
+      /# Define the generator.
+      def Generator(dir):
+        result = []
+        virtual_path = dir.abspath()
+        assert virtual_path.startswith(prefix)
+        real_path = virtual_path[len(prefix):] or '/'
+        if os.path.isdir(real_path):
+          /# print('***** HERE with %s=%s' % (virtual_path, real_path))
+          for basename in os.listdir(real_path):
+            fullpath = os.path.join(real_path, basename)
+            /# print(u'  ' + basename)
+            if os.path.islink(fullpath):
+              destpath = os.readlink(fullpath)
+              /# TODO(wmh): Decide how to handle these. Do we create the entire
+              /# directory hierarchy of the destination path? Or change
+              /# Symlink so that its 'link' (or some other field) is the
+              /# absolute path (rather than a Node).
+              link = None
+              if False:
+                print(
+                  'WARNING: Not currently properly handling symlink %s (in %s)' %
+                  (basename, virtual_path))
+              /# child = dir.add('symlink', basename, link=link)
+              child = None
+            elif os.path.isdir(fullpath):
+              /# The child needs to be able to perform the same dynamic
+              /# generation of its children as the current dir, so it uses the
+              /# same generator.
+              child = dir.add(
+                'dir', basename, freshold=freshold, generator=dir.generator())
+            else:
+              /# Normal file.
+              child = dir.add('file', basename)
+            if child:
+              result.append(child)
+        else:
+          print('ERROR: %s is not a directory' % real_path)
+        return result
+      /# Return it.
+      return Generator
     test:
-      test.iseqvec(
-        ['hier', 'file', 'dir'],
-        test.root.children().keys())
-    setup:
-      test.defineFiles(generator=True)
-    end lifecycle;
-    
+    end method FilesystemGenerator;
 
-  end class FilesystemDirectory;
+  end class DynamicDirectory;
 
   class File < Node #:
     Represents a terminal file, which the shell can interact with.

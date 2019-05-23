@@ -40,7 +40,8 @@ namespace demo.stmts scope:
       var opt : A = null;
     scope<*>:
       var t : int = 1;
-      var container : vec<int>;
+      var s : int = 5;
+      var container : vec<int> = [1,2,3];
 
       loop i over container ::
         print(i)
@@ -48,25 +49,28 @@ namespace demo.stmts scope:
       loop j from 10 to 20 by 2 ::
         print(j)
 
-      loop while expr1 ::
-        print(k)
+      loop while (t < s) ::
+        print(t)
+        t += 1
 
       loop ::
         print('')
-      until expr2;
+      until (expr2);
 
-      switch a #:
+      switch on a #:
         dkdk
       scope:
-        case expr 1 ::
+        case is 1 ::
           v = 2
-        case expr 2 ::
+        case is 2 ::
           v = 7
       else:
         v = 14;
       end;
 
     test:
+      b = demo.stmts.B(1, 'hello')
+      b.f(3)
     end method f;
  
   end class B;

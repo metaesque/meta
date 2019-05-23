@@ -32,7 +32,8 @@ namespace metax.meta scope:
     scope:
       accessor set scope:
         if value is not None and not isinstance(value, metax.attr.ComplexBlock):
-          raise metax.c.Error('Construct.parentIs with %s (%s)' % (value, value.__class__))
+          raise metax.c.Error(
+            'Construct.parentIs with %s (%s)' % (value, value.__class__))
         self._parent = value
 
     field context : metax.c.Context #:
@@ -58,8 +59,8 @@ namespace metax.meta scope:
       fields termcode and termline.
 
     field termcode : int = 16 #:
-      TODO(wmh): Change 16 to metax.c.TERM_UNINIT when meta properly supports it!
-      Encodes how this construct was terminated:
+      TODO(wmh): Change 16 to metax.c.TERM_UNINIT when meta properly supports
+      it! Encodes how this construct was terminated:
         0 (or TERM_UNINIT) = implicit (no terminator specified)
         1 = ';'
         3 = 'end;'
@@ -329,7 +330,8 @@ namespace metax.meta scope:
       /# Create the feature attributes
       if features:
         if not isinstance(features, list):
-          raise metax.c.Error('features must be list of tuples, not %s' % str(features))
+          raise metax.c.Error(
+            'features must be list of tuples, not %s' % str(features))
         legalfeatures = consinfo.features()
         for ftup in features:
           fkey = ftup[0]
@@ -339,7 +341,8 @@ namespace metax.meta scope:
           /# TODO(wmh): Need to set line and col correctly for each attribute!
           /# By passing litkey='', we are indicating that the feature key is
           /# not to be shown explicitly.
-          feature = metax.attr.FeatureAttribute(construct, fkey, fval, litkey='', line=line)
+          feature = metax.attr.FeatureAttribute(
+            construct, fkey, fval, litkey='', line=line)
           construct.registerAttribute(feature)
 
       /# Create the primary attribute
@@ -355,7 +358,8 @@ namespace metax.meta scope:
       /# Create the secondary attributes
       if secondaries:
         if not isinstance(secondaries, list):
-          raise metax.c.Error('secondaries must be list of tuples, not %s' % str(secondaries))
+          raise metax.c.Error(
+            'secondaries must be list of tuples, not %s' % str(secondaries))
         legalseconds = consinfo.secondaries()
         for stup in secondaries:
           skey = stup[0]
@@ -369,7 +373,6 @@ namespace metax.meta scope:
             /# all.  Useful when forming the tuples passed in as secondaries
             /# from code that may or may not produce null values ... avoids
             /# caller having to do checks.
-            /# print('**** WARNING: IGNORING %s (None) within %s' % (skey, construct.kindfqn()))
             continue
           elif isinstance(sval, metax.attr.Attribute):
             secondary = sval
@@ -475,8 +478,8 @@ namespace metax.meta scope:
       var key : str #:
         The attribute key.
       var default : any = False #:
-        The value to return if the key isn't present. If metax.c.REQUIRED, raises
-        MissingAttribute error.
+        The value to return if the key isn't present. If metax.c.REQUIRED,
+        raises MissingAttribute error.
         TODO(wmh): Fix the REQUIRED vs metax.c.REQUIRED issue.
     scope:
       if default is False:
@@ -484,7 +487,8 @@ namespace metax.meta scope:
       result = self._attributes.get(key, default)
       if result is metax.c.REQUIRED:
         raise metax.c.MissingAttribute(
-          'rawattr: On %s failed to find required rawattr("%s")' % (self.kindid(), key))
+          'rawattr: On %s failed to find required rawattr("%s")' %
+          (self.kindid(), key))
       return result
     test:
       construct = test.defineConstructs()
@@ -556,7 +560,10 @@ namespace metax.meta scope:
           'valopt': False,
           'cankey': 'scope:',
           'default': '<empty>',
-          'children': ['lifecycle', 'method', 'field', 'native', 'category', 'remark', 'command'],
+          'children': [
+            'lifecycle', 'method', 'field', 'native', 'category', 'remark',
+            'command',
+          ],
           'keyopt': False,
           'type': 'complex',
           'autokey': None,
@@ -605,7 +612,8 @@ namespace metax.meta scope:
             /#  'Here with attr %s : %s in %s' %
             /#  (key, info['type'], self.kindid()))
         elif default is metax.c.EMPTY:
-          /# NOTE(wmh): This is a variant of code in ConsInfo.registerSecondary()
+          /# NOTE(wmh): This is a variant of code in
+          /# ConsInfo.registerSecondary()
           attrinfo, consinfo = self.attrinfo(key)
           func = metax.c.MetaFile.AttrValueEmpty[attrinfo['type']]
           try:
@@ -616,8 +624,6 @@ namespace metax.meta scope:
             /# instance as well, which would remove the code redundancy between
             /# here and ConsInfo.registerSecondary. Alternative, we can just be
             /# careful about using metax.c.EMPTY ... only when truly needed.
-
-            /# print('****** HERE with key %s type %s value %s'  % (key, attrinfo['type'], str(value)))
             attr = metax.c.MetaFile.CreateNewAttribute(
               self, consinfo, key, key=key, value=value, typecheck=False,
               /# Not necessary since we are passing in parent, but that may
@@ -647,7 +653,8 @@ namespace metax.meta scope:
 
       IGNORE = object()
 
-      def Chk(pair, cls=IGNORE, attr=IGNORE, key=IGNORE, value=IGNORE, head=IGNORE):
+      def Chk(pair, cls=IGNORE, attr=IGNORE, key=IGNORE, value=IGNORE,
+              head=IGNORE):
         actual_attr, attrvalue = pair
         if cls is not IGNORE:
           test.isinst(actual_attr, cls)
@@ -800,7 +807,8 @@ namespace metax.meta scope:
           constructs = value
           value = []
           for construct in constructs:
-            value.append(construct.allpairs(stripcolon=stripcolon, simpletext=simpletext))
+            value.append(
+              construct.allpairs(stripcolon=stripcolon, simpletext=simpletext))
         elif attribute.isSimpleBlock():
           if simpletext:
             value = '\n'.join(value) + '\n'
@@ -1008,7 +1016,9 @@ namespace metax.meta scope:
         If true, do not consider self. If false, do consider self.
     scope:
       target = self.parent().parent() if proper else self
-      if isinstance(kind, re._pattern_type if sys.version_info[0] == 2 else re.Pattern):
+      if isinstance(
+        kind, re._pattern_type if sys.version_info[0] == 2 else re.Pattern
+      ):
         while target and not kind.search(target.kind()):
           target = target.parentConstruct()
       else:
@@ -1365,11 +1375,11 @@ namespace metax.meta scope:
         for key in corder:
           attribute = construct.attr(key)
           if attribute is None:
-            /# So far, this only appears to be happening for attributes of
-            /# type 'expr', when the default value is <special> (not when
-            /# default is <empty>).  Note that field default and _executable_ super
-            /# have <empty> while flag default and var default have <special>
-            /# have a proper empty instance (TODO(wmh): fix)
+            /# So far, this only appears to be happening for attributes of type
+            /# 'expr', when the default value is <special> (not when default is
+            /# <empty>). Note that field default and _executable_ super have
+            /# <empty> while flag default and var default have <special> have a
+            /# proper empty instance (TODO(wmh): fix)
             attribute = metax.attr.ExprAttribute.EmptyMap.get(key, None)
             if attribute is None:
               raise metax.c.Error('Unexpected null key %s' % key)
@@ -1384,11 +1394,11 @@ namespace metax.meta scope:
             else:
               if attribute.value() is None:
                 /# This happens for 'default' in 'var', which is marked in the
-                /# schema as having default <special> and ConsInfo.registerSecondary()
-                /# sets the value to None in such cases.
+                /# schema as having default <special> and
+                /# ConsInfo.registerSecondary() sets the value to None in such
+                /# cases.
                 /# 
                 /# For now, we do not add these attributes.
-                /# print('**** HERE with none %s %s for %s' % (attribute, key, construct.kindfqn()))
                 pass
               else:
                 attribute.lineIs(sline)
@@ -1437,7 +1447,8 @@ namespace metax.meta scope:
       test.iseqtext(
         'visibility public class Person\n'
         'scope:\n'
-        'gender male person bob count 42 default <special> value "this is a test"\n'
+        'gender male person bob count 42 default <special> value '
+        '"this is a test"\n'
         'type vec<str>\n'
         'fruit <apple|banana|cantelope>\n'
         'comment:\n'
@@ -1524,7 +1535,11 @@ namespace metax.meta scope:
         summary = form % data
         matches = filter and re.search(filter, summary)
 
-        if filter and (level > 2 or not scope or self.kind() == 'native') and not matches:
+        if (
+          filter
+          and (level > 2 or not scope or self.kind() == 'native')
+          and not matches
+        ):
           /# We are filtering, and the current line doesn't match the filter,
           /# so we don't show it.
           pass
@@ -1542,7 +1557,6 @@ namespace metax.meta scope:
               sep=sep, minlevel=minlevel, maxlevel=maxlevel,
               width=width, suffix=suffix, filter=filter)
 
-          /# print('For "%s" there were %d children and %s' % (output[-1], len(output) - currdex, matches))
           if len(output) <= currdex and filter:
             /# We are filtering, and there was no match amongst any children,
             /# so we remove this entry too.
@@ -1573,7 +1587,8 @@ namespace metax.meta scope:
       return fp.getvalue()
     test:
       construct = test.basics()
-      test.iseq('visibility public class Person\nscope:\nend;\n', construct.asStr())
+      test.iseq(
+        'visibility public class Person\nscope:\nend;\n', construct.asStr())
     end method asStr;
 
     method termstr : str #:
@@ -1808,7 +1823,8 @@ namespace metax.meta scope:
 
   abstract
   class MetaConstruct < Construct #:
-    @MetaConstruct: Abstract construct from which all Meta(Meta) constructs inherit.
+    @MetaConstruct: Abstract construct from which all Meta(Meta) constructs
+    inherit.
 
     IMPORTANT: Before implementing this construct in metax.meta, we need to
     deal with circularity issues introduced by having metax.c need metax.meta
@@ -2060,15 +2076,17 @@ namespace metax.meta scope:
       children = file_construct.attrval('scope:')
       /# We perform a special analysis to move file-level class constructs into
       /# implicit namespaces.
-      /#  - IMPORTANT: I initially planned to implement this insert-class-into-namespace
-      /#    logic in NamespaceConstruct.expandMeta() and ClassConstruct.expandMeta().
-      /#    Unfortunately, doing so causes NamespaceConstruct.expandMeta() to
-      /#    be invoked on the test namespace before the test methods from the
-      /#    implicit class are added to it, meaning no test methods are
-      /#    produced and state is uninitialized causing the compiler to crash.
-      /#    By performing the operation here, we can get the constructs into
-      /#    the expected state before we do any expansion. As an added benefit,
-      /#    the logic is in one place instead of scattered across two methods.
+
+      /#  - IMPORTANT: I initially planned to implement this 'insert class into
+      /#    namespace' logic in NamespaceConstruct.expandMeta() and
+      /#    ClassConstruct.expandMeta(). Unfortunately, doing so causes
+      /#    NamespaceConstruct.expandMeta() to be invoked on the test namespace
+      /#    before the test methods from the implicit class are added to it,
+      /#    meaning no test methods are produced and state is uninitialized
+      /#    causing the compiler to crash. By performing the operation here, we
+      /#    can get the constructs into the expected state before we do any
+      /#    expansion. As an added benefit, the logic is in one place instead of
+      /#    scattered across two methods.
       /#  - NOTE: it would be nice if FileConstruct was meta-langugage-agnostic,
       /#    but this code is inherently Meta(Oopl)-centric. Move it into a
       /#    metalanguage template method and invoke the method on the metalang.
@@ -2083,7 +2101,8 @@ namespace metax.meta scope:
           if namespace_scope is None:
             /# TODO(wmh): How to indicate that this attribute is implicitly
             /# added, and should not be used during canonicalization?
-            /#  - do we add an implicit field to ComplexBlock? Or to NamespaceConstruct?
+            /#  - do we add an implicit field to ComplexBlock? Or to
+            /#    NamespaceConstruct?
             scope = metax.attr.ComplexBlock(None, 'scope:', [])
             /# print('Added new scope to %s' % child.kindfqn())
             child.registerAttribute(scope)
@@ -2184,7 +2203,8 @@ namespace metax.meta scope:
             if cpname is None:
               parent_clsname = 'metax.meta.Construct'
             else:
-              /# cpname is a *construct* name ... we obtain it and convert to class name.
+              /# cpname is a *construct* name ... we obtain it and convert to
+              /# class name.
               parent_construct = config_attr.cons(cpname)
               parent_clsname = parent_construct.className()
 
@@ -2212,7 +2232,8 @@ namespace metax.meta scope:
             pnum = lnum
             secondaries = []
             secondaries.append(('<', parent_clsname, lnum))
-            secondaries.append(('#:', construct.attrval('comment:', default=None) or [], lnum))
+            secondaries.append(
+              ('#:', construct.attrval('comment:', default=None) or [], lnum))
             if assocscope:
               lnum += 1
               secondaries.append(('assocs:', [], lnum))
@@ -2259,10 +2280,9 @@ namespace metax.meta scope:
                 position='-',
               )
             else:
-              /# print('WARNING: Found explicit kind() method for %s' % construct.kindfqn())
               pass
 
-            /# Now consider the expand:, import:, translate:, compile: constructs.
+            /# Now consider expand:, import:, translate:, compile: attrs.
             /#  - The MetaLanguage construct provides convenience attributes for
             /#    defining expandMeta(), importMeta(), translateMeta() and
             /#    compileMeta()
@@ -2299,7 +2319,8 @@ namespace metax.meta scope:
                      {'var': 'output', 'termcode': 0, 'secondaries': [
                        (':', metax.c.Type.Instance('vec<metax.c.Construct>')),
                        ('=', metax.c.Expr('var', 'null', 'null')),
-                       ('#:', ['Where to write constructs created during expansion.']),
+                       ('#:',[
+                        'Where to write constructs created during expansion.']),
                      ]}], 1))
                 secondaries.append(('scope:', mlines, 2))
                 method = metax.oopl.MethodConstruct.NewFromData(
@@ -2396,10 +2417,6 @@ namespace metax.meta scope:
           fs.chmod(outpath, 0o400)
       else:
         print('Not writing %s due to errors' % outpath)
-      /# Compile the .meta file to verify that it is working properly.
-      /# print('######################\n# IMPORTANT: Execute this!\n######################\n%% metac %s' % outpath)
-      /# import os
-      /# os.system('metac %s' % outpath)
     test:
       /# We want to write into src/kernel/testdata/tmp, but cannot use
       /# testMetaPath() because mtameta.meta is symlinked and __metafile__ 
@@ -2520,7 +2537,8 @@ namespace metax.meta scope:
   scope:
 
     lifecycle setup:
-      test.metafile = test.metafileFor(name='oopl', metal='oopl', basel='python')
+      test.metafile = test.metafileFor(
+        name='oopl', metal='oopl', basel='python')
       test.metafile.parseMeta(test.context)
       test.construct = test.metafile.construct()
     end;
@@ -2817,9 +2835,10 @@ namespace metax.meta scope:
       Obtain a config var by value.
     params:
       var name : str;
-      var default : any = -666;
+      var default : any = -666 #:
+        TODO(wmh): Make this metax.c.REQUIRED when exprs handle xids.
     scope:
-      /# TODO(wmh): Support exprs of for metax.c.REQUIRED!
+      /# TODO(wmh): Support exprs of type xid (e.g. metax.c.REQUIRED).
       if default == -666:
         default = metax.c.REQUIRED
       result = self._configs.get(name, default)

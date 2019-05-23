@@ -309,7 +309,7 @@ scope:
       nb = cls.PowerBits()
       result = cls.ZeroPowers
       unitmap = cls.UnitMap
-      for unit, power in units.iteritems():
+      for unit, power in units.items():
         unitdata = unitmap.get(unit, None)
         if not unitdata: raise Error('Invalid unit "%s"' % unit)
         start = nb * unitdata['index']
@@ -774,7 +774,7 @@ scope:
       /# Verify some invariants and create unitmap
       unitmap = {}
       num_units = 2 ** cls.UnitBits()
-      items = cls.Dimensions().items()
+      items = list(cls.Dimensions().items())
       items.extend(cls.DerivedUnits.items())
       for dimension, data in items:
         data['name'] = dimension
@@ -795,7 +795,7 @@ scope:
         /# Iterate over units.
         /#  - add some additional keys ('unit' and 'dimension')
         /#  - register each unit in unitmap with various keys, ensuring uniqueness.
-        for unit, kdata in units.iteritems():
+        for unit, kdata in units.items():
           kdata['dimension'] = dimension
           kdata['unit'] = unit
           if index is not None:

@@ -1,0 +1,14 @@
+2019-05-21
+ - When parsing a construct with replacer semantics and no explicit id,
+   calling 'write' on the resulting construct has two problems:
+    1. auto-assigned id's get printed
+    2. the implicit nature of the replacer attribute is lost (it becomes
+       explicit).
+
+   For example:
+      case (i > 10) ::
+        j += 3
+
+   becomes:
+      case Meta__1__ expr (i > 10) ::
+        j += 3

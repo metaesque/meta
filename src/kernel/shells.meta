@@ -75,15 +75,22 @@ scope:
       self.defineCommand('sym', self.showSymbols)
 
       /# Directory hierarchy:
-      /#  /disk/<nmsp1>/<nmsp2>/.../<class>
+      /#  /ns/<nmsp1>/<nmsp2>/.../<class>
       /#    provides access to information about already-compiled namespaces
       /#    and classes, aggregating information across all base langs.
+      /#  /disk/<path> 
+      /#    provides access to the real contents of disk directory <path>
       /#  /mem/<metafile>/<nmsp>/.../<class>/<method>
       /#    provides access to information about in-memory parsed .meta files
       /#    and the entire construct hierarchy within each metafile
       /#     - ability to print out the Context associated with arbitrary block
       root = self.filesystem()
-      disk = root.add('dir', 'disk')
+
+      ns = root.add('dir', 'ns')
+
+      disk = root.add(
+        'dir', 'disk', freshold=0,
+        generator=metax.lib.shell.DynamicDirectory.FilesystemGenerator('/disk'))
 
       /# Defining directory 'mem'
       mem = root.add(
