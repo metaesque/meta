@@ -2,6 +2,7 @@ namespace metax.units #:
   Implement units.
 
   TODO(wmh): Consider using the decimal.Decimal class to represent values.
+  Cancel that ... not portable to other languages.
 scope:
 
   class Error < metax.root.Error #:

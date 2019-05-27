@@ -159,8 +159,8 @@
 ; (defconst metaoopl-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
 (defconst metaoopl-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
-(defconst metaoopl-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "accessor" "arg" "assoc" "behavior" "block" "category" "class" "command" "field" "flag" "lifecycle" "loop" "method" "namespace" "native" "receiver" "remark" "resource" "testx" "var"))
-(defconst metaoopl-attribute-keys '("#" "#<*>" "->" "->" "-><*>" "-><*>" ":<*>" "<" "<*>" "<<" "<<*>" "<<<" "<<<*>" "<<<<*>" "=" "=<*>" "@" "@<*>" "access" "alias" "alias<*>" "aliases" "aliases<*>" "associations" "associations<*>" "assocs" "assocs<*>" "autogen" "autokey" "autokey<*>" "binary" "binary<*>" "children" "children<*>" "clinit" "clinit<*>" "clsetup" "clsetup<*>" "clsname" "clsname<*>" "clteardown" "clteardown<*>" "color" "color<*>" "comment" "comment<*>" "compilation" "compile" "compile<*>" "config" "config<*>" "default" "default<*>" "delim" "delim<*>" "dispatch" "expand" "expand<*>" "extensibility" "finalize" "finalize<*>" "flags" "flags<*>" "import" "import<*>" "inheritance" "init" "init<*>" "interface" "interface<*>" "key" "kind" "lazy" "lazy<*>" "level" "location" "metafinalize" "metafinalize<*>" "metainit" "metainit<*>" "metaparent" "metaparent<*>" "multiplicity" "mutability" "name" "name<*>" "nmsp" "nmsp<*>" "optimization" "ownership" "pack" "pack<*>" "params" "params<*>" "parent" "parent<*>" "path" "path<*>" "pclsname" "pclsname<*>" "placement" "position" "postamble" "postamble<*>" "posts" "posts<*>" "preports" "preports<*>" "pres" "pres<*>" "presence" "provides" "provides<*>" "replacer" "replacer<*>" "returns" "returns" "returns<*>" "returns<*>" "role" "role<*>" "scope" "scope<*>" "setup" "setup<*>" "span" "status" "suffixes" "suffixes<*>" "super" "super<*>" "target" "target<*>" "teardown" "teardown<*>" "test" "test<*>" "testparent" "testparent<*>" "testpreports" "testpreports<*>" "tests" "tests<*>" "testsuite" "testsuite<*>" "toplevel" "toplevel<*>" "translate" "translate<*>" "type" "type<*>" "value" "visibility"))
+(defconst metaoopl-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "accessor" "arg" "assoc" "behavior" "block" "case" "category" "class" "command" "field" "flag" "lifecycle" "loop" "method" "namespace" "native" "receiver" "remark" "resource" "switch" "testx" "var"))
+(defconst metaoopl-attribute-keys '("#" "#<*>" "->" "->" "-><*>" "-><*>" ":<*>" "<" "<*>" "<<" "<<*>" "<<<" "<<<*>" "<<<<*>" "=" "=<*>" "@" "@<*>" "access" "alias" "alias<*>" "aliases" "aliases<*>" "associations" "associations<*>" "assocs" "assocs<*>" "autogen" "autokey" "autokey<*>" "binary" "binary<*>" "by" "by<*>" "children" "children<*>" "clinit" "clinit<*>" "clsetup" "clsetup<*>" "clsname" "clsname<*>" "clteardown" "clteardown<*>" "color" "color<*>" "comment" "comment<*>" "compilation" "compile" "compile<*>" "config" "config<*>" "default" "default<*>" "delim" "delim<*>" "dispatch" "else" "else<*>" "expand" "expand<*>" "expr" "expr<*>" "extensibility" "finalize" "finalize<*>" "flags" "flags<*>" "from" "from<*>" "import" "import<*>" "inheritance" "init" "init<*>" "interface" "interface<*>" "is" "is<*>" "key" "kind" "lazy" "lazy<*>" "level" "location" "metafinalize" "metafinalize<*>" "metainit" "metainit<*>" "metaparent" "metaparent<*>" "multiplicity" "mutability" "name" "name<*>" "nmsp" "nmsp<*>" "on" "on<*>" "optimization" "over" "over<*>" "ownership" "pack" "pack<*>" "params" "params<*>" "parent" "parent<*>" "path" "path<*>" "pclsname" "pclsname<*>" "placement" "position" "postamble" "postamble<*>" "posts" "posts<*>" "preamble" "preamble<*>" "preports" "preports<*>" "pres" "pres<*>" "presence" "provides" "provides<*>" "replacer" "replacer<*>" "returns" "returns" "returns<*>" "returns<*>" "role" "role<*>" "scope" "scope<*>" "setup" "setup<*>" "span" "status" "suffixes" "suffixes<*>" "super" "super<*>" "target" "target<*>" "teardown" "teardown<*>" "test" "test<*>" "testparent" "testparent<*>" "testpreports" "testpreports<*>" "tests" "tests<*>" "testsuite" "testsuite<*>" "to" "to<*>" "toplevel" "toplevel<*>" "translate" "translate<*>" "type" "type<*>" "until" "until<*>" "value" "visibility" "while" "while<*>"))
 (defconst metaoopl-feature-values '("<concrete" "abstract" "aliaskey" "autodispatch" "closure" "cls" "concrete" "const" "decl" "def" "defn" "explicit" "extendable" "feature" "final" "finalizer" "general" "immutable" "implicit" "initializer" "inline" "instance" "lib" "meta" "multi" "mutable" "named" "new" "nmsp" "nokey" "nometa" "nometanotest" "nonvirtual" "normal" "notest" "noval" "optional" "outline" "override" "owned" "package" "post" "postx" "pre" "prex" "primary" "private" "protected" "public" "raw" "required" "ro" "rw" "rwx" "scoped" "secondary" "showkey" "showval" "specific" "static" "std" "superx" "test" "tmpprivate" "tmppublic" "undef" "unowned" "user" "usertest" "userval" "virtual"))
 (defconst metaoopl-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
 (defconst metaoopl-basewords      '("alignas" "alignof" "and" "and_eq" "as" "asm" "assert" "auto" "bitand" "bitor" "bool" "break" "case" "catch" "char" "char16_t" "char32_t" "class" "compl" "const" "const_cast" "constexpr" "continue" "debugger" "decltype" "def" "default" "del" "delete" "do" "double" "dynamic_cast" "elif" "else" "enum" "except" "exec" "explicit" "export" "extends" "extern" "false" "finally" "float" "for" "friend" "from" "function" "global" "goto" "if" "implements" "import" "in" "inline" "instanceof" "int" "interface" "is" "lambda" "let" "long" "mutable" "namespace" "new" "noexcept" "not" "not_eq" "nullptr" "operator" "or" "or_eq" "package" "pass" "print" "private" "protected" "public" "raise" "register" "reinterpret_cast" "return" "short" "signed" "sizeof" "static" "static_assert" "static_cast" "struct" "super" "switch" "template" "this" "thread_local" "throw" "true" "try" "typedef" "typeid" "typename" "typeof" "union" "unsigned" "using" "var" "virtual" "void" "volatile" "wchar_t" "while" "with" "xor" "xor_eq" "yield"))
@@ -188,12 +188,14 @@
 (puthash 'metaoopl-Template-line (concat (gethash 'metaoopl-Template-kv RE) "\\(Template\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-accessor-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-accessor-line (concat (gethash 'metaoopl-accessor-kv RE) "\\(accessor\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl-assoc-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("cls" "decl" "def" "kind" "lib" "location" "meta" "std" "test" "user" "usertest")) "\[ \t\]\\)*") RE)
+(puthash 'metaoopl-assoc-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("cls" "decl" "def" "kind" "lib" "location" "meta" "optional" "required" "status" "std" "test" "user" "usertest")) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-assoc-line (concat (gethash 'metaoopl-assoc-kv RE) "\\(assoc\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-behavior-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "autodispatch" "autogen" "closure" "cls" "concrete" "const" "dispatch" "extendable" "extensibility" "final" "finalizer" "general" "immutable" "inheritance" "initializer" "inline" "instance" "kind" "location" "meta" "mutability" "mutable" "new" "nonvirtual" "notest" "optimization" "outline" "override" "package" "postx" "presence" "prex" "private" "protected" "public" "span" "specific" "static" "std" "superx" "test" "user" "usertest" "virtual" "visibility")) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-behavior-line (concat (gethash 'metaoopl-behavior-kv RE) "\\(behavior\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-block-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("kind" "named" "scoped" "virtual")) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-block-line (concat (gethash 'metaoopl-block-kv RE) "\\(block\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metaoopl-case-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metaoopl-case-line (concat (gethash 'metaoopl-case-kv RE) "\\(case\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-category-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-category-line (concat (gethash 'metaoopl-category-kv RE) "\\(category\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-class-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "autogen" "concrete" "general" "location" "meta" "nometa" "nometanotest" "notest" "presence" "private" "public" "span" "specific" "std" "test" "user" "usertest" "visibility")) "\[ \t\]\\)*") RE)
@@ -220,6 +222,8 @@
 (puthash 'metaoopl-remark-line (concat (gethash 'metaoopl-remark-kv RE) "\\(remark\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-resource-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("location" "meta" "test" "user" "usertest")) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-resource-line (concat (gethash 'metaoopl-resource-kv RE) "\\(resource\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metaoopl-switch-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metaoopl-switch-line (concat (gethash 'metaoopl-switch-kv RE) "\\(switch\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-testx-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-testx-line (concat (gethash 'metaoopl-testx-kv RE) "\\(testx\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-var-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("multi" "multiplicity" "normal")) "\[ \t\]\\)*") RE)
@@ -691,14 +695,17 @@
 (defun metaoopl-prev-class ()
   (interactive)
   (metaoopl-next-construct "class" 'backward))
+
+(setq metaoopl-var-current-class nil)
 (defun metaoopl-current-class ()
   (interactive)
-  (let ((p (point))
-        (data (metaoopl-next-construct "class" 'backward))
-        clsname)
-    (setq clsname )
+  (let* (
+      (p (point))
+      (data (metaoopl-next-construct "class" 'backward))
+      (clsname (assoc-default 'id data)))
     (goto-char p)
-    (message (format "%s %s" (assoc-default 'kind data) (assoc-default 'id data)))))
+    (setq metaoopl-var-current-class clsname)
+    (message (format "%s %s" (assoc-default 'kind data) clsname))))
 
 ;; Construct method
 ;;  - it would be nice to have these methods work for both
@@ -1207,29 +1214,41 @@ such newline-indentation is provided.")
     )
 )
 
-(defun insert-construct (ctype &optional id)
-   (interactive "sConstruct: \nsName:")
+(setq metaoopl-var-current-construct "")
+(defun metaoopl-insert-construct ()
+   (interactive)  ;; inputs: kind and uid (see below).
 
-   (let ((str (if (null id) "" (concat " " id))))
+   (let (
+     final
+     (kind
+      (read-from-minibuffer
+       (format "kind [%s]: " metaoopl-var-current-construct)))
+     (uid (read-from-minibuffer "uid: ")))
+
+     ;; If kind is empty, use metaoopl-var-current-construct
+     (cond
+      ((eq (length kind) 0)
+       (setq kind metaoopl-var-current-construct)))
 
      ;; Insert construct start at correct indentation
      (metaoopl-indent-line)
-     (insert (concat ctype str " {\n"))
+     (insert (format "%s %s ::\n" kind uid))
 
      ;; Insert (empty) one line within the SCOPE
+     ;;  - note that metaoopl-indent-line will indent 2 spaces relative to prev
      (metaoopl-indent-line)
      (insert "\n")
+     (setq final (- (point) 1))
 
      ;; Insert the end-of-construct line
-     (insert (concat "} " (downcase ctype) str ";\n"))
-     (next-line -1)
+     ;;  - note that metaoopl-indent-line will indent 2 spaces relative to prev
      (metaoopl-indent-line)
+     (backward-char 2)
+     (insert (format "end %s %s;\n" kind uid))
+     (goto-char final)
 
-     ;; Move back up to original line and position cursor
-     ;; after the construct primary key/value.
-     (next-line -2)
-     (end-of-line)
-     (forward-char -2)
+     ;; remember current construct
+     (setq metaoopl-var-current-construct kind)
   )
 )
 

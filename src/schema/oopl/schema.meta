@@ -1667,7 +1667,7 @@ config:
   config:
 
     primary
-    Attribute case : word = <auto> replacer expr #:
+    Attribute case : word = <auto> replacer expr aliases <if> #:
       The name of the cond. The value is implicitly mapped onto the 'name'
       attribute if a 'name' does not exist.
 

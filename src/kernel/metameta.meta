@@ -820,34 +820,29 @@ namespace metax.meta scope:
         result[key] = value
       return result
     test:
-      construct = test.constructInCode('demo.tmp/Person', name='oopl')
+      test.tpy()
+      construct = test.klass
       allpairs = construct.allpairs()
       float_type = metax.c.Type.Instance('float')
+      str_type = metax.c.Type.Instance('str')
+      ostream_type = metax.c.Type.Instance('ostream')
+
       test.iseq(
-        {
-          'scope:': [
-            {
-              'field': 'height',
-              'type': float_type,
-            },
-            {
-              'field': 'weight',
-              'type': float_type,
-            },
-            {
-              'scope:': ['return self.weight() / (self.height() ** 2)'],
-              'returns': float_type,
-              'method': 'bmi',
-            }
-          ],
-          'class': 'Person',
-          'comment:': [
-            'First line should be oneline summary.',
-            'Subsequent lines are for more details and',
-            'can be formatted in Meta(Doc) syntax.',
-          ]
-        },
-        allpairs)
+        ['associations:', 'class', 'comment:', 'scope:'],
+        sorted(allpairs))
+      test.iseq('Person', allpairs['class'])
+      test.iseq(
+        [
+          'First line should be oneline summary.',
+          '',
+          'Subsequent lines are for more details and can be formatted in',
+          'Meta(Doc) syntax.',
+        ],
+        allpairs['comment:'])
+      scopelist = allpairs['scope:']
+      test.iseq(
+        {'field': 'name', 'type': str_type},
+        scopelist[0])
     end method allpairs;
 
     method parentConstruct : *metax.meta.Construct #:
@@ -877,24 +872,44 @@ namespace metax.meta scope:
         a request to return an Attribute rather than a Construct. For example,
         '/nm.sp/Person/bmi@scope' returns the 'bmi' method construct, while
         '/nm.sp/Person/@scope' returns the scope of Person.
+      var delim : str = None #:
+        What is used to separate descendents.
+         - Use '/' to avoid the issues with the non-nesting of namespace ids,
+           and for a more intuitive syntax for absolute specifications 
+           ('/nm.sp/Class/method' is more familiar than '.nm.sp.Class.method')
+         - Use '.' to allow fqn's to be resolved. Note that fqns are resolved
+           relative to the FileConstruct, so although '.nm.sp.Class.method' is
+           supported, it is the same as 'nm.sp.Class.method' when child() is
+           invoked a FilConstruct.
+         - Use null to have the delim heuristically picked based on spec
+           (if a '/' exists, uses '/', else uses '.').
       var fp : ostream = null #:
         If non-null, where to write failure information.
     scope:
+      if delim is None:
+        delim = '/' if '/' in spec else '.'
       /# If 'spec' starts with '/', it is a request to find a child relative
       /# to the FileConstruct that this construct resides within.
-      terms = spec.split('/')
+      terms = spec.split(delim)
       if terms[0] == '':
         /# The path is relative to the File construct.
         construct = self.metafile().construct()
-        terms.pop(0)
+        /# Although in general this method avoids using recursion, FileConstruct
+        /# provides a specialized method so we invoke it (which will re-invoke
+        /# this method).
+        if delim == '.':
+          return construct.child(spec[1:], delim=delim, fp=fp)
+        else:
+          /# We use this implementation, removing the empty term.
+          terms.pop(0)
       else:
         construct = self
 
       /# Now for each <term> in <spec> traverse down the lexical chain from
       /# construct.
       m = len(terms) - 1
+      procterms = []
       for i, term in enumerate(terms):
-
         /# Parse the term
         idattr = term.split('@')
         ialen = len(idattr)
@@ -903,7 +918,7 @@ namespace metax.meta scope:
         if not id and i < m:
           /# Must specify id for all terms except last
           if fp:
-            fp.write(u'Must specify id for all terms except last: %s' % spec)
+            fp.write(u'Must specify id for all terms except last: %s\n' % spec)
           construct = None
           break
 
@@ -915,15 +930,10 @@ namespace metax.meta scope:
           construct.rawattr(attr + ':', default=None) or
           construct.rawattr(attr, default=None))
 
-        if False:
-          print(
-            'id=%s attr=%s ids=%s' %
-            (id, attr, attribute.map().keys() if attribute else None))
-
         if attribute is None:
           /# Failed to find the specified attribute.
           if fp:
-            fp.write(u'Did not find attribute %s: %s' % (attr, spec))
+            fp.write(u'Did not find attribute %s: %s\n' % (attr, spec))
           construct = None
           break
         elif not id:
@@ -934,38 +944,99 @@ namespace metax.meta scope:
         else:
           construct = attribute.cons(id, default=None)
           if construct is None:
-            /# Failedd to find the specified id.
+            /# Failed to find the specified id.
             if fp:
-              fp.write(u'Did not find construct %s: %s' % (id, spec))
+              fp.write(
+                u'Did not find %s in %s of %s [%s]\n' %
+                (id, attr, '.'.join(procterms), spec))
             construct = None
             break
+          else:
+            /# Success.
+            if fp:
+              fp.write(u'Found %s for %s\n' % (term, spec))
 
+        procterms.append(term)
+
+      /# This may be an attribute.
       return construct
-    test:
-      filecons = test.constructInCode('', name='oopl')
-      namespace = filecons.child('demo.tmp')
-      test.notnull(namespace)
+    tests:
+      testx slash ::
+        filecons = test.constructInCode('', name='oopl')
+        namespace = filecons.child('demo.tmp', delim='/')
+        test.notnull(namespace)
+        namespace2 = filecons.child('demo.tmp', delim='.')
+        test.issame(namespace, namespace2)
+        namespace3 = filecons.child('demo.tmp', delim=None)
+        test.issame(namespace, namespace3)
 
-      person1 = namespace.child('Person')
-      person2 = filecons.child('demo.tmp/Person')
-      person3 = namespace.child('/demo.tmp/Person')
-      test.notnull(person1)
-      test.issame(person1, person2)
-      test.issame(person1, person3)
+        person1 = namespace.child('Person')
+        person2 = filecons.child('demo.tmp/Person', delim='/')
+        person3 = filecons.child('demo.tmp.Person', delim='.')
+        person4 = filecons.child('demo.tmp.Person', delim=None)
+        person5 = namespace.child('/demo.tmp/Person')
+        test.notnull(person1)
+        test.issame(person1, person2)
+        test.issame(person1, person3)
+        test.issame(person1, person4)
+        test.issame(person1, person5)
 
-      method1 = namespace.child('Person/bmi')
-      method2 = filecons.child('demo.tmp/Person/bmi')
-      method3 = namespace.child('/demo.tmp/Person/bmi')
-      test.notnull(method1)
-      test.issame(method1, method2)
-      test.issame(method1, method3)
+        method1 = namespace.child('Person/bmi')
+        method2 = filecons.child('demo.tmp/Person/bmi')
+        method2b = filecons.child('demo.tmp/Person/bmi', delim='/')
+        method2c = filecons.child('demo.tmp.Person.bmi', delim='.')
+        method2d = filecons.child('demo.tmp/Person/bmi', delim=None)
+        method2e = filecons.child('demo.tmp.Person.bmi', delim=None)
+        method3 = namespace.child('/demo.tmp/Person/bmi')
+        method3b = namespace.child('/demo.tmp/Person/bmi', delim='/')
+        method3c = namespace.child('.demo.tmp.Person.bmi', delim='.')
+        method3d = namespace.child('/demo.tmp/Person/bmi', delim=None)
+        method3e = namespace.child('.demo.tmp.Person.bmi', delim=None)
+        test.notnull(method1)
+        test.issame(method1, method2)
+        test.issame(method1, method2b)
+        test.issame(method1, method2c)
+        test.issame(method1, method2d)
+        test.issame(method1, method2e)
+        test.issame(method1, method3)
+        test.issame(method1, method3b)
+        test.issame(method1, method3c)
+        test.issame(method1, method3d)
+        test.issame(method1, method3e)
 
-      filecons2 = test.constructInCode('', name='meta')
-      test.isnull(filecons2.child('test/special'))
-      special = filecons2.child('test/special@config')
-      test.notnull(special)
-      specspec = filecons2.child('test/special@config/special@config')
-      test.iseq('Attribute test.special.special', specspec.kindfqn())
+        filecons2 = test.constructInCode('', name='meta')
+        test.isnull(filecons2.child('test/special'))
+        special = filecons2.child('test/special@config')
+        test.notnull(special)
+        specspec = filecons2.child('test/special@config/special@config')
+        test.iseq('Attribute test.special.special', specspec.kindfqn())
+
+      testx dot ::
+        filecons = test.constructInCode('', name='oopl')
+        namespace = filecons.child('demo.tmp')
+        test.notnull(namespace)
+
+        person1 = namespace.child('Person')
+        person2 = filecons.child('demo.tmp/Person')
+        person3 = namespace.child('/demo.tmp/Person')
+        test.notnull(person1)
+        test.issame(person1, person2)
+        test.issame(person1, person3)
+
+        method1 = namespace.child('Person/bmi')
+        method2 = filecons.child('demo.tmp/Person/bmi')
+        method3 = namespace.child('/demo.tmp/Person/bmi')
+        test.notnull(method1)
+        test.issame(method1, method2)
+        test.issame(method1, method3)
+
+        filecons2 = test.constructInCode('', name='meta')
+        test.isnull(filecons2.child('test/special'))
+        special = filecons2.child('test/special@config')
+        test.notnull(special)
+        specspec = filecons2.child('test/special@config/special@config')
+        test.iseq('Attribute test.special.special', specspec.kindfqn())
+
     end method child;
 
     method path : str #:
@@ -995,6 +1066,10 @@ namespace metax.meta scope:
       method = filecons.child('/demo.tmp/Person/bmi')
       test.notnull(method)
       test.iseq('/demo.tmp/Person/bmi', method.path())
+      method2 = namespace.child('Person/bmi')
+      test.issame(method, method2)
+      method3 = person.child('bmi')
+      test.issame(method, method3)
 
       filecons2 = test.constructInCode('', name='meta')
 
@@ -1032,6 +1107,27 @@ namespace metax.meta scope:
       test.iseq('File a.meta', construct.ancestor('File').kindid())
       test.isnull(construct.ancestor('method'))
     end method ancestor;
+
+    method ancestorIn : *metax.meta.Construct #:
+      Obtain the nearest ancestor construct matching any of a list of kinds.
+    params:
+      var kinds : vec<str> #:
+        The kinds of the ancestor construct desired.
+      var proper : bool = true #:
+        If true, do not consider self. If false, do consider self.
+    scope:
+      target = self.parent().parent() if proper else self
+      /# Support regexps or no?
+      while target and target.kind() not in kinds:
+        target = target.parentConstruct()
+      return target
+    test:
+      construct = test.defineConstructs()
+      /# construct.write()
+      test.iseq('namespace nm.sp', construct.ancestor('namespace').kindid())
+      test.iseq('File a.meta', construct.ancestor('File').kindid())
+      test.isnull(construct.ancestor('method'))
+    end method ancestorIn;
 
     method distance : int #:
       Obtain the distance to the ancestor of specified kind.
@@ -1287,14 +1383,14 @@ namespace metax.meta scope:
       /# Verify expectations before changing parent.
       test.issame(file_scope, student.parent())
       test.issame(namespace_scope, person.parent())
-      test.iseq(1, namespace_scope.size())
-      test.iseq(2, file_scope.size())
+      test.iseq(2, namespace_scope.size())
+      test.iseq(4, file_scope.size())
 
       /# Now move Student into the namespace.
       student.changeParent(namespace_scope)
       test.issame(namespace_scope, student.parent())
-      test.iseq(2, namespace_scope.size())
-      test.iseq(1, file_scope.size())
+      test.iseq(3, namespace_scope.size())
+      test.iseq(3, file_scope.size())
 
       /# TODO(wmh): There are more things to test here, especially related
       /# to the undone updating of myclass!
@@ -1566,15 +1662,21 @@ namespace metax.meta scope:
 
       return output
     test:
-      construct = test.constructInCode('demo.tmp/Person', name='oopl')
-      construct.writeIndex()
-      output = construct.writeIndex()
+      test.tpy()
+      person = test.klass
+      person.writeIndex()
+      output = person.writeIndex()
       test.iseqvec(
         [
           '   3  class Person',
-          '   8    field height',
-          '   9    field weight',
-          '  10    method bmi',
+          '  11    field name',
+          '  12    field height',
+          '  13    field weight',
+          '  15    lifecycle Person',
+          '  22    method bmi',
+          '  29    method show',
+          '  35    method ClassMethod',
+          '  38    method StaticMethod',
         ],
         output)
     end method writeIndex;
@@ -1774,12 +1876,13 @@ namespace metax.meta scope:
         desc = ''
       return summary, desc
     test:
-      construct = test.constructInCode('demo.tmp/Person', name='oopl')
+      test.tpy()
+      person = test.klass
       test.iseq(
         ('First line should be oneline summary.',
-         'Subsequent lines are for more details and\n'
-         'can be formatted in Meta(Doc) syntax.'),
-        construct.splitComment())
+         'Subsequent lines are for more details and can be formatted in\n'
+         'Meta(Doc) syntax.'),
+        person.splitComment())
     end method splitComment;
 
     abstract
@@ -1959,7 +2062,6 @@ namespace metax.meta scope:
       /# the contents of test.construct to a tmp file, then invoke
       /# test.construct.compiler().metalangNamed('test', <path>) on it.
       /# That will, among other things, invoke postCreationInitialization().
-      print('Fix MetaLanguageConstruct.postCreationInitialization test')
       if False:
         construct = test.construct
         tmppath = 'fixme'
@@ -2135,13 +2237,16 @@ namespace metax.meta scope:
 
       /# Before invoking preExpandFileConstruct, the namespace has one child.
       scope = namespace_construct.attr('scope:')
-      test.iseq(['Person'], sorted(scope.map().keys()))
+      test.iseq(['Person', 'uid'], sorted(scope.map().keys()))
       person = scope.cons('Person')
       test.issame(file_construct, pre_student.parentConstruct())
 
       /# After invoking preExpandFileConstruct, the namespace has two children.
       test.construct.preExpandFileConstruct(file_construct)
-      test.iseq(['Person', 'Student'], sorted(scope.map().keys()))
+      test.iseq(
+        /# TODO(wmh): Should TestCase be in this list?
+        ['Error', 'Person', 'Student', 'TestCase', 'uid'],
+        sorted(scope.map().keys()))
       post_student = scope.cons('Student')
       test.issame(namespace_construct, post_student.parentConstruct())
     end method preExpandFileConstruct;
@@ -2500,6 +2605,11 @@ namespace metax.meta scope:
 
     method kind : str scope:
       return 'Attribute'
+    test:
+      test.basics()
+      construct = metax.meta.AttributeConstruct(
+        'visibility', None, test.context)
+      test.iseq('Attribute', construct.kind())
     end method kind;
 
   end class AttributeConstruct;
@@ -2554,6 +2664,92 @@ namespace metax.meta scope:
       Exact semantics depends on the Meta language being parsed. In Meta(Oopl),
       this is a NamespaceConstruct, and is used to establish which namespace
       to add a class that is a file level.
+
+    override
+    method child : any #:
+      Obtain a Construct or Attribute descendent node
+    params:
+      var spec : str #:
+        See Construct.child()
+      var delim : str = null #:
+        See Construct.child()
+      var fp : ostream = null #:
+        See Construct.child()
+    scope:
+      if delim is None:
+        delim = '/' if '/' in spec else '.'
+      if delim == '.':
+        if not spec:
+          /# Empty spec means return the file construct.
+          return self
+
+        /# Currently, namespace ids can contain '.' (i.e. for namespace 'nm.sp',
+        /# rather than having the FileConstruct contain 'nm' that contains 'sp',
+        /# we have FileConstruct contain 'nm.sp' directly). Although there
+        /# are efficiency advantages to this approach, it does make resolution
+        /# more difficult.
+        /#
+        /# In this code, we support finding the 'nm.sp' namespace for specs
+        /# like 'nm.sp.Person.bmi', and 'nm.sp@config.Class' but not 
+        /# nm@config.sp.Class' (there is no 'nm' so no 'config:' block within
+        /# it).
+        result = None
+        terms = spec.split(delim)
+        if terms[0] == '':
+          /# A fully qualified and relative spec mean the same thing for
+          /# FileConstructs, so we just ignore an initial empty term (which
+          /# means spec was fully qualified).
+          terms.pop(0)
+
+        i = 0
+        n = len(terms)
+        while i < n:
+          idattr = ('.'.join(terms[:i+1])).split('@')
+          id = idattr[0]
+          attr = idattr[1] if len(idattr) > 1 else 'scope'
+      
+          /# See notes in Construct.child() for why we do the following.
+          attribute = (
+            self.rawattr(attr + ':', default=None) or
+            self.rawattr(attr, default=None))
+
+          if attribute:
+            namespace = attribute.cons(id, default=None)
+            if namespace:
+              /# We have found the namespace, and can obtain the final result
+              /# by invoking child on it with the rest of the terms.
+              rest = '.'.join(terms[i+1:])
+              if rest:
+                result = namespace.child(rest, delim=delim, fp=fp)
+              else:
+                result = namespace
+              break
+
+          /# The current subset does not represent a namespace, so we try a
+          /# larger prefix of spec.
+          i += 1
+      else:
+        result = super(FileConstruct, self).child(spec, delim=delim, fp=fp)
+      return result
+    test:
+      filecons = test.constructInCode('', name='oopl')
+
+      namespace = filecons.child('demo.tmp', delim='/')
+      test.notnull(namespace)
+      namespace2 = filecons.child('demo.tmp', delim='.')
+      test.issame(namespace, namespace2)
+      namespace3 = filecons.child('demo.tmp', delim=None)
+      test.issame(namespace, namespace3)
+
+      person = filecons.child('demo.tmp/Person', delim='/')
+      person2 = filecons.child('demo.tmp.Person', delim='.')
+      person3 = filecons.child('demo.tmp.Person', delim=None)
+      person4 = filecons.child('demo.tmp/Person', delim=None)
+      test.notnull(person)
+      test.iseq(person, person2)
+      test.iseq(person, person3)
+      test.iseq(person, person4)
+    end method child;
 
     method path : str #:
       The path to this construct within the metafile.
@@ -2668,7 +2864,8 @@ namespace metax.meta scope:
 
       metax.c.D.imports.end()
     test:
-      test.construct.importMeta()
+      test.tpy(expand=True)  # expand before import
+      test.file.importMeta()
     end method importMeta;
 
     override
@@ -2683,7 +2880,6 @@ namespace metax.meta scope:
       /# TODO(wmh): This created
       /#   $WMH/lib/meta/oopl/python/demo/tmp[_test]
       /# Avoid writing to the real directory hierarchy
-      print('Fix Construct.translateMeta test')
       if False:
         test.construct.expandMeta()
         test.construct.translateMeta()
@@ -2915,3 +3111,4 @@ namespace metax.meta scope:
   end;
 
 end namespace metax.meta;
+

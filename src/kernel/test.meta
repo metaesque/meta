@@ -2133,9 +2133,9 @@ scope:
         print(u'iseq: %s' % str(item))
       else:
         if message is None:
-          eval = str(expected).replace('\n', '\\n')
           aval = str(item).replace('\n', '\\n')
-          message = u'"%s" != "%s"' % (eval, aval)
+          eval = str(expected).replace('\n', '\\n')
+          message = u'"%s" != "%s"' % (aval, eval)
         self.assertEqual(expected, item, message)
     test<py>:
       tc = self._tc

@@ -43,7 +43,7 @@ namespace demo.stmts scope:
       var s : int = 5;
       var container : vec<int> = [1,2,3];
 
-      loop i over container ::
+      loop l1 on i over container ::
         print(i)
 
       loop j from 10 to 20 by 2 ::

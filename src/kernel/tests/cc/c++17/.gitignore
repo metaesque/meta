@@ -1,4 +1,4 @@
-bazel-*
-any
-main
-
+/bazel-*
+/any
+/main
+/hello

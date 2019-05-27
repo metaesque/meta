@@ -567,7 +567,9 @@ scope:
     lifecycle params:
       var parent : Construct;
       var key : str;
-      var value : str;
+      var value : expr #:
+        There is currently some support for auto-converting strings to Expr,
+        but that may be removed.
       var litkey : str = null;
       var line : int = -1;
       var col : int = -1;
@@ -1050,9 +1052,9 @@ scope:
       return result
     test:
       scope = test.constructInCode('/demo.tmp/Person/@scope', name='oopl')
-      test.iseq(0, scope.findIndex('height'))
-      test.iseq(1, scope.findIndex('weight'))
-      test.iseq(2, scope.findIndex('bmi'))
+      test.iseq(1, scope.findIndex('height'))
+      test.iseq(2, scope.findIndex('weight'))
+      test.iseq(4, scope.findIndex('bmi'))
       test.raises(metax.c.Error, scope.findIndex, 'missing')
       test.isnull(scope.findIndex('missing', default=None))
     end method findIndex;
@@ -1182,7 +1184,11 @@ scope:
       scope = test.constructInCode('/demo.tmp/Person/@scope', name='oopl')
 
       test.iseqvec(
-        ['field height', 'field weight', 'method bmi'],
+        [
+          'field name', 'field height', 'field weight', 'lifecycle Person',
+          'method bmi', 'method show',
+          'method ClassMethod', 'method StaticMethod',
+        ],
         [c.kindid() for c in scope.value()])
 
       /# Add a construct at the end of existing constructs.
@@ -1190,7 +1196,11 @@ scope:
         'amethod', scope, test.context, 'method')
       scope.registerConstruct(cons1)
       test.iseqvec(
-        ['field height', 'field weight', 'method bmi', 'method amethod'],
+        [
+          'field name', 'field height', 'field weight', 'lifecycle Person',
+          'method bmi', 'method show',
+          'method ClassMethod', 'method StaticMethod', 'method amethod',
+        ],
         [c.kindid() for c in scope.value()])
 
       /# Add a construct before all constructs.
@@ -1198,24 +1208,42 @@ scope:
         'afield', scope, test.context, 'field')
       scope.registerConstruct(cons2, position='-')
       test.iseqvec(
-        ['field afield', 
-         'field height', 'field weight', 'method bmi', 'method amethod'],
+        [
+          'field afield', 
+          'field name', 'field height', 'field weight', 'lifecycle Person',
+          'method bmi', 'method show',
+          'method ClassMethod', 'method StaticMethod', 'method amethod',
+        ],
         [c.kindid() for c in scope.value()])
 
       /# Add a construct after a named construct.
       cons3 = metax.meta.GenericConstruct('hack1', scope, test.context, 'hack')
       scope.registerConstruct(cons3, position='+weight')
       test.iseqvec(
-        ['field afield', 'field height', 'field weight', 'hack hack1',
-         'method bmi', 'method amethod'],
+        [
+          'field afield', 
+          'field name', 'field height', 'field weight',
+          'hack hack1',
+          'lifecycle Person',
+          'method bmi', 'method show',
+          'method ClassMethod', 'method StaticMethod', 'method amethod',
+        ],
         [c.kindid() for c in scope.value()])
 
       /# Add a construct before a named construct.
       cons4 = metax.meta.GenericConstruct('hack2', scope, test.context, 'hack')
       scope.registerConstruct(cons4, position='-height')
       test.iseqvec(
-        ['field afield', 'hack hack2', 'field height', 'field weight', 
-         'hack hack1', 'method bmi', 'method amethod'],
+        [
+          'field afield', 
+          'field name',
+          'hack hack2',
+          'field height', 'field weight',
+          'hack hack1',
+          'lifecycle Person',
+          'method bmi', 'method show',
+          'method ClassMethod', 'method StaticMethod', 'method amethod',
+        ],
         [c.kindid() for c in scope.value()])
     end method registerConstruct;
 
@@ -1246,24 +1274,31 @@ scope:
     test:
       test.captureStdout()
       scope = test.constructInCode('/demo.tmp/Person/@scope', name='oopl')
+      expected = [
+        'field name', 'field height', 'field weight', 'lifecycle Person',
+        'method bmi', 'method show',
+        'method ClassMethod', 'method StaticMethod',
+      ]
 
-      test.iseqvec(
-        ['field height', 'field weight', 'method bmi'],
-        [c.kindid() for c in scope.value()])
+      test.iseqvec(expected, [c.kindid() for c in scope.value()])
 
       /# Register a construct within existing constructs.
       cons1 = metax.meta.GenericConstruct(
         'amethod', scope, test.context, 'method')
       scope.registerConstruct(cons1, position='-weight')
       test.iseqvec(
-        ['field height', 'method amethod', 'field weight', 'method bmi'],
+        [
+          'field name', 'field height', 
+          'method amethod',
+          'field weight', 'lifecycle Person',
+          'method bmi', 'method show',
+          'method ClassMethod', 'method StaticMethod',
+        ],
         [c.kindid() for c in scope.value()])
 
       /# Now unregister it.
       scope.unregisterConstruct(cons1)
-      test.iseqvec(
-        ['field height', 'field weight', 'method bmi'],
-        [c.kindid() for c in scope.value()])
+      test.iseqvec(expected, [c.kindid() for c in scope.value()])
 
     end method unregisterConstruct;
 
@@ -1272,8 +1307,16 @@ scope:
   behavior isFeature #:
     Convenience method for determining if an attribute is a FeatureAttribute.
   scope:
+
     receiver Attribute scope:
       return False
+    test:
+      test.defineAttributes()
+      test.isfalse(test.word.isFeature())
+      test.isfalse(test.id.isFeature())
+      test.isfalse(test.simple.isFeature())
+      test.isfalse(test.complex.isFeature())
+    end;
 
     receiver FeatureAttribute scope:
       return True
@@ -1290,8 +1333,15 @@ scope:
   behavior isBlock #:
     Convenience method for determining if an attribute is a BlockAttribute.
   scope:
+
     receiver Attribute scope:
       return False
+    test:
+      test.defineAttributes()
+      test.isfalse(test.feature.isBlock())
+      test.isfalse(test.word.isBlock())
+      test.isfalse(test.id.isBlock())
+    end;
 
     receiver BlockAttribute scope:
       return True
@@ -1309,6 +1359,13 @@ scope:
   scope:
     receiver Attribute scope:
       return False
+    test:
+      test.defineAttributes()
+      test.isfalse(test.feature.isSimpleBlock())
+      test.isfalse(test.word.isSimpleBlock())
+      test.isfalse(test.id.isSimpleBlock())
+      test.isfalse(test.complex.isSimpleBlock())
+    end;
 
     receiver SimpleBlock scope:
       return True
@@ -1323,8 +1380,16 @@ scope:
   behavior isComplexBlock #:
     Convenience method for determining if an attribute is a ComplexBlock
   scope:
+
     receiver Attribute scope:
       return False
+    test:
+      test.defineAttributes()
+      test.isfalse(test.feature.isComplexBlock())
+      test.isfalse(test.word.isComplexBlock())
+      test.isfalse(test.id.isComplexBlock())
+      test.isfalse(test.simple.isComplexBlock())
+    end;
 
     receiver ComplexBlock scope:
       return True
@@ -1339,7 +1404,8 @@ scope:
   behavior valueStr #:
     A string representation of the value of an Attribute.
 
-    TODO(wmh): Decide if this will stay around or be subsumed by writeValueLines()
+    TODO(wmh): Decide if this will stay around or be subsumed by
+    writeValueLines()
      - valueStr() is problematic for values spanning multiple lines
        (e.g. block-valued attributes)
      - valueStr() is less efficient than writeValueLines() since it has to
@@ -1352,8 +1418,8 @@ scope:
       See Construct.write() for details on mode semantics.
   scope:
 
-    receiver Attribute scope:
-      raise NotImplementedError
+    abstract
+    receiver Attribute;
 
     receiver IdAttribute scope:
       return str(self.value())

@@ -637,14 +637,17 @@
 (defun metaoopl-prev-class ()
   (interactive)
   (metaoopl-next-construct "class" 'backward))
+
+(setq metaoopl-var-current-class nil)
 (defun metaoopl-current-class ()
   (interactive)
-  (let ((p (point))
-        (data (metaoopl-next-construct "class" 'backward))
-        clsname)
-    (setq clsname )
+  (let* (
+      (p (point))
+      (data (metaoopl-next-construct "class" 'backward))
+      (clsname (assoc-default 'id data)))
     (goto-char p)
-    (message (format "%s %s" (assoc-default 'kind data) (assoc-default 'id data)))))
+    (setq metaoopl-var-current-class clsname)
+    (message (format "%s %s" (assoc-default 'kind data) clsname))))
 
 ;; Construct method
 ;;  - it would be nice to have these methods work for both
@@ -1153,29 +1156,41 @@ such newline-indentation is provided.")
     )
 )
 
-(defun insert-construct (ctype &optional id)
-   (interactive "sConstruct: \nsName:")
+(setq metalang-var-current-construct "")
+(defun metalang-insert-construct ()
+   (interactive)  ;; inputs: kind and uid (see below).
 
-   (let ((str (if (null id) "" (concat " " id))))
+   (let (
+     final
+     (kind
+      (read-from-minibuffer
+       (format "kind [%s]: " metalang-var-current-construct)))
+     (uid (read-from-minibuffer "uid: ")))
+
+     ;; If kind is empty, use metalang-var-current-construct
+     (cond
+      ((eq (length kind) 0)
+       (setq kind metalang-var-current-construct)))
 
      ;; Insert construct start at correct indentation
      (metalang-indent-line)
-     (insert (concat ctype str " {\n"))
+     (insert (format "%s %s ::\n" kind uid))
 
      ;; Insert (empty) one line within the SCOPE
+     ;;  - note that metalang-indent-line will indent 2 spaces relative to prev
      (metalang-indent-line)
      (insert "\n")
+     (setq final (- (point) 1))
 
      ;; Insert the end-of-construct line
-     (insert (concat "} " (downcase ctype) str ";\n"))
-     (next-line -1)
+     ;;  - note that metalang-indent-line will indent 2 spaces relative to prev
      (metalang-indent-line)
+     (backward-char 2)
+     (insert (format "end %s %s;\n" kind uid))
+     (goto-char final)
 
-     ;; Move back up to original line and position cursor
-     ;; after the construct primary key/value.
-     (next-line -2)
-     (end-of-line)
-     (forward-char -2)
+     ;; remember current construct
+     (setq metalang-var-current-construct kind)
   )
 )
 

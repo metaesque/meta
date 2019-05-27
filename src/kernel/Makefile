@@ -22,7 +22,10 @@ full: fullmeta-py
 # target test:
 #   Run tests on the Meta implementation of Meta.
 test: fullmeta-py
-	metac -b py -r metax.c metax.attr metax.fs metax.logs metax.root metax.cli metax.test metax.lib.markdown metax.lib.shell metax.units
+	metac -b py -r metax.c metax.attr metax.fs metax.logs \
+	metax.root metax.cli metax.test \
+	metax.meta metax.oopl \
+	metax.lib.markdown metax.lib.shell metax.units
 
 # target vtest:
 #   Run tests on the Meta implementation of Meta.

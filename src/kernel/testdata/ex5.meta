@@ -1,0 +1,4 @@
+namespace demo.stmts2 scope:
+  class A scope:
+    method f scope<*>:
+      var a : int = 1;
