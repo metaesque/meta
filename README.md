@@ -412,10 +412,14 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
          - &str --> const std::string&
          - *str --> const std::string*
       - when used as an arg or return of a method
-         - @str --> std::string_view      
+         - @str --> std::string_view
          - &str --> std::string_view or const std::string_view&
-         - *str --> const std::string_view*      
-      
+         - *str --> const std::string_view*
+      - notes:
+         - string cannot separate "empty" from "null/invalid"
+         - string_view can separate "empty" from "null/invalid"
+           (.length()==0 vs .data()==nullptr vs )
+           
    - implementing 'str' using 'const std::string'
       - variants:
         - *str --> const std::string* 

@@ -2942,6 +2942,23 @@ namespace metax.meta scope:
       test.iseq('BaseLanguage', test.construct.kind())
     end;
 
+    method pseudovar : str #:
+      Return the baselang-specific value of a specified pseudovar.
+    params:
+      var name : str #:
+        The high-level name of the pseudovar.
+    scope:
+      result = self.pseudovars().get(name, None)
+      if result is None:
+        raise metax.c.InternalError('Invalid pseudovar %s' % name)
+      return result
+    test:
+      test.tpy()
+      test.iseq('None', test.baselang.pseudovar('null'))
+      test.iseq('True', test.baselang.pseudovar('true'))
+      test.iseq('False', test.baselang.pseudovar('false'))
+    end method pseudovar;
+
     method postCreationInitialization #:
       Perform post-creation initialization
     params:

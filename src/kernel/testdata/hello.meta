@@ -1,0 +1,11 @@
+namespace demo.hello #:
+  Hello world (in C++)
+scope:
+
+  class Greeting #:
+    A generic greeting class.
+  scope:
+
+  end class Greeting;
+
+end namespace demo.hello;

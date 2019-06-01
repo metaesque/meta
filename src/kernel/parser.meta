@@ -743,32 +743,6 @@ scope:
     lib assoc metax.units;
   scope:
 
-    meta
-    method StrExpr : Expr #:
-      Given a string representation of an expression, obtain its Expr.
-    params:
-      var src : str #:
-        The input string reprsentation.
-      var attribute : Attribute = null #:
-        The attribute the expr is associated with. Currently only required
-        when parsing expressions starting with '('
-    scope:
-      /# Since ExprParser assumes a MetaFile containing all lines to be
-      /# parsed, we need to wrap our src string.  Rather than creating a new
-      /# MetaFile each time, we use a cached one. TODO(wmh): Lock this, or
-      /# make thread-local, etc.
-      metafile = cls.DummyMetaFile
-      if metafile is None:
-        metafile = MetaFile('/fake/path.meta', None, '\n')
-        cls.DummyMetaFile = metafile
-
-      text = src + '\n'
-      metafile.linesIs(Line.FromText(text))
-      metafile.textIs(text)
-      expr = cls(metafile).parse(attribute=attribute)
-      return expr
-    end method StrExpr;
-
     field source : MetaFile #:
       The MetaFile within which the expr resides.
     field row : int #:
@@ -851,9 +825,6 @@ scope:
         r'(?:[:](?P<spec>get|set|ref))?$')
 
       cls.XID_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_.]*$')
-
-      /# This will be used in StrExpr()
-      cls.DummyMetaFile = None
     end;
 
     method numrows : int #:
@@ -861,8 +832,7 @@ scope:
     scope:
       return len(self.source().lines())
     test:
-      metafile = test.metafileFor(text='a \nb\ncd\n')
-      eprs = metax.c.ExprParser(metafile)
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'a \nb\ncd\n'))
       test.iseq(3, eprs.numrows())
     end method numrows;
 
@@ -871,7 +841,7 @@ scope:
     scope:
       return (self.row(), self.col(), self.peek())
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'a \nb\ncd\n'))
       test.iseq((0, 0, 'a'), eprs.pos())
       eprs.set(row=2, col=1)
       test.iseq((2, 1, 'd'), eprs.pos())
@@ -883,7 +853,7 @@ scope:
     scope:
       return (self.line(), self.col())
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'a \nb\ncd\n'))
       test.iseq(('a \n', 0), eprs.current())
       eprs.set(row=2, col=1)
       test.iseq(('cd\n', 1), eprs.current())
@@ -894,7 +864,7 @@ scope:
     scope:
       return self.line()[self.col()]
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'a \nb\ncd\n'))
       test.iseq('a', eprs.peek())
       eprs.set(row=2, col=1)
       test.iseq('d', eprs.peek())
@@ -920,7 +890,7 @@ scope:
         self.colIs(col + 1)
       return result
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'a \nb\ncd\n'))
       test.iseq('a', eprs.getc())
       test.iseq(' ', eprs.getc())
       test.iseq('\n', eprs.getc())
@@ -954,7 +924,7 @@ scope:
       if col >= 0:
         self.colIs(col)
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'a \nb\ncd\n'))
       test.iseq((0, 0, 'a'), eprs.pos())
       eprs.set(row=2, col=1)
       test.iseq((2, 1, 'd'), eprs.pos())
@@ -969,7 +939,7 @@ scope:
       self.colIs(scol)
     test:
       eprs = metax.c.ExprParser(
-        test.metafileFor(text='a \nb\ncd\n'), row=2, col=1)
+        metax.c.MetaFile(None, None, 'a \nb\ncd\n'), row=2, col=1)
       eprs.set(row=0, col=0)
       test.iseq((0, 0, 'a'), eprs.pos())
       eprs.reset()
@@ -1011,7 +981,7 @@ scope:
       /# Reinstate position we entered this method at.
       self.set(row=crow, col=ccol)
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'a \nb\ncd\n'))
 
       fp = test.fp()
       eprs.summary(fp=fp, verbose=False)
@@ -1037,7 +1007,7 @@ scope:
       /# output).
       self.errors().append('R%dC%d: %s' % (self.row(), self.col(), msg))
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'a \nb\ncd\n'))
       test.iseq([], eprs.errors())
       eprs.error('This is a test')
       test.iseq(['R0C0: This is a test'], eprs.errors())
@@ -1048,7 +1018,7 @@ scope:
     scope:
       self.errorsIs([])
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'a \nb\ncd\n'))
       eprs.error('error1')
       eprs.error('error2')
       eprs.error('error3')
@@ -1062,7 +1032,7 @@ scope:
     scope:
       return '\n'.join(self._errors) if self._errors else None
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text='a \nb\ncd\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'a \nb\ncd\n'))
       test.isnull(eprs.errorText())
       eprs.error('this is an error')
       test.iseq('R0C0: this is an error', eprs.errorText())
@@ -1113,7 +1083,8 @@ scope:
       return (self.line(), self.col())
     test:
       eprs = metax.c.ExprParser(
-        test.metafileFor(text='abc\n  def   more \n      \n  \n   abc\n'))
+        metax.c.MetaFile(
+          None, None, 'abc\n  def   more \n      \n  \n   abc\n'))
 
       /# Test normal skipping
       eprs.skipws()
@@ -1156,7 +1127,7 @@ scope:
       return result
     test:
       eprs = metax.c.ExprParser(
-        test.metafileFor(text='a lad had a fall\nin the hall\nwith a keg\n'))
+        metax.c.MetaFile(None, None, 'a lad had a fall\nin the hall\nwith a keg\n'))
 
       test.iseq('lad had', eprs.text(0, 2, 0, 8))
       test.iseqtext('lad had a fall\nin the ha', eprs.text(0, 2, 1, 8))
@@ -1263,7 +1234,8 @@ scope:
 
       return result
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text=' 1   apple"hello"\n'))
+      eprs = metax.c.ExprParser(
+        metax.c.MetaFile(None, None, ' 1   apple"hello"\n'))
 
       test.iseq('<kind=num str=1 expr=1>', str(eprs.parse()))
       test.iseq('<kind=var str=apple expr=apple>', str(eprs.parse()))
@@ -1308,7 +1280,7 @@ scope:
 
       return expr
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text='  \n  10\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '  \n  10\n'))
       eprs.set(row=1, col=2)
       test.iseq(10, eprs._parseNum())
       test.iseq((1, 4, '\n'), eprs.pos())
@@ -1368,7 +1340,7 @@ scope:
       return expr
     test:
       eprs = metax.c.ExprParser(
-        test.metafileFor(text='a val true meta!out a.bc.def.Hex\n'))
+        metax.c.MetaFile(None, None, 'a val true meta!out a.bc.def.Hex\n'))
       eprs.set(row=0, col=0)
 
       self.iseq('a', eprs._parseVar())
@@ -1425,8 +1397,8 @@ scope:
       return expr
     test:
       eprs = metax.c.ExprParser(
-        test.metafileFor(text=
-          '  "this is a test"\n\'another test\'?  \n'))
+        metax.c.MetaFile(
+          None, None, '  "this is a test"\n\'another test\'?  \n'))
       eprs.set(row=0, col=2)
       test.iseq('"this is a test"', eprs._parseStr())
       test.iseq((0, 18, '\n'), eprs.pos())
@@ -1581,12 +1553,14 @@ scope:
       return result
     test:
       attribute = metax.attr.ExprAttribute(None, 'super', None)
-      eprs = metax.c.ExprParser(test.metafileFor(text='(1, "hello", apple)\n'))
+      eprs = metax.c.ExprParser(
+        metax.c.MetaFile(None, None, '(1, "hello", apple)\n'))
       eprs.set(0, 0)
       test.iseq('plist', eprs.parse(attribute=attribute).kind())
 
       attribute2 = metax.attr.ExprAttribute(None, 'not_super', None)
-      eprs2 = metax.c.ExprParser(test.metafileFor(text='((a < 7) and (b > 10))\n'))
+      eprs2 = metax.c.ExprParser(
+        metax.c.MetaFile(None, None, '((a < 7) and (b > 10))\n'))
       eprs2.set(0, 0)
       test.iseq('bool', eprs2.parse(attribute=attribute2).kind())
     end;
@@ -1728,7 +1702,7 @@ scope:
       attribute = metax.attr.ExprAttribute(None, 'someattr', None)
 
       /# A simple single-var bool expression
-      eprs = metax.c.ExprParser(test.metafileFor(text=' (var)\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, ' (var)\n'))
       eprs.set(0, 1)
       test.iseq(
         "{'logic': 0, 'data': [<kind=var str=var expr=var>], 'ops': []}",
@@ -1736,7 +1710,7 @@ scope:
       test.iseq([], eprs.errors())
 
       /# A negated single-var bool expression with whitespace.
-      eprs = metax.c.ExprParser(test.metafileFor(text=' ( ! var )\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, ' ( ! var )\n'))
       eprs.set(0, 1)
       test.iseq(
         "{'logic': 1, 'data': ['!', <kind=var str=var expr=var>], 'ops': ['!']}",
@@ -1744,7 +1718,7 @@ scope:
       test.iseq([], eprs.errors())
 
       /# A simple conjuncttion.
-      eprs = metax.c.ExprParser(test.metafileFor(text=' ( v1 and v2 )\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, ' ( v1 and v2 )\n'))
       eprs.set(0, 1)
       test.iseq(
         "{'logic': 1, 'data': [<kind=var str=v1 expr=v1>, 'and', <kind=var str=v2 expr=v2>], 'ops': ['and']}",
@@ -1753,7 +1727,7 @@ scope:
 
       /# A conjuncttion of disjunctions.
       eprs = metax.c.ExprParser(
-        test.metafileFor(text='((v1 or !v2 or v3) and (!v4 or v5 or v6))\n'))
+        metax.c.MetaFile(None, None, '((v1 or !v2 or v3) and (!v4 or v5 or v6))\n'))
       eprs.set(0, 0)
       test.iseq(
         "{'logic': 1, 'data': [<kind=bool str=(v1 or !v2 or v3) expr={'logic': 3, 'data': [<kind=var str=v1 expr=v1>, 'or', '!', <kind=var str=v2 expr=v2>, 'or', <kind=var str=v3 expr=v3>], 'ops': ['or', '!', 'or']}>, 'and', <kind=bool str=(!v4 or v5 or v6) expr={'logic': 3, 'data': ['!', <kind=var str=v4 expr=v4>, 'or', <kind=var str=v5 expr=v5>, 'or', <kind=var str=v6 expr=v6>], 'ops': ['!', 'or', 'or']}>], 'ops': ['and']}",
@@ -1762,7 +1736,7 @@ scope:
 
       /# Some arthimetic expressions.
       eprs = metax.c.ExprParser(
-        test.metafileFor(text='((v1<v2) and (v3 > v4) or (v5 ==v6))\n'))
+        metax.c.MetaFile(None, None, '((v1<v2) and (v3 > v4) or (v5 ==v6))\n'))
       eprs.set(0, 0)
       test.iseq(
         "{'logic': 2, 'data': [<kind=bool str=(v1<v2) expr={'logic': 0, 'data': [<kind=var str=v1 expr=v1>, '<', <kind=var str=v2 expr=v2>], 'ops': ['<']}>, 'and', <kind=bool str=(v3 > v4) expr={'logic': 0, 'data': [<kind=var str=v3 expr=v3>, '>', <kind=var str=v4 expr=v4>], 'ops': ['>']}>, 'or', <kind=bool str=(v5 ==v6) expr={'logic': 0, 'data': [<kind=var str=v5 expr=v5>, '==', <kind=var str=v6 expr=v6>], 'ops': ['==']}>], 'ops': ['and', 'or']}",
@@ -1770,7 +1744,7 @@ scope:
       test.iseq([], eprs.errors())
 
       /# Special modes.
-      eprs = metax.c.ExprParser(test.metafileFor(text='(3 < x < 7)\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '(3 < x < 7)\n'))
       eprs.set(0, 0)
       test.iseq(
         "{'logic': 0, 'data': [<kind=num str=3 expr=3>, '<', <kind=var str=x expr=x>, '<', <kind=num str=7 expr=7>], 'ops': ['<', '<']}",
@@ -1778,7 +1752,7 @@ scope:
       test.iseq([], eprs.errors())
 
       /# Error modes.
-      eprs = metax.c.ExprParser(test.metafileFor(text='(3 < x and 7)\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '(3 < x and 7)\n'))
       eprs.set(0, 0)
       test.isnull(eprs._parseBool(attribute=attribute))
       test.iseq(
@@ -1801,11 +1775,12 @@ scope:
       hello = '"hello"'
 
       /# The empty plist.
-      eprs = metax.c.ExprParser(test.metafileFor(text='()\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '()\n'))
       test.iseq([], eprs._parsePList())
 
       /# A simple single-line plist expression
-      eprs = metax.c.ExprParser(test.metafileFor(text=' (1, "hello", apple)\n'))
+      eprs = metax.c.ExprParser(
+        metax.c.MetaFile(None, None, ' (1, "hello", apple)\n'))
       eprs.set(0, 1)
       test.iseq(
         '[<kind=num str=1 expr=1>, <kind=str str="hello" expr="hello">, <kind=var str=apple expr=apple>]',
@@ -1813,7 +1788,7 @@ scope:
 
       /# Now a multi-line plist expression
       eprs = metax.c.ExprParser(
-        test.metafileFor(text=
+        metax.c.MetaFile(None, None, 
           '  # python method call\n'
           '  self.f(1,\n'
           '         apple,\n'
@@ -1836,7 +1811,7 @@ scope:
         str(eprs.parse(attribute=attribute)))
 
       /# Test default values for id expressions.
-      eprs = metax.c.ExprParser(test.metafileFor(text='f(1, a, def=def)\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'f(1, a, def=def)\n'))
       eprs.set(0, 1)
       test.iseq(
         '[<kind=num str=1 expr=1>, <kind=var str=a expr=a>, <kind=var str=def expr=def default=<kind=var str=def expr=def>>]',
@@ -1855,11 +1830,11 @@ scope:
       hello = '"hello"'
 
       /# The empty list.
-      eprs = metax.c.ExprParser(test.metafileFor(text='[]\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '[]\n'))
       test.iseq([], eprs._parseList())
 
       /# A simple single-line plist expression
-      eprs = metax.c.ExprParser(test.metafileFor(text=' [1, "hello", apple]\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, ' [1, "hello", apple]\n'))
       eprs.set(0, 1)
       test.iseq(
         '[<kind=num str=1 expr=1>, <kind=str str="hello" expr="hello">, <kind=var str=apple expr=apple>]',
@@ -1867,7 +1842,7 @@ scope:
 
       /# Now a multi-line plist expression
       eprs = metax.c.ExprParser(
-        test.metafileFor(text=
+        metax.c.MetaFile(None, None, 
           '  # python method call\n'
           '  abc = [1,\n'
           '         apple,\n'
@@ -1924,7 +1899,7 @@ scope:
       return quantity
     test:
       /# A simple single-line hash expression
-      eprs = metax.c.ExprParser(test.metafileFor(text='<1.87m>\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '<1.87m>\n'))
       res = eprs._parseUnit()
       test.iseq(' 1.87000 m', res.asStr())
       line, i = eprs.current()
@@ -2056,12 +2031,12 @@ scope:
 
     test:
       /# An empty hash.
-      eprs = metax.c.ExprParser(test.metafileFor(text='{}n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '{}n'))
       test.iseq([], eprs._parseHash())
 
       /# A simple single-line hash expression
       eprs = metax.c.ExprParser(
-        test.metafileFor(text=' {"a": 1, \'b\': 2, 3 : apple, "a" : "hello" } \n'))
+        metax.c.MetaFile(None, None, ' {"a": 1, \'b\': 2, 3 : apple, "a" : "hello" } \n'))
       eprs.set(0, 1)
       test.iseqtext(
         '[(<kind=str str="a" expr="a">, <kind=num str=1 expr=1>), (<kind=str str=\'b\' expr=\'b\'>, <kind=num str=2 expr=2>), (<kind=num str=3 expr=3>, <kind=var str=apple expr=apple>), (<kind=str str="a" expr="a">, <kind=str str="hello" expr="hello">)]',
@@ -2069,7 +2044,7 @@ scope:
 
       /# A multi-line hash expression
       eprs = metax.c.ExprParser(
-        test.metafileFor(text=
+        metax.c.MetaFile(None, None, 
           "data = {\n"
           "  'S': 1,\n"
           "  'H': 2,\n"
@@ -2190,19 +2165,19 @@ scope:
       return expr
     test:
       /# Simple method invocation with no args
-      eprs = metax.c.ExprParser(test.metafileFor(text='@self.meth; \n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '@self.meth; \n'))
       test.iseq(
         {'rec': 'self', 'subcalls': [{'name': 'meth'}]},
         eprs._parseCall())
 
       /# Simple field get
-      eprs = metax.c.ExprParser(test.metafileFor(text='@self!fld; \n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '@self!fld; \n'))
       test.iseq(
         {'rec': 'self', 'subcalls': [{'name': 'fld', 'field': True}]},
         eprs._parseCall())
 
       /# Simple method invocation with two args
-      eprs = metax.c.ExprParser(test.metafileFor(text='@self.meth(a, 1); \n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '@self.meth(a, 1); \n'))
       test.iseq(
         "{'rec': 'self', 'subcalls': ["
         "{'args': [<kind=var str=a expr=a>, <kind=num str=1 expr=1>], "
@@ -2210,14 +2185,14 @@ scope:
         str(eprs._parseCall()))
 
       /# Simple field set
-      eprs = metax.c.ExprParser(test.metafileFor(text='@self!fld(1); \n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '@self!fld(1); \n'))
       test.iseq(
         "{'rec': 'self', 'subcalls': [{'field': True, 'args': [<kind=num str=1 expr=1>], 'name': 'fld'}]}",
         str(eprs._parseCall()))
 
       /# Nested method invocation.
       eprs = metax.c.ExprParser(
-        test.metafileFor(text='@self.meth1.meth2(a).meth3(b, 1); \n'))
+        metax.c.MetaFile(None, None, '@self.meth1.meth2(a).meth3(b, 1); \n'))
       test.iseq(
         "{'rec': 'self', 'subcalls': [{'name': 'meth1'}, {'args': [<kind=var str=a expr=a>], 'name': 'meth2'}, {'args': [<kind=var str=b expr=b>, <kind=num str=1 expr=1>], 'name': 'meth3'}]}",
         str(eprs._parseCall()))
@@ -2225,14 +2200,14 @@ scope:
       /# Nested method invocation with nested calls.
       /# expr = metax.c.ExprParser(['@test.iseq(2, 1);\n'])
       eprs = metax.c.ExprParser(
-        test.metafileFor(text='@test.iseq(@test!hex.q, 1);\n'))
+        metax.c.MetaFile(None, None, '@test.iseq(@test!hex.q, 1);\n'))
       test.iseq(
         "{'rec': 'test', 'subcalls': [{'args': [<kind=call str=@test!hex.q expr={'rec': 'test', 'subcalls': [{'field': True, 'name': 'hex'}, {'name': 'q'}]}>, <kind=num str=1 expr=1>], 'name': 'iseq'}]}",
         str(eprs._parseCall()))
 
       /# Nested method invocation with nested calls spanning multiple lines.
       eprs = metax.c.ExprParser(
-        test.metafileFor(text=
+        metax.c.MetaFile(None, None, 
           "        @test.iseq(\n"
           "          'Edge between <1,0,-1> (n) and <1,-1,0> (s) with center <0,-52>',\n"
           "          @edge.summary);\n"),
@@ -2288,7 +2263,7 @@ scope:
       return result
 
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text='1 + 2\n'))
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, '1 + 2\n'))
       eprs.parse()
       eprs.skipws()
       test.iseq(
@@ -2306,8 +2281,8 @@ scope:
     scope:
       return self.line().lstrip()[0] == '@';
     test:
-      eprs1 = metax.c.ExprParser(test.metafileFor(text='@self.meth; \n'))
-      eprs2 = metax.c.ExprParser(test.metafileFor(text='10 a\n'))
+      eprs1 = metax.c.ExprParser(metax.c.MetaFile(None, None, '@self.meth; \n'))
+      eprs2 = metax.c.ExprParser(metax.c.MetaFile(None, None, '10 a\n'))
       test.istrue(eprs1.isCallConstruct())
       test.isfalse(eprs2.isCallConstruct())
     end;
@@ -2351,6 +2326,30 @@ scope:
     scope:
     end;
 
+    meta
+    method FromStr : Expr #:
+      Obtain an Expr from a string.
+    params:
+      var text : str #:
+        The textual representation of the Expr.
+      var attribute : metax.attr.Attribute = null #:
+        The attribute the expr is part of. Used to distinguish between
+        syntaxes like plist vs boolexpr.
+    scope:
+      /# ExprParser only relies on the source/lines of a MetaFile, not on the
+      /# schema, so we can make a sparse instance.
+      metafile = MetaFile(None, None, text + '\n')
+      return ExprParser(metafile).parse(attribute=attribute)
+    test:
+      FS = metax.c.Expr.FromStr
+      test.iseq('<kind=num str=1 expr=1>', repr(FS('1')))
+      test.iseq('<kind=var str=true expr=true>', repr(FS('true')))
+      test.iseq('<kind=var str=false expr=false>', repr(FS('false')))
+      test.iseq('<kind=str str="" expr="">', repr(FS('""')))
+      test.iseq("<kind=str str='' expr=''>", repr(FS("''")))
+      test.iseq('<kind=var str=person expr=person>', repr(FS('person')))
+    end method FromStr;
+
     method __repr__ : str #:
       The printable representation of this Expr
     scope:
@@ -2359,8 +2358,7 @@ scope:
         parts.append('default=' + str(self._default))
       return '<' + ' '.join(parts) + '>'
     test:
-      eprs = metax.c.ExprParser(test.metafileFor(text=' 1   apple"hello"\n'))
-      expr = eprs.parse()
+      expr = metax.c.Expr.FromStr(' 1   apple"hello"')
       test.iseq('<kind=num str=1 expr=1>', repr(expr))
     end method __repr__;
 
@@ -2380,12 +2378,17 @@ scope:
       if kind == 'str':
         result = self.value()
         if result:
-          if unquote and result[0] == "\"":
+          if unquote and (result[0] == "\"" or result[0] == "'"):
             result = result[1:-1]
           elif quote and (result[0] != "\"" and result[0] != "'"):
             if delim is None:
               delim = "'"
             result = delim + result + delim
+        else:
+          /# This is presumably very rare, since we must normally quote a string
+          /# to recognize it as a string expression.
+          if delim:
+            result = delim + delim
       else:
         /# TODO(wmh): Do a better for the more complex types.
         result = str(self.value())
@@ -3265,8 +3268,24 @@ scope:
             /# We increment metaline by one to adjust from 0-based to 1-based.
             metaline = attribute.line() + 1
             mapping.append((baseline, metaline, fullid))
-          /# Note that the str(chunk) is there tto handle opaque data.
-          lines.append(indent + str(chunk) if chunk else '')
+
+          /# Handle both python2 and python3
+          from past.builtins import basestring
+          if not chunk:
+            chunk = ''
+          elif not isinstance(chunk, basestring):
+            /# Handle opaque data
+            chunk = str(chunk)
+          try:
+            lines.append(indent + chunk)
+          except UnicodeDecodeError as e:
+            /# TODO(wmh): Fix this! Must be able to handle unicode chars in
+            /# meta source code!  This was working fine before I made all
+            /# literal strings unicode (by prefacing them with 'u'), but now
+            /# fails for symbols like ohm, etc.
+            print('ERROR: chunk = %s (%s)' % (chunk, type(chunk)))
+            print('ERROR: indent = "%s" (%s)' % (indent, type(indent)))
+            raise
 
       if strip_special:
         dentre = metax.c.SPECIAL_PREFIX_RE
@@ -12271,6 +12290,7 @@ scope:
         if error:
           print('ERROR: %s' % error)
           continue
+        /# pprint.pprint(newdata)
         test_target = newdata['test_target']
         test_arg = newdata.get('test_arg', None)
 
@@ -13402,15 +13422,14 @@ scope:
         'bazel', args, cwd=cwd, dryrun=dryrun, quiet=quiet, prompt=prompt,
         show=show)
     test:
-      print('Fix Compiler.executeBazelCommand test')
-      return
-
-      _, _, _, compiler = self.cachedInfo(metal='oopl')
-      test.captureStdout()
-      rc, out, err = compiler.executeBazelCommand(['info'])
-      test.iseq(0, rc)
-      test.contains('committed-heap-size:', out)
-      test.iseq('', err)
+      /# TODO(wmh): Fix Compiler.executeBazelCommand test
+      if False:
+        _, _, _, compiler = self.cachedInfo(metal='oopl')
+        test.captureStdout()
+        rc, out, err = compiler.executeBazelCommand(['info'])
+        test.iseq(0, rc)
+        test.contains('committed-heap-size:', out)
+        test.iseq('', err)
     end method executeBazelCommand;
 
     method executeCommand : tuple<int,str,str> #:
@@ -17913,10 +17932,8 @@ scope:
       /# An expr to be used as the 'super' attribute of 'initializer' and
       /# 'method2'.
       dummy_attribute = metax.attr.ExprAttribute(None, 'super', None)
-      expr = metax.c.ExprParser(
-        self.metafileFor(
-          text='(a, b=1, c=false)\n', basel=baselang.id())).parse(
-            attribute=dummy_attribute)
+      expr = metax.c.Expr.FromStr(
+        '(a, b=1, c=false)', attribute=dummy_attribute)
 
       /# Define a FileConstruct.
       self.filecons = metax.meta.FileConstruct.NewFromData(

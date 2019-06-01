@@ -783,11 +783,11 @@ config:
         The method overrides an inherited definition by completing replacing
         functionality.
       FeatureValue prex #:
-        The method extends an inherited definition by always invoking its
-        parent implementation (with same args) after doing class-specific actions.
+        The method extends an inherited definition by always invoking its parent
+        implementation (with same args) after doing class-specific actions.
       FeatureValue postx #:
-        The method extends an inherited definition by always invoking its
-        parent implementation (with same args) before doing class-specific actions.
+        The method extends an inherited definition by always invoking its parent
+        implementation (with same args) before doing class-specific actions.
       FeatureValue superx #:
         The method extends an inherited definition by always invoking its parent
         implementation (with same args) somewhere within its method body, via
@@ -813,16 +813,20 @@ config:
         in more places ... at namespace level, within methods, etc.
         TODO(wmh): Is 'static' just an alias for 'function'?
       FeatureValue cls #:
-        This is a special case for handling an issue in Python between metaclasses
-        and @classmethods.  It indicates that the method should have a @classmethod
-        decorator. It would be preferable to define such methods as having
-        location 'meta', but in Meta that puts the method in the metaclass instead
-        of being an @classmethod method.  Python does not treat @classmethods
-        entirely as methods on the metaclass, which breaks things, hence the need
-        for this special case.  This value should be considered an implementation
-        detail and NOT used in user-level code, as it does not have a correlate in
-        most other baselangs. It is used internally by Meta when @classmethods
-        are needed to implement some higher-level meta concept.
+        This is a special case for handling an issue in Python between
+        metaclasses and @classmethods. It indicates that the method should have
+        a @classmethod decorator. It would be preferable to define such methods
+        as having location 'meta', but in Meta that puts the method in the
+        metaclass instead of being an @classmethod method. Python does not treat
+        @classmethods entirely as methods on the metaclass, which breaks things,
+        hence the need for this special case. This value should be considered an
+        implementation detail and NOT used in user-level code, as it does not
+        have a correlate in most other baselangs. It is used internally by Meta
+        when @classmethods are needed to implement some higher-level meta
+        concept. TODO(wmh): Should we just have 'meta' methods always be
+        implemented as @classmethods in Python (i.e. never put them in the
+        metaclass)? Then we could get rid of 'cls' here (or at least make it
+        truly an implementation detail that is not allowed in user-level code).
       FeatureValue closure #:
         A function that has access to the variables in the scope within which
         it is lexically defined.

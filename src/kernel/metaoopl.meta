@@ -1484,6 +1484,8 @@ namespace metax.oopl scope:
       suppressed.
 
     lifecycle  clinit:
+      /# TODO(wmh): These should not be ExprAttribute, but rather WordAttribute
+      /# or some such.
       cls.DummySuperAttribute = metax.attr.ExprAttribute(None, 'super', None)
       cls.DummyNonSuperAttribute = metax.attr.ExprAttribute(None, 'hack', None)
 
@@ -2952,6 +2954,8 @@ namespace metax.oopl scope:
               /# we do NOT need to insert this line.
               /# TODO(wmh): Consider making this a list of lines instead of
               /# a single line.
+              if return_var is None:
+                return_var = baselang.pseudovar('null')
               retamble = ['return ' + return_var]
 
           if len(scope_lines) == 0:
@@ -3004,30 +3008,57 @@ namespace metax.oopl scope:
         if scope_attr:
           scope_parent = scope_attr.parent()
           if isinstance(scope_parent, metax.oopl.ExecutableConstruct):
-            baserec = baselang.receiverStr(scope_parent, deref=True)
-            metarec = baselang.receiverStr(scope_parent, style='meta')
-            if baserec != metarec and len(scope_lines) > 0:
-              /# print 'Here with %s and %s and %s' % (self.kindfqn(), baserec, metarec)
-              /# TODO(wmh): Make this baselang-general!
-              /# TODO(wmh): If any parameter is defined with same name as metarec,
-              /#   we need to report warning or not tromp!
-              /# TODO(wmh): Do not insert if there are no scope lines, etc.
-              preamble.append('%s = %s' % (metarec, baserec))
+            /# We introduce 'self' or 'meta' or 'test' into the scope.
+            metarec = baselang.receiverStr(scope_parent, style='meta')[0]
+            baserec, specrec = baselang.receiverStr(scope_parent, deref=True)
+            if baserec is None:
+              /# There is no variable we can initialize.
+              pass
+              /# print('*** WARNING: for %s no baserec (not defining %s)' % (scope_parent.kindfqn(), metarec))
+            elif baserec != metarec and len(scope_lines) > 0:
+              /# TODO(wmh): If any parameter is defined with same name as
+              /# metarec, we need to report warning or not tromp! Same for
+              /# local vars (do we disallow?)
+              /# TODO(wmh): Only insert this if metarec is used within the
+              /# method!
+              text = baselang.defineBaseVar(
+                metarec, baseval=baserec, mtype=None)
+              preamble.append(text)
 
       return scope_attr, scope_lines, preamble, postamble, retamble, comment, params
-    test:
-      test.tpy(expand=True, imports=True, translate=True)  # methodInfo relies on translation
-      test.iseq(
-        (
-          test.method.attr('scope:'),
-          ['return 0.0'], [], [], None,
-          ['"""Calculate body mass index of this person.',
-           'Result is unitless, but relies on height in meters and',
-           'weight in kilograms.', '"""',
-          ],
-          '(self)'
-        ),
-        test.method.methodInfo())
+    tests:
+      testx cc ::
+        /# methodInfo relies on translation
+        test.tcc(expand=True, imports=True, translate=True)
+        test.iseq(
+          (
+            test.method.attr('scope:'),
+            /# TODO(wmh): Fix this ... should not be returning None!
+            ['return None;'],
+            ['auto& self = (*this);'],
+            [],
+            None,
+            ['// Calculate body mass index of this person.',
+             '// Result is unitless, but relies on height in meters and',
+             '// weight in kilograms.'],
+            '()',
+          ),
+          test.method.methodInfo())
+
+      testx py ::
+        /# methodInfo relies on translation
+        test.tpy(expand=True, imports=True, translate=True)
+        test.iseq(
+          (
+            test.method.attr('scope:'),
+            ['return 0.0'], [], [], None,
+            ['"""Calculate body mass index of this person.',
+             'Result is unitless, but relies on height in meters and',
+             'weight in kilograms.', '"""',
+            ],
+            '(self)'
+          ),
+          test.method.methodInfo())
     end method methodInfo;
 
     method isTestCase : bool #:
@@ -3565,6 +3596,7 @@ namespace metax.oopl scope:
     scope:
       indent = ''
       metac = self.compiler()
+      metafile = self.metafile()
       baselang = metac.baselang()
       aliases = self.attrval('aliases', default=None)
       type = self.attrval('type', default=None) or metax.c.Type.Instance('str')
@@ -3572,9 +3604,8 @@ namespace metax.oopl scope:
       if default is None:
         baselang_default = 'None'
       else:
-        baselang_default = baselang.formatExpr(default, type, self)
-      /#if default is None:
-      /#  default = baselang.defaultValue(type)
+        baselang_default, type2 = baselang.compileExpr(
+          default, metafile, executable=self, metatype=type)
       summary, desc = self.splitComment()
 
       /# Establish if this is a flag or arg.
@@ -4633,9 +4664,8 @@ namespace metax.oopl scope:
                 ],
                 context)
               secondaries.append(('params:', params))
-              dummy_attr = ClassConstruct.DummySuperAttribute
-              super_expr = metax.c.ExprParser.StrExpr(
-                '(args, kwds)', attribute=dummy_attr)
+              super_expr = metax.c.Expr.FromStr(
+                '(args, kwds)', attribute=ClassConstruct.DummySuperAttribute)
               secondaries.append(('super', super_expr))
             elif basel == 'cpp':
               /# TODO(wmh): How do we invoke the parent constructor with
@@ -4711,10 +4741,8 @@ namespace metax.oopl scope:
                 initializer.fqn())
             else:
               /# We add an explicit 'super' and 'params:' attributes.
-              fauxfile = metax.c.MetaFile(
-                '/faux/faux.meta', metac, '(meta__name)\n')
-              super_expr = metax.c.ExprParser(fauxfile).parse(
-                attribute=ClassConstruct.DummySuperAttribute)
+              super_expr = metax.c.Expr.FromStr(
+                '(meta__name)', attribute=ClassConstruct.DummySuperAttribute)
               super = metax.attr.ExprAttribute(initializer, 'super', super_expr)
               /# Create a 'params:' attribute.
               params = metax.oopl.ExecutableConstruct.CreateParams(
@@ -4806,6 +4834,9 @@ namespace metax.oopl scope:
 
             /# Create a 'super' attribute
             if True:
+              /# TODO(wmh): Now that Expr.FromStr() exists, we should use it
+              /# instead of this hardcoded solution.
+
               /# Explicit creation
               super_expr = metax.c.Expr(
                 'plist', '(name, bases, symbols)', 
@@ -4817,9 +4848,9 @@ namespace metax.oopl scope:
               )
             else:
               /# Indirect and slow creation
-              fauxfile = metax.c.MetaFile(
-                '/faux/faux.meta', metac, '(name, bases, symbols)\n')
-              super_expr = metax.c.ExprParser(fauxfile).parse()
+              super_expr = metax.c.Expr.FromStr(
+                '(name, bases, symbols)',
+                attribute=metax.oopl.ClassConstruct.DummySuperAttribute)
             super = metax.attr.ExprAttribute(initializer, 'super', super_expr)
 
             iscope = initializer.attr('scope:', default=None)
@@ -4906,7 +4937,7 @@ namespace metax.oopl scope:
         pack = self.attrval('pack')
         tmpvis = self.attrval('visibility')
         typeattr, type = self.attrpair('type', default=metax.c.LOOKUP)
-        select = self.attrval('access')
+        access = self.attrval('access')
         if type is None:
           metafile.error('Must provide a type', line=self.primary().line())
           return
@@ -4925,14 +4956,16 @@ namespace metax.oopl scope:
         /#    receiver variable.
         if myclass:
           location = 'test' if myclass.isTest() else ('meta' if myclass.isMeta() else 'user')
-          receiver_code = (
+          receiver_code, receiver_special = (
             baselang.receiverStr(
-              self, style='base', location=location, myclass=myclass))
-          if kind == 'static':
-            receiver_code += baselang.config('staticsep')
-          else:
-            receiver_code += baselang.config('selfsep')
-          /# print('%s = %s [%s]' % (self.kindfqn(), receiver_code, kind))
+              self, style='base', sep=True, location=location, myclass=myclass))
+          if receiver_code is None:
+            if False:
+              print(
+                '**** NOTE: receiver_code="%s" receiver_special="%s" for '
+                'style=base location=%s myclass=%s' %
+                (receiver_code, receiver_special, location, myclass.fqn()))
+            receiver_code = receiver_special
         else:
           receiver_code = ''
 
@@ -4965,7 +4998,7 @@ namespace metax.oopl scope:
 
         /# Establish the default accessor code.
         /#  - also establishes the legal set of accessor ids.
-        /#  - TODO(wmh): Must generalize this to all baselangs. Defined
+        /#  - TODO(wmh): Must generalize this to all baselangs. Define
         /#    a 'initBodyMap' behavior.
         field_code = '%s%s' % (receiver_code, rawfield)
         bodymap = {}
@@ -5073,7 +5106,7 @@ namespace metax.oopl scope:
         /#  - TODO(wmh): Improve on this by making the 'access' attribute
         /#    a multi-valued field.
         genacc = {}
-        if select == 'raw':
+        if access == 'raw':
           /# By definition of 'raw', there are no accessors for raw fields.
           genacc['get'] = False
           genacc['set'] = False
@@ -5083,7 +5116,7 @@ namespace metax.oopl scope:
           /# we don't generate a setter or reffer.
           genacc['get'] = True
           genacc['set'] = not isconst
-          genacc['ref'] = False  # disabling for now # not isconst
+          genacc['ref'] = 'w' in access
 
         /# The line number in the metafile at which the field is defined. It
         /# is used for:
@@ -5112,42 +5145,13 @@ namespace metax.oopl scope:
           metax.c.D.expand.info('Created getter ' + getter.fqn(), level=2)
 
           if lazylines:
-            /# The getter (and reffer?) have lazy lines, so we need to
-            /# generate some additional code to replace getter scope:.
-            newlines = []
-            /# TODO(wmh): Compile a var construct to assign an value to
-            /# a result var?
-            resvar = '__meta_result'
-            recstr = baselang.receiverStr(getter, sep=True)
-            rawvar = '%s%s' % (recstr, rawfield)
-            newlines.append('%s = %s' % (resvar, rawvar))
-
-            /# TODO(wmh): Make this a baselang method.
-            if baselang.id() == 'python':
-              if type.isValue():
-                newlines.append('if not %s:' % resvar)
-              else:
-                newlines.append('if %s is None:' % resvar)
-              for i in range(0, len(lazylines)-1):
-                newlines.append('  ' + lazylines[i])
-              lazyend = lazylines[-1][:3]
-              if lazyend != '-> ':
-                metafile.error(
-                  'Expecting lazy: block of accessor to end with line starting "-> " not "%s"' % 
-                  (lazyend), line=lazy_attr.line())
-              resval = lazylines[-1][3:]
-              newlines.append('  %s = %s' % (resvar, resval))
-              newlines.append('  %s = %s' % (rawvar, resvar))
-              /# TODO(wmh): This can easily be obtained for all baselangs
-              /# by compiling a 'return' construct.  See the getter code
-              /# in Compiler._expandField() for an example.
-              newlines.append('return ' + resvar)
-              gscope = getter.attrval('scope:')
-              del gscope[:]
-              gscope.extend(newlines)
-            else:
-              metafile.warning(
-                'Not yet handling lazy in %s' % baselang.id(), attr=lazy_attr)
+            /# Each baselang knows how to generate a method body given a lazy
+            /# attribute.
+            newlines = baselang.lazyLines(
+              metafile, getter, lazy_attr, type, rawfield)
+            gscope = getter.attrval('scope:')
+            del gscope[:]
+            gscope.extend(newlines)
         else:
           getter = None
 
@@ -5327,7 +5331,7 @@ namespace metax.oopl scope:
             myclass.registerInitializer(self)
 
           /# Establish the receiver variable to use.
-          rec = baselang.receiverStr(self, style='meta')
+          rec = baselang.receiverStr(self, style='meta')[0]
 
           /# We register this executable as a symbol within its class.
           /#  - TODO(wmh): Think more carefully about how symbols should be
@@ -6382,7 +6386,7 @@ namespace metax.oopl scope:
                 "%sif cli.rest and cli.rest[0].startswith('help'):" % indent)
               command_body.append(
                 '%s  meta__command.help'
-                "(full='ful' in cli.rest[0], commands=cli.rest[1:])" % indent)
+                "(mode='helpfull' if 'ful' in cli.rest[0] else 'help', commands=cli.rest[1:])" % indent)
             else:
               command_body.append('%sif False:\n' % indent)
               command_body.append('%s  pass' % indent)
@@ -7612,14 +7616,8 @@ namespace metax.oopl scope:
       /# is required to exist and be a BaseSegment, not a string.
       segment = segments[-1]
       assert isinstance(segment, metax.c.BaseSegment)
-
-      if expr:
-        code, codetype = baselang.compileExpr(expr, metafile, indent='')
-      else:
-        /# We are to assign a type-specific default to the var.
-        codetype = self.attrval('type')
-        code = baselang.defaultValue(codetype)
-
+      code, codetype = baselang.compileExpr(
+        expr, metafile, metatype=self.attrval('type'), indent='')
       segment.addLine('%s = %s' % (self.id(), code))
     test:
       metafile = test.metafile
@@ -8507,90 +8505,6 @@ namespace metax.oopl scope:
         oopljs.typeToBase(metax.c.Type.Instance('vec<nm.sp.A>'), defqn=True))
     end method typeToBase;
 
-    method _compileExprAttr : tuple<str,Type> #:
-      Service routine for compiling an 'expr'-typed attribute.
-
-      Any attribute that is typed as 'expr' can be passed to this method to
-      obtain the baselang-specific code representing the expr. Errors are added
-      to metafile for various issues (and None returned), otherwise the result
-      is baselang code representing the expression.
-
-      Returns:
-       0. The baselang code representing the expr. Returns None if exprattr is
-          None.
-       1. The meta type of the expr.
-    params:
-      var metafile : metax.oopl.MetaFile #:
-        Where to report errors.
-      var exprattr : metax.attr.ExprAttribute #:
-        The expr attribute.  If None, returns None.
-      var default : any = null #:
-        What to return if exprattr is None
-      var legal : vec<str> = null #:
-        The enumerable of legal expr kinds allowed.
-      var paren : bool = false #:
-        If True, the expr is expected to be parenthezied.
-      var executable : metax.oopl.ExecutableConstruct = null #:
-        The context within which this expr is being compiled.  Used in order
-        to establish type of result from type analysis.
-      var typecheck : bool = true #:
-        If False, do not typecheck.
-    scope:
-      raise Error('Is this method used?')
-
-      result = default
-      metatype = None
-      if exprattr:
-        result, metatype = exprattr.getCompilationResults()
-        if result is None:
-          expr = exprattr.value()
-          linenum = exprattr.line()
-          data = expr.data()
-          if paren and data['kind'] not in ('plist', 'arglist'):
-            metafile.error('Expecting parenthesized expr', line=linenum)
-          else:
-            /# If data represents an arglist, it should only have one element.
-            error = False
-            while data['kind'] in ('plist', 'arglist'):
-              parts = data['expr']
-              if len(parts) != 1:
-                metafile.error(
-                  'Expecting one expr, not %d' % len(parts), line=linenum)
-                error = True
-              else:
-                data = parts[0]
-            if not error:
-              kind = data['kind']
-              if legal and kind not in legal:
-                metafile.error(
-                  'Expecting a callsite or variable, not %s' % kind)
-              else:
-                /# We record the line number in metafile first.
-                metafile.setLineNum(exprattr.line(), STATE_COMPILE)
-                /# Compile the expression.
-                result, metatype = self.compileExpr(
-                  data, metafile, executable=executable)
-                /# Cache the compilation results so that subsequent invocations
-                /# are fast. TODO(wmh): How often is the same exprattr compiled?
-                /# Is the savings in time (if any) worth the increase in memory?
-                exprattr.cacheCompilationResults(result, metatype)
-      return result, metatype
-    test:
-      /# This method appears unused.
-      if False:
-        ooplpy, _, context, compiler = test.cachedInfo(basel='python')
-        metafile = metax.c.MetaFile('/faux/path', compiler, '\n')
-
-        expr_true = metax.c.ExprParser(test.metafileFor(text='true\n')).parse()
-        expr_null = metax.c.ExprParser(test.metafileFor(text='null\n')).parse()
-        expr_one = metax.c.ExprParser(test.metafileFor(text='1\n')).parse()
-        expr_var = metax.c.ExprParser(test.metafileFor(text='apple\n')).parse()
-
-        test.iseq(
-          ooplpy._compileExprAttr(
-            metafile, metax.attr.ExprAttribute(None, 'expr', expr_one)))
-    end method _compileExprAttr;
-
     method compileExpr : tuple<str,Type> #:
       Compile an Expr instance into a baselang.
 
@@ -8598,10 +8512,8 @@ namespace metax.oopl scope:
        0. the baselang code representing the expression
        1. the meta type of the expression.
     params:
-      var expr : any #:
-        The expr to compile. If it is an Expr, expr.data() should return
-        the already-parsed dict.  If it is a dict, that dict is the pre-parsed
-        data.
+      var expr : metax.c.Expr #:
+        The expr to compile. If null, mtype is used to establish a default.
       var metafile : *metax.oopl.MetaFile #:
         The meta file being parsed/compiled.
       var executable : metax.oopl.ExecutableConstruct = null #:
@@ -8610,6 +8522,10 @@ namespace metax.oopl scope:
         TODO(wmh): This should probably be renamed to symbol_construct of type
         SymbolConstruct ... for vars it will be a MethodConstruct, but for
         fields it will be a ClassConstruct.
+      var metatype : metax.c.Type = null #:
+        The expected type of the expression. Used if expr is null, to establish
+        a default value. Note that this method returns the metatype when expr is
+        non-null, so this is only needed when expr is null.
       var typecheck : bool = true #:
         If False, do not typecheck, even if executable is provided.
         Useful for disabling certain warnings.
@@ -8617,72 +8533,118 @@ namespace metax.oopl scope:
         What to insert before each line (except first??)
     scope:
       lines = ['']
-      metatype = self._compileExpr(
-        expr, metafile, lines,
-        indent=indent, executable=executable, typecheck=typecheck)
-      return '\n'.join(lines), metatype
-    test:
-      def Chk(expected_code, expected_type, pair):
-        code, mtype = pair
-        test.iseq(expected_code, code)
-        if expected_type is None:
-          test.isnull(mtype)
-        elif isinstance(expected_type, list):
-          for i, etype in enumerate(expected_type):
-            mt = mtype[i]
-            if mt is None:
-              test.isnull(mt)
-            else:
-              test.iseq(etype, mt.raw())
-        else:
-          test.iseq(expected_type, mtype.raw())
+      if expr is None:
+        /# Provide a default value based on expression type.
+        if metatype is None:
+          raise metax.c.InternalError(
+            'Invoked compileExpr on null expr without providing mtype')
+        lines[-1] += self.defaultValue(metatype)
+      else:
+        metatype = self._compileExpr(
+          expr, metafile, lines,
+          indent=indent, executable=executable, typecheck=typecheck)
+      code = '\n'.join(lines)
+      /# TODO(wmh): Should we be doing the following?
+      /#  code = self.pseudovars().get(code, code)
+      code2 = self.pseudovars().get(code, code)
+      if code2 != code:
+        print('*** HERE with "%s" vs "%s"' % (code, code2))
 
-      ooplpy, _, context, compiler = test.cachedInfo(basel='python')
-      metafile = metax.c.MetaFile('/faux/path', compiler, '\n')
+      return code, metatype
+    tests:
 
-      expr_true = metax.c.ExprParser(test.metafileFor(text='true\n')).parse()
-      Chk('True', 'bool', ooplpy.compileExpr(expr_true, metafile))
+      testx cc ::
+        test.tcc()
+        baselang = test.baselang
+        compiler = test.compiler
 
-      expr_null = metax.c.ExprParser(test.metafileFor(text='null\n')).parse()
-      Chk('None', 'meta.Null', ooplpy.compileExpr(expr_null, metafile))
+        metafile = metax.c.MetaFile('/faux/path', compiler, '\n')
 
-      expr_one = metax.c.ExprParser(test.metafileFor(text='1\n')).parse()
-      Chk('1', 'uint', ooplpy.compileExpr(expr_one, metafile))
+        for estr, expected_code, expected_type, attribute in (
+          ('true', 'true', 'bool', None),
+          ('null', 'nullptr', 'meta.Null', None),
+          ('1', '1', 'uint', None),
+          ('apple', 'apple', None, None),
+          ('""', '""', '&str', None),
+          ('"hello"', '"hello"', '&str', None),
+          ("''", '""', '&str', None),
+          ("'world'", '"world"', '&str', None),
+          ('(a, b=1)', '(a, b=1)', [None, None],
+           metax.oopl.ClassConstruct.DummySuperAttribute),
+          ('(a)', 'a', 'bool',
+           metax.oopl.ClassConstruct.DummyNonSuperAttribute),
+          ('( ! a )', '(!a)', 'bool',
+           metax.oopl.ClassConstruct.DummyNonSuperAttribute),
+          ( '(3 < a < 7)', '(3 < a) and (a < 7)', 'bool',
+           metax.oopl.ClassConstruct.DummyNonSuperAttribute),
+          ('[false, true, null, 1, a]',
+           '[\n  false,\n  true,\n  nullptr,\n  1,\n  a,\n]',
+           'vec', None),
+          ("{'a': false, 'b': true, 'c': a}",
+           '{\n  "a" : false,\n  "b" : true,\n  "c" : a,\n}',
+           'map', None),
+        ):
+          expr = metax.c.Expr.FromStr(estr, attribute=attribute)
+          code, mtype = baselang.compileExpr(expr, metafile)
+          test.iseq(expected_code, code)
+          if expected_type is None:
+            test.isnull(mtype)
+          elif isinstance(expected_type, list):
+            for i, etype in enumerate(expected_type):
+              mt = mtype[i]
+              if mt is None:
+                test.isnull(mt)
+              else:
+                test.iseq(etype, mt.raw())
+          else:
+            test.iseq(expected_type, mtype.raw())
 
-      expr_var = metax.c.ExprParser(test.metafileFor(text='apple\n')).parse()
-      Chk('apple', None, ooplpy.compileExpr(expr_var, metafile))
+      testx py ::
+        test.tpy()
+        baselang = test.baselang
+        compiler = test.compiler
 
-      expr_params = metax.c.ExprParser(
-        test.metafileFor(text='(a, b=1)\n')).parse(
-          attribute=metax.oopl.ClassConstruct.DummySuperAttribute)
-      Chk('(a, b=1)', [None, None], ooplpy.compileExpr(expr_params, metafile))
+        metafile = metax.c.MetaFile('/faux/path', compiler, '\n')
 
-      expr_bool1 = metax.c.ExprParser(
-        test.metafileFor(text='(a)\n')).parse(
-          attribute=metax.oopl.ClassConstruct.DummyNonSuperAttribute)
-      Chk('a', 'bool', ooplpy.compileExpr(expr_bool1, metafile))
+        for estr, expected_code, expected_type, attribute in (
+          ('true', 'True', 'bool', None),
+          ('null', 'None', 'meta.Null', None),
+          ('1', '1', 'uint', None),
+          ('apple', 'apple', None, None),
+          ('""', 'u""', '&str', None),
+          ('"hello"', 'u"hello"', '&str', None),
+          ("''", "u''", '&str', None),
+          ("'world'", "u'world'", '&str', None),
+          ('(a, b=1)', '(a, b=1)', [None, None],
+           metax.oopl.ClassConstruct.DummySuperAttribute),
+          ('(a)', 'a', 'bool',
+           metax.oopl.ClassConstruct.DummyNonSuperAttribute),
+          ('( ! a )', '(!a)', 'bool',
+           metax.oopl.ClassConstruct.DummyNonSuperAttribute),
+          ( '(3 < a < 7)', '(3 < a) and (a < 7)', 'bool',
+           metax.oopl.ClassConstruct.DummyNonSuperAttribute),
+          ('[false, true, null, 1, a]',
+           '[\n  False,\n  True,\n  None,\n  1,\n  a,\n]',
+           'vec', None),
+          ("{'a': false, 'b': true, 'c': a}",
+           "{\n  u'a' : False,\n  u'b' : True,\n  u'c' : a,\n}",
+           'map', None),
+        ):
+          expr = metax.c.Expr.FromStr(estr, attribute=attribute)
+          code, mtype = baselang.compileExpr(expr, metafile)
+          test.iseq(expected_code, code)
+          if expected_type is None:
+            test.isnull(mtype)
+          elif isinstance(expected_type, list):
+            for i, etype in enumerate(expected_type):
+              mt = mtype[i]
+              if mt is None:
+                test.isnull(mt)
+              else:
+                test.iseq(etype, mt.raw())
+          else:
+            test.iseq(expected_type, mtype.raw())
 
-      expr_bool2 = metax.c.ExprParser(
-        test.metafileFor(text='( ! a )\n')).parse(
-          attribute=metax.oopl.ClassConstruct.DummyNonSuperAttribute)
-      Chk('(!a)', 'bool', ooplpy.compileExpr(expr_bool2, metafile))
-
-      expr_bool3 = metax.c.ExprParser(
-        test.metafileFor(text='(3 < a < 7)\n')).parse(
-          attribute=metax.oopl.ClassConstruct.DummyNonSuperAttribute)
-      Chk(
-        '(3 < a) and (a < 7)', 'bool',
-        ooplpy.compileExpr(expr_bool3, metafile))
-
-      expr_list = metax.c.ExprParser(
-        test.metafileFor(text='[false, true, null, 1, a]\n')).parse()
-      Chk('[\n  False,\n  True,\n  None,\n  1,\n  a,\n]',
-          'vec', ooplpy.compileExpr(expr_list, metafile))
-
-      expr_map = metax.c.ExprParser(
-        test.metafileFor(text="{'a': false, 'b': true, 'c': a}\n")).parse()
-      Chk("{\n  'a' : False,\n  'b' : True,\n  'c' : a,\n}", 'map',
-          ooplpy.compileExpr(expr_map, metafile))
     end method compileExpr;
 
     method _compileExpr : metax.oopl.Type #:
@@ -8691,10 +8653,8 @@ namespace metax.oopl scope:
       Returns: Type
         The meta type of the expression.  None if no type could be established.
     params:
-      var expr : any #:
-        The expr to compile. If it is an Expr, expr.value() is the data. If it
-        is a dict, that dict is the pre-parsed data. 
-        TODO(wmh): Can this ever be a dict in this new code?
+      var expr : &metax.c.Expr #:
+        The expr to compile. Should never be null.
       var metafile : *metax.oopl.MetaFile #:
         The meta file being parsed/compiled.
       var lines : vec<str>;
@@ -8706,6 +8666,8 @@ namespace metax.oopl scope:
         If False, do not typecheck, even if executable is provided.
         Useful for disabling certain warnings.
     scope:
+      assert expr is not None
+
       /# caller should set lineno before invoking _compileExpr!
       lnum = metafile.lnum()
       numerrs = metafile.numErrors()
@@ -8738,22 +8700,7 @@ namespace metax.oopl scope:
 
       elif kind == 'str':
         /# A string literal is always quoted in the Meta source
-        /#  - In C++ and Java, strings must always use double quotes.
-        /#  - Python and Javascript, double or single quotes are fine (use
-        /#    whatever user provided in source.
-        /#  - Perl allows interpolation within double quoted strings and
-        /#    doesn't do interpolation within single-quoted strings.
-        strlit = expr.value()
-        if basel in ('cpp', 'java'):
-          result = expr.asStr(quote=True, delim='\"')
-          /# print('******** basel=%s str expr="%s"' % (basel, result))
-        elif basel in ('python', 'javascript'):
-          result = expr.asStr(quote=True)
-        elif basel == 'perl':
-          /# TODO(wmh): Clean this up.
-          result = expr.asStr(quote=True)
-        else:
-          raise metax.c.Error('Provide implementation of str literals in %s' % basel)
+        result = self.literalString(expr)
         lines[-1] += result
         if typecheck:
           metatype = metax.c.Type.Instance('&str')
@@ -9284,7 +9231,7 @@ namespace metax.oopl scope:
     scope:
       metafile = method.metafile()
       stmtend = self.config('stmtend')
-      recsepstr = self.receiverStr(method, style='base', sep=True)
+      recsepstr = self.receiverStr(method, style='base', sep=True)[0]
 
       myclass = method.myclass()
       initmap = self.analyzeExecutableForFields(method)
@@ -9307,11 +9254,9 @@ namespace metax.oopl scope:
           /# TODO(wmh): Should we do LOOKUP on 'default' to get '<special>', or
           /# set it to null here?
           default = field.attrval('default', default=None)
-          /# defval_old = self.formatExpr(default, metatype, field)
           if default:
             defval, resmtype = self.compileExpr(
               default, metafile, method, indent='    ')
-            /# print('**** HERE with %s = %s' % (field.kindfqn(), defval))
           else:
             defval = self.defaultValue(metatype)
         if fkind == 'static':
@@ -9392,16 +9337,14 @@ namespace metax.oopl scope:
       if scope and scope.isSimpleBlock():
         recs = set()
         baserec = self.receiverStr(
-          executable, style='base', location=location, sep=True)
+          executable, style='base', location=location, sep=True)[0]
         recs.add(baserec)
         if baserec == 'this->':
           recs.add('(*this).')
         metarec = self.receiverStr(
-          executable, style='meta', location=location, sep=True)
+          executable, style='meta', location=location, sep=True)[0]
         recs.add(metarec)
         recstr = '|'.join([re.escape(rec) for rec in recs])
-
-        /# print('%-12s  %s = %s' % (self.id(), location, recstr))
 
         fre = re.compile(
           /# Note that we only consider assignments that are NOT indented,
@@ -9473,7 +9416,6 @@ namespace metax.oopl scope:
 
       Chk('py', 'user', {'pyjscc': '21', 'py_js_cc': '1'})
       Chk('js', 'user', {'pyjscc': '21', 'py_js_cc': '1'})
-      /# Chk('cc', 'user', {'cc': '7', 'cc2': '8', 'pyjscc': '21', 'py_js_cc': '1'})
       Chk('cc', 'user', {'cc': '7', 'cc2': '8', 'pyjscc': '21', 'py_js_cc': '1'})
 
       Chk('py', 'meta', {'pyjscc': '21', 'py_js_cc': '1'})
@@ -9481,6 +9423,89 @@ namespace metax.oopl scope:
       Chk('cc', 'meta', {'cc': '7', 'cc2': '8', 'pyjscc': '21', 'py_js_cc': '1'})
 
     end method analyzeExecutableForFields;
+
+    final
+    method _receiverStr : tuple<str,str> #:
+      Service method used by subclasses in their implementation of receiverStr.
+    params:
+      var method : metax.oopl.ExecutableConstruct #:
+        The executable for which a receiver is desired.
+      var location : str #:
+        The location feature value of the method. If null, obtained from
+        method.
+      var style : str #:
+        One of 'base', 'meta' or 'auto'
+          base:
+            This is the only style NOT handled by this method (instead, it
+            is handled by subclasses in 'receiverStr').
+          meta:
+            Use the meta-defined receiver variable ('self' for instance,
+            'meta' for metaclass, 'test' for testclass)
+          auto:
+            Establish the meta-level receiver, then look for that variable
+            in the user-provided body of the method.  If found, use that
+            variable, else use the 'base' variable.
+      var myclass : metax.oopl.ClassConstruct #:
+        The class of the method.  If null, uses method.myclass().
+    scope:
+      result = None
+      if myclass is None:
+        myclass = method.myclass()
+        if myclass is None:
+          raise metax.c.Error(
+            'Construct %s has not initialized myclass' % method.kindfqn())
+      kind = method.attrval('kind')
+      if location is None:
+        location = method.attrval('location')
+
+      if style == 'meta':
+        /# A meta-level receiver is desired.
+        /#  - meta-methods and static methods use 'meta'
+        /#  - test methods use 'test'
+        /#  - instance methods use 'self'
+        if myclass.isTest():
+          result = 'test'
+        elif myclass.isMeta():
+          result = 'meta'
+        else:
+          result = 'meta' if (kind == 'static' or kind == 'cls') else 'self'
+          
+      elif style == 'auto':
+        /# We are to establish the meta-level var, see if it exists in the
+        /# scope, and return it or the base var dependning on whether it does.
+        metavar = self._receiverStr(method, location, 'meta', myclass)[0]
+        scope = method.attrval('scope:')
+        /# TODO(wmh): Consider using BaseLanguageOopl.analzyeExecutableForFields
+        /# (but it would need generalizing, since we are looking here for only
+        /# metavar references).
+        /# Note that meta-level vars ('self, 'test', and 'meta') always refer
+        /# to reference types (never pointers), so we do not need to loo
+        /# syntax like '(*this).f'
+        mre = re.compile(r'%s(\.|->)' % metavar)
+        found = False
+        for line in scope:
+          /# Check if metavar is used
+          if mre.search(line):
+            found = True
+            break
+        if found:
+          /# We found a reference to the metavar, so that is what we return.
+          result = metavar
+        else:
+          /# We did not find reference to the metavar, so we use the basevar.
+          result = self.receiverStr(
+            method, location=location, style='base', myclass=myclass)[0]
+
+      elif style != 'base':
+        /# This method does not handle style 'base', but does handle all others.
+        raise metax.c.Error('Invalid style "%s"' % style)
+
+      return (result, myclass, kind, location)
+    test:
+      /# This is called from each of the receiverStr() behavior implementations,
+      /# and comprehensive testing is done therein.
+      pass
+    end method _receiverStr;
 
     method defaultValue : str #:
       The default value for a given metatype.
@@ -9553,8 +9578,8 @@ namespace metax.oopl scope:
         recre = None
 
         if False and replace_receiver and isinstance(parent, metax.oopl.ExecutableConstruct):
-          baserec = self.receiverStr(parent, deref=True)
-          metarec = self.receiverStr(parent, style='meta')
+          baserec = self.receiverStr(parent, deref=True)[0]
+          metarec = self.receiverStr(parent, style='meta')[0]
           if baserec != metarec:
             /# This regexp is carefully crafted to avoid grabbing non-receivers:
             /#  - the basics: don't replace inside another variable
@@ -11414,7 +11439,7 @@ namespace metax.oopl scope:
     Auto-generate the human-readable printMeta() method.
 
       method printMeta : void params:
-        var fp : ostream = out;
+        var fp : &ostream = out;
         var indent : str = '';
       end;
   params:
@@ -11437,7 +11462,7 @@ namespace metax.oopl scope:
           ('#:',['Auto-generated human-readable summary of this object.']),
           ('params:', [
             {'var': 'fp', 'secondaries': [
-              (':', metax.c.Type.Instance('ostream')),
+              (':', metax.c.Type.Instance('&ostream')),
               ('=', metax.c.Expr('var', 'out', 'out')),
             ]},
             {'var': 'indent', 'secondaries': [
@@ -11461,6 +11486,12 @@ namespace metax.oopl scope:
     receiver OoplCpp scope:
       method = super(OoplCpp, self).autogenPrint(klass)
       body = method.attrval('scope:')
+
+      /# TODO(wmh): Since every class defines these methods, should we just
+      /# include <iostream> in __Meta__.h?
+      /# The params require module 'iostream'.
+      klass.addDependency('iostream', 'std', 'needed by autogened printMeta')
+
       /# TODO(wmh): Add body!
       return method
     test:
@@ -11471,7 +11502,7 @@ namespace metax.oopl scope:
         >|notest method printMeta : void #:
         >|  Auto-generated human-readable summary of this object.
         >|params:
-        >|  var fp : ostream = out;
+        >|  var fp : &ostream = out;
         >|  var indent : str = '';
         >|scope:
         >|end method printMeta;
@@ -11492,7 +11523,7 @@ namespace metax.oopl scope:
         >|notest method printMeta : void #:
         >|  Auto-generated human-readable summary of this object.
         >|params:
-        >|  var fp : ostream = out;
+        >|  var fp : &ostream = out;
         >|  var indent : str = '';
         >|scope:
         >|end method printMeta;
@@ -11558,7 +11589,7 @@ namespace metax.oopl scope:
         >|notest method printMeta : void #:
         >|  Auto-generated human-readable summary of this object.
         >|params:
-        >|  var fp : ostream = out;
+        >|  var fp : &ostream = out;
         >|  var indent : str = '';
         >|scope:
         >|  subindent = indent + "  "
@@ -11602,7 +11633,7 @@ namespace metax.oopl scope:
           ('#:',['Auto-generated protobuf serializer of this object.']),
           ('params:', [
             {'var': 'fp', 'secondaries': [
-              (':', metax.c.Type.Instance('ostream')),
+              (':', metax.c.Type.Instance('&ostream')),
               ('=', metax.c.Expr('var', 'out', 'out')),
             ]},
           ]),
@@ -11613,9 +11644,6 @@ namespace metax.oopl scope:
       assert method.myclass() is klass
       method.expandMeta()
       method.namespaceIs(klass.namespace())
-
-      /# The code above requires standard module 'sys'.
-      klass.addDependency('sys', 'std', 'needed by autogened writeMeta')
 
       return method
     test:
@@ -11644,7 +11672,10 @@ namespace metax.oopl scope:
 
     receiver OoplPython scope:
       method = super(OoplPython, self).autogenWrite(klass)
-      /# TODO(wmh): Add body lines
+
+      /# The code above requires standard module 'sys'.
+      klass.addDependency('sys', 'std', 'needed by autogened writeMeta')
+
       return method
     test:
       test.tpy()
@@ -11698,7 +11729,7 @@ namespace metax.oopl scope:
 
     receiver OoplCpp scope:
       method = super(OoplCpp, self).autogenSize(klass)
-      method.attrval('scope:').extend(['result = 0', 'return result'])
+      method.attrval('scope:').extend(['int result = 0;', 'return result;'])
       return method
     test:
       test.tcc()
@@ -11708,8 +11739,8 @@ namespace metax.oopl scope:
         >|notest method sizeMeta : int #:
         >|  Auto-generated sizeof method for this object.
         >|scope:
-        >|  result = 0
-        >|  return result
+        >|  int result = 0;
+        >|  return result;
         >|end method sizeMeta;
         >|""",
         test.out())
@@ -11717,7 +11748,7 @@ namespace metax.oopl scope:
 
     receiver OoplJavascript scope:
       method = super(OoplJavascript, self).autogenSize(klass)
-      method.attrval('scope:').extend(['result = 0', 'return result'])
+      method.attrval('scope:').extend(['let result = 0;', 'return result;'])
       return method
     test:
       test.tjs()
@@ -11727,8 +11758,8 @@ namespace metax.oopl scope:
         >|notest method sizeMeta : int #:
         >|  Auto-generated sizeof method for this object.
         >|scope:
-        >|  result = 0
-        >|  return result
+        >|  let result = 0;
+        >|  return result;
         >|end method sizeMeta;
         >|""",
         test.out())
@@ -11754,6 +11785,35 @@ namespace metax.oopl scope:
     end receiver OoplPython;
 
   end behavior autogenSize;
+
+  behavior buildPreambleText : str #:
+    The baselang-specific preamble at the top of a BUILD file.
+  scope:
+    abstract receiver BaseLanguageOopl;
+
+    receiver OoplCpp scope:
+      return ''
+    test:
+      test.iseq('', test.baselang.buildPreambleText())
+    end receiver OoplCpp;
+
+    receiver OoplJavascript scope:
+      return (
+        >|"""load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library")
+        >|load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_binary")
+        >|load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_test")
+        >|""")
+    test:
+      test.contains('io_bazel_rules_closure', test.baselang.buildPreambleText())
+    end receiver OoplJavascript;
+
+    receiver OoplPython scope:
+      return ''
+    test:
+      test.iseq('', test.baselang.buildPreambleText())
+    end receiver OoplPython;
+
+  end behavior buildPreambleText;
 
   behavior classPath : str #:
     Obtain the baselang specific path in which a class is stored.
@@ -11793,35 +11853,6 @@ namespace metax.oopl scope:
     end receiver OoplPython;
 
   end behavior classPath;
-
-  behavior buildPreambleText : str #:
-    The baselang-specific preamble at the top of a BUILD file.
-  scope:
-    abstract receiver BaseLanguageOopl;
-
-    receiver OoplCpp scope:
-      return ''
-    test:
-      test.iseq('', test.baselang.buildPreambleText())
-    end receiver OoplCpp;
-
-    receiver OoplJavascript scope:
-      return (
-        >|"""load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library")
-        >|load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_binary")
-        >|load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_test")
-        >|""")
-    test:
-      test.contains('io_bazel_rules_closure', test.baselang.buildPreambleText())
-    end receiver OoplJavascript;
-
-    receiver OoplPython scope:
-      return ''
-    test:
-      test.iseq('', test.baselang.buildPreambleText())
-    end receiver OoplPython;
-
-  end behavior buildPreambleText;
 
   behavior classSubPath : str #:
     The path (relative to WORKSPACE dir) of the file that contains the
@@ -12267,8 +12298,14 @@ namespace metax.oopl scope:
           data['srcs'].append(name + '.h')
         else:
           data['hdrs'] = [name + '.h']
+        copts = data.setdefault('copts', [])
         /# The -Iexternal/gtest/include is needed to support gtest.
-        data.setdefault('copts', []).append('-Iexternal/gtest/include')
+        copts.append('-Iexternal/gtest/include')
+        /# The -Wnounused-variable is temporary until we get the code for
+        /# inserting 'self'/'test'/'meta' properly conditionalized so that
+        /# it isn't inserted of the variable isn't used.
+        /# TODO(wmh): Consider using [[maybe_unused]]: https://en.cppreference.com/w/cpp/language/attributes
+        copts.append('-Wno-unused-variable')
 
       else:
         rule = None
@@ -12290,6 +12327,82 @@ namespace metax.oopl scope:
     end receiver OoplCpp;
 
   end behavior createBuildFragment;
+
+  behavior defineBaseVar : str #:
+    Obtain the baselang syntax for defining/initializing a variable.
+  params:
+    var name : str #:
+      Name of variable.
+    var baseval : str = null #:
+      The baselang-specific syntax for the value. One of 'baseval' or 'metaval'
+      must be provided.
+    var metaval : metax.c.Expr = null #:
+      A meta-level expression to convert to baselang syntax.
+    var mtype : metax.c.Type = null #:
+      The type of the variable. If null, use auto if avaiable else any.
+  scope:
+
+    receiver BaseLanguageOopl ::
+      metafile = self.metafile()
+      if metaval:
+        if baseval:
+          raise metax.c.InternalError('Do not specify both baseval and metaval')
+        /# TODO(wmh): Add code here!
+        raise metax.c.InternalError('Not yet handling metaval in defineBaseVar')
+      elif baseval:
+        /# subclasses will add text before (typing) and after (termination).
+        result = '%s = %s' % (name, baseval)
+      else:
+        raise metax.c.InternalError('Must specify one of baseval or metaval')
+      return result
+    test:
+      /# tested in subclass overrides (no instance of this class).
+      pass
+    end receiver BaseLanguageOopl;
+
+    receiver OoplCpp ::
+      result = super(OoplCpp, self).defineBaseVar(
+        name, baseval=baseval, metaval=metaval, mtype=mtype)
+      /# https://stackoverflow.com/questions/29859796/c-auto-vs-auto
+      prefix = 'auto&' if mtype is None else self.typeToBase(mtype)
+      result = prefix + ' ' + result + ';'
+      return result
+    test:
+      test.tcc()
+      test.iseq(
+        'auto& self = (*this);',
+        test.baselang.defineBaseVar('self', baseval='(*this)', mtype=None))
+      /# TODO(wmh): More testing!
+    end receiver OoplCpp;
+
+    receiver OoplJavascript ::
+      result = super(OoplJavascript, self).defineBaseVar(
+        name, baseval=baseval, metaval=metaval, mtype=mtype)
+      /# TODO(wmh): Add jsdoc typing info here!
+      result = 'let ' + result + ';'
+      return result
+    test:
+      test.tjs()
+      test.iseq(
+        'let self = this;',
+        test.baselang.defineBaseVar('self', baseval='this', mtype=None))
+      /# TODO(wmh): More testing!
+    end receiver OoplJavascript;
+
+    receiver OoplPython ::
+      result = super(OoplPython, self).defineBaseVar(
+        name, baseval=baseval, metaval=metaval, mtype=mtype)
+      /# No type and no prefix, so parent result is sufficient.
+      return result
+    test:
+      test.tpy()
+      test.iseq(
+        'this = self',
+        test.baselang.defineBaseVar('this', baseval='self', mtype=None))
+      /# TODO(wmh): More testing!
+    end receiver OoplPython;
+
+  end behavior defineBaseVar;
 
   behavior emptyBlockCode : vec<str> #:
     Returns the lines of baselang code used to represent an empty block.
@@ -13026,8 +13139,8 @@ namespace metax.oopl scope:
       test.iseq(
         /# TODO(wmh): Fix 'demo.tmp.MetaPerson' (should be 'demo.tmp.PersonMeta')
         ['demo.tmp.MetaPerson', 'metax.root.Object', 'metax.root.ObjectMeta',
-         /# TODO(wmh): os and sys should not be in the javascript list
-         'os', 'sys',
+         /# TODO(wmh): os should not be in the javascript list
+         'os',
         ],
         sorted(klass.deps().keys()))
       test.iseq(
@@ -13104,82 +13217,6 @@ namespace metax.oopl scope:
     end receiver OoplPython;
 
   end behavior formatDependency;
-
-  behavior formatExpr : str #:
-    Convert an Expr to baselang syntax.
-
-    TODO(wmh): FIX THIS!  BaseLanguageOopl.compileExpr() already does this,
-    and much better.
-  params:
-    var value : any #:
-      TODO(wmh): In the transitional period where we are switching 'default'
-      and various other attributes from type 'word' to type 'expr', the value
-      passed to this behavior may be an Expr or a string, and the code should
-      handle both.  Once we are fully converted, we can remove the string
-      handling code.
-    var mtype : *metax.oopl.Type #:
-      The type of the expression.  Only used if value is None, in which case
-      the default value associated with this type is used.
-    var construct : *metax.oopl.Construct #:
-      A MethodConstruct or FieldConstruct, etc.
-  scope:
-
-    receiver BaseLanguageOopl scope:
-      /# TODO(wmh): This import should be at the top of the namespace file,
-      /# but until we add a 'preport:' secondary attribute to MetaLanguage,
-      /# that isn't possible here.
-      from past.builtins import basestring
-
-      if value is None:
-        /# CODETANGLE(special_expr): TODO(wmh): Decide whether <special> is
-        /# indicated by an Expr with value() None, or by an Expr that is None.
-        result = self.defaultValue(mtype)
-      elif isinstance(value, basestring):
-        print('************* FIX ME ... SHOULD NOT PASS STRINGS to formatExpr')
-        result = value
-      elif isinstance(value, metax.c.Expr):
-        if True:
-          metafile = construct.context().metafile()
-          /# TODO(wmh): This needs improving. If construct is a case/loop/switch
-          /# we should use the method it belongs to as the executable.
-          executable = construct if isinstance(construct, metax.oopl.ExecutableConstruct) else None
-          result, restype = self.compileExpr(value, metafile, executable=executable)
-        else:
-          kind = value.kind()
-          if kind == 'str':
-            result = value.value()
-            /# CODETANGLE(special_expr): TODO(wmh): Decide whether <special> is
-            /# indicated by an Expr with value() None, or by an Expr that is None.
-            if result is None:
-              result = self.defaultValue(mtype)
-          elif kind == 'id':
-            result = value.value()
-            /# TODO(wmh): Handle pseudovars here!
-            /# result = self.pseudovars().get(result, result)
-          elif kind == 'num':
-            result = value.value()
-          else:
-            print('*** HERE with %s = %s' % (value, mtype.raw()))
-            result = 'fix me'
-      else:
-        raise metax.c.Error('Unknown value type %s for formatExpr' % type(value))
-      return result
-    test:
-      /# TODO(wmh): Get support for tests: working for behaviors, and add
-      /# tests for all baselangs.
-      test.tpy(statements=True)
-      switch1 = test.switch
-      case1 = switch1.attr('scope:').value()[0]
-      expr1 = case1.attrval('expr')
-      switch2 = test.switch2
-      case2 = switch2.attr('scope:').value()[0]
-      expr2 = case2.attrval('expr')
-      
-      test.iseq('1', test.baselang.formatExpr(expr1, None, case1))
-      test.iseq('(f == 1)', test.baselang.formatExpr(expr2, None, case2))
-    end;
-
-  end behavior formatExpr;
 
   behavior formatFieldDefinition : vec<str> #:
     Obtain the baselang code needed to define this field.
@@ -13262,11 +13299,12 @@ namespace metax.oopl scope:
       if kind == 'static':
         default = field.attrval('default', default=None)
         mtype = field.attrval('type', default=metax.c.LOOKUP)
-        /# print('%s : %s = %s' % (field.fqn(), mtype.raw(), default))
-
-        /# TODO(wmh): Replace this with compileExpr() when we are fully
-        /# migrated to 'default' always being of type 'expr'.
-        basedef = self.formatExpr(default, mtype, field)
+        basedef, mtype2 = self.compileExpr(default, self.metafile(), metatype=mtype)
+        if mtype is not mtype2:
+          /# Sanity check.
+          print(
+            'NOTE: In formatFieldDefinition, default type %s vs %s' % 
+            (mtype, mtype2))
         result = ['%s = %s' % (field.rawfield(), basedef)]
       else:
         result = []
@@ -13520,19 +13558,38 @@ namespace metax.oopl scope:
         preamble.append('cls = %s' % executable.myclass().id())
         pass
       else:
-        rec = self.receiverStr(executable)
+        rec = self.receiverStr(executable)[0]
         assert rec is not None
         result.append(rec)
 
       params = executable.parsedParams()
       pdata = params['data']
       if pdata:
+        metafile = self.metafile()
+        nulltype = metax.c.Type.Instance('meta.Null')
         for param in pdata:
           part = param['name']
           if 'default' in param:
             defexpr = param['default']
-            default = self.formatExpr(defexpr, param['type'], executable)
-            defval = self.pseudovars().get(default, default)
+            metatype = param['type']
+            defval, metatype2 = self.compileExpr(
+              defexpr, metafile, executable=executable, metatype=metatype)
+            if False and metatype is not metatype2 and metatype2 is not nulltype:
+              /# TODO(wmh): The discrepancies reported by this when not disabled
+              /# are a bit concerning. Things like:
+              /#   str vs &str
+              /#   &ostream vs meta.ostream
+              /#   int vs uint
+              /#   bool vs None
+              /# are all potential errors. On the other hand, diffs like
+              /#   vec<metax.c.Construct> vs meta.Null
+              /#   metax.oopl.ClassConstruct vs meta.Null
+              /#   metax.oopl.ExecutableConstruct vs meta.Null
+              /#   map vs meta.Null
+              /# are valid.
+              print(
+                'NOTE: In formatParams, metatype %s vs %s' %
+                (metatype, metatype2))
 
             /# TODO(wmh): Need to implement a generic mechanism for providing
             /# type-specific interpretations of default values. The following is
@@ -13581,25 +13638,27 @@ namespace metax.oopl scope:
       test.tpy(expand=True)
       preamble = []
       test.iseq(
-        "(self, fp=sys.stdout, indent='')",
+        "(self, fp=sys.stdout, indent=u'')",
         test.baselang.formatParams(test.method2, preamble))
       test.iseq([], preamble)
     end receiver OoplPython;
 
     receiver OoplJavascript scope:
       result = []
-      rec = self.receiverStr(executable)
+      rec = self.receiverStr(executable)[0]
 
       variadics = []
       params = executable.parsedParams()
       pdata = params['data']
       if pdata:
+        metafile = self.metafile()
         for param in pdata:
           part = param['name']
           if 'default' in param:
-            default = self.formatExpr(
-              param['default'], param['type'], executable)
-            defval = self.pseudovars().get(default, default)
+            metatype = param['type']
+            defval, metatype2 = self.compileExpr(
+              param['default'], metafile,
+              executable=executable, metatype=metatype)
             /# As of ES2015, default parameters exist in javascript.
             /#   https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Default_parameters
             part += '=' + defval
@@ -13623,7 +13682,7 @@ namespace metax.oopl scope:
 
     receiver OoplCpp scope:
       result = []
-      rec = self.receiverStr(executable)
+      rec = self.receiverStr(executable)[0]
       myclass = executable.myclass()
 
       mutability = executable.attrval('mutability')
@@ -13634,6 +13693,7 @@ namespace metax.oopl scope:
       params = executable.parsedParams()
       pdata = params['data']
       if pdata:
+        metafile = self.metafile()
         for param in pdata:
           basetype = self.typeToBase(param['type'], class_construct=myclass)
           part = basetype + ' ' + param['name']
@@ -13642,9 +13702,10 @@ namespace metax.oopl scope:
               /# In C++, default args can be added to declaration or
               /# definition but not both.  Since the default args are part of
               /# the public interface, we assign them in decl not defn.
-              default = self.formatExpr(
-                param['default'], param['type'], executable)
-              defval = self.pseudovars().get(default, default)
+              metatype = param['type']
+              defval, metatype2 = self.compileExpr(
+                param['default'], metafile,
+                executable=executable, metatype=metatype)
               part += ' = ' + defval
           result.append(part)
       if 'varvec' in params:
@@ -13880,6 +13941,7 @@ namespace metax.oopl scope:
         if i < k:
           /# Per-class map files are in .<name>.<suffix>.map (even in python)
           class_candidate = parts[i]
+
           /# In C++, self.suffix() is .cc, but we need to use .h because the
           /# .h.map file is guaranteed to have all symbols whereas .cc.map will
           /# not have header-inlined symbols.
@@ -14150,6 +14212,179 @@ namespace metax.oopl scope:
     end receiver OoplCpp;
 
   end behavior initializerName;
+
+  behavior lazyLines : vec<str> #:
+    Define the code to implement a lazy accessor getter.
+  params:
+    var metafile : metax.c.MetaFile #:
+      The metafile being parsed.
+    var getter : MethodConstruct #:
+      The getter containing the lazy attribute.
+    var lazy : metax.attr.Attribute #:
+      The lazy attribute.
+    var mtype : metax.c.Type #:
+      The type of the field.
+    var rawfield : str #:
+      The baselang rawfield name.
+  scope:
+
+    abstract
+    receiver BaseLanguageOopl;
+
+    receiver OoplCpp ::
+      newlines = []
+      resvar = '__meta_result'
+      recstr, specstr = self.receiverStr(getter, sep=True)
+      if recstr is None:
+        recstr = specstr
+      rawvar = '%s%s' % (recstr, rawfield)
+
+      if mtype.isPtr():
+        /# We can make an efficient copy, so we do not use auto&. That allows
+        /# us to assign the ->result to both resvar and recstr.
+        newlines.append('auto %s = %s;' % (resvar, rawvar))
+      else:
+        /# Non-ref assignment will invoke the copy constructor, which we want
+        /# to avoid, so we assign by reference. This however means that we
+        /# do not need to copy ->result to recstr, as the lazy block will be
+        /# directly modifying the desired variable.
+        newlines.append('auto& %s = %s;' % (resvar, rawvar))
+
+      if mtype.isValue():
+        newlines.append('if (!%s) {' % resvar)
+      else:
+        newlines.append('if (%s == nullptr) {' % resvar)
+
+      /# TODO(wmh): Handle complex block! This portion can be a submethod
+      /# as it is common to all baselangs.
+      lazylines = lazy.value()
+      for i in range(0, len(lazylines)-1):
+        newlines.append('  ' + lazylines[i])
+      lazyend = lazylines[-1][:3]
+      if lazyend != '-> ':
+        metafile.error(
+          'Expecting lazy: block of accessor to end with line starting "-> " not "%s"' % 
+          (lazyend), line=lazy.line())
+
+      resval = lazylines[-1][3:]
+      if mtype.isPtr():
+        newlines.append('  %s = %s;' % (resvar, resval))
+        newlines.append('  %s = %s;' % (rawvar, resvar))
+      newlines.append('}')  # ends 'if' above.
+      newlines.append('return %s;' % resvar)
+
+      return newlines
+    end receiver OoplCpp;
+
+    receiver OoplJavascript ::
+      newlines = []
+      metafile.warning(
+        'Not yet handling lazy in %s' % self.id(), attr=lazy)
+      return newlines
+    end receiver OoplJavascript;
+
+    receiver OoplPython ::
+      newlines = []
+      resvar = '__meta_result'
+      recstr, specstr = self.receiverStr(getter, sep=True)
+      if recstr is None:
+        recstr = specstr
+      rawvar = '%s%s' % (recstr, rawfield)
+      newlines.append('%s = %s' % (resvar, rawvar))
+
+      if mtype.isValue():
+        newlines.append('if not %s:' % resvar)
+      else:
+        newlines.append('if %s is None:' % resvar)
+
+      /# TODO(wmh): Handle complex block! This portion can be a submethod
+      /# as it is common to all baselangs.
+      lazylines = lazy.value()
+      for i in range(0, len(lazylines)-1):
+        newlines.append('  ' + lazylines[i])
+      lazyend = lazylines[-1][:3]
+      if lazyend != '-> ':
+        metafile.error(
+          'Expecting lazy: block of accessor to end with line starting "-> " not "%s"' % 
+          (lazyend), line=lazy.line())
+
+      resval = lazylines[-1][3:]
+      newlines.append('  %s = %s' % (resvar, resval))
+      newlines.append('  %s = %s' % (rawvar, resvar))
+      newlines.append('return ' + resvar)
+
+      return newlines
+    end receiver OoplPython;
+
+  end behavior lazyLines;
+
+  behavior literalString : str #:
+    Provides a baselang-specific representation of a literal string.
+  params:
+    var expr : Expr #:
+      An expr of kind 'str'.
+  scope:
+
+    receiver OoplCpp ::
+      /# Strings must be quoted using ".
+      assert expr.kind() == 'str'
+      value = expr.value()
+      delim = "\""
+      if not value:
+        raise metax.c.Error('Not supporting empty literal strings')
+      if value[0] == "'":
+        value = value[1:-1]
+        /# TODO(wmh): Properly escape unescaped double quotes in value
+        result = delim + value + delim
+      elif value[0] != delim:
+        /# TODO(wmh): Properly escape unescaped double quotes in value
+        result = delim + value + delim
+      else:
+        result = value
+      return result
+    test:
+      test.tcc()
+      test.iseq('""', test.baselang.literalString(metax.c.Expr.FromStr("''")))
+      test.iseq('""', test.baselang.literalString(metax.c.Expr.FromStr('""')))
+      test.iseq(
+        '"Hello World!"',
+        test.baselang.literalString(metax.c.Expr.FromStr('"Hello World!"')))
+      test.iseq(
+        '"Hello World!"',
+        test.baselang.literalString(metax.c.Expr.FromStr("'Hello World!'")))
+    end receiver OoplCpp;
+
+    receiver OoplJavascript ::
+      /# Strings must be quoted, but can use either ' or ". We use whatever the
+      /# user used when specifying it in meta syntax.
+      assert expr.kind() == 'str'
+      return expr.asStr(quote=True)
+    test:
+      test.tjs()
+      test.iseq("''", test.baselang.literalString(metax.c.Expr.FromStr("''")))
+      test.iseq('""', test.baselang.literalString(metax.c.Expr.FromStr('""')))
+      test.iseq(
+        '"Hello World!"',
+        test.baselang.literalString(metax.c.Expr.FromStr('"Hello World!"')))
+    end receiver OoplJavascript;
+
+    receiver OoplPython ::
+      /# Strings must be quoted, but can use either ' or ". We use whatever the
+      /# user used when specifying it in meta syntax. However, in order to be
+      /# both python2 and python3 compliant, we preface all literal strings with
+      /# a unicode indicator.
+      assert expr.kind() == 'str'
+      return 'u' + expr.asStr(quote=True)
+    test:
+      test.tpy()
+      test.iseq("u''", test.baselang.literalString(metax.c.Expr.FromStr("''")))
+      test.iseq('u""', test.baselang.literalString(metax.c.Expr.FromStr('""')))
+      test.iseq(
+        'u"Hello World!"',
+        test.baselang.literalString(metax.c.Expr.FromStr('"Hello World!"')))
+    end receiver OoplPython;
+
+  end behavior literalString;
 
   behavior metaMethodBody : vec<str> #:
     Returns the list of lines in baselang syntax used to implement the
@@ -14653,7 +14888,9 @@ namespace metax.oopl scope:
 
       /#import pprint; pprint.pprint(tdata)
     test:
-      print('Awaiting data on what arg content should look like.')
+      /# TODO(wmh): Fix this!
+      if False:
+        print('Awaiting data on what arg content should look like.')
     end receiver OoplJavascript;
 
     receiver OoplPython scope:
@@ -15092,8 +15329,16 @@ namespace metax.oopl scope:
 
   end behavior processTestOutput;
 
-  behavior receiverStr : str #:
-    Obtain the baselang-specific receiver variable
+  behavior receiverStr : tuple<str,str> #:
+    Obtain the baselang-specific receiver variable associated with a method.
+
+    IMPORTANT: There are two related values that are useful here:
+     1. The syntax to use to access state within a given method. This is 
+        always a variable (or null if there is no variable by which state
+        can be accessed).  This variable may be augmented by dereference and
+        seperator syntax, but the core is a variable.
+     2. The syntax to use to access state, without requiring that it be a
+        variable.
   params:
     var method : metax.oopl.ExecutableConstruct #:
       The executable for which a receiver is desired.
@@ -15120,149 +15365,441 @@ namespace metax.oopl scope:
       If true, append the separator character. For style 'base', this
       is baselang-dependent, but for style 'meta' it is always '.'.
     var deref : bool = false #:
-      If true, return the version of the base receiver that can respond
-        to '.'. For example, for C++, returns '(*this)', because
-        '(*this).func()' is legal.
+      Only considered if style is base. Dereferences pointer types.
+      For example, for C++, returns '(*this)' so that one can use 
+      '(*this).func()'.
   scope:
-
-    receiver BaseLanguageOopl scope:
-      if myclass is None:
-        myclass = method.myclass()
-        if myclass is None:
-          raise metax.c.Error(
-            'Construct %s has not initialized myclass' % method.kindfqn())
-      if location is None:
-        location = method.attrval('location')
-      attrkind = method.attrval('kind')
-      if style == 'base':
-        if attrkind == 'static':
-          /# TODO(wmh): Some baselangs will need to use fqn rather than id.
-          /# Also, in C++, the separator between the receiver and method is
-          /# different for static methods than for instance/meta methods, and
-          /# will have to be special-cased in FieldConstruct.expandMeta().
-          result = myclass.id()
-        elif self.id() in ('python', 'perl'):
-          if myclass.isMeta() or attrkind == 'cls':
-            result = 'cls'
-          else:
-            result = 'self'
-        else:
-          pvar = 'cls' if location == 'meta' else 'self'
-          result = self.config(pvar)
-      elif style == 'meta':
-        if myclass.isTest():
-          result = 'test'
-        elif myclass.isMeta():
-          result = 'meta'
-        else:
-          kind = method.attrval('kind')
-          result = 'meta' if kind == 'cls' else 'self'
-      elif style == 'auto':
-        meta_result = 'self' if location == 'user' else location
-        pvar = 'cls' if location == 'meta' else 'self'
-        base_result = self.config(pvar)
-        /# TODO(wmh): search method.attrval('scope:') for references to
-        /# the variable stored in result. If found, use it, else use the
-        /# baselang version.
-        raise metax.c.Error('Not yet supporting receiverStr(base="%s")' % style)
-      else:
-        raise metax.c.Error('Invalid style "%s"' % style)
-
-      if sep:
-        if style == 'base':
-          result += self.config('selfsep')
-        else:
-          result += '.'
-      if deref:
-        if style == 'base':
-          /# TODO(wmh): Generalize? We could define receiverStr() as
-          /# a behavior, with this implementation as the default. C++ would
-          /# call super and modify slightly.
-          if self.id() == 'cpp':
-            result = '(*' + result + ')'
-      return result
-    test:
-      ooplpy, _, context, _ = test.cachedInfo(basel='python')
-      oopljs, _, _, _ = test.cachedInfo(basel='javascript')
-      ooplcc, _, _, _ = test.cachedInfo(basel='cpp')
-
-      filec = metax.meta.FileConstruct.NewFromData(
-        'File', context, secondaries=[('scope:', [])])
-      namespace = metax.oopl.NamespaceConstruct.NewFromData(
-        'nm.sp', context, parent=filec.attr('scope:'),
-        secondaries=[('scope:', [])])
-      klass = metax.oopl.ClassConstruct.NewFromData(
-        'Card', context, parent=namespace.attr('scope:'),
-        secondaries=[('scope:', [])])
-
-      /# instance method
-      instance_method = metax.oopl.MethodConstruct.NewFromData(
-        'f', context, parent=klass.attr('scope:'))
-      instance_method.myclassIs(klass)
-      test.iseq('self', ooplpy.receiverStr(instance_method, location='user'))
-      test.iseq('self', ooplpy.receiverStr(instance_method))
-      test.iseq('self', ooplpy.receiverStr(instance_method, style='meta'))
-      test.iseq('this', oopljs.receiverStr(instance_method, location='user'))
-      test.iseq('this', oopljs.receiverStr(instance_method))
-      test.iseq('self', oopljs.receiverStr(instance_method, style='meta'))
-      test.iseq('this', ooplcc.receiverStr(instance_method, location='user'))
-      test.iseq('this', ooplcc.receiverStr(instance_method))
-      test.iseq('self', ooplcc.receiverStr(instance_method, style='meta'))
-
-      /# meta method
-      meta_method =  metax.oopl.MethodConstruct.NewFromData(
-        'F', context, parent=klass.attr('scope:'),
-        features=[('location', 'meta')])
-      meta_method.myclassIs(klass)
-      klass.variantIs('meta')
-      test.iseq('cls',  ooplpy.receiverStr(meta_method, location='meta'))
-      test.iseq('cls',  ooplpy.receiverStr(meta_method))
-      test.iseq('meta', ooplpy.receiverStr(meta_method, style='meta'))
-      test.iseq('this', oopljs.receiverStr(meta_method, location='meta'))
-      test.iseq('this', oopljs.receiverStr(meta_method))
-      test.iseq('meta', oopljs.receiverStr(meta_method, style='meta'))
-      test.iseq('this', ooplcc.receiverStr(meta_method, location='meta'))
-      test.iseq('this', ooplcc.receiverStr(meta_method))
-      test.iseq('meta', ooplcc.receiverStr(meta_method, style='meta'))
-
-      /# test method
-      test_method =  metax.oopl.MethodConstruct.NewFromData(
-        'test_f', context, parent=klass.attr('scope:'),
-        features=[('location', 'test')])
-      test_method.myclassIs(klass)
-      klass.variantIs('test')
-      test.iseq('self', ooplpy.receiverStr(test_method, location='test'))
-      test.iseq('self', ooplpy.receiverStr(test_method))
-      test.iseq('test', ooplpy.receiverStr(test_method, style='meta'))
-      test.iseq('this', oopljs.receiverStr(test_method, location='test'))
-      test.iseq('this', oopljs.receiverStr(test_method))
-      test.iseq('test', oopljs.receiverStr(test_method, style='meta'))
-      test.iseq('this', ooplcc.receiverStr(test_method, location='test'))
-      test.iseq('this', ooplcc.receiverStr(test_method))
-      test.iseq('test', ooplcc.receiverStr(test_method, style='meta'))
-
-      /# Testing the 'sep' param
-      test.iseq('self.', ooplpy.receiverStr(instance_method, sep=True))
-      test.iseq('this.', oopljs.receiverStr(instance_method, sep=True))
-      test.iseq('this->', ooplcc.receiverStr(instance_method, sep=True))
-
-      /# Testing the 'deref' param
-      test.iseq('self', ooplpy.receiverStr(instance_method, deref=True))
-      test.iseq('this', oopljs.receiverStr(instance_method, deref=True))
-      test.iseq('(*this)', ooplcc.receiverStr(instance_method, deref=True))
-    end receiver BaseLanguageOopl;
+ 
+    abstract
+    receiver BaseLanguageOopl;
 
     receiver OoplCpp scope:
-      result = super(OoplCpp, self).receiverStr(
-        method, location=location, style=style, myclass=myclass, sep=sep)
-      if deref:
+      result, myclass, kind, location = self._receiverStr(
+        method, location, style, myclass)
+      special = result
+
+      if style == 'base':
+        /# This will either be 'this' or the metaclass instance.
+        if kind == 'static':
+          /# There is no receiver for static methods, but one prefaces the
+          /# static method with '<class>::'.
+          result = None
+          special = myclass.id()
+        elif location == 'meta':
+          /# We want access to the singleton metaclass instance.
+          result = 'this'
+          special = ClassConstruct.MetaInstifyName(myclass.id())
+        else:
+          /# TODO(wmh): Consider deleting the 'this', 'self', and 'cls' entries
+          /# from the baselang configs in favor of always using this method.
+          result = 'this'
+          special = 'this'
+
+        /# deref only considered for style base.
+        if deref:
+          if kind != 'static':
+            /# The receiver for static methods is not a real receiver, so it
+            /# cannot be dereferenced.
+            result = '(*' + result + ')' if result else None
+            special = '(*' + special + ')'
+
+      if sep:
+        /# TODO(wmh): Can remove 'selfsep' from configs if we always use this
+        /# method.
         if style == 'base':
-          result = '(*' + result + ')'
-      return result
+          if result:
+            result += '::' if kind == 'static' else ('.' if deref else '->')
+          special += '::' if kind == 'static' else ('.' if deref else '->')
+        else:
+          /# The meta-level 'self', 'test' and 'meta' vars are always
+          /# by-reference (never ptr).
+          if result:
+            result += '::' if kind == 'static' else '.'
+          special += '::' if kind == 'static' else '.'
+
+      return result, special
     test:
-      /# Noop - tested in BaseLanguageOopl.receiverStr()
-      pass
+      basel = 'cpp'
+
+      /# instance method
+      baselang, instance_method = test.generateMethodVariant(basel, 'instance')
+      test.iseq(
+        ('this', 'this'), 
+        baselang.receiverStr(instance_method, location='user'))
+      test.iseq(
+        ('this', 'this'), 
+        baselang.receiverStr(instance_method))
+      test.iseq(
+        ('this->', 'this->'), 
+        baselang.receiverStr(instance_method, sep=True))
+      test.iseq(
+        ('(*this)', '(*this)'), 
+        baselang.receiverStr(instance_method, deref=True))
+      test.iseq(
+        ('(*this).', '(*this).'), 
+        baselang.receiverStr(instance_method, deref=True, sep=True))
+      test.iseq(
+        ('self', 'self'), 
+        baselang.receiverStr(instance_method, style='meta'))
+      test.iseq(
+        ('self.', 'self.'), 
+        baselang.receiverStr(instance_method, style='meta', sep=True))
+
+      /# static method
+      baselang, static_method = test.generateMethodVariant(basel, 'static')
+      test.iseq(
+        (None, 'Card'), 
+        baselang.receiverStr(static_method, location='user'))
+      test.iseq(
+        (None, 'Card'), 
+        baselang.receiverStr(static_method))
+      test.iseq(
+        (None, 'Card::'), 
+        baselang.receiverStr(static_method, sep=True))
+      test.iseq(
+        (None, 'Card'), 
+        baselang.receiverStr(static_method, deref=True))
+      test.iseq(
+        (None, 'Card::'), 
+        baselang.receiverStr(static_method, deref=True, sep=True))
+      /# TODO(wmh): Decide how to handle the meta-level version of static
+      /# receiver. In Python, we treat static and meta methods similarly
+      /# (possible because the syntax for invoking a static method is the same
+      /# as for a class method). In C++, the syntax is different (meta->f() vs
+      /# <class>::f()). In order to be able to introduce a 'meta' variable and
+      /# treat static and class method invocations the same in C++, we would
+      /# need to perform a special replacement of 'meta.' with '<class>::'.
+      test.iseq(
+        ('meta', 'meta'), 
+        baselang.receiverStr(static_method, style='meta'))
+
+      /# meta method
+      baselang, meta_method = test.generateMethodVariant(basel, 'meta')
+      test.iseq(
+        ('this', 'MetaCard'), 
+        baselang.receiverStr(meta_method, location='meta'))
+      test.iseq(
+        ('this', 'MetaCard'), 
+        baselang.receiverStr(meta_method))
+      test.iseq(
+        ('(*this)', '(*MetaCard)'), 
+        baselang.receiverStr(meta_method, deref=True))
+      test.iseq(
+        ('this->', 'MetaCard->'), 
+        baselang.receiverStr(meta_method, sep=True))
+      test.iseq(
+        ('(*this).', '(*MetaCard).'), 
+        baselang.receiverStr(meta_method, sep=True, deref=True))
+      test.iseq(
+        ('meta', 'meta'), 
+        baselang.receiverStr(meta_method, style='meta'))
+      test.iseq(
+        ('meta.', 'meta.'), 
+        baselang.receiverStr(meta_method, style='meta', sep=True))
+
+      /# test method
+      baselang, test_method = test.generateMethodVariant(basel, 'test')
+      test.iseq(
+        ('this', 'this'), 
+        baselang.receiverStr(test_method, location='test'))
+      test.iseq(
+        ('this', 'this'), 
+        baselang.receiverStr(test_method))
+      test.iseq(
+        ('this->', 'this->'), 
+        baselang.receiverStr(test_method, sep=True))
+      test.iseq(
+        ('(*this)', '(*this)'), 
+        baselang.receiverStr(test_method, deref=True))
+      test.iseq(
+        ('(*this).', '(*this).'), 
+        baselang.receiverStr(test_method, deref=True, sep=True))
+      test.iseq(
+        ('test', 'test'), 
+        baselang.receiverStr(test_method, style='meta'))
+      test.iseq(
+        ('test.', 'test.'), 
+        baselang.receiverStr(test_method, style='meta', sep=True))
+
     end receiver OoplCpp;
+
+    receiver OoplJavascript scope:
+      result, myclass, kind, location = self._receiverStr(
+        method, location, style, myclass)
+      special = result
+
+      if style == 'base':
+        /# This will either be 'this' or the metaclass instance.
+        if kind == 'static':
+          /# In javascript, the syntax for accessing static methods is the same
+          /# as for meta methods (similar to Python).
+          /# static method with '<class>::'.
+          result = 'meta'
+          special = myclass.id()
+        elif location == 'meta':
+          /# We want access to the singleton metaclass instance.
+          result = 'this'
+          special = ClassConstruct.MetaInstifyName(myclass.id())
+        else:
+          /# TODO(wmh): Consider deleting the 'this', 'self', and 'cls' entries
+          /# from the baselang configs in favor of always using this method.
+          result = 'this'
+          special = 'this'
+
+        /# In javascript, there is no difference between deref and non-deref
+        /# syntax, so the deref arg is ignored.
+
+      if sep:
+        /# In Javascript, the seperator is always '.'.
+        result += '.'
+        special += '.'
+
+      return result, special
+    test:
+      basel = 'javascript'
+
+      /# instance method
+      baselang, instance_method = test.generateMethodVariant(basel, 'instance')
+      test.iseq(
+        ('this', 'this'), 
+        baselang.receiverStr(instance_method, location='user'))
+      test.iseq(
+        ('this', 'this'), 
+        baselang.receiverStr(instance_method))
+      test.iseq(
+        ('this.', 'this.'), 
+        baselang.receiverStr(instance_method, sep=True))
+      test.iseq(
+        ('this', 'this'), 
+        baselang.receiverStr(instance_method, deref=True))
+      test.iseq(
+        ('this.', 'this.'), 
+        baselang.receiverStr(instance_method, deref=True, sep=True))
+      test.iseq(
+        ('self', 'self'), 
+        baselang.receiverStr(instance_method, style='meta'))
+      test.iseq(
+        ('self.', 'self.'), 
+        baselang.receiverStr(instance_method, style='meta', sep=True))
+
+      /# static method
+      baselang, static_method = test.generateMethodVariant(basel, 'static')
+      test.iseq(
+        ('meta', 'Card'), 
+        baselang.receiverStr(static_method, location='user'))
+      test.iseq(
+        ('meta', 'Card'), 
+        baselang.receiverStr(static_method))
+      test.iseq(
+        ('meta.', 'Card.'), 
+        baselang.receiverStr(static_method, sep=True))
+      test.iseq(
+        ('meta', 'Card'), 
+        baselang.receiverStr(static_method, deref=True))
+      test.iseq(
+        ('meta.', 'Card.'), 
+        baselang.receiverStr(static_method, deref=True, sep=True))
+      test.iseq(
+        ('meta', 'meta'), 
+        baselang.receiverStr(static_method, style='meta'))
+
+      /# meta method
+      baselang, meta_method = test.generateMethodVariant(basel, 'meta')
+      test.iseq(
+        ('this', 'MetaCard'), 
+        baselang.receiverStr(meta_method, location='meta'))
+      test.iseq(
+        ('this', 'MetaCard'), 
+        baselang.receiverStr(meta_method))
+      test.iseq(
+        ('this', 'MetaCard'), 
+        baselang.receiverStr(meta_method, deref=True))
+      test.iseq(
+        ('this.', 'MetaCard.'), 
+        baselang.receiverStr(meta_method, sep=True))
+      test.iseq(
+        ('this.', 'MetaCard.'), 
+        baselang.receiverStr(meta_method, sep=True, deref=True))
+      test.iseq(
+        ('meta', 'meta'), 
+        baselang.receiverStr(meta_method, style='meta'))
+      test.iseq(
+        ('meta.', 'meta.'), 
+        baselang.receiverStr(meta_method, style='meta', sep=True))
+
+      /# test method
+      baselang, test_method = test.generateMethodVariant(basel, 'test')
+      test.iseq(
+        ('this', 'this'), 
+        baselang.receiverStr(test_method, location='test'))
+      test.iseq(
+        ('this', 'this'), 
+        baselang.receiverStr(test_method))
+      test.iseq(
+        ('this.', 'this.'), 
+        baselang.receiverStr(test_method, sep=True))
+      test.iseq(
+        ('this', 'this'), 
+        baselang.receiverStr(test_method, deref=True))
+      test.iseq(
+        ('this.', 'this.'), 
+        baselang.receiverStr(test_method, deref=True, sep=True))
+      test.iseq(
+        ('test', 'test'), 
+        baselang.receiverStr(test_method, style='meta'))
+      test.iseq(
+        ('test.', 'test.'), 
+        baselang.receiverStr(test_method, style='meta', sep=True))
+
+    end receiver OoplJavascript;
+
+    receiver OoplPython scope:
+      result, myclass, kind, location = self._receiverStr(
+        method, location, style, myclass)
+      special = result
+
+      if style == 'base':
+        /# This will either be 'this' or the metaclass instance.
+        if kind == 'static':
+          /# TODO(wmh): We can use either <class> or Meta<class>, since they
+          /# are the same object in Python.
+          result = 'cls'     # make this 'meta'
+          special = myclass.id()
+        elif kind == 'cls' or myclass.isMeta():
+          /# TODO(wmh): In Python, we are using receiverStr(style='base') for
+          /# two different purposes:
+          /#  1. obtain the name of the variable to use in method definitions
+          /#  2. obtain the actual receiver in a given method.
+          /# The two can probably be treated the same, but it might be useful
+          /# to pass in another param to distinguish the two use-cases.
+          result = 'cls'     # make this 'meta'
+          special = ClassConstruct.MetaInstifyName(myclass.id())
+        elif location == 'meta':
+          /# We want access to the singleton metaclass instance.
+          /#
+          /# TODO(wmh): This is rarely reached because of the test above for
+          /# myclass.isMeta(). However, it *is* accessed from 
+          /# baselang.analyzeExecutableForFields().
+          result = 'cls'    # make this 'meta'
+          special = ClassConstruct.MetaInstifyName(myclass.id())
+        else:
+          /# TODO(wmh): Consider deleting the 'this', 'self', and 'cls' entries
+          /# from the baselang configs in favor of always using this method.
+          result = 'self'
+          special = 'self'
+
+        /# In python, there is no difference between deref and non-deref syntax,
+        /# so the deref arg is ignored.
+
+      if sep:
+        /# In Python, the seperator is always '.'.
+        result += '.'
+        special += '.'
+
+      return result, special
+    test:
+      basel = 'python'
+
+      /# instance method
+      baselang, instance_method = test.generateMethodVariant(basel, 'instance')
+      test.iseq(
+        ('self', 'self'), 
+        baselang.receiverStr(instance_method, location='user'))
+      test.iseq(
+        ('self', 'self'), 
+        baselang.receiverStr(instance_method))
+      test.iseq(
+        ('self.', 'self.'), 
+        baselang.receiverStr(instance_method, sep=True))
+      test.iseq(
+        ('self', 'self'), 
+        baselang.receiverStr(instance_method, deref=True))
+      test.iseq(
+        ('self.', 'self.'), 
+        baselang.receiverStr(instance_method, deref=True, sep=True))
+      test.iseq(
+        ('self', 'self'), 
+        baselang.receiverStr(instance_method, style='meta'))
+      test.iseq(
+        ('self.', 'self.'), 
+        baselang.receiverStr(instance_method, style='meta', sep=True))
+
+      /# static method
+      baselang, static_method = test.generateMethodVariant(basel, 'static')
+      test.iseq(
+        ('cls', 'Card'), 
+        baselang.receiverStr(static_method, location='user'))
+      test.iseq(
+        ('cls', 'Card'), 
+        baselang.receiverStr(static_method))
+      test.iseq(
+        ('cls.', 'Card.'), 
+        baselang.receiverStr(static_method, sep=True))
+      test.iseq(
+        ('cls', 'Card'), 
+        baselang.receiverStr(static_method, deref=True))
+      test.iseq(
+        ('cls.', 'Card.'), 
+        baselang.receiverStr(static_method, deref=True, sep=True))
+      /# TODO(wmh): Decide how to handle the meta-level version of static
+      /# receiver. In Python, we treat static and meta methods similarly
+      /# (possible because the syntax for invoking a static method is the same
+      /# as for a class method). In C++, the syntax is different (meta->f() vs
+      /# <class>::f()). In order to be able to introduce a 'meta' variable and
+      /# treat static and class method invocations the same in C++, we would
+      /# need to perform a special replacement of 'meta.' with '<class>::'.
+      test.iseq(
+        ('meta', 'meta'), 
+        baselang.receiverStr(static_method, style='meta'))
+
+      /# meta method
+      baselang, meta_method = test.generateMethodVariant(basel, 'meta')
+      test.iseq(
+        ('cls', 'MetaCard'), 
+        baselang.receiverStr(meta_method, location='meta'))
+      test.iseq(
+        ('cls', 'MetaCard'), 
+        baselang.receiverStr(meta_method))
+      test.iseq(
+        ('cls', 'MetaCard'), 
+        baselang.receiverStr(meta_method, deref=True))
+      test.iseq(
+        ('cls.', 'MetaCard.'), 
+        baselang.receiverStr(meta_method, sep=True))
+      test.iseq(
+        ('cls.', 'MetaCard.'), 
+        baselang.receiverStr(meta_method, sep=True, deref=True))
+      test.iseq(
+        ('meta', 'meta'), 
+        baselang.receiverStr(meta_method, style='meta'))
+      test.iseq(
+        ('meta.', 'meta.'), 
+        baselang.receiverStr(meta_method, style='meta', sep=True))
+
+      /# test method
+      baselang, test_method = test.generateMethodVariant(basel, 'test')
+      test.iseq(
+        ('self', 'self'), 
+        baselang.receiverStr(test_method, location='test'))
+      test.iseq(
+        ('self', 'self'), 
+        baselang.receiverStr(test_method))
+      test.iseq(
+        ('self.', 'self.'), 
+        baselang.receiverStr(test_method, sep=True))
+      test.iseq(
+        ('self', 'self'), 
+        baselang.receiverStr(test_method, deref=True))
+      test.iseq(
+        ('self.', 'self.'), 
+        baselang.receiverStr(test_method, deref=True, sep=True))
+      test.iseq(
+        ('test', 'test'), 
+        baselang.receiverStr(test_method, style='meta'))
+      test.iseq(
+        ('test.', 'test.'), 
+        baselang.receiverStr(test_method, style='meta', sep=True))
+    end receiver OoplPython;
 
   end behavior receiverStr;
 
@@ -15423,7 +15960,7 @@ namespace metax.oopl scope:
     abstract receiver BaseLanguageOopl;
 
     receiver OoplPython scope:
-      recstr = self.receiverStr(method)
+      recstr = self.receiverStr(method)[0]
       myclass = method.myclass()
       class_name = myclass.id()
       method_name = method.id()
@@ -15486,7 +16023,7 @@ namespace metax.oopl scope:
 
     receiver OoplJavascript scope:
       kind = method.attrval('kind', default=metax.c.LOOKUP)
-      recstr = self.receiverStr(method)
+      recstr = self.receiverStr(method)[0]
       myclass = method.myclass()
       class_name = myclass.id()
       method_name = method.id()
@@ -15524,7 +16061,6 @@ namespace metax.oopl scope:
           args.append(sstr)
       output.append(super_method + '(' + ', '.join(args) + ');')
 
-
     test:
       oopljs, _, context, _ = test.cachedInfo(basel='javascript')
 
@@ -15536,8 +16072,9 @@ namespace metax.oopl scope:
       klass = metax.oopl.ClassConstruct.NewFromData(
         'Card', context, namespace.attr('scope:'), secondaries=[('scope:', [])])
       kscope = klass.attr('scope:')
-      exprp = metax.c.ExprParser(test.metafileFor(text='(a, b=1, c=false)\n'))
-      expr = exprp.parse(attribute=metax.oopl.ClassConstruct.DummySuperAttribute)
+      expr = metax.c.Expr.FromStr(
+        '(a, b=1, c=false)',
+        attribute=metax.oopl.ClassConstruct.DummySuperAttribute)
 
       /# An initializer
       initializer = metax.oopl.MethodConstruct.NewFromData(
@@ -15705,6 +16242,65 @@ namespace metax.oopl scope:
     test:
     end method _checkStatement;
     
+    method generateMethodVariant : any #:
+      A service method for use in unittests for receiverStr() and other
+      methods that require instance, static, meta and test methods.
+    params:
+      var basel : str #:
+        The desired baselang.
+      var kind : str #:
+        One of 'instance', 'static', 'meta' or 'test'
+    scope:
+      baselang, _, context, _ = test.cachedInfo(basel=basel)
+
+      filec = metax.meta.FileConstruct.NewFromData(
+        'File', context, secondaries=[('scope:', [])])
+      namespace = metax.oopl.NamespaceConstruct.NewFromData(
+        'nm.sp', context, parent=filec.attr('scope:'),
+        secondaries=[('scope:', [])])
+      klass = metax.oopl.ClassConstruct.NewFromData(
+        'Card', context, parent=namespace.attr('scope:'),
+        secondaries=[('scope:', [])])
+
+      test.baselang = baselang
+      test.context = context
+      test.file = filec
+      test.namespace = namespace
+      test.klass = klass
+
+      if kind == 'instance':
+        method = metax.oopl.MethodConstruct.NewFromData(
+          'f', context, parent=klass.attr('scope:'))
+        method.myclassIs(klass)
+
+      elif kind == 'static':
+        method = metax.oopl.MethodConstruct.NewFromData(
+          'SF', context, parent=klass.attr('scope:'),
+          features=[('kind', 'static')])
+        method.myclassIs(klass)
+
+      elif kind == 'meta':
+        method =  metax.oopl.MethodConstruct.NewFromData(
+          'F', context, parent=klass.attr('scope:'),
+          features=[('location', 'meta')])
+        method.myclassIs(klass)
+        klass.variantIs('meta')
+        
+      elif kind == 'test':
+        method = metax.oopl.MethodConstruct.NewFromData(
+          'test_f', context, parent=klass.attr('scope:'),
+          features=[('location', 'test')])
+        method.myclassIs(klass)
+        klass.variantIs('test')
+        
+      else:
+        raise metax.c.Error('Invalid kind %s' % kind)
+
+      return baselang, method
+    test:
+    end method generateMethodVariant;
+
+
   end;
 
 end namespace metax.oopl;

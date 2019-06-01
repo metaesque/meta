@@ -11,7 +11,7 @@ Makefile:
   Useful targets
 
 meta-mode-template.el:
-  A template for generating metalang-specific major-modes in emacs. See 'meta2
+  A template for generating metalang-specific major-modes in emacs. See 'metac
   emacs' and metax.Compiler.generateMajorMode().
 
 metaxy/

@@ -1800,7 +1800,7 @@ scope:
         Width of key
       var valwidth : int = 27 #:
         Width of the two values.
-    scope:
+    scope<py>:
       formstr = TestCase.FormStr
       indent = ' ' * depth
 
@@ -1856,7 +1856,7 @@ scope:
           /# The two objects are different types so they are incomparable.
           fp.write(
             u'* ' + formstr(t1, valwidth) + ' ' + formstr(t2, valwidth) + '\n')
-    test:
+    test<py>:
       tc = metax.test.TestCase('run')
 
       /# Equal ints

@@ -129,9 +129,14 @@ scope:
         /#   'metax.root.Object.Config: initialized to %s' % str(result))
         -> result
       lazy<cc>:
+        /# TODO(wmh): Make this a unique_ptr.
+        std::map<meta::strview,meta::strview>* result =
+          new std::map<meta::strview,meta::strview>();
         std::cerr
           << "metax.root.ObjectMeta.Config() not yet implemented"
           << std::endl;
+        -> result
+      end accessor get;
     end field Config;
 
     static
@@ -148,7 +153,7 @@ scope:
         without the compiler as intermediary.
       - TODO(wmh): Find a way to initialize this properly.
 
-    static
+    static rwx
     field ResourceMap : @map<@str,@str> #:
       Maps fully qualified resource names to explicit paths. The
       Object.Resource() method looks in this map before performing its
@@ -165,6 +170,13 @@ scope:
         because it would introduce a circularity to depend on metax.cli.Values.
       var resources : map<@str,@str> = null #:
         An explicit mapping for resources.
+    scope<cc>:
+      if (cli != nullptr) {
+        Object::CLIIs(cli);
+      }
+      if (resources != nullptr) {
+        Object::ResourceMapIs(*resources);
+      }
     scope<py>:
       if cli is not None:
         Object.CLIIs(cli)
@@ -174,13 +186,6 @@ scope:
         logging.info('metax.root.Object.Init: ResourceMap initialized.')
     test<py>:
       metax.root.Object.Init()
-    scope<cc>:
-      if (cli != nullptr) {
-        Object::CLIIs(cli);
-      }
-      if (resources != nullptr) {
-        Object::ResourceMapIs(resources);
-      }
     end method Init;
 
     static
@@ -191,9 +196,13 @@ scope:
         Name of the resource
       var path : str #:
         The value associated with the resource.
-    scope:
-      Object.ResourceMap()[name] = path
-    test:
+    scope<cc>:
+      Object::ResourceMapRef()[name] = path;
+    test<cc>:
+      metax::root::Object::RegisterResource('a', '/a/b/c');
+    scope<py>:
+      Object.ResourceMapRef()[name] = path
+    test<py>:
       metax.root.Object.RegisterResource('a', '/a/b/c')
     end;
 
