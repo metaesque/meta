@@ -2533,7 +2533,7 @@ namespace metax.meta scope:
       try:
         os.chdir(newdir)
         mlcons.generateMeta()
-        outpath = os.path.join(newdir, 'metaTest.meta.gen')
+        outpath = os.path.join(newdir, 'metatest.meta.gen')
         test.exists(outpath)
         with open(outpath, 'r') as fp:
           out = fp.read()
