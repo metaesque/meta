@@ -1841,6 +1841,7 @@ scope:
                 obj2.get(key, None),
                 depth+1,
                 fp=fp, keywidth=keywidth, valwidth=valwidth)
+          /# TODO(wmh): Add support for tuples/lists??
           else:
             fp.write(
               u'* ' + formstr(obj1, valwidth) +
@@ -2299,10 +2300,11 @@ scope:
           isdiff = eval != val
           if isdiff:
             diffs += 1
-          line = (
-            '  %4d  %1s  %-30s  %-30s' %
-            (i, '*' if isdiff else '', str(eval)[:30], str(val)[:30]))
-          lines.append(line)
+          evalstr = str(eval)
+          valstr = str(val)
+          lines.append('  %4d  %1s  %s' % (i, 'e' if isdiff else '', evalstr))
+          if isdiff:
+            lines.append('  %4s  %1s  %s' % ('', 'a', valstr))
         if diffs:
           print('\n'.join(lines))
           self.fail(message)

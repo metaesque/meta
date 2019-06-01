@@ -6680,7 +6680,12 @@ namespace metax.oopl scope:
           /#  - the parent class is incorrectly specified by the user
           /#  - there is a bug in Meta
           if not parent_info.get('external', False):
-            print('PARENT INFO: %s' % str(parent_info))
+            /# TODO(wmh): There are certain situations where this is happening
+            /# (and not being surfaced if no errors occur!). In particular,
+            /# the unittests for NamespaceConstruct.importMeta and 
+            /# ExecutableConstruct.methodInfo_cc.
+            /#
+            /# print('PARENT INFO: %s' % str(parent_info))
             metafile.warning(
               'Failed to import parent %s for %s' % (fqn, self.fqn()),
               line=self.primary().line())
@@ -12321,7 +12326,7 @@ namespace metax.oopl scope:
           'visibility': ['//visibility:public'],
           'srcs': ['Card.cc'],
           'deps': [],
-          'copts': ['-Iexternal/gtest/include'],
+          'copts': ['-Iexternal/gtest/include', '-Wno-unused-variable'],
           'hdrs': ['Card.h']}),
         test.baselang.createBuildFragment(test.klass, []))
     end receiver OoplCpp;
@@ -14251,8 +14256,16 @@ namespace metax.oopl scope:
         newlines.append('auto& %s = %s;' % (resvar, rawvar))
 
       if mtype.isValue():
+        /# TODO(wmh): We need to decide how 'lazy' applies to value types.
+        /#  - if it is an 'int', do we assign if 0, or if it is the special
+        /#    value -2^(size)?
+        /#  - if it is a 'float', the default value is 0.0, so unless we want
+        /#    to change the default to NaN, we must assume that lazy semantics
+        /#    is desired for value 0.0, not for NaN.
         newlines.append('if (!%s) {' % resvar)
       else:
+        /# TODO(wmh): If mtype is a 'str', and we are implementing 'str' as
+        /# absl::string_view, we need to instead check var.data() == nullptr.
         newlines.append('if (%s == nullptr) {' % resvar)
 
       /# TODO(wmh): Handle complex block! This portion can be a submethod
@@ -14274,14 +14287,42 @@ namespace metax.oopl scope:
       newlines.append('return %s;' % resvar)
 
       return newlines
+    test:
+      /# Setup the args needed to invoke lazylines.
+      test.tcc()
+      baselang = test.baselang
+      primary_line = 17
+      ftype = metax.c.Type.Instance(
+        '*A', namespace_function=lambda: test.namespace)
+      lazy = metax.attr.ComplexBlock(None, 'scope:', ['a = new A();', '-> a'])
+      getter = metax.oopl.MethodConstruct.NewFromData(
+        'somegetter', test.context,
+        secondaries=[
+          (':', ftype),
+          ('scope:', ['return self._somegetter;'], primary_line),
+        ],
+        primary_line=primary_line)
+      getter.myclassIs(test.klass)
+
+      /# Invoke lazylines and confirm output
+      lines = baselang.lazyLines(test.metafile, getter, lazy, ftype, '_somegetter')
+      test.isfalse(test.metafile.hasErrors(show=True))
+      test.iseqvec(
+        [
+          'auto __meta_result = this->_somegetter;',
+          'if (__meta_result == nullptr) {',
+          '  a = new A();',
+          '  __meta_result = a;',
+          '  this->_somegetter = __meta_result;',
+          '}',
+          'return __meta_result;',
+        ],
+        lines)
     end receiver OoplCpp;
 
-    receiver OoplJavascript ::
-      newlines = []
-      metafile.warning(
-        'Not yet handling lazy in %s' % self.id(), attr=lazy)
-      return newlines
-    end receiver OoplJavascript;
+    abstract
+    receiver OoplJavascript #:
+      Fix me (only abstract to avoid generating test method).
 
     receiver OoplPython ::
       newlines = []
@@ -14314,6 +14355,35 @@ namespace metax.oopl scope:
       newlines.append('return ' + resvar)
 
       return newlines
+    test:
+      /# Setup the args needed to invoke lazylines.
+      test.tpy()
+      baselang = test.baselang
+      primary_line = 17
+      ftype = metax.c.Type.Instance('int')
+      lazy = metax.attr.ComplexBlock(None, 'scope:', ['a = 77', '-> a'])
+      getter = metax.oopl.MethodConstruct.NewFromData(
+        'somegetter', test.context,
+        secondaries=[
+          (':', ftype),
+          ('scope:', ['return self._somegetter'], primary_line),
+        ],
+        primary_line=primary_line)
+      getter.myclassIs(test.klass)
+
+      /# Invoke lazylines and confirm output
+      lines = baselang.lazyLines(test.metafile, getter, lazy, ftype, '_somegetter')
+      test.isfalse(test.metafile.hasErrors(show=True))
+      test.iseqvec(
+        [
+          '__meta_result = self._somegetter',
+          'if not __meta_result:',
+          '  a = 77',
+          '  __meta_result = a',
+          '  self._somegetter = __meta_result',
+          'return __meta_result',
+        ],
+        lines)
     end receiver OoplPython;
 
   end behavior lazyLines;

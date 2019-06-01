@@ -5242,7 +5242,7 @@ scope:
             /# uses the fully qualified class name, and a TypeWrapper instance
             /# that captures this particular relative type.
             if namespace_function is None:
-              raise Error('Must provide a namespace')
+              raise Error('Must provide a namespace_function')
             namespace = namespace_function()
             if not isinstance(namespace, metax.oopl.NamespaceConstruct):
               print('ERROR: %s() = %s (%s) when resolving type "%s"' % (

@@ -13,15 +13,6 @@ namespace metax.meta scope:
     std assoc io;
   scope:
 
-    method kind : str scope:
-      /# Subclasses should override this method, so this kind should never be
-      /# seen.
-      return '_construct_'
-    test:
-      construct = test.basics(metal='oopl', basel='python')
-      test.iseq('class', construct.kind())
-    end method kind;
-
     ro
     field id : str #:
       An identifier by which this construct can be uniquely identified among
@@ -121,7 +112,23 @@ namespace metax.meta scope:
 
       /#if self.kind() == 'class':
       /#  print('CREATING %s (%s)' % (uid, id(self)))
+    clinit:
+      /# Absurd that it has taken so long for python to add a properly accesible
+      /# class for regexps. Available in 3.6+.
+      vinfo = sys.version_info
+      cls.RegexpClass = (
+        re.Pattern if vinfo.major > 2 and vinfo.minor > 5 else
+        re._pattern_type)
     end;
+
+    method kind : str scope:
+      /# Subclasses should override this method, so this kind should never be
+      /# seen.
+      return '_construct_'
+    test:
+      construct = test.basics(metal='oopl', basel='python')
+      test.iseq('class', construct.kind())
+    end method kind;
 
     method kindid : str #:
       The kind and id of this construct.
@@ -1091,9 +1098,7 @@ namespace metax.meta scope:
         If true, do not consider self. If false, do consider self.
     scope:
       target = self.parent().parent() if proper else self
-      if isinstance(
-        kind, re._pattern_type if sys.version_info[0] == 2 else re.Pattern
-      ):
+      if isinstance(kind, Construct.RegexpClass):
         while target and not kind.search(target.kind()):
           target = target.parentConstruct()
       else:
