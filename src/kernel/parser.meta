@@ -3283,9 +3283,14 @@ scope:
             /# meta source code!  This was working fine before I made all
             /# literal strings unicode (by prefacing them with 'u'), but now
             /# fails for symbols like ohm, etc.
-            print('ERROR: chunk = %s (%s)' % (chunk, type(chunk)))
-            print('ERROR: indent = "%s" (%s)' % (indent, type(indent)))
-            raise
+            uchunk = chunk.decode('utf8', 'replace')
+            try:
+              lines.append(indent + uchunk)
+            except Exception:
+              print('ERROR: chunk = %s (%s)' % (chunk, type(chunk)))
+              print('ERROR:       = %s (%s)' % (uchunk, type(uchunk)))
+              print('ERROR: indent = "%s" (%s)' % (indent, type(indent)))
+              raise
 
       if strip_special:
         dentre = metax.c.SPECIAL_PREFIX_RE

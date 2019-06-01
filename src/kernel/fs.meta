@@ -656,8 +656,13 @@ scope:
           linkpath, _ = self.basefilePath(link)
           self.symlink(linkpath, fullpath)
         else:
+          contents = basefile.contents()
           with self.open(fullpath, 'w') as fp:
-            fp.write(basefile.contents())
+            try:
+              fp.write(contents)
+            except UnicodeEncodeError as e:
+              /# print('metax.fs.Filesystem.addFile: %s' % e)
+              fp.write(contents.encode('utf8', 'replace'))
           /# TODO(wmh): Should mode be disabled if link is provided in BaseFile(), since we
           /# are ignoring it here?
           self.chmod(fullpath, basefile.mode())
