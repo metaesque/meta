@@ -2,6 +2,22 @@ namespace metax.test #:
   Classes related to unit-testing.
 scope:
 
+  class Dummy #:
+    A total hack ... only here because Meta currently attaches native blocks to
+    the previous 'class' construct and classes like FakeFcntl and StubHolder are
+    python-specific and thus do not exist in C++ ... so compiling C++ code fails
+    when a native block exists after them.
+  scope:
+  end class Dummy;
+
+  native fixme scope<py>:
+    import io
+    StrStrClass = io.StringIO().__class__
+    MISSING = object()
+  scope<cc>:
+    int MISSING = 1;
+  end native;    
+
   specific
   class FakeFcntl parent<py> ^object #:
     A fake fcntl object.
@@ -270,12 +286,6 @@ scope:
       pass
     end method UnsetAll;
   end class StubHolder;
-
-  native fixme scope<py>:
-    import io
-    StrStrClass = io.StringIO().__class__
-    MISSING = object()
-  end native;    
   
   class TestCase #:
     /# The JUnit testing infrastructure for Java (which came from a testing
@@ -1145,7 +1155,7 @@ scope:
       throw new Error('TestCase.fp() not yet implemented');
     scope<cc>:
       std::stringstream* result;
-      if (content == meta::NullStr()) {
+      if (content == metax::NullStr()) {
         result = new std::stringstream();
       } else {
         result = new std::stringstream(content);
@@ -1179,7 +1189,7 @@ scope:
       if (size > 0) {
         return strstreams[size-1]->str();
       } else {
-        return meta::NullStr();
+        return metax::NullStr();
       }
     end method out;
 
@@ -1783,6 +1793,8 @@ scope:
       return result
     test<py>:
       test.iseq('abc$', metax.test.TestCase.FormStr('abcdef', 4))
+    scope<cc>:
+      absl::PrintF("TestCase.FormStr not yet implemented\n");
     end method FormStr;
 
     method recursiveCompare #:
@@ -2248,7 +2260,7 @@ scope:
       }
     scope<cc>:
       throw metax::root::Error("TestCase.iseq() not yet implemented");
-      if (message == meta::NullStr()) {
+      if (message == metax::NullStr()) {
       } else {
       }
     end method iseqstr;
@@ -2276,7 +2288,7 @@ scope:
       }
     scope<cc>:
       throw metax::root::Error("TestCase.iseq() not yet implemented");
-      if (message == meta::NullStr()) {
+      if (message == metax::NullStr()) {
       } else {
       }
     end method noteqstr;

@@ -314,11 +314,6 @@ scope:
     test resource testdata path "./testdata/fs";
   scope:
 
-    meta
-    lifecycle scope:
-      cls.Root = Directory('', None)
-    end lifecycle;
-
     field kind : str #:
       Identifies the kind of filesystem.  Values are:
         disk:
@@ -354,7 +349,8 @@ scope:
       flag qllows us to change that.
 
     field rootdir : str #:
-      The directory that relative paths are relative to.
+      Relative paths are relative to ${rootdir}/.meta
+      TODO(wmh): Consider renaming this to 'cwd'.
 
     field disk_filesystem : map #:
       None if we are using a memory filesystem, a map otherwise.
@@ -385,6 +381,8 @@ scope:
 
       if kind == 'emulate':
         self.emulateIO()
+    clinit:
+      cls.Root = Directory('', None)
     end lifecycle;
 
     method subpath : BaseFile #:
@@ -397,9 +395,11 @@ scope:
     test:
       fs = test.diskfs
       metafile = test.metafile()
-      basefile = metax.fs.BaseFile('sub/b.meta', '', metafile=metafile)
+      /# TODO(wmh): This test is creating actual files within ${METAREPO},
+      /# which it really shouldn't do.
+      basefile = metax.fs.BaseFile('test/sub/b.meta', '', metafile=metafile)
       fs.addFile(basefile)
-      basefile2 = fs.subpath('sub/b.meta')
+      basefile2 = fs.subpath('test/sub/b.meta')
       test.issame(basefile2, basefile)
     end method subpath;
 
@@ -692,6 +692,24 @@ scope:
     params:
       var basefile : meta.c.BaseFile;
     scope:
+      /# TODO(wmh): This method is performing bad logic.
+      /#  - if ${rootdir}/.meta exists, we obtain the real path to which it
+      /#    symlinks.
+      /#  - otherwise we IGNORE ${rootdir} and use the repository path stored
+      /#    in the compiler!
+      /#
+      /# This means this Filesystem class only works as intended when rootdir is
+      /# set to a directory containing .meta files that also contains a
+      /# symlinked .meta file pointing to the repository. 
+      /#
+      /# TODO(wmh): Consider renaming the current 'rootdir' to 'localdir' or
+      /# 'cwd'. Then define 'rootdir' (or 'realrootdir' if we don't rename
+      /# existing 'rotodir') as a field that can be initialized upon creation,
+      /# with its default value being
+      /# basefile.metafile().compiler().repositoryPath(). Then we can continue
+      /# to use the current logic but also support file systems that do not
+      /# conform to the rigid usecase of the meta code hierarchy.
+
       /# Obtain the absolute real path of the file on disk.
       metadir = self.metadir()
       mroot = self.join(self.rootdir(), metadir)
@@ -700,9 +718,15 @@ scope:
         fullpath = self.realpath(self.join(mroot, basefile.subpath()))
         /# print('metadir=%s mroot=%s subpath=%s fullpath=%s' % (metadir, mroot, basefile.subpath(), fullpath))
       else:
+        /# TODO(wmh): Clean up this logic. Rather than using
+        /#   basefile.metafile().compiler().repositoryPath()
+        /# we should be using self.realrootdir(), which can be initialized based
+        /# on a provided metafile.compiler().repositoryPath().
         metafile = basefile.metafile()
         metac = metafile.compiler()
+        mroot_orig = mroot
         mroot = metac.repositoryPath()
+        print('WARNING: %s does not exist, so using %s' % (mroot_orig, mroot))
         fullpath = self.join(mroot, basefile.subpath())
       return fullpath, mroot
     test:
@@ -1359,16 +1383,18 @@ scope:
     test:
       fs = test.diskfs
       metafile = test.metafile()
-      fs.addFile(metax.fs.BaseFile('a.meta', '', metafile=metafile))
-      fs.addFile(metax.fs.BaseFile('sub/b.meta', '', metafile=metafile))
-      fs.addFile(metax.fs.BaseFile('other/c.meta', '', metafile=metafile))
+      /# TODO(wmh): This test is creating actual files within ${METAREPO},
+      /# which it really shouldn't do.
+      fs.addFile(metax.fs.BaseFile('test/a.meta', '', metafile=metafile))
+      fs.addFile(metax.fs.BaseFile('test/sub/b.meta', '', metafile=metafile))
+      fs.addFile(metax.fs.BaseFile('test/other/c.meta', '', metafile=metafile))
       fs.summarize(fp=test.fp())
       out = test.out()
       test.iseqtext("""
         >|Filesystem:
-        >|   1        0 a.meta                                                      
-        >|   2        0 other/c.meta                                                
-        >|   3        0 sub/b.meta                                                  
+        >|   1        0 test/a.meta                                                 
+        >|   2        0 test/other/c.meta                                           
+        >|   3        0 test/sub/b.meta                                             
         >|""",
         out)
     end method summarize;

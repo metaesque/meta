@@ -130,8 +130,8 @@ scope:
         -> result
       lazy<cc>:
         /# TODO(wmh): Make this a unique_ptr.
-        std::map<meta::strview,meta::strview>* result =
-          new std::map<meta::strview,meta::strview>();
+        std::map<metax::strview,metax::strview>* result =
+          new std::map<metax::strview,metax::strview>();
         std::cerr
           << "metax.root.ObjectMeta.Config() not yet implemented"
           << std::endl;

@@ -1,3 +1,4 @@
+
 namespace metax.oopl scope:
 
   abstract
@@ -8211,7 +8212,7 @@ namespace metax.oopl scope:
         test.tcc()
         test.iseq('int32_t', test.baselang.metabase('int'))
         test.iseq('int64_t', test.baselang.metabase('int', param='42'))
-        test.iseq('meta::str', test.baselang.metabase('str'))
+        test.iseq('metax::str', test.baselang.metabase('str'))
       testx js ::
         test.tjs()
         test.iseq('number', test.baselang.metabase('int'))
@@ -10237,11 +10238,21 @@ namespace metax.oopl scope:
     clinit:
       /# cls.CC_ANY = 'long long'
       cls.CC_ANY = 'void'
+
+      /# CODETANGLE(cc_str_defn): How we define 'CC_STR' and 'CC_STRVIEW' here
+      /# must be compatible with how we define 'str' and 'strview' in
+      /# $METAREP/src/templates/oopl/cpp/metastrap/__Meta__.h.
+      /#
+      /# TODO(wmh): Get abseil working, and start using absl::string_view. Note
+      /# that we can represent a null 'str' using absl::string_view by setting
+      /# sv.data() to null (and this differs from the empty string, so we don't
+      /# have to special case things too much).
+
       /#cls.CC_STR = 'const std::string'
       /#cls.CC_STR_VALUE = 'std::string'
-      cls.CC_STR = 'meta::str'
-      cls.CC_STRVIEW = 'meta::strview'
-      cls.CC_STR_VALUE = 'meta::str'
+      cls.CC_STR = 'metax::str'
+      cls.CC_STRVIEW = 'metax::strview'
+      cls.CC_STR_VALUE = 'metax::str'
       cls.PTR_MAP = {
         'u': 'std::unique_ptr',
         's': 'std::shared_ptr',
@@ -10255,7 +10266,7 @@ namespace metax.oopl scope:
       /# See
       /#  http://en.cppreference.com/w/cpp/language/types
       strptr = {'base': OoplCpp.CC_STR, 'default': 'nullptr'}
-      strref = {'base': OoplCpp.CC_STR, 'default': 'meta::string()'}
+      strref = {'base': OoplCpp.CC_STR, 'default': 'metax::string()'}
       self.metatypesIs({
         'bool': {'base': 'bool', 'default': 'false'},
         'char': {'base': 'char', 'default': "''"},
@@ -10458,9 +10469,9 @@ namespace metax.oopl scope:
           if ftype.isStr():
             /# We have the 'str' type. Note that 'str' is inherently const so
             /# we do NOT need to prefix the type with '#'.
-            /#  get *str returns meta::str (there is a special meta::str instance that represents null)
-            /#  get &str returns meta::str (how do we ensure non-null not allowed?)
-            /#  get @str returns meta::str copy
+            /#  get *str returns metax::str (there is a special metax::str instance that represents null)
+            /#  get &str returns metax::str (how do we ensure non-null not allowed?)
+            /#  get @str returns metax::str copy
             result = strview
           elif ftype.isValue():
             /# The only possible prefixes are '@' and '@#'.
@@ -12991,7 +13002,7 @@ namespace metax.oopl scope:
 
     receiver OoplCpp scope:
       /# Every header file in C++ includes the special metastrap/__Meta__.h
-      /# file, which defines all the core types like meta::str, etc.
+      /# file, which defines all the core types like metax::str, etc.
       class_construct.addDependency(
         'metastrap.__Meta__', 'lib',
         'implicit import in OoplCpp.formatDependencies',
@@ -13284,7 +13295,7 @@ namespace metax.oopl scope:
     test:
       test.tcc()
       test.iseq(
-        ['private: meta::str None;'],
+        ['private: metax::str None;'],
         test.baselang.formatFieldDefinition(test.field))
     end receiver OoplCpp;
 
@@ -13734,10 +13745,10 @@ namespace metax.oopl scope:
       method.myclass().namespaceIs(test.namespace)
       preamble = []
       test.iseq(
-        '(meta::strview a, int32_t b = 1, bool c = false)',
+        '(metax::strview a, int32_t b = 1, bool c = false)',
         test.baselang.formatParams(method, preamble, decl=True))
       test.iseq(
-        '(meta::strview a, int32_t b, bool c)',
+        '(metax::strview a, int32_t b, bool c)',
         test.baselang.formatParams(method, preamble))
       test.iseqvec([], preamble)
     end receiver OoplCpp;

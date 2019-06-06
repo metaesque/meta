@@ -1,6 +1,6 @@
 #include "metastrap/__Meta__.h"
 
-namespace meta {
+namespace metax {
 
 const std::string& NullStr() {
   static std::string result("");

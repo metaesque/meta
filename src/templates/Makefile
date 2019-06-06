@@ -1,12 +1,15 @@
-METAREP := $(shell meta2 config repository_path)
+METAREP := $(shell metac config repository_path)
 
 default:
 	@echo "Specify explicit target"
 
+test:
+	@echo "METAREP: $(METAREP)"
+
 # target update:
 #   Update the meta repository with template data.
 update: oopl.tgz
-	@echo "Adding $$(pwd)/oopl.tgz to $(METAREP)"
+	@echo "Applying $$(pwd)/oopl.tgz onto $(METAREP)"
 	@tar="$$(pwd)/oopl.tgz"; builtin cd $(METAREP); tar xzf $$tar
 
 # target oopl.tgz:
