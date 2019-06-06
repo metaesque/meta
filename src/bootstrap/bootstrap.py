@@ -15,7 +15,7 @@ def ValidPath(path):
   epath = re.sub(r'\$([a-zA-Z_]+)', lambda m: os.getenv(m.group(1), ''), path)
   result = os.path.exists(epath)
   if not result:
-    print 'WARN: %s does not exist' % path
+    print('WARN: %s does not exist' % path)
   return result
 
 
@@ -133,7 +133,7 @@ def CreateConfig(src_root, bazel_path):
           ans = ans.strip()
         typecheck = data.get('type', None)
         if typecheck and not typecheck(ans):
-          print 'ERROR: "%s" is invalid for var %s' % (ans, var)
+          print('ERROR: "%s" is invalid for var %s' % (ans, var))
         else:
           break
 
@@ -158,8 +158,8 @@ def InstallBazel():
   # Establish the latest version of bazel.
 
   # Where the bazel executable should be installed
-  print 'Please specify the path within which to install bazel. You can use'
-  print 'environment variables in the path.'
+  print('Please specify the path within which to install bazel. You can use')
+  print('environment variables in the path.')
   default_install_dir = os.path.join(os.getenv('HOME'), 'bin')
   install_dir = os.path.expandvars(
     raw_input('Path [%s]: ' % default_install_dir) or default_install_dir)
@@ -169,14 +169,14 @@ def InstallBazel():
   r = requests.get(github_bazel_releases)
   version = None
   if not r.ok:
-    print 'ERROR: Failed to download %s' % github_bazel_releases
+    print('ERROR: Failed to download %s' % github_bazel_releases)
     sys.exit(1)
 
   # Extract the latest version from the page.
   m = re.search(r'/bazelbuild/bazel/tree/([\d.]+)', r.text)
   if not m:
-    print r.text
-    print 'ERROR: Failed to obtain bazel version from %s' % github_bazel_releases
+    print(r.text)
+    print('ERROR: Failed to obtain bazel version from %s' % github_bazel_releases)
     sys.exit(1)
   version = m.group(1)
 
@@ -209,13 +209,13 @@ def InstallBazel():
     executable = os.path.join(tmpdir, base)
     installer = None
   else:
-    print 'ERROR: Do not know how to install bazel on %s' % system
+    print('ERROR: Do not know how to install bazel on %s' % system)
     sys.exit(1)
 
-  print 'system = %s' % system
-  print 'url = %s' % url
-  print 'executable = %s' % executable
-  print 'installer = %s' % installer
+  print('system = %s' % system)
+  print('url = %s' % url)
+  print('executable = %s' % executable)
+  print('installer = %s' % installer)
 
   # Download the bazel installer/executable.
   subprocess.check_output(['curl', '-L', '-O', url], cwd=tmpdir)
@@ -233,7 +233,7 @@ def InstallBazel():
 
   # Verify executable
   if not os.path.exists(executable):
-    print 'ERROR: Failed to obtain %s' % executable
+    print('ERROR: Failed to obtain %s' % executable)
     sys.exit(1)
   return executable
 
@@ -254,27 +254,84 @@ def SetupBootstrap(src_root):
     python_dir = os.path.realpath(os.path.expandvars(pdir))
     if python_dir in paths:
       break
-    print 'ERROR: %s not in PYTHONPATH' % python_dir
+    print('ERROR: %s not in PYTHONPATH' % python_dir)
 
   metastrap_path = os.path.join(src_root, 'lib', 'metastrap.py')
   full_path = os.path.join(python_dir, 'metastrap.py')
   if not os.path.exists(metastrap_path):
-    print 'ERROR: Failed to find %s' % metastrap_path
+    print('ERROR: Failed to find %s' % metastrap_path)
     sys.exit(1)
   elif os.path.exists(full_path):
     if os.path.islink(full_path) and os.readlink(full_path) == metastrap_path:
       # We are all set up
-      print 'NOTE: confirmed %s -> %s' % (full_path, metastrap_path)
+      print('NOTE: confirmed %s -> %s' % (full_path, metastrap_path))
     else:
-      print 'ERROR: %s exists' % full_path
+      print('ERROR: %s exists' % full_path)
       sys.exit(1)
   else:
-    print 'src %s link %s' % (metastrap_path, full_path)
+    print('src %s link %s' % (metastrap_path, full_path))
     os.symlink(metastrap_path, full_path)
 
-def BuildMeta(src_root):
-  os.system('cd %s; ' % src_root)
+def ExtractCode(src_root):
+  # In $src_root/lib/versions, 'current' should be a symlink to another
+  # local dir. If the child dir doesn't exist, there should be a .tgz version.
+  # Extract.
+  vdir = os.path.join(src_root, 'lib', 'versions')
+  if not os.path.isdir(vdir):
+    raise Error('Failed to find %s' % vdir)
+  current = os.path.join(vdir, 'current')
+  if not os.path.islink(current):
+    raise Error('Expecting %s to be a symlink' % vdir)
+  link = os.readlink(current)
+  cdir = os.path.join(vdir, link)
+  if os.path.exists(cdir):
+    print('TRUE: %s exists' % cdir)
+  else:
+    # We require link to start with 'v' and end with '.00'
+    assert link.startswith('v') and link.endswith('.00')
+    # Obtain the .tgz file (strip off .00)
+    tgzpath = cdir[:-3] + '.tgz'
+    if not os.path.exists(tgzpath):
+      raise Error('ERROR: Failed to find %s' % tgzpath)
+    # Extract the tar file
+    print('NOTE: Extracting %s into %s' % (tgzpath, vdir))
+    cmd = 'tar xzf %s' % tgzpath
+    print('CMD: %s' % cmd)
+    subprocess.check_output(cmd, cwd=vdir, shell=True)
+    basedir = tgzpath.replace('.tgz', '')
+    assert os.path.exists(basedir), basedir
+    basedir_00 = basedir + '.00'
+    if not os.path.exists(basedir_00):
+      base00_name = os.path.basename(basedir_00)
+      subprocess.check_output(
+        'ln -s %s %s' % (os.path.basename(basedir), base00_name),
+        cwd=vdir, shell=True)
+      print('NOTE: Linked %s to %s' % (basedir, base00_name))
+  assert os.path.exists(current), current
 
+
+def BuildMeta(src_root):
+  os.system('pip install future')
+  os.system('pip3 install future')
+  kdir = os.path.join(src_root, 'src', 'kernel')
+
+  # Execute metac a first time (lots of warnings/errors are printed as various
+  # dependencies are not present, so we do not show the output.
+  command = 'python ../bootstrap/metac.py --meta_version=current *.meta ../lib/*.meta'
+  print('COMMAND: cd %s; %s' % (kdir, command))
+  out, err = subprocess.Popen(
+    command, cwd=kdir, shell=True,
+    stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+
+  # Now execute a similar command, using the 'metac' binary.
+  command = 'metac *.meta ../lib/*.meta'
+  print('COMMAND: cd %s; %s' % (kdir, command))
+  out, err = subprocess.Popen(
+    command, cwd=kdir, shell=True,
+    stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+  print(out)
+  print(err)
+  
 
 def main():
   default_src_root = os.path.expandvars('$HOME/src/meta')
@@ -283,12 +340,18 @@ def main():
   ) or default_src_root
   src_root = os.path.expandvars(src_root)
   if not os.path.exists(src_root):
-    print '%s does not exist.' % src_root
-    print
-    print 'Download Meta with:'
-    print ' % cd <somedir>'
-    print ' % git clone https://github.com/metaesque/meta.git meta'
+    print('%s does not exist.' % src_root)
+    print('')
+    print('Download Meta with:')
+    print(' % cd <somedir>')
+    print(' % git clone https://github.com/metaesque/meta.git meta')
     sys.exit(1)
+
+  BuildMeta(src_root)
+  return
+
+  # Ensure we can compile meta code using --meta_version=current
+  ExtractCode(src_root)
 
   # Ensure that, for each baselang, the Meta bootstrapping functionality is
   # discoverable.
