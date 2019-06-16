@@ -59,7 +59,7 @@ scope:
     code that uses the Meta-generated code without having to use the
     Meta-generated exception classes.
 
-  pre decl
+  pre
   native PrePart scope<cc>:
     // Forward declare the Command class.
     // TODO(wmh): Support for this should be made available via assocs!
@@ -307,7 +307,7 @@ scope:
 
   end class Part;
 
-  post decl nmsp
+  post nmsp
   native PostPart scope<cc>:
     // Now include the Command
     // TODO(wmh): Support for this should be made available via assocs!
@@ -321,7 +321,7 @@ scope:
       TODO(wmh): Meta should automatically include implicit dependencies
       due to use of native types. For example, if a method uses:
          var fp : ostream = out
-      in Python this gets mapped to 
+      in Python this gets mapped to
          fp = sys.stdout
       and Meta should add an implicit reliance on module 'sys'.
   scope:

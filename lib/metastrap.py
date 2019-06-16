@@ -318,7 +318,7 @@ def RecoverMeta(e):
   metax.c.Compiler.CurrentIs(metac)
   text = traceback.format_exc()
   if sys.version_info[0] == 2 and isinstance(text, str):
-    text = unicode(text)
+    text = u'' + text
   ifp = io.StringIO(text)
   baselang = metac.metalang().baselangNamed('python')
   metac.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)

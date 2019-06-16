@@ -43,7 +43,7 @@ namespace metax.lib.shell #:
         home = root.add(
           'dir', 'home',
           childvar='user', generator=Users, childvar=freshold=120)
-        # In the above, the signature of Users is 
+        # In the above, the signature of Users is
         #    Users(dir:Directory) : vec<Node>
         # and it should return a list of newly created Node instances that
         # have already been registered within the 'dir' arg.
@@ -51,7 +51,7 @@ namespace metax.lib.shell #:
      def main():
        shell = MyShell()
        shell.run()
-      
+
 scope:
 
   nometanotest
@@ -66,7 +66,9 @@ scope:
   nometanotest
   class InvalidDirectoryError < Error;
 
-  native scope:
+  native ##:
+    TODO(wmh): Use metax.c constants? Use enum.
+  scope<py>:
     REQUIRED = object()
     DEFAULT = object()
     UNDEF = object()
@@ -74,7 +76,7 @@ scope:
 
   class Shell #:
     Represents a generic command-line shell.
-    
+
     This provides basic shell-like functionality.  Subclasses add
     domain-specific functionality.
   assocs:
@@ -89,7 +91,7 @@ scope:
 
     field history : @vec #:
       Maintains a history of commands executed.
-    
+
     field rcfile : str #:
       Where the rc init file for this shell resides.  Contents are loaded
       at the start of run().
@@ -307,7 +309,7 @@ scope:
 
       cls.TYPE_FUNCS = {
         'str': str,
-        'int': int, 
+        'int': int,
         'bool': Bool,
         'float': float,
         'double': float,
@@ -344,7 +346,7 @@ scope:
 
     method registerDirectoryGenerator #:
       Register a set of path generators.
-      
+
       Example:
         genspec = '/domain/<domain>/'
     params:
@@ -441,7 +443,7 @@ scope:
       var kind : str = 'shell' #:
         Known kinds include:
           'context' --> directory context variable
-          'shell'   --> a \"normal\" variable   
+          'shell'   --> a \"normal\" variable
           'env'     --> environment variable
         But subclasses can add arbitrary new kinds as they choose. For
         example, The metax.c.shell.Shell subclass adds kind 'flag' to
@@ -469,7 +471,7 @@ scope:
           /# TODO(wmh): Fix this:
           /#  - If type == 'enum<val1,val2,...>', create a lambda that verifies
           /#    that the value is one of those listed in the enum.
-          /#  - If type == 'list<T>', the value should already be a list, and 
+          /#  - If type == 'list<T>', the value should already be a list, and
           /#    we need only recursively validate the type of each element.
           print(
             'WARNING: In metax.lib.shell.Shell, type %s not yet handle' %
@@ -499,7 +501,7 @@ scope:
       vinfo = sh._vars['shell']['home']
       test.iseqmap(
         {
-          'kind': 'shell', 
+          'kind': 'shell',
           'name': 'home',
           'type': str,
           'default': '',
@@ -622,7 +624,8 @@ scope:
 
       history_match = self.HISTORY_RE.match(command)
       if history_match:
-        /# If the command is a history reference, obtain the actual history line.
+        /# If the command is a history reference, obtain the actual history
+        /# line.
         numbang = history_match.group(1)
         index = -1 if numbang == '!' else int(numbang)
         command, hargs = self._history[index]
@@ -635,7 +638,9 @@ scope:
         /#    they already had aliases applied when they were first invoked.
         prearg_groups = self.split(self._aliases[command])
         if len(prearg_groups) > 1:
-          print('ERROR: Not supporting aliases producing %d commands' % len(prearg_groups))
+          print(
+            'ERROR: Not supporting aliases producing %d commands' %
+            len(prearg_groups))
         command, preargs = prearg_groups[0]
         args = preargs + args
 
@@ -844,7 +849,7 @@ scope:
 
     method helpCommand #:
       Provide summary of commands.
-      
+
       Without arguments, provides one-line summary of all commands.
       With an argument, provides multi-line description of a given command.
     params:
@@ -864,7 +869,8 @@ scope:
           method = info['method']
           /#print(dir(method.im_func))
           desc = method.im_func.func_doc
-          lines = re.split('\n', desc or 'Missing doc string: ' % method.__name__)
+          lines = re.split(
+            '\n', desc or 'Missing doc string: ' % method.__name__)
           self.log('%-15s: %s\n', command, lines[0])
     test:
       sh = test.shell
@@ -886,15 +892,15 @@ scope:
 
     method listDirCommand #:
       List contents of directory.
-      
+
         -F  = prefix dirs with /, etc.
         -l  = long listing (one line per file)
         -a  = show . files.
     params:
       multi var args : vec;
     scope:
-      /# TODO(wmh): Support listing of a specified directory (currently only lists
-      /# current directory - i.e. ignores args).
+      /# TODO(wmh): Support listing of a specified directory (currently only
+      /# lists current directory - i.e. ignores args).
       dir = self._cwd
       annotate = False
       hidden = False
@@ -987,19 +993,17 @@ scope:
           if dir.contains(part):
             dir = dir.child(part)
             if dir.isDir():
-              /# We set the directory each time thru, so that the context vars are
-              /# set each time.
+              /# We set the directory each time thru, so that the context vars
+              /# are set each time.
               self.cwdIs(dir)
               /# We ensure that the subdir is still fresh.
               dir.refresh()
-
-              /# print('***** HERE with %s = %s' % (dir.abspath(), dir.infomap()))
-
             else:
               print('ERROR: %s is not a directory' % dir.abspath())
               break
           else:
-            raise InvalidDirectoryError('Directory %s has no child %s' % (dir.abspath(), part))
+            raise InvalidDirectoryError(
+              'Directory %s has no child %s' % (dir.abspath(), part))
     test:
       sh = test.shell
       fs = sh.filesystem()
@@ -1010,10 +1014,10 @@ scope:
 
     method setvarCommand #:
       Set a shell variable to a given value.
-      
+
       This is invoked if the command encountered at the prompt is 'set', with
       all subsequent words being treated as args.
-      
+
       Two idioms are supported:
         set <var> <value>
       and
@@ -1108,7 +1112,7 @@ scope:
         summary='current terminal width')
       sh.defineVariable('cell', str, kind='context', default='qa')
       sh.defineVariable('HOME', str, kind='env', default='/home/bob')
-      
+
       test.iseqmap(
         {
           'kind': 'shell',
@@ -1123,7 +1127,7 @@ scope:
       test.iseq(
         {
           'kind': 'context',
-          'name': 'cell', 
+          'name': 'cell',
           'default': 'qa',
           'summary': '',
           'type': str,
@@ -1155,7 +1159,7 @@ scope:
         If REQUIRED, raises an error in this situation.
         If DEFAULT, uses the default specified when the variable was defined
         via defineVariable() (which by default is also REQUIRED, and thus
-        also raises an error).                              
+        also raises an error).
       var undef : any = REQUIRED #:
         The default value to return from _info if the variable is not defined
         at all.
@@ -1952,7 +1956,7 @@ scope:
         else:
           raise Error(
             'The infomap keyword is only legal for kind dir not %s' % kind)
-      /# We do NOT need to invoke registerChild() here, because during 
+      /# We do NOT need to invoke registerChild() here, because during
       /# creation of result we passed in the parent (aka self) and the
       /# Directory initializer implicitly invokes registerChild() on the
       /# parent when non-null.
@@ -2043,7 +2047,7 @@ scope:
 
     field freshold : int #:
       For now, each instance records its freshness threshold in seconds.
-      May want to find a more efficient means of storing this though 
+      May want to find a more efficient means of storing this though
       (for example based on the generic path of this node).
 
     lifecycle #:
@@ -2213,8 +2217,8 @@ scope:
               link = None
               if False:
                 print(
-                  'WARNING: Not currently properly handling symlink %s (in %s)' %
-                  (basename, virtual_path))
+                  'WARNING: Not currently properly handling symlink %s (in %s)'
+                  % (basename, virtual_path))
               /# child = dir.add('symlink', basename, link=link)
               child = None
             elif os.path.isdir(fullpath):

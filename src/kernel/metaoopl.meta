@@ -112,7 +112,7 @@ namespace metax.oopl scope:
         /#      and add this sub-segment to 'segment'.
         /# The pro (and con) of #2 is that it will result in an entry being
         /# added to the mapfile, which both inflates the mapfile significantly
-        /# (not so good) and increases the chances that the meta-to-base 
+        /# (not so good) and increases the chances that the meta-to-base
         /# line number mapping is kept correct (as long as we pass in the
         /# correct attribute to the sub-segment).  For now, we are going with
         /# #2, and we see how this impacts performance, etc.
@@ -157,7 +157,7 @@ namespace metax.oopl scope:
         /# If the on variable has integral type, we can perform an actual
         /# baselang switch statement if the baselang has it. But if the on
         /# variable is any other type, we perform implicit equality testing.
-        
+
         /# TODO(wmh): Find the variable identified by 'on' in the symbol table
         /# of the parent construct, and obtain its type.
         ontype = metax.c.Type.Instance('nm.sp.A')
@@ -250,7 +250,7 @@ namespace metax.oopl scope:
       var construct : *metax.oopl.Construct #:
         The construct associated with the symbol.
       var note : str = null #:
-        Any human-readable notes associated with the symbol.        
+        Any human-readable notes associated with the symbol.
     scope:
       table = self.symbols()
       /# print('%s registering symbol %s = %s' %
@@ -614,7 +614,7 @@ namespace metax.oopl scope:
       /#   The baselang code for importing the classes.
       scope = self.attr('scope:')
       if kind == 'merge':
-        
+
         mapfile = metax.c.MapFile(
           metac.basePath(fqn, prefix='.', suffix=basesuffix + '.map'),
           fs.realpath(fs.abspath(metafile.path())),
@@ -909,7 +909,7 @@ namespace metax.oopl scope:
           /#  - The order in which imports appear is sometimes critically
           /#    important, so we maintain the order (based on when first seen).
           /#  - If optional=<fqn> exists in the comment, it means the import
-          /#    is optional and should be guarded with a 
+          /#    is optional and should be guarded with a
           /#       try ... except ImportError
           /#    block.
           if line and line[0] == '#': continue
@@ -1276,7 +1276,7 @@ namespace metax.oopl scope:
     meta
     method MetaInstifyName : str #:
       Convert a class name to a metaclass instance name.
-      TODO(wmh): Can we make this an instance method, or is it used in 
+      TODO(wmh): Can we make this an instance method, or is it used in
       situations where an instance isn't avialable?
     params:
       var name : str #:
@@ -1463,22 +1463,65 @@ namespace metax.oopl scope:
     field clinit : metax.oopl.MethodConstruct #:
       The method initializing the static fields of this class.  Often null.
 
-    field extralines : @map<str,vec<str>> #:
-      Maps <position> to <placement> to list of strings, where
-       - <position> is one of 'pre', 'prenmsp', 'post', 'postnmsp'
-       - <placement> is one of 'defn' or 'decl'
-       - the list represents baselang text to appear
-         - pre: before class within namespace
-         - prenmsp: before class before namespace
-         - post: after class within namespace
-         - postnmsp: after class after namespace
+    field streams : @map<str,vec> #:
+      A mapping from stream name to list of <str|BaseSegment>, where the stream
+      name should be one of 'cls-post-decl' or 'cls-post-defn'. To understand
+      why these are needed, consider the situation where we have a class
+      construct, followed by (outside of the class definition, so all at
+      namespace level) a native construct, a field construct, another native
+      construct, and a method construct, all with position 'post'. All of these
+      constructs are to be added to the code for the class before them. HOWEVER,
+      the code for a class is generated when ClassConstruct.translateMeta() is
+      invoked ... which happens BEFORE we invoke translateMeta() on any of the
+      constructs after the class. To address this, we can perform special
+      processing of namespace-level native, field and method constructs with
+      position 'post' during expandMeta(), in which we identify the previous
+      class and add the code associated with the construct to the appropriate
+      class-specific streams() instance. Then when
+      ClassConstruct.translateMeta() is invoked, we can check for streams in
+      self.streams() and add them to the associates streams in
+      metafile.streams() as appropriate.
 
-      The most common keys are post/defn, because native constructs in namespace
-      scope appearing after a class are by default associated with the class
-      above them (post) and refer to class definition (defn). For languages like
-      C++ that have both a header file and source file, 'defn' refers to .cc and
-      'decl' refers to 'h'.
-    end field extralines;
+      Note that we could process cls-pre-* streams the same way, but we can also
+      process them within translateMeta() because the streams that 'pre'
+      placement native, field and method constructs write into during
+      translateMeta() will be available when the ClassConstruct.translateMeta()
+      is entered.
+
+      There are numerous implementtion strategies here:
+        1. Handle namespace-level native blocks within expandMeta, but
+           handle namespace-level pre-position field/method blocks in
+           translateMeta and disallow post-position field/method blocks.
+            + easy to implement
+            - the order in which pre/post native blocks are inserted into the
+              class code, relative to field/method code, will often not
+              correspond to the order seen in the Meta code (bad!)
+        2. Handle pre-position namespace-level native/field/method blocks in
+           translateMeta by writing to the appropriate metafile streams,
+           and handle post-position namespace-level native blocks in expandMeta
+           (by writing to class-specific streams). Disallow post-position
+           field/method code.
+            + easy to implement
+            - one common idiom for dealing with class initialization is to have
+              a namespace-level function invoked after all classes have been
+              defined. This would need to be post-position.  However, we can
+              easily use a native block for such things. Not optimal, but
+              doable.
+        3. Handle namespace-level pre/post-position native/field/method blocks
+           within expandMeta().
+            + the most generalized and intuitive solution
+            + consistent, localized functionality
+            - requires us to perform translateMeta() functionality within
+              expandMeta() sometimes, so we'll need to pull translateMeta()
+              code into library functions (easy to do though).
+        4. Handle namespace-level pre-position native/field/method blocks
+           within translateMeta() and namespace-level post-position
+           native/field/method blocks within expandMeta().
+            + a general and flexible solution
+            - similar code needs to reside in two different locations
+              (expandMeta for post-position and translateMeta for pre-position)
+
+      For now, we are doing #2.
 
     field suppress : @map #:
       Maps suppress commands to strings explaining why the error is being
@@ -1610,6 +1653,32 @@ namespace metax.oopl scope:
       test.istrue(test.klass.metaclass().isMeta())
     end method isMeta;
 
+    method streamNamed : vec<any> #:
+      Obtain the per-class stream of the given name. Implciitly create if not
+      present.
+    params:
+      var name : str #:
+        The stream name. Should be cls-post-[decl|defn] for now. Will be
+        extended to include cls-pre-[decl|defn] (and [pre|post]-cls-[decl|defn])
+        if we decide to perform all namespace-level native/field/method code
+        generation (for constructs associated with a class) within expandMeta()
+        instead of translateMeta()). See the streams() comment for details on
+        the subtleties here.
+    scope:
+      streams = self.streams()
+      result = streams.get(name, None)
+      if result is None:
+        result = []
+        streams[name] = result
+      return result
+    test:
+      test.tpy()
+      segments = test.klass.streamNamed('cls-post-defn')
+      test.iseqvec([], segments)
+      segments2 = test.klass.streamNamed('cls-post-defn')
+      test.issame(segments, segments2)
+    end method streamNamed;
+
     method addDependency #:
       Add a dependency on this class.
     params:
@@ -1645,7 +1714,7 @@ namespace metax.oopl scope:
           /# in a target for 'std' even though target isn't needed. But
           /# other calls to addDependency (like in OoplPython.autogenPrint)
           /# do not bother with a target since 'std' assocs by definition
-          /# do not need one.  Can we clean this up so we don't need to 
+          /# do not need one.  Can we clean this up so we don't need to
           /# make the test against 'std' above?
           print(
             '**** WARNING: for %s dep %s has target %s vs %s' %
@@ -1959,7 +2028,7 @@ namespace metax.oopl scope:
       test.iseq(
         ([], []),
         test.klass.suppressInfo())
-      /# TODO(wmh): Introduce suppress syntax info a faux metafile and 
+      /# TODO(wmh): Introduce suppress syntax info a faux metafile and
       /# verify suppressInfo.
     end method suppressInfo;
 
@@ -1979,7 +2048,7 @@ namespace metax.oopl scope:
       return result
     test:
       /# file-level classes moved into namespace in expandMeta
-      test.tpy(expand=True)   
+      test.tpy(expand=True)
       test.isfalse(test.klass.isErrorClass())
       errorclass = test.nscope.cons('Error')
       test.istrue(errorclass.isErrorClass())
@@ -2315,7 +2384,7 @@ namespace metax.oopl scope:
           /# is invoked to start the test suite.
           if basel == 'python':
             self.addDependency(
-              'metax.test', 'lib', 
+              'metax.test', 'lib',
               'implicit import of metax.test so metax.test.main() is available',
               target=None)
         else:
@@ -2334,7 +2403,7 @@ namespace metax.oopl scope:
             'reason': 'parent', 'kind': 'cls', 'fqn': 'metax.root.Object',
             'target': '//metax/root:Object'},
           'metax.root.ObjectMeta': {
-            'reason': 'every class depends on ObjectMeta', 'kind': 'cls', 
+            'reason': 'every class depends on ObjectMeta', 'kind': 'cls',
             'fqn': 'metax.root.ObjectMeta', 'target': '//metax/root:ObjectMeta'},
           'os': {
             'reason': 'in assocs', 'kind': 'std', 'fqn': 'os',
@@ -2738,7 +2807,7 @@ namespace metax.oopl scope:
 
     field namespace : metax.oopl.NamespaceConstruct #:
       The namespace this method belongs to. Only really needed for methods
-      defined directly within namespace scope. 
+      defined directly within namespace scope.
       TODO(wmh): Consider whether there is a different way to handle this, so
       we aren't wasting a slot in every instance when few need it. For
       example, mark this field optional?
@@ -3442,7 +3511,7 @@ namespace metax.oopl scope:
       test.iseq(
         ['cmd = pcmd.newCommand(',
          "  'sub',",
-         "  summary='',", 
+         "  summary='',",
          "  desc='')"],
         output)
     end method generatePython;
@@ -3549,7 +3618,7 @@ namespace metax.oopl scope:
             linkpath, None, metafile=metafile, mapfile=None,
             link=cmdfile)
           metafile.registerFile(linkfile)
-      return cmdfile          
+      return cmdfile
     test:
       /# TODO(wmh): Create a memory-only fs so that writing this file does not
       /# affect production!
@@ -3828,7 +3897,7 @@ namespace metax.oopl scope:
     since this method is called often (and not cached), we provide per-subclass
     optimizations even though they are trivial. We could just store the kind as
     a field (which was initially avoided to save space, but given how huge
-    the Construct class is now, one more field is irrelevant).             
+    the Construct class is now, one more field is irrelevant).
   scope:
 
     receiver OoplConstruct ::
@@ -3974,9 +4043,9 @@ namespace metax.oopl scope:
       creation of implicit Meta-level constructs, moving constructs around,
       etc. However, some special-casing is needed based on esoteria of
       individual baselangs.
-      
+
       IMPORTANT ISSUES TO KEEP IN MIND:
-       - each construct should be expanded exactly once (not counting 
+       - each construct should be expanded exactly once (not counting
          situations where an expandMeta() method is invoked on a construct and
          it is determined that nothing should be done for the instance in
          question (this can happen, for example, when invoking expandMeta() on
@@ -3997,7 +4066,7 @@ namespace metax.oopl scope:
             construct has an expandMeta() defined, one should in most cases
             invoke expandMeta() on that sub-construct at the time it is
             created.
-      
+
        - NamespaceConstruct.expandMeta(), when invoked on a user-defined
          namespace, creates a test namespace, then expands all subconstructs
          of the user-defined namespace (which populates the test namespace
@@ -4007,7 +4076,7 @@ namespace metax.oopl scope:
           - No construct needs to expand any autogened subconstruct that is
             placed into the test namespace ... it will be expanded when the
             test namespace is expanded.
-      
+
        - ClassConstruct.expandMeta(), when invoked on a user-defined
          namespace, creates a metaclass then expands all subconstructs of the
          user-defined class (which populates the metaclass with meta-level
@@ -4840,7 +4909,7 @@ namespace metax.oopl scope:
 
               /# Explicit creation
               super_expr = metax.c.Expr(
-                'plist', '(name, bases, symbols)', 
+                'plist', '(name, bases, symbols)',
                 [
                   metax.c.Expr('var', 'name', 'name'),
                   metax.c.Expr('var', 'bases', 'bases'),
@@ -5230,14 +5299,14 @@ namespace metax.oopl scope:
         /#    the symbol-table represent what is actually visible to the
         /#    baselang, or whether the symboltable stores conceptual symbols
         /#    that get mapped down to baselang representations later.
-        /#   
+        /#
         /#  - Symbols are conceptual names:
         /#    + implementing -> provide semantics is easy
         /#    + in namespace, conceptual symbols would be classnames (baselang
         /#      symbols would require us using the MetaFoo singleton instance,
         /#      at least in languages without first-class classes). Being able
         /#      to refer to classes instead of metaclasses is intuitive, and
-        /#      makes it viable for us to define the auto-generator for 
+        /#      makes it viable for us to define the auto-generator for
         /#        /mem/<metafile>/<namespace>/<class>/<method>
         /#      to be "show the symbol table of the current construct", which
         /#      is pretty convenient.
@@ -5833,7 +5902,7 @@ namespace metax.oopl scope:
     test:
       test.tpy()
       lifecycle = test.lifecycle
-      
+
       /# No initializer before expandMeta
       test.isnull(test.cscope.cons('__init__', default=None))
 
@@ -5938,7 +6007,7 @@ namespace metax.oopl scope:
             /#    actively compiled (not just one that was implicitly loaded
             /#    and will thus not be written).
             /#  - in experiments, if proceed is set True, the instrumentation
-            /#    code causes 
+            /#    code causes
             /#       InternalError: Failed to find stream named "defn" in ['command_body', 'command_init']
             print('NOTE: Found %s ... must verify we are generating code for it' % targetclsname)
             proceed = False
@@ -6079,34 +6148,31 @@ namespace metax.oopl scope:
       /# is attached to the preceeding class construct
       parent_construct = self.parentConstruct()
       if parent_construct.kind() == 'namespace':
-        /# native blocks within namespace scope are added to either the
-        /# 'pre' or 'post' key of the 'extralines' field of the nearest
-        /# 'class' construct in a particular direction.
-        baselang = self.baselang()
-        rem = baselang.config('rem')
-        comment_attr, commlines = self.attrpair('comment:', None)
-        scope_attr, scope = self.attrpair('scope:', default=None)
+        /# IMPORTANT: See the comment associated with the ClassConstruct.streams
+        /# field for a discussion of some subtleties in how namespace-level
+        /# native constructs need to be handled and why pre-position
+        /# namespace constructs (attached to the class below them) are handled
+        /# in NativeConstruct.translateMeta, while post-position namespace
+        /# constructs (attached to the class above them) must be handled here
+        /# in NativeConstruct.expandMeta).
 
-        /# These feature attributes help us determine which class construct to
-        /# find (the 'position' feature is either 'pre' or 'post', indicating
-        /# whether we are looking for the class below or above this native
-        /# construct), which class variant is desired (the 'location' feature
-        /# is 'user', 'test' or 'meta'), and which file variant is desired
-        /# (the 'placement' feature is 'defn' or 'decl').
         position = self.attrval('position')
-        placement = self.attrval('placement')
-        level = self.attrval('level')
+        if position != 'post':
+          return
 
+        metafile = self.metafile()
+        baselang = self.baselang()
+        scope_attr, scope = self.attrpair('scope:', default=None)
+        decl_attr, decl_lines = self.attrpair('decl:', default=None)
+
+        /# Establish the class construct to attach this native construct to.
         parent = self.parent()
         block = parent.value()
         index = block.index(self)
         class_construct = None
-        metafile = self.metafile()
-
-        if scope is None:
+        if scope is None and decl_lines is None:
           /# This native block does not apply to the baselang in question.
           direction = None
-
         elif position == 'pre':
           /# This native block is associated with the class BELOW it, and
           /# is written into that class' premap field.
@@ -6118,6 +6184,7 @@ namespace metax.oopl scope:
             if cons.kind() == 'class':
               class_construct = cons
               break
+          print('HERE with %s' % self.kindfqn())
         elif position == 'post':
           /# This native block is associated with the class ABOVE it, and
           /# is written into that class' postmap field.
@@ -6146,7 +6213,6 @@ namespace metax.oopl scope:
           /# then locattr will by definition not have a proper line number
           /# in the meta source file.  We should fall back to some default
           /# (the primary attribute line number, for example).
-
           if location == 'user':
             /# We are good as-is
             target_class = class_construct
@@ -6174,15 +6240,17 @@ namespace metax.oopl scope:
 
           /# Write the native lines to the appropriate location.
           if target_class:
-            lines = []
-            if comment_attr or scope:
-              lines.append('')
-            baselang.simpleToBase(comment_attr, output=lines, comment=True)
-            baselang.simpleToBase(scope_attr, output=lines)
-            segment = metax.c.BaseSegment(scope_attr, chunks=lines)
-            /# print('**** HERE with %s for %s(%s) and %s,%s' % (self.kindfqn(), target_class.kindfqn(), id(target_class), position, placement))
-            extralines = target_class.extralines().setdefault(position, {}).setdefault(placement, [])
-            extralines.append(segment)
+            if position == 'post' and decl_attr:
+              comment = self.attr('comment:', None)
+              segment = baselang.segmentForBlockAndComment(
+                decl_attr, comment=comment)
+              target_class.streamNamed('cls-post-decl').append(segment)
+
+            if scope_attr:
+              icomment = self.attr('icomment:', None)
+              segment = baselang.segmentForBlockAndComment(
+                scope_attr, comment=icomment)
+              target_class.streamNamed('cls-post-defn').append(segment)
     test:
       /# TODO(wmh): Test this.
       pass
@@ -6194,8 +6262,8 @@ namespace metax.oopl scope:
       /# Create a meta method on the class within which the entry is found
       /# representing the code to execute for this entry point. This involves
       /# compiling all 'flag', 'arg' and 'command' subconstructs of the
-      /# 'interface:' attribute, and the code in scope:, into a collection of lines
-      /# that represent the body of the to-be-added meta method.
+      /# 'interface:' attribute, and the code in scope:, into a collection of
+      /# lines that represent the body of the to-be-added meta method.
       /#
       /# TODO(wmh): This code is invoked on every command defined in any
       /# transitively included meta source file, which is unnecessary (we only
@@ -6449,7 +6517,7 @@ namespace metax.oopl scope:
           command_body.append(indent + line)
 
       if (not subcmds or toplevel) and not has_optargs:
-        /# There were no subcommands or optional args (or, alternatively, this 
+        /# There were no subcommands or optional args (or, alternatively, this
         /# is the top-level command). In either case, we want to add a
         /# 'catch-all' arg.
         /#  - for non-toplevel commands, if there were any 'arg' constructs
@@ -6582,7 +6650,7 @@ namespace metax.oopl scope:
     test:
       pass
     end receiver FlagConstruct;
-  
+
     receiver BlockConstruct ::
       metax.c.D.expand.sinfo(self.kindfqn())
       print('HERE in %s.expandMeta()' % self.kindfqn())
@@ -6683,7 +6751,7 @@ namespace metax.oopl scope:
           if not parent_info.get('external', False):
             /# TODO(wmh): There are certain situations where this is happening
             /# (and not being surfaced if no errors occur!). In particular,
-            /# the unittests for NamespaceConstruct.importMeta and 
+            /# the unittests for NamespaceConstruct.importMeta and
             /# ExecutableConstruct.methodInfo_cc.
             /#
             /# print('PARENT INFO: %s' % str(parent_info))
@@ -6743,7 +6811,7 @@ namespace metax.oopl scope:
     test:
       test.tpy(expand=True)   # expand before import
       test.lifecycle.importMeta()
-      
+
     end receiver ExecutableConstruct;
 
     receiver MethodConstruct ::
@@ -6823,6 +6891,9 @@ namespace metax.oopl scope:
     receiver NamespaceConstruct ::
       /# Namespace compilation code.
       /#  - compile all classes into separate files
+      /#  - handle namespace-level native constructs properly, in
+      /#    both languages that merge decl/defn and those that
+      /#    separate them.
       /#  - for languages that are namespace-primary (e.g. Python), create a
       /#    file representing the namespace (aka module)
       /#  - create a BUILD file containing all targets for building the classes
@@ -6837,6 +6908,159 @@ namespace metax.oopl scope:
       nameparts = fqn.split(scope_sep)
       nmspbase = nameparts[-1]
       fs = metac.fs()
+
+      /# We define the streams that will be used on a per-class basis. They are
+      /# defined here instead of within ClassConstruct.translateMeta for two
+      /# reasons:
+      /#  - by putting (most) streams in a single place, it is easier to find
+      /#    and understand how each stream is used.
+      /#  - the 'pre-cls-*' and 'cls-pre-*' streams are special in that
+      /#    they cannot be created within the class, since the class to which
+      /#    they refer has not yet been translated (a native block with
+      /#    position 'pre' found before a class is processed before that
+      /#    class, and we need a stream to write the native code into that will
+      /#    be picked up by the class when it is processed.
+      /#
+      /# Streams used within classes:
+      /#   cls-decl:
+      /#     For classes that have a distinction between declaration and
+      /#     definition, this represents the declaration (public interface).
+      /#     For classes without a distinction between declaration and
+      /#     definition, this is unused (all code is written to 'defn' below).
+      /#   cls-defn:
+      /#     For classes that have a distinction between declaration and
+      /#     definition, this represents the definition of the class (actual
+      /#     implementation). For classes without a distinction, this is where
+      /#     all code is written.
+      /#   cls-pre-decl:
+      /#     This represents namespace-level code affiliated with a class, to
+      /#     be inserted before the class declaration but within the namespace.
+      /#     For baselangs without decl/defn distinction, this is added to the
+      /#     same location as cls-pre-defn.
+      /#   cls-pre-defn:
+      /#     This represents namespace-level code affiliated with a class, to
+      /#     be inserted before the class definition but within the namespace.
+      /#   cls-post-decl:
+      /#     This represents namespace-level code affiliated with a class, to
+      /#     be inserted after the class declaration but within the namespace.
+      /#     For baselangs without decl/defn distinction, this is added to the
+      /#     same location as cls-post-defn.
+      /#   cls-post-defn:
+      /#     This represents namespace-level code affiliated with a class, to
+      /#     be inserted after the class definition but within the namespace.
+      /#
+      /#   pre-cls-decl:
+      /#     This is only relevant in baselangs whose per-class syntax has a
+      /#     distinction between "outside of namespace" and "inside of
+      /#     namespace".  It represents namespace-generic code affiliated with
+      /#     a class to appear in the declaration of the class before the
+      /#     namespace. This can be useful to insert code in a .h file in C++
+      /#     (before the namespace is defined, eg add include), but makes no
+      /#     sense in Python. The 'decl:' block of a 'native' construct with
+      /#     position 'pre' is written into this stream.
+      /#   pre-cls-defn:
+      /#     Like pre-cls-defn but for declaration. Useful for inserting code
+      /#     into a .cc file in C++ before the namespace is entered but makes
+      /#     no sense in Python. The 'scope:' (aka 'defn:') block of a 'native'
+      /#     construct with position 'pre' is written into this stream.
+      /#   post-cls-decl:
+      /#     Like pre-cls-decl but after the namespace instead of before it.
+      /#     This can be useful to insert code in a .h file in C++ (after the
+      /#     namespace is closed), but makes no sense in Python.
+      /#     The 'decl:' block of a 'native' construct with position 'post' is
+      /#     written into this stream.
+      /#   post-cls-defn:
+      /#     Like post-cls-decl but for definition not declaration.
+      /#     The 'scope:' (aka 'defn:') block of a 'native' construct with
+      /#     position 'post' is written into this stream.
+      /#
+      /# The above streams are sufficiently general to handle almost all
+      /# use-cases, including being able to insert native code in various
+      /# locations of declarations and definitions. However, when it comes to
+      /# namespace-level code, the above streams require that the
+      /# namespace-level code be affiliated with some class (for example the
+      /# 'position' feature attribute of the 'native' construct affiliates
+      /# namespace-level raw code with a class before it (position post) or
+      /# after it (position pre).
+      /#
+      /# Although viable (and easy to implement), having namespace-level code be
+      /# tied to a class is not intuitive. An alternative would be to introduce
+      /# support for class-independent namespace-level code. To get this
+      /# namespace-generic code to work properly in the face of separate
+      /# compilation (i.e. the ability to define classes within a namespace in
+      /# various places and times and have the overall implementation work) we
+      /# will need to maintain per-metafile namespace snippets and merge them
+      /# all together each time the namespace-generic code is desired. The order
+      /# in which such merging happens will need to be presumed random unless we
+      /# want to offer some partial ordering syntax.
+      /#
+      /# IMPORTANT: ALL of the following are currently speculative and NOT
+      /# IMPLEMENTED. They represent an experiment in formalizing
+      /# namespace-level code not tied to specific classes.
+      /#
+      /#   pre-nmsp-decl:
+      /#     This represents code to be inserted BEFORE a namespace declaration
+      /#     (i.e. before the syntax to start the namespace itself). For
+      /#     languages without a distinction between decl/defn, or for which it
+      /#     does not make sense to insert before a namespace, this is unused.
+      /#   nmsp-pre-decl
+      /#     This represents code to be inserted at the beginning of a namespace
+      /#     declaration (but within it), before any class code is inserted. For
+      /#     languages without a distinction between decl/defn, or for which it
+      /#     does not make sense to insert within the namespace directly, this is
+      /#     unused. See also 'decl' and 'pre-decl' define in ClassConstruct.
+      /#   pre-nmsp-defn:
+      /#     This represents code to be inserted BEFORE a namespace definition
+      /#     (i.e. before the syntax to start the namespace itself). For
+      /#     languages without a distinction between decl/defn, this is where
+      /#     all such code is written.
+      /#   nmsp-pre-defn:
+      /#     This represents code to be inserted at the beginning of a namespace
+      /#     definition (but within it), before any class code is inserted. For
+      /#     languages without a distinction between decl/defn, this is where all
+      /#     such code is written. See also 'defn' and 'pre-defn' define in
+      /#     ClassConstruct.
+      /#   post-nmsp-decl:
+      /#     This represents code to be inserted AFTER a namespace declaration
+      /#     (i.e. after the syntax to end the namespace itself). For
+      /#     languages without a distinction between decl/defn, or for which it
+      /#     does not make sense to insert after a namespace, this is unused.
+      /#   nmsp-post-decl:
+      /#     This represents code to be inserted at the end of a namespace
+      /#     declaration (but within it), after any class code is inserted. For
+      /#     languages without a distinction between decl/defn, or for which it
+      /#     does not make sense to insert within the namespace directly, this is
+      /#     unused. See also 'decl' and 'cls-post-decl' define in ClassConstruct.
+      /#   post-nmsp-defn:
+      /#     This represents code to be inserted AFTER a namespace definition
+      /#     (i.e. after the syntax to end the namespace itself). For
+      /#     languages without a distinction between decl/defn, this is where
+      /#     all such code is written.
+      /#   nmsp-post-defn:
+      /#     This represents code to be inserted at the end of a namespace
+      /#     definition (but within it), after any class code is inserted. For
+      /#     languages without a distinction between decl/defn, this is where all
+      /#     such code is written. See also 'defn' and 'cls-post-defn' define in
+      /#     ClassConstruct.
+      /#
+      /# IMPORTANT: THE ABOVE ARE NOT YET IMPLEMENTED! Currently instead using
+      /# the support made available within classes for adding namespace-generic
+      /# code.
+      streams = metafile.streams()
+      snames = []
+      /# Within namespace
+      snames.append('cls-decl')
+      snames.append('cls-defn')
+      snames.append('cls-pre-decl')
+      snames.append('cls-post-decl')
+      snames.append('cls-pre-defn')
+      snames.append('cls-post-defn')
+      /# Outside of namespace (esoteric, rare in C++, n/a in python)
+      snames.append('pre-cls-decl')
+      snames.append('post-cls-decl')
+      snames.append('pre-cls-defn')
+      snames.append('post-cls-defn')
+      streams.initStreams(*snames)
 
       /###
       /# Process the scope.  Children include:
@@ -6934,35 +7158,35 @@ namespace metax.oopl scope:
       /#    3) a meta class. Each of these is compiled separately.
       /#
       /#  - A class with name nm.sp.Ex has the following associated files:
-      /# 
+      /#
       /#     1a. class definition
       /#           <<repository_path>>/<metalang>/<baselang>/nm/sp/Ex.$defn
       /#         where $defn is the baselang-specific suffix for definitions.
-      /# 
+      /#
       /#     1b. line map for class definition
       /#           <<repository_path>>/<metalang>/<baselang>/nm/sp/.Ex.$defn.map
       /#         defining the mapping from line numbers in source .meta file and
       /#         line numbers in
       /#           <<repository_path>>/<metalang>/<baselang>/nm/sp/Ex.$defn.
-      /# 
+      /#
       /#     2a. class declaration
       /#           <<repository_path>>/<metalang>/<baselang>/nm/sp/Ex.$decl
       /#         where $defn is the baselang-specific suffix for declarations.
       /#         Most languages, $decl == $defn, but in languages likes C++
       /#         they differ.
-      /# 
+      /#
       /#     2b. line map for class declaration
       /#           <<repository_path>>/<metalang>/<baselang>/nm/sp/.Ex.$decl.map
       /#         defining the mapping from line numbers in source .meta file and
       /#         line numbers in
       /#           <<repository_path>>/<metalang>/<baselang>/nm/sp/Ex.$decl.
-      /# 
+      /#
       /#     3.  build fragment for class
       /#           <<repository_path>>/<metalang>/<baselang>/nm/sp/.Ex.bld
       /#         containing a bazel ${basel}_library rule defining how
       /#         to compile the class and listing all deps (other Bazel targets),
       /#         and all data (aka resources).
-      /# 
+      /#
       /# Actions:
       /#
       /#  - identify all dependencies that need importing (assocs plus implicit
@@ -6971,7 +7195,7 @@ namespace metax.oopl scope:
       /#
       /#  - create the BUILD fragment representing the class
       /#    (in <<repository_path>>/<metalang>/<baselang>/nm/sp/.Ex.bld)
-      /# 
+      /#
       /#  - compile all class-level constructs to obtain the contents of the class,
       /#    writing baselang text to BaseStream instances and populating the
       /#    ClassConstruct instance with relevant data identified during child
@@ -6999,7 +7223,7 @@ namespace metax.oopl scope:
       consinfo = context.consinfo('class')
       namespace = self.namespace()
       fs = metac.fs()
-      decl_is_separate = baselang.id() == 'cpp'
+      has_decl = baselang.config('definition_separate')
       variant = self.variant()
       suppress = self.suppress()
 
@@ -7012,74 +7236,48 @@ namespace metax.oopl scope:
       /#   method/initializer/finalizer/lifecycle/function
       /#   native
       /#   category
-      extralines = self.extralines()
+
+      /# See NamespaceConstruct.translateMeta() for a discussion of (and
+      /# creation of) the many different streams that are defined for use while
+      /# translating classes.
+      /#  - we do not pass in create=True below because all streams should
+      /#    have been created in NamespaceConstruct.translateMeta()
+      /#  - we do need to clear the per-class streams for each class, but
+      /#    the 'cls-pre-*' streams are special in that they are written by
+      /#    constructs found BEFORE this class that are to be affiliated with
+      /#    this class. Note that we obtain the pre-existing value and ignore
+      /#    the new value, because for this class it is the pre-existing value
+      /#    that is relevant (the new, empty, value is used by the next class,
+      /#    not this one).
+      /#  - the 'cls-post-*' streams are NOT obtained from metafile streams
+      /#    because they are written during translateMeta(), and any data
+      /#    written to such streams by constructs found AFTER this class
+      /#    construct will not affect the code generated for this class. TO
+      /#    handle this, NativeConstruct.expandMeta() inserts code into
+      /#    class-specific streams for post-position native blocks. Something
+      /#    similar may be implemented for post-position namespace-level
+      /#    fields and methods if we decide to support them (see the discussion
+      /#    in the ClassConstruct.streams field for more details.
       streams = metafile.streams()
-      /# Streams used within classes:
-      /#   decl:
-      /#     For classes that have a distinction between declaration and
-      /#     definition, this represents the declaration (public interface).
-      /#     For classes without a distinction between declaration and
-      /#     definition, this is unused (all code is written to 'defn' below).
-      /#   defn: 
-      /#     For classes that have a distinction between declaration and
-      /#     definition, this represents the definition of the class (actual
-      /#     implementation). For classes without a distinction, this is where
-      /#     all code is written.
-      /#   decl-pre:
-      /#     This represents code to be inserted before the class declaration,
-      /#     but which is still associated with the class. Not needed in
-      /#     baselangs without distinction between decl/defn, or for which it
-      /#     makes no sense to insert code before the class declaration.
-      /#   defn-pre:
-      /#     This represents code to be inserted before the class definition,
-      /#     but which is still associated with the class. For languages without
-      /#     a distinction between decl/defn, this is where all such code is
-      /#     written (i.e. decl-pre not used in such languages)
-      /#   decl-post:
-      /#     This represents code to be inserted after the class declaration,
-      /#     but which is still associated with the class. Not needed in
-      /#     baselangs without distinction between decl/defn, or for which it
-      /#     makes no sense to insert code after the class declaration.
-      /#   defn-post:
-      /#     This represents code to be inserted after the class definition,
-      /#     but which is still associated with the class. For languages without
-      /#     a distinction between decl/defn, this is where all such code is
-      /#     written (i.e. decl-post not used in such languages)
-      /#   decl-pre-nmsp:
-      /#     This represents code to be inserted before the class declaration,
-      /#     but which is still associated with the class. Not needed in
-      /#     baselangs without distinction between decl/defn, or for which it
-      /#     makes no sense to insert code before the class declaration.
-      /#   defn-pre-nmsp:
-      /#     This represents code to be inserted before the class definition,
-      /#     but which is still associated with the class. For languages without
-      /#     a distinction between decl/defn, this is where all such code is
-      /#     written (i.e. decl-pre not used in such languages)
-      /#   decl-post-nmsp:
-      /#     This represents code to be inserted after the class declaration,
-      /#     but which is still associated with the class. Not needed in
-      /#     baselangs without distinction between decl/defn, or for which it
-      /#     makes no sense to insert code after the class declaration.
-      /#   defn-post-nmsp:
-      /#     This represents code to be inserted after the class definition,
-      /#     but which is still associated with the class. For languages without
-      /#     a distinction between decl/defn, this is where all such code is
-      /#     written (i.e. decl-post not used in such languages)
-      snames = []
-      for placement in ('defn', 'decl'):
-        snames.append(placement)
-        for position in ('pre', 'post'):
-          sname = placement + '-' + position
-          snames.append(sname)
-          snames.append(sname + '-nmsp')
-      streams.initStreams(*snames)
+      defn_segments = streams.stream('cls-defn', clear=True)
+      decl_segments = streams.stream('cls-decl', clear=True)
+      _, pre_decl_segments = streams.newStream('cls-pre-decl')
+      _, pre_defn_segments = streams.newStream('cls-pre-defn')
+      post_decl_segments = self.streamNamed('cls-post-decl')
+      post_defn_segments = self.streamNamed('cls-post-defn')
+
+      /# special streams (useful in C++, probably not other baselangs)
+      /#  - code that appears before or after the namespace syntax within
+      /#    which this class is defined.
+      if basel == 'cpp':
+        msp_pre_decl_segments, _ = streams.newStream('pre-cls-decl')
+        nmsp_pre_defn_segments, _ = streams.newStream('pre-cls-defn')
+        nmsp_post_decl_segments = self.streamNamed('post-cls-decl')
+        nmsp_post_defn_segments = self.streamNamed('post-cls-defn')
 
       scope, children = self.attrpair('scope:')
       for construct in children:
         construct.translateMeta()
-      decl_segments = streams.stream('decl')
-      defn_segments = streams.stream('defn')
-      decl_post_segments = streams.stream('decl-post')
 
       /# parentspec: str
       /#   the baselang syntax needed to define all parents (extends/implements)
@@ -7088,30 +7286,66 @@ namespace metax.oopl scope:
       /# Now process dependencies into targets and imports
       imports, targets = baselang.formatDependencies(self)
 
-      /# preclass: vec<str>
-      /#   baselang code associated with a class definition but appearing
-      /#   before the class.
-      preclass = []
-      prelines = extralines.get('pre', {}).get('decl', None)
-      if prelines:
-        preclass.extend(prelines)
+      /# Instantiate the template using the varset
+      istestcase = self.isTestCase()
+      basesuffix = baselang.suffix()
+      template_name = baselang.id()
+      if istestcase: template_name += '_test'
+      if has_decl:
+        /# For baselangs with two files per class, we print out the
+        /# definition using the same flow as in other baselangs, and
+        /# handle the declaration file specially.
+        template_name += '_defn'
 
-      /# postclass: vec<str>
-      /#   - baselang code associated with a class declaration but appearing
-      /#     after the class.
-      /#   - extra-lines may contain native code.
-      /#      - TODO(wmh): Consider replacing extra_lines with decl-post now
-      /#        that it exists!
-      postclass = []
-      if decl_post_segments:
-        postclass.extend(decl_post_segments)
-      /# TODO(wmh): Clean up the confusion about decl vs defn in languages that
-      /# don't make a distinction.  Note that varset var 'postclass' is for
-      /# declaration, and 'postclass-local' is for definition for langs that
-      /# care, and 'postclass' is used for langs that don't care.
-      postlines = extralines.get('post', {}).get('defn', None)
-      if postlines:
-        postclass.extend(postlines)
+      /# Now we initialized [pre|post]class_[decl|defn], which are vectors
+      /# strings and BaseSegment instances representing
+      /#   preclass_decl:
+      /#     code to insert before class declaration.
+      /#     ignored for classes that do not distinguish decl/defn.
+      /#   preclass_defn:
+      /#     code to insert before class definition.
+      /#   postclass_decl:
+      /#     code to insert after class declaration.
+      /#     ignored for classes that do not distinguish decl/defn.
+      /#   postclass_defn:
+      /#     code to insert after class definition.
+
+      if has_decl:
+        /# This baselang distinguishes between decl and defn.
+        preclass = pre_defn_segments
+        postclass = post_defn_segments
+        preclass_decl = pre_decl_segments
+        postclass_decl = post_decl_segments
+
+      else:
+        /# This class does not distinguish between decl and defn, so preclass is
+        /# a merging of pre_defn_segments and pre_decl_segments (usually empty),
+        /# and postclass is a merging of post_defn_segments and
+        /# post_decl_segments (usually empty).
+        preclass = []
+        postclass = []
+        /# Unused
+        preclass_decl = []
+        postclass_decl = []
+
+        /# preclass is a merging of pre_defn_segments and pre_decl_segments
+        /# (the latter of which will usually be empty).
+        if pre_decl_segments:
+          /# print('#' * 80)
+          /# print('Found pre decl:\n%s' % pre_decl_segments[0].flattenStr())
+          preclass.extend(pre_decl_segments)
+        if pre_defn_segments:
+          /# print('#' * 80)
+          /# print('Found pre defn:\n%s' % pre_defn_segments[0].flattenStr())
+          preclass.extend(pre_defn_segments)
+        if post_decl_segments:
+          /# print('#' * 80)
+          /# print('Found post decl:\n%s' % post_decl_segments[0].flattenStr())
+          postclass.extend(post_decl_segments)
+        if post_defn_segments:
+          /# print('#' * 80)
+          /# print('Found post defn:\n%s' % post_defn_segments[0].flattenStr())
+          postclass.extend(post_defn_segments)
 
       /# preamble: vec<str>
       /#   Lines of text within class scope before user-provided scope.
@@ -7138,6 +7372,7 @@ namespace metax.oopl scope:
       /# Create the VarSet of variables.
       varset = metax.c.VarSet()
       varset.addVar('imports', imports)
+      varset.addVar('imposts', [])   # fixme
       varset.addVar('preclass', preclass)
       varset.addVar('preamble', preamble)
       varset.addVar('fqcn', self.fqn())
@@ -7158,25 +7393,11 @@ namespace metax.oopl scope:
       /#    in each construct class?
       baselang.augmentVarset(self, varset)
 
-      /# Instantiate the template using the varset
-      has_decl = False
-      istestcase = self.isTestCase()
-      basesuffix = baselang.suffix()
-      template_name = baselang.id()
-      if istestcase: template_name += '_test'
-      if baselang.config('definition_separate'):
-        /# For baselangs with two files per class, we print out the
-        /# definition using the same flow as in other baselangs, and
-        /# handle the declaration file specially.
-        template_name += '_defn'
-        has_decl = True
-
       /# Create the defn base file and associated mapfile
       template = consinfo.templateNamed(template_name)
       segment = metax.c.BaseSegment(self.primary())
       fqn = self.fqn()
       segment.instantiate(template, varset, self.kind(), fqn)
-
       mapfile = metax.c.MapFile(
         metac.basePath(fqn, prefix='.', suffix=basesuffix + '.map'),
         fs.realpath(fs.abspath(metafile.path())), [])
@@ -7190,13 +7411,31 @@ namespace metax.oopl scope:
 
       /# If the baselang separates definition from declaration, do declaration.
       if has_decl:
+        /# We have already written the declaration file (above), so now we
+        /# instantiate the declaration file.
         template_name = template_name.replace('_defn', '_decl')
         template = consinfo.templateNamed(template_name)
         segment = metax.c.BaseSegment(self.primary())
         fqn = self.fqn()
         declsuffix = baselang.suffix(location='decl')
 
-        varset.setValue('scope', decl_segments)
+        /# Create the VarSet of variables.
+        varset = metax.c.VarSet()
+        varset.addVar('imports', [])  # fixme
+        varset.addVar('imposts', [])  # fixme
+        varset.addVar('preclass', preclass_decl)
+        varset.addVar('preamble', [])  # fixme
+        /# varset.addVar('fqcn', self.fqn())
+        varset.addVar('namespace', namespace.id())
+        varset.addVar('namespace_under', namespace.fqn().replace('.', '_'))
+        varset.addVar('class', self.id(), attribute=self.primary())
+        varset.addVar('parentspec', parentspec)
+        varset.addVar('comment', [])  # fixme
+        varset.addVar('scope', decl_segments, attribute=scope)
+        varset.addVar('postamble', [])  # fixme
+        varset.addVar('postclass', postclass)
+        baselang.augmentVarset(self, varset)
+        /# varset.show()
 
         segment.instantiate(template, varset, self.kind(), fqn)
         mapfile = metax.c.MapFile(
@@ -7235,6 +7474,9 @@ namespace metax.oopl scope:
       return [basefile, bldfile]
     test:
       test.tpy(expand=True, imports=True)  # expand/import before translate
+      test.metafile.streams().initStreams(
+        'cls-defn', 'cls-post-defn', 'cls-pre-defn',
+        'cls-decl', 'cls-post-decl', 'cls-pre-decl')
       test.klass.translateMeta()
       /# TODO(wmh): Lots of testing possible here.
     end receiver ClassConstruct;
@@ -7286,9 +7528,9 @@ namespace metax.oopl scope:
       /# the field definition is written into the declaration stream.
       /# TODO(wmh): Define a method on BaseLanguageOopl for determining which
       /# stream to write field declarations to?
-      sname = 'defn'
+      sname = 'cls-defn'
       if baselang.config('definition_separate'):
-        sname = 'decl'
+        sname = 'cls-decl'
       if lines:
         /# TODO(wmh): Do we need to create a BaseSegment so we have line
         /# numbering? Will need to split apart comment lines and code lines.
@@ -7296,18 +7538,18 @@ namespace metax.oopl scope:
 
       if baselang.id() == 'cpp':
         defn_lines = baselang.formatFieldDefinition(self, defn=True)
-        streams.addLines('defn-post', defn_lines)
+        streams.addLines('cls-post-defn', defn_lines)
 
       metax.c.D.translate.end()
     test:
       test.tpy()
-      segments = test.metafile.streams().newStream('defn')
+      segments = test.metafile.streams().newStream('cls-defn')
       test.field.translateMeta()
       test.iseq(
         (['', '# field name : str'], None),
         segments)
     end receiver FieldConstruct;
-  
+
     receiver ExecutableConstruct ::
       /# Executable compilation code.
       /#  - format the signature
@@ -7480,13 +7722,13 @@ namespace metax.oopl scope:
           template = consinfo.templateNamed(template_name)
           segment = metax.c.BaseSegment(None)
           segment.instantiate(template, varset, self.kind(), self.fqn())
-          streams.addSegment('defn', segment)
+          streams.addSegment('cls-defn', segment)
 
         if has_decl:
           /# This baselang has different syntax for declaring a method and
           /# defining it (in separate files). We've already written the
           /# definition to the 'defn' stream, and now we write the declaration
-          /# to the 'decl' stream.
+          /# to the 'cls-decl' stream.
           template_name = baselang.establishTemplateName(self, defn=False)
           template = consinfo.templateNamed(template_name)
           segment = metax.c.BaseSegment(None)
@@ -7501,12 +7743,12 @@ namespace metax.oopl scope:
           varset.setValue('params', params_str_decl)
 
           segment.instantiate(template, varset, self.kind(), self.fqn())
-          streams.addSegment('decl', segment)
+          streams.addSegment('cls-decl', segment)
 
       metax.c.D.translate.end()
     test:
       test.tpy(expand=True, imports=True)
-      segments = test.metafile.streams().newStream('defn')
+      segments = test.metafile.streams().newStream('cls-defn')
       test.method.translateMeta()
       test.iseqtext('''
         >|def bmi(self):
@@ -7525,7 +7767,7 @@ namespace metax.oopl scope:
     end receiver LifecycleConstruct;
 
     receiver BehaviorConstruct ::
-      return (None, None)      
+      return (None, None)
     test:
       pass
     end receiver BehaviorConstruct;
@@ -7559,7 +7801,9 @@ namespace metax.oopl scope:
     receiver NativeConstruct ::
       /# verbatim dump
       parent_construct = self.parentConstruct()
-      if parent_construct.kind() == 'class':
+      kind = parent_construct.kind()
+
+      if kind == 'class':
         metafile = self.metafile()
         baselang = self.baselang()
         streams = metafile.streams()
@@ -7575,7 +7819,42 @@ namespace metax.oopl scope:
             lines.append('')
           baselang.simpleToBase(scope, output=lines)
           segment = metax.c.BaseSegment(scope, metaline=metaline, chunks=lines)
-          streams.addSegment('defn', segment)
+          streams.addSegment('cls-defn', segment)
+
+      elif kind == 'namespace':
+        /# We only process pre-position native blocks here. post-position
+        /# native blocks are handled in NativeConstruct.expandMeta() and
+        /# child-position native blocks are not yet supported.
+        posattr, position = self.attrpair('position', default=metax.c.LOOKUP)
+
+        if position == 'pre':
+          /# See the ClassConstruct.streams field comment for details on why we
+          /# only process pre-position native constructs here in translateMeta,
+          /# and process post-position native constructs in expandMeta.
+          metafile = self.metafile()
+          streams = metafile.streams()
+          baselang = self.baselang()
+
+          /# Obtain decl: and defn:
+          scope_attr, scope = self.attrpair('scope:', default=None)
+          decl_attr, decl_lines = self.attrpair('decl:', default=None)
+
+          /# Establish the streams to write, and the scope to write to the stream.
+          items = []
+          /# This native block is associated with the class BELOW it.
+          if scope_attr:
+            icomment_attr = self.attr('icomment:', None)
+            items.append(('cls-pre-defn', scope_attr, icomment_attr))
+          if decl_attr:
+            comment_attr = self.attr('comment:', None)
+            items.append(('cls-pre-decl', decl_attr, comment_attr))
+
+          /# Now write the blocks to streams.
+          for sname, block, comment in items:
+            segment = baselang.segmentForBlockAndComment(
+              block, comment=comment)
+            streams.stream(sname).append(segment)
+
       return (None, None)
     test:
       pass
@@ -7631,7 +7910,7 @@ namespace metax.oopl scope:
       segments, previous = streams.newStream('current-body')
       segment = metax.c.BaseSegment(None)
       segments.append(segment)
-      
+
       test.var1.translateMeta()
       test.var2.translateMeta()
       test.var3.translateMeta()
@@ -7844,7 +8123,7 @@ namespace metax.oopl scope:
       /# expand/translate must be invoked at least on the class. We do
       /# everything.
       metafile, _, _ = test.compiler.processMeta(
-        '/dummy/path65.meta', 
+        '/dummy/path65.meta',
         text="""\
         >|namespace hack.stmts scope:
         >|  class A scope:
@@ -7879,7 +8158,7 @@ namespace metax.oopl scope:
         metafile.error('missing required expr', attr=self.primary())
         return
       estr, etype = baselang.compileExpr(expr, metafile)
-      
+
       /# Must have a 'scope' attribute
       scope_attr = self.attr('scope:', default=None)
       if scope_attr is None:
@@ -7934,7 +8213,7 @@ namespace metax.oopl scope:
         >|"""
 
       test.checkStatement(
-        code, 
+        code,
         '/hack.stmts/A/f/s1/Meta__1__',
         """\
         >|if h == 1:
@@ -7943,7 +8222,7 @@ namespace metax.oopl scope:
       )
 
       test.checkStatement(
-        code, 
+        code,
         '/hack.stmts/A/f/s1/Meta__2__',
         """\
         >|elif h == 2:
@@ -8008,7 +8287,7 @@ namespace metax.oopl scope:
       /# a class without invoking on namespace first?
     end receiver ClassConstruct;
 
-  end behavior compileMeta;  
+  end behavior compileMeta;
 
   abstract
   class BaseLanguageOopl < metax.meta.BaseLanguageConstruct #:
@@ -8142,7 +8421,7 @@ namespace metax.oopl scope:
         'pair': (('T1', 'any'), ('T2', any)),
         /# NOTE: An entry in Templates() that is empty implies any number of
         /# params, each with default any.
-        'tuple': tuple(), 
+        'tuple': tuple(),
       })
     end lifecycle;
 
@@ -9381,7 +9660,7 @@ namespace metax.oopl scope:
             rawfield = m.group('rawfield')
             if rawfield:
               /# CODETANGLE(fieldinit): See FieldConstruct.expandMeta(), which
-              /# specifies how rawfields are formed from field names. 
+              /# specifies how rawfields are formed from field names.
               /# TODO(wmh): Generalize this code to use the 'field_prefix' and
               /# 'field_suffix' keys of Context.Tokens(). Make sure to handle
               /# public fields that do not make a difference between rawfield
@@ -9475,7 +9754,7 @@ namespace metax.oopl scope:
           result = 'meta'
         else:
           result = 'meta' if (kind == 'static' or kind == 'cls') else 'self'
-          
+
       elif style == 'auto':
         /# We are to establish the meta-level var, see if it exists in the
         /# scope, and return it or the base var dependning on whether it does.
@@ -9669,6 +9948,29 @@ namespace metax.oopl scope:
           ['# Some Python', 'a = 1'],
           test.baselang.simpleToBase(block))
     end method simpleToBase;
+
+    method segmentForBlockAndComment : BaseSegment #:
+      Return a BaseSegment instance for a simple block and associated comment.
+    params:
+      var block : metax.attr.SimpleBlock #:
+        The block to make a segment for.
+      var comment : metax.attr.SimpleBlock = null #:
+        The comment associated with the block, to be inserted before the block
+        in baselang code.
+    scope:
+      lines = []
+      if comment is not None:
+        lines.append('')
+      self.simpleToBase(comment, output=lines, comment=True)
+      xlines = len(lines)
+      self.simpleToBase(block, output=lines)
+      /# Note that block.line() is the default start for the segment,
+      /# but we inserted xlines before it so we need to adjust.
+      segment = metax.c.BaseSegment(
+        block, chunks=lines, metaline=block.line() - xlines)
+      return segment
+    test:
+    end method segmentForBlockAndComment;
 
     method formatBuildRule : str #:
       Form a BUILD rule from data.
@@ -10884,28 +11186,6 @@ namespace metax.oopl scope:
         /# header (.h) file.
         varset.addVar('header', construct.fqn().replace('.', '/') + '.h')
 
-        /# Deal with lines of C++ code to be inserted before and after the
-        /# namespace specifiers within which the class is defined.
-        /#  imports        - C++ code before namespace in header
-        /#  imports_local  - C++ code before namespace in source
-        /#  imposts        - C++ code after  namespace in header
-        /#  imposts_local  - C++ code after  namespace in source
-        /#
-        /# Note that 'imports' often already has content (all the imports that
-        /# are needed by the class), but the other three are usually (always?)
-        /# empty/undefined before this code.
-        extralines = construct.extralines()
-        import_extra = extralines.get('premsp', {}).get('decl', [])
-        varset.addVar(
-          'imports_local',
-          extralines.get('premsp', {}).get('defn', []))
-        varset.addVar(
-          'imposts_local', 
-          extralines.get('postmsp', {}).get('defn', []))
-        varset.addVar(
-          'imposts',
-          extralines.get('postmsp', {}).get('decl', []))
-
         /# Define preclass (before class) and postclass (after class)
         preclass = varset.getValue('preclass')
         postclass = varset.getValue('postclass')
@@ -10913,11 +11193,11 @@ namespace metax.oopl scope:
         preclass_defn = []
         postclass_defn = []
 
-        /# Sub-constructs of class may write to the 'decl-post' stream (e.g.
+        /# Sub-constructs of class may write to the 'cls-post-decl' stream (e.g.
         /# static field constructs write static field definition and
         /# initialization code here). They are to be inserted into the .cc
         /# file outside of the class scope (after it).
-        defn_post_segments = streams.stream('defn-post')
+        defn_post_segments = streams.stream('cls-post-defn')
         if defn_post_segments:
           postclass_defn.extend(defn_post_segments)
 
@@ -10958,8 +11238,8 @@ namespace metax.oopl scope:
             preamble.append(
               'using %s::%s;' % (parentclass['fqn'], parentclass['id']))
 
-        varset.addVar('preclass_local', preclass_defn)
-        varset.addVar('postclass_local', postclass_defn)
+        /# varset.addVar('preclass_local', preclass_defn)
+        /# varset.addVar('postclass_local', postclass_defn)
 
       elif kind == 'method':
         modifiers = varset.getValue('modifiers')
@@ -11023,25 +11303,22 @@ namespace metax.oopl scope:
       /# Class
       klass = test.klass
       cscope = test.cscope
-      test.metafile.streams().newStream('defn-post')
+      test.metafile.streams().newStream('cls-post-defn')
       varset = metax.c.VarSet()
       varset.addVar('preclass', [])
       varset.addVar('preamble', [])
       varset.addVar('postclass', [])
       test.baselang.augmentVarset(klass, varset)
-      test.iseq(
-        {'imposts': [[], None, None, -1],
-         'end_namespace': [['}  // tmp', '}  // demo'], None, None, -1],
-         'namespace_spec': ['namespace demo {\nnamespace tmp {', None, None, -1],
-         'imposts_local': [[], None, None, -1],
-         'imports_local': [[], None, None, -1],
-         'namespace_under': ['demo_tmp', None, None, -1],
-         'header': ['demo/tmp/Person.h', None, None, -1],
-         'postclass_local': [[], None, None, -1],
-         'postclass': [[], None, None, -1],
-         'preclass': [[], None, None, -1],
-         'preclass_local': [[], None, None, -1],
-         'preamble': [[], None, None, -1]},
+      test.iseqmap(
+        {
+          'end_namespace': [['}  // tmp', '}  // demo'], None, None, -1],
+          'namespace_spec': ['namespace demo {\nnamespace tmp {', None, None, -1],
+          'namespace_under': ['demo_tmp', None, None, -1],
+          'header': ['demo/tmp/Person.h', None, None, -1],
+          'postclass': [[], None, None, -1],
+          'preclass': [[], None, None, -1],
+          'preamble': [[], None, None, -1],
+        },
         varset.map())
 
       /# Instance Method
@@ -11595,7 +11872,7 @@ namespace metax.oopl scope:
             body.append("fp.write('%%s  %s = ' %% indent)" % fstr)
             body.append(
               "self.%s().printMeta(fp=fp, indent=subindent)\n" % field.id())
-      
+
       return method
     test:
       test.tpy()
@@ -11702,7 +11979,7 @@ namespace metax.oopl scope:
   end behavior autogenWrite;
 
   behavior autogenSize : MethodConstruct #:
-      Auto-generate the byte-size calculator. 
+      Auto-generate the byte-size calculator.
   params:
     var klass : metax.oopl.ClassConstruct;
   scope:
@@ -12046,7 +12323,7 @@ namespace metax.oopl scope:
       /# Test namespace build fragment
       test.iseq(
         ('py_library',
-         {'srcs': ['tmp.py'], 
+         {'srcs': ['tmp.py'],
           'visibility': ['//visibility:public'],
           'name': 'tmp',
           'deps': ['//metax/root:root']}),
@@ -12282,7 +12559,7 @@ namespace metax.oopl scope:
            'name': 'Person',
            'deps': set(['//demo/tmp:MetaPerson', '//metax/root:Object',
                         '//metax/root:ObjectMeta']),
-           'suppress': ['JSC_EXTRA_REQUIRE_WARNING', 
+           'suppress': ['JSC_EXTRA_REQUIRE_WARNING',
                         'JSC_NULLABLE_RETURN_WITH_NAME'],
          }
        ),
@@ -12760,7 +13037,7 @@ namespace metax.oopl scope:
       comment = test.klass.attr('comment:', default=None)
       test.iseqvec(
         ['/**',
-         ' * demo.tmp.Person', 
+         ' * demo.tmp.Person',
          ' *   First line should be oneline summary.',
          ' *   ',
          ' *   Subsequent lines are for more details and can be formatted in',
@@ -13319,7 +13596,7 @@ namespace metax.oopl scope:
         if mtype is not mtype2:
           /# Sanity check.
           print(
-            'NOTE: In formatFieldDefinition, default type %s vs %s' % 
+            'NOTE: In formatFieldDefinition, default type %s vs %s' %
             (mtype, mtype2))
         result = ['%s = %s' % (field.rawfield(), basedef)]
       else:
@@ -14031,7 +14308,7 @@ namespace metax.oopl scope:
           else:
             /# Invalid class name.
             result['error'] = (
-              '%s is not a namespace or class in %s' % 
+              '%s is not a namespace or class in %s' %
               (class_candidate, fqn.rsplit('.', 1)[0]))
         else:
           /# The fqn contains only namespaces.
@@ -14287,7 +14564,7 @@ namespace metax.oopl scope:
       lazyend = lazylines[-1][:3]
       if lazyend != '-> ':
         metafile.error(
-          'Expecting lazy: block of accessor to end with line starting "-> " not "%s"' % 
+          'Expecting lazy: block of accessor to end with line starting "-> " not "%s"' %
           (lazyend), line=lazy.line())
 
       resval = lazylines[-1][3:]
@@ -14357,7 +14634,7 @@ namespace metax.oopl scope:
       lazyend = lazylines[-1][:3]
       if lazyend != '-> ':
         metafile.error(
-          'Expecting lazy: block of accessor to end with line starting "-> " not "%s"' % 
+          'Expecting lazy: block of accessor to end with line starting "-> " not "%s"' %
           (lazyend), line=lazy.line())
 
       resval = lazylines[-1][3:]
@@ -14537,7 +14814,7 @@ namespace metax.oopl scope:
     test:
       test.tpy(expand=True)
       test.iseqvec(
-        ['result = self.__class__', 
+        ['result = self.__class__',
          'assert issubclass(result, Person)',
          'assert issubclass(result, MetaPerson)',
          'return result'],
@@ -15314,7 +15591,19 @@ namespace metax.oopl scope:
         if failm:
           d = failm.groupdict()
           fqn = '%s.%s' % (d['class'], d['method'])
+
+          /# TODO(wmh): Apparently if a test method has a docstring, the
+          /# output of the test includes the docstring before the separator.
+          /# The code below assumes the separator is in errlines[i] (only
+          /# tru if test method has no docstring (which is true for all
+          /# test methods defined via 'test:' or 'tests:', but not explicit
+          /# test methods). Need to fix this ... scan forward until sepre
+          /# matches.
+
           if not sepre.match(errlines[i]):
+            print('#' * 80)
+            print('\n'.join(errlines))
+            print('#' * 80)
             raise metax.c.Error('Should have found separator line after "%s"' % line)
           if fqn not in datamap:
             item = {
@@ -15382,14 +15671,14 @@ namespace metax.oopl scope:
       test.baselang.processTestOutput(
         /# stdout
         """\
-         >|OoplPython.OoplPython                    ...   73735 us  
+         >|OoplPython.OoplPython                    ...   73735 us
          >|OoplPython.augmentVarset                 ...behavior metax.oopl.augmentVarset (for OoplPython) does not yet have a unittest
-         >|    1211 us  
-         >|OoplPython.autogenPrint                  ...   32229 us  
+         >|    1211 us
+         >|OoplPython.autogenPrint                  ...   32229 us
          >|OoplPython.autogenSize                   ...behavior metax.oopl.autogenSize (for OoplPython) does not yet have a unittest
-         >|    1362 us  
-         >|OoplPython.repl                          ...    1299 us  
-         >|OoplPython.superCode                     ...    2055 us  
+         >|    1362 us
+         >|OoplPython.repl                          ...    1299 us
+         >|OoplPython.superCode                     ...    2055 us
          >|""",
         /# stderr
         """\
@@ -15414,7 +15703,7 @@ namespace metax.oopl scope:
     Obtain the baselang-specific receiver variable associated with a method.
 
     IMPORTANT: There are two related values that are useful here:
-     1. The syntax to use to access state within a given method. This is 
+     1. The syntax to use to access state within a given method. This is
         always a variable (or null if there is no variable by which state
         can be accessed).  This variable may be augmented by dereference and
         seperator syntax, but the core is a variable.
@@ -15447,10 +15736,10 @@ namespace metax.oopl scope:
       is baselang-dependent, but for style 'meta' it is always '.'.
     var deref : bool = false #:
       Only considered if style is base. Dereferences pointer types.
-      For example, for C++, returns '(*this)' so that one can use 
+      For example, for C++, returns '(*this)' so that one can use
       '(*this).func()'.
   scope:
- 
+
     abstract
     receiver BaseLanguageOopl;
 
@@ -15505,43 +15794,43 @@ namespace metax.oopl scope:
       /# instance method
       baselang, instance_method = test.generateMethodVariant(basel, 'instance')
       test.iseq(
-        ('this', 'this'), 
+        ('this', 'this'),
         baselang.receiverStr(instance_method, location='user'))
       test.iseq(
-        ('this', 'this'), 
+        ('this', 'this'),
         baselang.receiverStr(instance_method))
       test.iseq(
-        ('this->', 'this->'), 
+        ('this->', 'this->'),
         baselang.receiverStr(instance_method, sep=True))
       test.iseq(
-        ('(*this)', '(*this)'), 
+        ('(*this)', '(*this)'),
         baselang.receiverStr(instance_method, deref=True))
       test.iseq(
-        ('(*this).', '(*this).'), 
+        ('(*this).', '(*this).'),
         baselang.receiverStr(instance_method, deref=True, sep=True))
       test.iseq(
-        ('self', 'self'), 
+        ('self', 'self'),
         baselang.receiverStr(instance_method, style='meta'))
       test.iseq(
-        ('self.', 'self.'), 
+        ('self.', 'self.'),
         baselang.receiverStr(instance_method, style='meta', sep=True))
 
       /# static method
       baselang, static_method = test.generateMethodVariant(basel, 'static')
       test.iseq(
-        (None, 'Card'), 
+        (None, 'Card'),
         baselang.receiverStr(static_method, location='user'))
       test.iseq(
-        (None, 'Card'), 
+        (None, 'Card'),
         baselang.receiverStr(static_method))
       test.iseq(
-        (None, 'Card::'), 
+        (None, 'Card::'),
         baselang.receiverStr(static_method, sep=True))
       test.iseq(
-        (None, 'Card'), 
+        (None, 'Card'),
         baselang.receiverStr(static_method, deref=True))
       test.iseq(
-        (None, 'Card::'), 
+        (None, 'Card::'),
         baselang.receiverStr(static_method, deref=True, sep=True))
       /# TODO(wmh): Decide how to handle the meta-level version of static
       /# receiver. In Python, we treat static and meta methods similarly
@@ -15551,55 +15840,55 @@ namespace metax.oopl scope:
       /# treat static and class method invocations the same in C++, we would
       /# need to perform a special replacement of 'meta.' with '<class>::'.
       test.iseq(
-        ('meta', 'meta'), 
+        ('meta', 'meta'),
         baselang.receiverStr(static_method, style='meta'))
 
       /# meta method
       baselang, meta_method = test.generateMethodVariant(basel, 'meta')
       test.iseq(
-        ('this', 'MetaCard'), 
+        ('this', 'MetaCard'),
         baselang.receiverStr(meta_method, location='meta'))
       test.iseq(
-        ('this', 'MetaCard'), 
+        ('this', 'MetaCard'),
         baselang.receiverStr(meta_method))
       test.iseq(
-        ('(*this)', '(*MetaCard)'), 
+        ('(*this)', '(*MetaCard)'),
         baselang.receiverStr(meta_method, deref=True))
       test.iseq(
-        ('this->', 'MetaCard->'), 
+        ('this->', 'MetaCard->'),
         baselang.receiverStr(meta_method, sep=True))
       test.iseq(
-        ('(*this).', '(*MetaCard).'), 
+        ('(*this).', '(*MetaCard).'),
         baselang.receiverStr(meta_method, sep=True, deref=True))
       test.iseq(
-        ('meta', 'meta'), 
+        ('meta', 'meta'),
         baselang.receiverStr(meta_method, style='meta'))
       test.iseq(
-        ('meta.', 'meta.'), 
+        ('meta.', 'meta.'),
         baselang.receiverStr(meta_method, style='meta', sep=True))
 
       /# test method
       baselang, test_method = test.generateMethodVariant(basel, 'test')
       test.iseq(
-        ('this', 'this'), 
+        ('this', 'this'),
         baselang.receiverStr(test_method, location='test'))
       test.iseq(
-        ('this', 'this'), 
+        ('this', 'this'),
         baselang.receiverStr(test_method))
       test.iseq(
-        ('this->', 'this->'), 
+        ('this->', 'this->'),
         baselang.receiverStr(test_method, sep=True))
       test.iseq(
-        ('(*this)', '(*this)'), 
+        ('(*this)', '(*this)'),
         baselang.receiverStr(test_method, deref=True))
       test.iseq(
-        ('(*this).', '(*this).'), 
+        ('(*this).', '(*this).'),
         baselang.receiverStr(test_method, deref=True, sep=True))
       test.iseq(
-        ('test', 'test'), 
+        ('test', 'test'),
         baselang.receiverStr(test_method, style='meta'))
       test.iseq(
-        ('test.', 'test.'), 
+        ('test.', 'test.'),
         baselang.receiverStr(test_method, style='meta', sep=True))
 
     end receiver OoplCpp;
@@ -15642,94 +15931,94 @@ namespace metax.oopl scope:
       /# instance method
       baselang, instance_method = test.generateMethodVariant(basel, 'instance')
       test.iseq(
-        ('this', 'this'), 
+        ('this', 'this'),
         baselang.receiverStr(instance_method, location='user'))
       test.iseq(
-        ('this', 'this'), 
+        ('this', 'this'),
         baselang.receiverStr(instance_method))
       test.iseq(
-        ('this.', 'this.'), 
+        ('this.', 'this.'),
         baselang.receiverStr(instance_method, sep=True))
       test.iseq(
-        ('this', 'this'), 
+        ('this', 'this'),
         baselang.receiverStr(instance_method, deref=True))
       test.iseq(
-        ('this.', 'this.'), 
+        ('this.', 'this.'),
         baselang.receiverStr(instance_method, deref=True, sep=True))
       test.iseq(
-        ('self', 'self'), 
+        ('self', 'self'),
         baselang.receiverStr(instance_method, style='meta'))
       test.iseq(
-        ('self.', 'self.'), 
+        ('self.', 'self.'),
         baselang.receiverStr(instance_method, style='meta', sep=True))
 
       /# static method
       baselang, static_method = test.generateMethodVariant(basel, 'static')
       test.iseq(
-        ('meta', 'Card'), 
+        ('meta', 'Card'),
         baselang.receiverStr(static_method, location='user'))
       test.iseq(
-        ('meta', 'Card'), 
+        ('meta', 'Card'),
         baselang.receiverStr(static_method))
       test.iseq(
-        ('meta.', 'Card.'), 
+        ('meta.', 'Card.'),
         baselang.receiverStr(static_method, sep=True))
       test.iseq(
-        ('meta', 'Card'), 
+        ('meta', 'Card'),
         baselang.receiverStr(static_method, deref=True))
       test.iseq(
-        ('meta.', 'Card.'), 
+        ('meta.', 'Card.'),
         baselang.receiverStr(static_method, deref=True, sep=True))
       test.iseq(
-        ('meta', 'meta'), 
+        ('meta', 'meta'),
         baselang.receiverStr(static_method, style='meta'))
 
       /# meta method
       baselang, meta_method = test.generateMethodVariant(basel, 'meta')
       test.iseq(
-        ('this', 'MetaCard'), 
+        ('this', 'MetaCard'),
         baselang.receiverStr(meta_method, location='meta'))
       test.iseq(
-        ('this', 'MetaCard'), 
+        ('this', 'MetaCard'),
         baselang.receiverStr(meta_method))
       test.iseq(
-        ('this', 'MetaCard'), 
+        ('this', 'MetaCard'),
         baselang.receiverStr(meta_method, deref=True))
       test.iseq(
-        ('this.', 'MetaCard.'), 
+        ('this.', 'MetaCard.'),
         baselang.receiverStr(meta_method, sep=True))
       test.iseq(
-        ('this.', 'MetaCard.'), 
+        ('this.', 'MetaCard.'),
         baselang.receiverStr(meta_method, sep=True, deref=True))
       test.iseq(
-        ('meta', 'meta'), 
+        ('meta', 'meta'),
         baselang.receiverStr(meta_method, style='meta'))
       test.iseq(
-        ('meta.', 'meta.'), 
+        ('meta.', 'meta.'),
         baselang.receiverStr(meta_method, style='meta', sep=True))
 
       /# test method
       baselang, test_method = test.generateMethodVariant(basel, 'test')
       test.iseq(
-        ('this', 'this'), 
+        ('this', 'this'),
         baselang.receiverStr(test_method, location='test'))
       test.iseq(
-        ('this', 'this'), 
+        ('this', 'this'),
         baselang.receiverStr(test_method))
       test.iseq(
-        ('this.', 'this.'), 
+        ('this.', 'this.'),
         baselang.receiverStr(test_method, sep=True))
       test.iseq(
-        ('this', 'this'), 
+        ('this', 'this'),
         baselang.receiverStr(test_method, deref=True))
       test.iseq(
-        ('this.', 'this.'), 
+        ('this.', 'this.'),
         baselang.receiverStr(test_method, deref=True, sep=True))
       test.iseq(
-        ('test', 'test'), 
+        ('test', 'test'),
         baselang.receiverStr(test_method, style='meta'))
       test.iseq(
-        ('test.', 'test.'), 
+        ('test.', 'test.'),
         baselang.receiverStr(test_method, style='meta', sep=True))
 
     end receiver OoplJavascript;
@@ -15759,7 +16048,7 @@ namespace metax.oopl scope:
           /# We want access to the singleton metaclass instance.
           /#
           /# TODO(wmh): This is rarely reached because of the test above for
-          /# myclass.isMeta(). However, it *is* accessed from 
+          /# myclass.isMeta(). However, it *is* accessed from
           /# baselang.analyzeExecutableForFields().
           result = 'cls'    # make this 'meta'
           special = ClassConstruct.MetaInstifyName(myclass.id())
@@ -15784,43 +16073,43 @@ namespace metax.oopl scope:
       /# instance method
       baselang, instance_method = test.generateMethodVariant(basel, 'instance')
       test.iseq(
-        ('self', 'self'), 
+        ('self', 'self'),
         baselang.receiverStr(instance_method, location='user'))
       test.iseq(
-        ('self', 'self'), 
+        ('self', 'self'),
         baselang.receiverStr(instance_method))
       test.iseq(
-        ('self.', 'self.'), 
+        ('self.', 'self.'),
         baselang.receiverStr(instance_method, sep=True))
       test.iseq(
-        ('self', 'self'), 
+        ('self', 'self'),
         baselang.receiverStr(instance_method, deref=True))
       test.iseq(
-        ('self.', 'self.'), 
+        ('self.', 'self.'),
         baselang.receiverStr(instance_method, deref=True, sep=True))
       test.iseq(
-        ('self', 'self'), 
+        ('self', 'self'),
         baselang.receiverStr(instance_method, style='meta'))
       test.iseq(
-        ('self.', 'self.'), 
+        ('self.', 'self.'),
         baselang.receiverStr(instance_method, style='meta', sep=True))
 
       /# static method
       baselang, static_method = test.generateMethodVariant(basel, 'static')
       test.iseq(
-        ('cls', 'Card'), 
+        ('cls', 'Card'),
         baselang.receiverStr(static_method, location='user'))
       test.iseq(
-        ('cls', 'Card'), 
+        ('cls', 'Card'),
         baselang.receiverStr(static_method))
       test.iseq(
-        ('cls.', 'Card.'), 
+        ('cls.', 'Card.'),
         baselang.receiverStr(static_method, sep=True))
       test.iseq(
-        ('cls', 'Card'), 
+        ('cls', 'Card'),
         baselang.receiverStr(static_method, deref=True))
       test.iseq(
-        ('cls.', 'Card.'), 
+        ('cls.', 'Card.'),
         baselang.receiverStr(static_method, deref=True, sep=True))
       /# TODO(wmh): Decide how to handle the meta-level version of static
       /# receiver. In Python, we treat static and meta methods similarly
@@ -15830,55 +16119,55 @@ namespace metax.oopl scope:
       /# treat static and class method invocations the same in C++, we would
       /# need to perform a special replacement of 'meta.' with '<class>::'.
       test.iseq(
-        ('meta', 'meta'), 
+        ('meta', 'meta'),
         baselang.receiverStr(static_method, style='meta'))
 
       /# meta method
       baselang, meta_method = test.generateMethodVariant(basel, 'meta')
       test.iseq(
-        ('cls', 'MetaCard'), 
+        ('cls', 'MetaCard'),
         baselang.receiverStr(meta_method, location='meta'))
       test.iseq(
-        ('cls', 'MetaCard'), 
+        ('cls', 'MetaCard'),
         baselang.receiverStr(meta_method))
       test.iseq(
-        ('cls', 'MetaCard'), 
+        ('cls', 'MetaCard'),
         baselang.receiverStr(meta_method, deref=True))
       test.iseq(
-        ('cls.', 'MetaCard.'), 
+        ('cls.', 'MetaCard.'),
         baselang.receiverStr(meta_method, sep=True))
       test.iseq(
-        ('cls.', 'MetaCard.'), 
+        ('cls.', 'MetaCard.'),
         baselang.receiverStr(meta_method, sep=True, deref=True))
       test.iseq(
-        ('meta', 'meta'), 
+        ('meta', 'meta'),
         baselang.receiverStr(meta_method, style='meta'))
       test.iseq(
-        ('meta.', 'meta.'), 
+        ('meta.', 'meta.'),
         baselang.receiverStr(meta_method, style='meta', sep=True))
 
       /# test method
       baselang, test_method = test.generateMethodVariant(basel, 'test')
       test.iseq(
-        ('self', 'self'), 
+        ('self', 'self'),
         baselang.receiverStr(test_method, location='test'))
       test.iseq(
-        ('self', 'self'), 
+        ('self', 'self'),
         baselang.receiverStr(test_method))
       test.iseq(
-        ('self.', 'self.'), 
+        ('self.', 'self.'),
         baselang.receiverStr(test_method, sep=True))
       test.iseq(
-        ('self', 'self'), 
+        ('self', 'self'),
         baselang.receiverStr(test_method, deref=True))
       test.iseq(
-        ('self.', 'self.'), 
+        ('self.', 'self.'),
         baselang.receiverStr(test_method, deref=True, sep=True))
       test.iseq(
-        ('test', 'test'), 
+        ('test', 'test'),
         baselang.receiverStr(test_method, style='meta'))
       test.iseq(
-        ('test.', 'test.'), 
+        ('test.', 'test.'),
         baselang.receiverStr(test_method, style='meta', sep=True))
     end receiver OoplPython;
 
@@ -16253,7 +16542,7 @@ namespace metax.oopl scope:
       var expected : str = null #:
         The expected baselang output. If null, print out the output rather
         than check against it (and also print out the construct identified by
-        mxpath).                               
+        mxpath).
       var verbose : bool = false #:
         If true, print out the identified statement construct and the output
         produced by invoking translateMeta().
@@ -16293,7 +16582,7 @@ namespace metax.oopl scope:
       var expected : str = null #:
         The expected baselang output. If null, print out the output rather
         than check against it (and also print out the construct identified by
-        mxpath).                               
+        mxpath).
       var verbose : bool = false #:
         If true, print out the identified statement construct and the output
         produced by invoking translateMeta().
@@ -16322,7 +16611,7 @@ namespace metax.oopl scope:
       return statement
     test:
     end method _checkStatement;
-    
+
     method generateMethodVariant : any #:
       A service method for use in unittests for receiverStr() and other
       methods that require instance, static, meta and test methods.
@@ -16366,14 +16655,14 @@ namespace metax.oopl scope:
           features=[('location', 'meta')])
         method.myclassIs(klass)
         klass.variantIs('meta')
-        
+
       elif kind == 'test':
         method = metax.oopl.MethodConstruct.NewFromData(
           'test_f', context, parent=klass.attr('scope:'),
           features=[('location', 'test')])
         method.myclassIs(klass)
         klass.variantIs('test')
-        
+
       else:
         raise metax.c.Error('Invalid kind %s' % kind)
 

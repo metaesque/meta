@@ -5,7 +5,9 @@ scope:
 
   class Error < metax.root.Error;
 
-  native scope:
+  post native ##:
+    TODO(wmh): Use metqx.c.REQUIRED
+  defn<py>:
     REQUIRED = object()
   end;
 
@@ -79,7 +81,7 @@ scope:
 
     method child : GenericFile #:
       Find a child by name.
-      
+
       TODO(wmh): By having the arg be vararg, we add convenience at the expense
       of conflating the term 'child' with 'descendent' and potentially pose
       problems in baselangs that cannot handle varargs well. Do we want a safer
@@ -318,7 +320,7 @@ scope:
       Identifies the kind of filesystem.  Values are:
         disk:
           use the underlying disk filesystem
-        memory: 
+        memory:
           do not write files to disk, but don't mock out I/O methods. TODO(wmh):
           Change this to 'readonly' ... it relies on a read-only disk filesystem
           to acquire data, but all methods that modify the filesystem are
@@ -427,7 +429,7 @@ scope:
     test:
       test.iseq('/bin/bash', test.diskfs.getenv('SHELL'))
     end method getenv;
-   
+
     method setenv : any #:
       Set an environment variable.
     params:
@@ -441,7 +443,7 @@ scope:
       test.diskfs.setenv('BLAH', '1')
       test.iseq('1', test.diskfs.getenv('BLAH'))
     end method setenv;
-   
+
     method unsetenv : any #:
       Unset an environment variable.
     params:
@@ -700,7 +702,7 @@ scope:
       /#
       /# This means this Filesystem class only works as intended when rootdir is
       /# set to a directory containing .meta files that also contains a
-      /# symlinked .meta file pointing to the repository. 
+      /# symlinked .meta file pointing to the repository.
       /#
       /# TODO(wmh): Consider renaming the current 'rootdir' to 'localdir' or
       /# 'cwd'. Then define 'rootdir' (or 'realrootdir' if we don't rename
@@ -726,7 +728,7 @@ scope:
         metac = metafile.compiler()
         mroot_orig = mroot
         mroot = metac.repositoryPath()
-        print('WARNING: %s does not exist, so using %s' % (mroot_orig, mroot))
+        /# print('WARNING: %s does not exist, so using %s' % (mroot_orig, mroot))
         fullpath = self.join(mroot, basefile.subpath())
       return fullpath, mroot
     test:
@@ -1362,7 +1364,7 @@ scope:
           if mapfile:
             fp.write(u'  ' + '-' * 80 + '\n')
             mapfile.serialize(fp=fp, indent='  ')
-            
+
       if kind == 'disk':
         fs = self._disk_filesystem
         if fs:
@@ -1392,9 +1394,9 @@ scope:
       out = test.out()
       test.iseqtext("""
         >|Filesystem:
-        >|   1        0 test/a.meta                                                 
-        >|   2        0 test/other/c.meta                                           
-        >|   3        0 test/sub/b.meta                                             
+        >|   1        0 test/a.meta                                                 |<
+        >|   2        0 test/other/c.meta                                           |<
+        >|   3        0 test/sub/b.meta                                             |<
         >|""",
         out)
     end method summarize;

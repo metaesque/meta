@@ -1,22 +1,20 @@
+
 namespace metax.test #:
   Classes related to unit-testing.
 scope:
 
-  class Dummy #:
-    A total hack ... only here because Meta currently attaches native blocks to
-    the previous 'class' construct and classes like FakeFcntl and StubHolder are
-    python-specific and thus do not exist in C++ ... so compiling C++ code fails
-    when a native block exists after them.
-  scope:
-  end class Dummy;
-
+  pre
   native fixme scope<py>:
     import io
     StrStrClass = io.StringIO().__class__
+    /# TODO(wmh): define a field or enum. Consider using metax.c.* (define
+    /# MISSING therein, or use one of the existing ones instead of MISSING).
     MISSING = object()
-  scope<cc>:
+  decl<cc>:
+    extern int MISSING;
+  defn<cc>:
     int MISSING = 1;
-  end native;    
+  end native;
 
   specific
   class FakeFcntl parent<py> ^object #:
@@ -97,16 +95,16 @@ scope:
   class StubHolder parent<py> ^object
   comment:
     Support class for stubbing methods out for unit testing.
-    
+
     Sample Usage:
-    
+
     You want os.path.exists() to always return true during testing.
-    
+
        stubs = StubHolder()
        stubs.Set(os.path, 'exists', lambda x: 1)
          ...
        stubs.CleanUp()
-    
+
     The above changes os.path.exists into a lambda that returns 1.  Once
     the ... part of the code finishes, the CleanUp() looks up the old
     value of os.path.exists and restores it.
@@ -121,7 +119,7 @@ scope:
 
     method __del__ comment:
       Do not rely on the destructor to undo your stubs.
-      
+
       You cannot guarantee exactly when the destructor will get called without
       relying on implementation details of a Python VM that may change.
     scope:
@@ -164,21 +162,21 @@ scope:
         The new value for the attribute.
     comment:
       Replace obj.attr_name with new_attr.
-      
+
       This method is smart and works at the module, class, and instance level
       while preserving proper inheritance. It will not stub out C types however
       unless that has been explicitly allowed by the type.
-      
+
       This method supports the case where attr_name is a staticmethod or a
       classmethod of obj.
-      
+
       Notes:
        - If obj is an instance, then it is its class that will actually be
          stubbed. Note that the method Set() does not do that: if obj is
          an instance, it (and not its class) will be stubbed.
        - The stubbing is using the builtin getattr and setattr. So, the __get__
          and __set__ will be called when stubbing.
-      
+
       Raises:
         AttributeError: If the attribute cannot be found.
     scope:
@@ -222,10 +220,10 @@ scope:
 
     method SmartUnsetAll comment:
       Reverses SmartSet() calls, restoring things to original definitions.
-      
+
       This method is automatically called when the StubOutForTesting()
       object is deleted; there is no need to call it explicitly.
-      
+
       It is okay to call SmartUnsetAll() repeatedly, as later calls have
       no effect if no SmartSet() calls have been made.
     scope:
@@ -246,13 +244,13 @@ scope:
         The_new_value_of_the_attribute
     comment:
       In parent, replace child_name's old definition with new_child.
-      
+
       The parent could be a module when the child is a function at
       module scope.  Or the parent could be a class when a class' method
       is being replaced.  The named child is set to new_child, while the
       prior definition is saved away for later, when UnsetAll() is
       called.
-      
+
       This method supports the case where child_name is a staticmethod or a
       classmethod of parent.
     scope:
@@ -270,10 +268,10 @@ scope:
 
     method UnsetAll comment:
       Reverses Set() calls, restoring things to their original definitions.
-      
+
       This method is automatically called when the StubOutForTesting()
       object is deleted; there is no need to call it explicitly.
-      
+
       It is okay to call UnsetAll() repeatedly, as later calls have no
       effect if no Set() calls have been made.
     scope:
@@ -286,20 +284,20 @@ scope:
       pass
     end method UnsetAll;
   end class StubHolder;
-  
+
   class TestCase #:
     /# The JUnit testing infrastructure for Java (which came from a testing
     /# infrastructure for Smalltalk) has gained cross-language recognition, and
     /# there is an xUnit implementation for basically every OO language
     /# (e.g. CppUnit, JSUnit, python unit (unittest), etc.).
-    /# 
+    /#
     /# See $METAROOT/UseGuide.wmd (/Meta/Meta From The Middle Ground/Unit Tests)
     /# for a discussion of xUnit and how Meta implements this testing paradigm
     /# across all baselangs.
-    /# 
+    /#
     /# See the src/kernel/asserts.org file for details on alerts across
     /# baselangs.
-    /# 
+    /#
     /# In javascript, the normal idiom for doing javascript testing using
     /# bazel and google closure is as follows:
     /#  - unittests are implemented in some file ending in _test.js
@@ -327,7 +325,7 @@ scope:
     /#                - invokes testCase.execute()
     /#                   - invokes testCase.cycleTests()
     /#                      ...
-    /# 
+    /#
     /# In Meta<javascript>, the above control flow is changed as follows:
     /#  - For user-defined class <C> in namespace <N>, Meta implicitly defines
     /#    test class <N>_test.<C>Test in file <N>/<C>_test.js.
@@ -344,13 +342,13 @@ scope:
     /#  - The 'run' method (metax.test.TestCase.run) does the following:
     /#     - Invokes jsunit(), which does similar work to what goog.testing.jsunit
     /#       does.
-    /#     - Invokes setTestObj(), which does similar work to 
+    /#     - Invokes setTestObj(), which does similar work to
     /#       goog.testing.TestCase.setTestObj()
     /#     - Invokes gTestRunner.setStrict(false) to all 0 tests
     /#     - Invokes goog.testing.TestCase.initializeTestRunner()
     /#     - Invokes gTestRunner.execute()
     /#         ...
-    /# 
+    /#
     /# Modifications needed to io_bazel_rules_closure
     /#  - created local repository at $WMH/src/google/rules_closure
     /#    with
@@ -419,7 +417,7 @@ scope:
   assocs<cc>:
     std assoc strstream;
     std assoc typeinfo;
-    lib assoc gtest.gtest target "@gtest//:main";    
+    lib assoc gtest.gtest target "@gtest//:main";
     cls assoc metax.root.Error;
   scope:
 
@@ -447,7 +445,7 @@ scope:
 
     static
     field Interactive : bool #:
-      Set this to True to enable interactive unit tests.      
+      Set this to True to enable interactive unit tests.
 
     field debug : bool #:
       If True, prints out each invocation of the initializer, setup,
@@ -531,7 +529,7 @@ scope:
       each baselang, allowing the user to focus simply on the
       init/setup/teardown/finalize sequence.
 
-      Note that the javascript asserting methods are available in 
+      Note that the javascript asserting methods are available in
         $CLOSURE_ROOT/library/closure/goog-orig/testing/asserts.js
       They are rather odd in having the optional message be the first argument
       of the method (so we have to do some reversal to get the more intuitive
@@ -552,7 +550,7 @@ scope:
         IMPORTANT: Since the Meta compiler implicitly adds a parameter to
         meta lifecycles of testcase classes, it is important that we ...???
       type<py> str
-      type<js> @str 
+      type<js> @str
       type<cc> &str;
     super<py> (method_name)
     super<js> (method_name)
@@ -651,7 +649,7 @@ scope:
       self.deblog('Invoking %s tearDown for %s' % (self.name(), self.methname()))
       status = self.status()
       if not self.silent():
-        sys.stdout.write('%8d us  %s\n' % (seconds * 1000000, status))
+        sys.stdout.write('%8d us  %s\n' % (seconds * 1000000, status or '.'))
 
       /# Clean up moxes
       self.clearMoxes()
@@ -819,7 +817,7 @@ scope:
           else:
             result = ''
       return result
-      
+
       if False:
         /# THis is old code ... remove it.
         text_test_result = getattr(self, '_outcome', None)
@@ -1360,7 +1358,7 @@ scope:
     new specific
     method setupFilesystem : any #:
       Configure module so that it uses a fake filesystem.
-      
+
       Raises:
         Error: if the method is called on a module multiple times.
         Error: if from_module is not None and has not been setup.
@@ -1371,7 +1369,7 @@ scope:
       var path_specs : *vec = null #:
         The paths to create. Each element is either a string (path) or
         a two-tuple, with the first element being the path, and the second
-        element being a dict of keyword args to send to 
+        element being a dict of keyword args to send to
         fake_filesystem.CreateFile().
       var from_module : any = null #:
         If specified, the faux filesystem objects are obtained from
@@ -1487,7 +1485,7 @@ scope:
             the symlink points.
     comment:
       Create files within a fake filesystem.
-      
+
       Raises:
         Error: if an illegal key is passed in path_specs subdata.
     scope<py>:
@@ -1654,7 +1652,7 @@ scope:
         The path to the file.
     comment:
       Obtain a fakefile instance.
-      
+
       Raises:
         Error: If one invokes this method without first invoking
                SetupSharedFilesystem().
@@ -1704,7 +1702,7 @@ scope:
         The path to the file.
     comment:
       Obtain the contents of a fake file.
-      
+
       Raises:
         Error: If one invokes this method without first invoking
                SetupSharedFilesystem().
@@ -1740,7 +1738,7 @@ scope:
     test<py>:
       pass
     end method _readFile;
- 
+
     new specific
     method revertFilesystem #:
       Undo all stubs to create a faux filesystem.
@@ -1755,7 +1753,7 @@ scope:
             % mname)
       del module.open
       del fsinfo[mname]
-      
+
       /# Revert fake-filesystem-related modules
       for modname, mod in self._hacks.iteritems():
         /# print('Here with %s = %s vs %s' % (modname, getattr(module, modname, None), mod))
@@ -2074,7 +2072,7 @@ scope:
       Confirm that the given method raises an exception.
 
       Note that the python version accepts arbitrary positional and
-      keyword args while the javascript version does not. Need to get 
+      keyword args while the javascript version does not. Need to get
       varargs supported in javascript before we can try implementing it.
     params:
       var eclass : class #:
@@ -2108,7 +2106,7 @@ scope:
     end method raises;
 
     method matches #:
-      A string value matches a regexp. 
+      A string value matches a regexp.
     params:
       var restr : str #:
         The regexp to match against (as a string).
@@ -2348,7 +2346,7 @@ scope:
         /# Don't use BytesIO, as one cannot write unicode to such.
         fp = io.StringIO()
         self.recursiveCompare('', expected, data, 0, fp=fp, valwidth=width)
-        self.fail(fp.getvalue())        
+        self.fail(fp.getvalue())
     test<py>:
       tc = self._tc
       tc.setUp()
@@ -2844,9 +2842,10 @@ scope:
       metastrap.Setup()
     end;
 
-  end class TestCase;  
+  end class TestCase;
 
-  native #:
+  post
+  native main #:
     The code needed to run the namespace level tests.
   scope<py>:
     def main(**kwds):

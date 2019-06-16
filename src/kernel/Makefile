@@ -36,8 +36,8 @@ vtest: fullmeta-py
 #   Compare beta *.meta with current *.meta
 diff-%: .FORCE
 	diff --width=160 --recursive --suppress-common-lines -y \
-	  $*.meta \
-	  ../../lib/versions/current/src/kernel/$*.meta
+	  ../../lib/versions/current/src/kernel/$*.meta \
+	  $*.meta
 
 # target pdiff-%:
 #   Compare beta *.py with current *.py

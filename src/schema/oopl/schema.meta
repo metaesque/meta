@@ -51,9 +51,38 @@ config:
         TODO(wmh): Remove this option from here and add it in 'assoc'.
     end Attribute location;
 
+    feature
+    Attribute position : <pre|post|child> = post #:
+      Is this native block associated with the construct before or after it.
+    config:
+      FeatureValue pre #:
+        This native block is associated with the construct below it.
+      FeatureValue post #:
+        This native block is associated with the construct above it.
+      FeatureValue child #:
+        NOT YET IMPLEMENTED (and may never be). Experimental idea for indicating
+        that this native block is not to be affiliated with a class and instead
+        represents namespace-level code independent of any class. This would
+        require us to introduce baselang-specific code for supporting this, and
+        would mean maintaining metafile-specific namespace snippets that get
+        merged together into a single namespace-wide baselang implementation
+        within NamespaceConstruct.translateMeta(). There are complexities and
+        concerns associated with this, so for the time being we are seeing how
+        far we can push the strategy of always associating namespace-level code
+        with some class within the namespace. There are downsides to that
+        approach though, in that the namespace-level code is not available
+        unless one imports the class containing that code.
+    end Attribute position;
+
     secondary
     Attribute comment: : simple = <empty> aliases <#:> #:
-      Arbitrary multi-line text describing the purpose of the construct.
+      Arbitrary multi-line text providing interface (public) details about
+      the construct.
+
+    secondary
+    Attribute icomment: : simple = <empty> aliases <##:> #:
+      Arbitrary multi-line text providing implementation (private) details
+      about the construct.
 
     secondary
     Attribute config: : complex = <empty> children <Construct> #:
@@ -73,7 +102,7 @@ config:
     Attribute comment:;
     Attribute config:;
     Attribute scope:;
-  end Construct _symbol_;    
+  end Construct _symbol_;
 
   Construct namespace < _symbol_ #:
     @namespace: Represents a 'namespace' construct.
@@ -143,6 +172,88 @@ config:
       >|if __name__ == '__main__':
       >|  metax.test.main()
     end Template python_test;
+
+    Template cpp_decl #:
+      This is an exploration of the feasibility of using a spexial .h/.cc file
+      pair to represent non-class code defined within a namespace. It is not
+      yet being used in production code.
+
+      In C++, we create a special .h and .cc file to contain namespace-generic
+      declarations/definitions. This is where things like namespace-level field
+      and method decls/defns reside, when it does not make sense to attach those
+      decls/defns with a class. Note that separate compilation makes this more
+      complicated than it might first seem, since we cannot instantiate this
+      template blindly based off of the compilation of a single occurrence of a
+      given namespace (there may be multiple occurrences of the same namespace
+      in different .meta files). Instead, we must merge the code from all such
+      namespaces together.
+
+      Suppose that the metafile /some/path/file.meta defines nm.sp and
+      introduces namespace-level non-class code. Another metafile,
+      /some/other/path/file2.meta, also defines nm.sp and introduces
+      namespace-level non-class code. If both meta files are provided in an
+      invocation of metac, we have all of the needed code. But if we later
+      compile only one of these .meta files, we still need the code from the
+      other .meta file to exist in the specially generated namespace file.
+
+      To this end, suppose for each .meta file defining namespace-level
+      non-class code for namespace nm.sp, we wrote a special meta-specific file
+      into $METAREPO/oopl/cpp/nm/sp (if the .meta file is /some/path/file.meta,
+      we would write $METAREPO/oopl/cpp/nm/sp/.some_path_file.nmsp). That file
+      contains a merging of pre-namespace decl/defn, within-namespace decl/defn,
+      and post-namespace decl/defn code (separated by some special syntax). Now,
+      anytime any namespace is being compiled, we can form the .h and .cc files
+      representing the namespace-level non-class syntax by:
+
+       - Obtaining all $METAREPO/oopl/cpp/nm/sp/.*.nmsp files
+
+       - Parsing each into their pre-namespace, within-namespace, and
+         post-namespace decl/defn components
+
+       - Merging all pre-namespace decl code together, all within-namespace decl code
+         together, and all post-namespace decl code together (order of processing
+         is required to be irrelevant, so any ordering is allowed), which provides
+         all info needed to instantiate this _decl template.
+
+       - Merging all pre-namespace defn code together, all within-namespace defn code
+         together, and all post-namespace defn code together (order of processing
+         is required to be irrelevant, so any ordering is allowed), which provides
+         all info needed to instantiate the following _defn template.
+
+       - The BUILD file must contain a target for this special namespace .h/.cc pair.
+      
+       - When defining the target in the BUILD file for any class defined within namespace
+         nm.sp, one of the dependencies is the aforementioned namespace target.
+    scope:
+      >|#ifndef ${namespace_under}_special_h
+      >|#define ${namespace_under}_special_h 1
+      >|
+      >|${pre_namespace}
+      >|
+      >|${namespace_spec}
+      >|
+      >|${comment}
+      >|
+      >|${end_namespace}
+      >|
+      >|${post_namespace}
+      >|
+      >|#endif // ${namespace_under}_special_h
+    end Template cpp_decl;
+
+    Template cpp_defn scope:
+      >|#include "${header}"
+      >|${imports_local}
+      >|
+      >|${namespace_spec}
+      >|${preclass_local}
+      >|${scope}
+      >|${postclass_local}
+      >|
+      >|${end_namespace}
+      >|${imposts_local}
+    end Template cpp_defn;
+
   end Construct namespace;
 
   abstract
@@ -168,7 +279,7 @@ config:
       FeatureValue static #:
         The ${kind} is defined within the scope of the class but does not
         reside in the instance or metaclass (and is not inherited into
-        child classes).                                             
+        child classes).
     end Attribute kind;
 
     Attribute comment:;
@@ -398,15 +509,15 @@ config:
 
     Template cpp_defn scope:
       >|#include "${header}"
-      >|${imports_local}
+      >|${imports}
       >|
       >|${namespace_spec}
-      >|${preclass_local}
+      >|${preclass}
       >|${scope}
-      >|${postclass_local}
+      >|${postclass}
       >|
       >|${end_namespace}
-      >|${imposts_local}
+      >|${imposts}
     end Template cpp_defn;
 
     Template cpp_test_decl scope:
@@ -430,20 +541,20 @@ config:
       >|
       >|#endif // ${namespace_under}_${class}_h
     end Template cpp_test_decl;
- 
+
     Template cpp_test_defn scope:
       >|#include "${header}"
-      >|${imports_local}
+      >|${imports}
       >|
       >|${namespace_spec}
-      >|${preclass_local}
+      >|${preclass}
       >|
       >|${scope}
       >|
-      >|${postclass_local}
+      >|${postclass}
       >|
       >|${end_namespace}
-      >|${imposts_local}
+      >|${imposts}
       >|
       >|
       >|int main(int argc, char* argv[]) {
@@ -480,12 +591,12 @@ config:
         #r = getter is protected
         ~r = getter is package
         !r = getter is not generated
-      
+
       And the complete set could be:
         +r+w
         +r-w-x
         etc.
-      
+
       However, the above would require a different mechanism for defining
       feature values. Two possibilities:
        1. the set of feature values is
@@ -519,7 +630,7 @@ config:
     Attribute visibility : <tmppublic|tmpprivate> = tmpprivate #:
       The visibility of the field.
 
-      TODO(wmh): This attribute is temporary. It is subsumed by the 
+      TODO(wmh): This attribute is temporary. It is subsumed by the
       multi-valued version of 'access', and code should start migrating
       away from the use of this field.  Hence the 'tmp' prefix on
       legal values.
@@ -557,6 +668,33 @@ config:
     Attribute kind;
 
     feature
+    Attribute position : <pre|post|child> = post #:
+      The 'field' and 'method' constructs will inherit this attribute.
+      Used only for fields/methods found at namespace level (at least for
+      now), and indicates which class the namespace-level field or method
+      should be attached to (pre means next class, post means previous class).
+      If we decide to implement true namespace-level support (which is looking
+      more and more necessary), we may be able to remove this (unless we
+      still want to support namespace-level constructs attached to classes).
+
+      TODO(wmh): We should be able to just inherit the definition of 'position'
+      from _oopl_ into _classic_ using
+         Attribute position;
+      and then further inherit it into 'field' and 'method' with the same
+      syntax. However, currently I'm getting an exception of the form:
+         metax.c.Error: Failed to find attribute 'kind' in
+           /oopl/field@config/position@config
+      so something about the inheritance isn't implemented correctly.
+    config:
+      FeatureValue pre #:
+        This native block is associated with the construct below it.
+      FeatureValue post #:
+        This native block is associated with the construct above it.
+      FeatureValue child #:
+        See discussion in 'position' definition in _oopl_ for more details.
+    end Attribute position;
+
+    feature
     Attribute inheritance : <new|override> = override #:
       Whether the accessors are defined in parents or not.
       TODO(wmh): We need to be able to specify this on a per-accessor
@@ -589,7 +727,7 @@ config:
         uint    0
         real    0.0
         bool    false
-        *<any>  null 
+        *<any>  null
         @vec    []
         @map    {}
     end Attribute default;
@@ -907,6 +1045,33 @@ config:
     Attribute location;
     Attribute kind;
 
+    feature
+    Attribute position : <pre|post|child> = post #:
+      The 'field' and 'method' constructs will inherit this attribute.
+      Used only for fields/methods found at namespace level (at least for
+      now), and indicates which class the namespace-level field or method
+      should be attached to (pre means next class, post means previous class).
+      If we decide to implement true namespace-level support (which is looking
+      more and more necessary), we may be able to remove this (unless we
+      still want to support namespace-level constructs attached to classes).
+
+      TODO(wmh): We should be able to just inherit the definition of 'position'
+      from _oopl_ into _classic_ using
+         Attribute position;
+      and then further inherit it into 'field' and 'method' with the same
+      syntax. However, currently I'm getting an exception of the form:
+         metax.c.Error: Failed to find attribute 'kind' in
+           /oopl/field@config/position@config
+      so something about the inheritance isn't implemented correctly.
+    config:
+      FeatureValue pre #:
+        This native block is associated with the construct below it.
+      FeatureValue post #:
+        This native block is associated with the construct above it.
+      FeatureValue child #:
+        See discussion in 'position' definition in _oopl_ for more details.
+    end Attribute position;
+
     primary
     Attribute method : id = <required> #:
       The name of the method.
@@ -1220,34 +1385,13 @@ config:
   end Construct remark;
 
   Construct native < _oopl_ #:
-    @native: A means of dumping raw base-language code into a compilation stream.
+    @native: A means of dumping raw base-language code into a compilation
+    stream.
+
   config:
 
     Attribute location;
-
-    feature
-    Attribute position : <pre|post> = post #:
-      Is this native block associated with the construct before or after it.
-    config:
-      FeatureValue pre #:
-        This native block is associated with the construct below it.
-      FeatureValue post #:
-        This native block is associated with the construct above it.
-    end Attribute position;
-
-    feature
-    Attribute placement : <defn|decl> = defn #:
-      Only meaningful in base-languages that make a distinction between
-      declaration (signature) and definition (implementation). For example,
-      in C++ 'defn' is .h and 'decl' is .cc, whereas in python both 'defn'
-      and 'decl' refer to .py, in java both 'defn' and 'decl' refer to .java,
-      etc.
-    config:
-      FeatureValue defn #:
-        In C++, this identifies the .cc file.
-      FeatureValue decl #:
-        In C++, this identifies the .h file.
-    end Attribute placement;
+    Attribute position;
 
     feature
     Attribute level : <cls|nmsp> = cls #:
@@ -1270,7 +1414,15 @@ config:
       The name of the native.
 
     Attribute comment:;
-    Attribute scope: : simplex children <_statement_>;
+    Attribute icomment:;
+    Attribute scope: : simplex aliases <defn:> children <_statement_>;
+
+    secondary
+    Attribute decl: : simplex = <empty> children <_statement_> #:
+      Only applicable in baselangs with a distinction between
+      declaration and definition. For example, in C++ this inserts
+      raw C++ in the .h file associated with a class.
+    end;
 
   end Construct native;
 
@@ -1436,7 +1588,7 @@ config:
       Only relevant for top-level command constructs. Specifies the binary to
       use when the default is not suitable.  Allows one to, for example,
       make code require python3 instead of python2.
-    
+
     Attribute comment:;
     Attribute scope: : simple;
 
@@ -1580,7 +1732,7 @@ config:
 
   Construct loop < _statement_ #:
     @loop: A generalization of all looping syntax.
-    
+
     Kinds of loops supported:
      - for i in enumerable ...
          loop over <expr>
@@ -1601,7 +1753,7 @@ config:
     secondary
     Attribute on : id = <empty> #:
       The name of the variable to use. This is normally not explicitly
-      specified, as we 
+      specified, as we
 
     secondary
     Attribute over : expr = <empty> #:
@@ -1638,7 +1790,7 @@ config:
 
   Construct switch < _statement_ #:
     @if: A generalization of all branching/conditional syntax.
-    
+
     Kinds of conditionals supported:
      - if .. elif ... else
      - switch a:  case 0: ... case 1: ... default: ...

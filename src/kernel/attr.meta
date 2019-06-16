@@ -914,7 +914,7 @@ scope:
     end method clone;
 
     method valueAsStr : str #:
-      Convert value to multi-line string.  Handles special >| notation.
+      Convert value to multi-line string.  Handles special >| |< notation.
       Always ends with newline.
     scope:
       /# NOTE: The handling of SPECIAL_PREFIX_RE is NOT being done to support
@@ -922,8 +922,9 @@ scope:
       /# Template bodies, which use the |> syntax for readability. For the
       /# baselang code stripping, see BaseSegment.flattenLines() and the
       /# strip_special param.
-      r = metax.c.SPECIAL_PREFIX_RE
-      result = '\n'.join([r.sub('', line) for line in self.value()]) + '\n'
+      spre = metax.c.SPECIAL_PREFIX_RE2
+      result = '\n'.join(
+        [spre.sub(r'\1', line) for line in self.value()]) + '\n'
       return result
     test:
       test.defineAttributes()

@@ -4,14 +4,14 @@ namespace metax.c #:
   /#  - This codebase is implemented in itself. That is, it defines
   /#    the Meta compiler, and the code produced by this code is what parses
   /#    this code (there is a reason the project is named Meta, after all)
-  /# 
+  /#
   /#  - Meta source code compiled by this code is written into
   /#    <<repository_path>>/<metalang>/<baselang>
   /#     - by convention, the notation <<var>> means something obtained from
   /#       ~/.config/metameta, and the notation <var> means something obtained
   /#       from flags.
   /#
-  /#  - The top-level namespace for Meta is metax so that we can use the 
+  /#  - The top-level namespace for Meta is metax so that we can use the
   /#    pseudovar 'meta' to refer to metaclass instance without having them hide
   /#    the namespace (if it were named 'meta' instead').
   /#
@@ -196,13 +196,14 @@ scope:
   nometanotest
   class ConflictingFeatureValues < Error;
 
+  pre
   native #:
     These are currently required because Meta is not properly parsing
       params:
         var default : any = metax.c.REQUIRED;
     Only the 'Meta' is being parsed, and the '.REQUIRED' is being silently
     ignored.
-  scope:
+  scope<py>:
     ERROR = -1234567891
     REQUIRED = -1234567892
     LOOKUP = -1234567893
@@ -216,12 +217,13 @@ scope:
     /#    implicit"
     /#  - this used to be -1, but we want to pack termcode and termline together
     /#    so we avoid negative numbers at least until field packing exists and
-    /#    supports negative numbers (if we decide to allow them in packed
-    /#    fields).
+    /#    supports negative numbers.
+    /#  - TODO(wmh): Field packing now supported ... fix this!
     TERM_UNINIT = 16
     SUFFIX = '.meta'
     SPECIAL_PREFIX_RE = re.compile(r'^\s*>\|')
-    SPECIAL_PREFIX_RE2 = re.compile(r'^\s*>\|(?P<line>.*)')
+    SPECIAL_PREFIX_RE2 = re.compile(r'^\s*>\|(?P<line>.*?)(?:\|<$)?$')
+    SPECIAL_SUFFIX_RE = re.compile(r'\|<$')
     SPECIAL_CHILD_DIR = '.meta'
     INTERPOLATION_RE = re.compile(r'\$\{\"(?P<varstr>[^\"]+)\"\}')
     VAR_RE = re.compile(r'\$\{(?P<var>[^\}]+)\}')
@@ -255,7 +257,7 @@ scope:
     /#         file.metadoc  <--- a generic file in Meta(Doc)
     /#       we have been assuming that
     /#         file.meta
-    /#       is a Meta(Oopl) doc, but do we want to support 
+    /#       is a Meta(Oopl) doc, but do we want to support
     /#         file.metaoopl
     /#       and what about
     /#         file.metaooplpy
@@ -1301,7 +1303,7 @@ scope:
       Some variables accessible within a particular scope are not entirely
       local. For example, suppose class 'A' within namespace 'nm.sp' has a
       method 'f', a public raw class field 'M' and a public raw static variable
-      'S'. From within method 'm', both 'M' and 'S' may (or may not) be 
+      'S'. From within method 'm', both 'M' and 'S' may (or may not) be
       considered visible.  If they are visible, what syntax is used to access
       them?
        - for class fields, we have callsite notation for this:
@@ -1544,7 +1546,7 @@ scope:
         The attribute associated with this expression.
     scope:
       if not attribute:
-        line, i = self.current()        
+        line, i = self.current()
         raise Error('Missing attribute keyword for paren expr %s' % line[i:])
       if attribute.key() == 'super':
         result = self._parsePList(attribute=attribute)
@@ -1571,7 +1573,7 @@ scope:
 
       Returns:
         List of maps describing the parsed boolean expression. Each element
-        is a 
+        is a
     params:
       var attribute : Attribute = null #:
         The attribute associated with this expression.
@@ -1765,7 +1767,7 @@ scope:
       Parse a parenthesized list of comma-separated expressions OR a boolean
       expression.
 
-      TODO(wmh): 
+      TODO(wmh):
     params:
       var attribute : Attribute = null #:
         The attribute associated with this expression.
@@ -1788,7 +1790,7 @@ scope:
 
       /# Now a multi-line plist expression
       eprs = metax.c.ExprParser(
-        metax.c.MetaFile(None, None, 
+        metax.c.MetaFile(None, None,
           '  # python method call\n'
           '  self.f(1,\n'
           '         apple,\n'
@@ -1842,7 +1844,7 @@ scope:
 
       /# Now a multi-line plist expression
       eprs = metax.c.ExprParser(
-        metax.c.MetaFile(None, None, 
+        metax.c.MetaFile(None, None,
           '  # python method call\n'
           '  abc = [1,\n'
           '         apple,\n'
@@ -2044,7 +2046,7 @@ scope:
 
       /# A multi-line hash expression
       eprs = metax.c.ExprParser(
-        metax.c.MetaFile(None, None, 
+        metax.c.MetaFile(None, None,
           "data = {\n"
           "  'S': 1,\n"
           "  'H': 2,\n"
@@ -2207,7 +2209,7 @@ scope:
 
       /# Nested method invocation with nested calls spanning multiple lines.
       eprs = metax.c.ExprParser(
-        metax.c.MetaFile(None, None, 
+        metax.c.MetaFile(None, None,
           "        @test.iseq(\n"
           "          'Edge between <1,0,-1> (n) and <1,-1,0> (s) with center <0,-52>',\n"
           "          @edge.summary);\n"),
@@ -2748,19 +2750,27 @@ scope:
         If True, create if it does not exist.  By default, we want to
         report an error, because we usually want to explicilty create
         streams in parent compilation methods.
+      var default : any = REQUIRED #:
+        The default value to return if the stream does not exist. If it
+        is the special value REQUIRED, an exception is raised.
     scope:
       streams = self._streams
       result = streams.get(name, None)
-      if clear:
-        if name in streams:
-          streams[name] = []
       if result is None:
+        /# The stream does not currently exist.
         if create:
           result = []
           streams[name] = result
-        else:
+        elif default is REQUIRED:
           raise metax.c.InternalError(
             'Failed to find stream named "%s" in %s' % (name, sorted(streams)))
+        else:
+          result = default
+      else:
+        /# The stream already exists.
+        if clear:
+          result = []
+          streams[name] = result
       if False:
         /# Use this if you want to debug the actions taken on individual
         /# stream collections.  All the code is designed to handle lists
@@ -2982,7 +2992,7 @@ scope:
       fp.write(self.flattenAll())
       fp.write('\n')
     test:
-      
+
     end method dump;
 
   end class BaseStreams;
@@ -3112,6 +3122,8 @@ scope:
       var indent -> indent = '';
     scope:
       if chunks is None:
+        /# TODO(wmh): Why are we not defaulting to attribute.value() instead of
+        /# the empty list??
         chunks = []
       self.chunksIs(chunks)
     clinit:
@@ -3156,7 +3168,7 @@ scope:
       test.iseqtext(
        >|""" 0: HPB
        >| 1: is a brat
-       >| 2:     
+       >| 2:     |<
        >| 3: seg comment: (77)
        >|   0: Hello
        >|""",
@@ -3232,7 +3244,6 @@ scope:
         if isinstance(chunk, BaseSegment):
           attribute = chunk.attribute()
           if attribute:
-            /# print('ATTRIBUTE: %s (%d)' % (attribute.path(), attribute.line()))
             fqn = attribute.parent().fqn()
             fullid = fqn + ':' + attribute.key()
             metaline = chunk.metaline()
@@ -3279,10 +3290,9 @@ scope:
           try:
             lines.append(indent + chunk)
           except UnicodeDecodeError as e:
-            /# TODO(wmh): Fix this! Must be able to handle unicode chars in
-            /# meta source code!  This was working fine before I made all
-            /# literal strings unicode (by prefacing them with 'u'), but now
-            /# fails for symbols like ohm, etc.
+            /# TODO(wmh): Fix this! Must be able to handle unicode chars in meta
+            /# source code! This was working fine before I made all literal
+            /# strings unicode, but now fails for symbols like ohm, etc.
             uchunk = chunk.decode('utf8', 'replace')
             try:
               lines.append(indent + uchunk)
@@ -3293,11 +3303,9 @@ scope:
               raise
 
       if strip_special:
-        dentre = metax.c.SPECIAL_PREFIX_RE
+        spre = metax.c.SPECIAL_PREFIX_RE2
         for i in range(start_index, len(lines)):
-          m = dentre.match(lines[i])
-          if m:
-            lines[i] = lines[i][m.end(0):]
+          lines[i] = spre.sub(r'\1', lines[i])
     test:
       mapfile = metax.c.MapFile(None, None)
       test.segment2.addChunk(test.segment)
@@ -3879,7 +3887,7 @@ scope:
         mapping = []
       self.mappingIs(mapping)
     setup:
-      _, _, _, metac = test.cachedInfo()      
+      _, _, _, metac = test.cachedInfo()
       path = metac.fs().join(
         metac.workspaceDirectory(), 'demo', 'cards0', '.__init__.py.map')
       test.mapfile = metac.loadMapFile(path)
@@ -4402,7 +4410,7 @@ scope:
       if children:
         data['children'] = children
 
-      /# 
+      /#
       /# TODO(wmh): We need a better way to handle the following situation:
       /#   panel :<*l>:
       /#     ...
@@ -4411,7 +4419,7 @@ scope:
       /# what 'secondaries' is for, and we of course add the newly added
       /# secondary key and its aliases. We *could* also add the baselang
       /# variants of key and its aliases, but this would be needed for ALL
-      /# baselangs, which hugely inflates the size of secondaries. Can we 
+      /# baselangs, which hugely inflates the size of secondaries. Can we
       /# do better?  See CODETANGLE(baselang_keys) in MetaFile.parseConstruct().
       keys = [key, metax.attr.Attribute.BasedAttr(key, '*')]
       if aliases:
@@ -5098,7 +5106,7 @@ scope:
                  this is the same as &T (and is disallowed to avoid clutter).
 
          @T   -> by-value T (copy if arg, guartanteed to be non-null if field)
-         @#T  -> copy of const T (no different than just @T in most cases, 
+         @#T  -> copy of const T (no different than just @T in most cases,
                  but may be useful for local vars where one wants to remind
                  oneself not to modify something ... const int val)
      no! #@T  -> const copy of T (same as @#T which is more canonical so this
@@ -5248,7 +5256,7 @@ scope:
               print('ERROR: %s() = %s (%s) when resolving type "%s"' % (
                 namespace_function,
                 namespace, namespace.kindid() if namespace else None, base))
-              
+
               raise Error(
                 'Failed to establish namespace ... cannot qualify %s' % raw)
 
@@ -7029,7 +7037,7 @@ scope:
         if not construct:
           /# No more constructs in this block.
           break
-        
+
         termcode = construct.termcode()
         if termcode == TERM_UNINIT:
           /# We have encountered an error during parsing.
@@ -7260,7 +7268,7 @@ scope:
               /# We are to auto-assign the primary id and create an implicit
               /# attribute for the replacer attribute.
               primary_value = context.autoId()
-      
+
               /# Parse the value of the implicit replacer attribute. It starts
               /# at index 'index'.
               /#  - we create a faux construct instance, which is needed in
@@ -7510,7 +7518,7 @@ scope:
               aval.pop()
             if emptyln:
               /# print('Found %d empty lines above %d in %s' % (emptyln, self.lnum(), self.path()))
-              
+
               self.set(lnum=self.lnum() - emptyln)
         else:
           if text[index] == '\n':
@@ -7799,7 +7807,7 @@ scope:
 
         if False and litkey == 'case':
           print(
-            '****** HERE with litkey=%s key=%s basel=%s secondary=%s termcode=%d line=%d:%s' % 
+            '****** HERE with litkey=%s key=%s basel=%s secondary=%s termcode=%d line=%d:%s' %
             (litkey, key, basel, secondary, termcode, lnum, line.line()))
 
         ldent = line.indent()
@@ -7951,7 +7959,7 @@ scope:
           result = construct.ancestor('namespace')
           if result is None:
             /# This can happen if we have a class at File-level. This code is
-            /# in parseMeta(), which is executed *before* 
+            /# in parseMeta(), which is executed *before*
             /# metalang.preExpandFileConstruct(), where the class constructs
             /# are moved into their namespaces.
             print('**** HERE with current %s' % self.current_namespace())
@@ -9260,7 +9268,7 @@ scope:
       Import additional .meta files identified during expandMeta.
     scope:
       D.imports.sinfo(self.path())
-      
+
       imports = self.compiler().importlist()
       imports.append(self)
       self.stateIs('importing')
@@ -9649,7 +9657,7 @@ scope:
         r'(?P<rest>.*)'
         ,
         flags=re.DOTALL)
-        
+
       /# Matches a file in a namespace repository directory. Used by
       /# parseRepositoryNamespace.
       cls.NamespaceFileRE = re.compile(
@@ -11380,8 +11388,8 @@ scope:
         'command': 'cmd',
       }
       consorder = [
-        'namespace', 'class', 'method', 'field', 'resource', 'lifecycle', 
-        'behavior', 'receiver', 
+        'namespace', 'class', 'method', 'field', 'resource', 'lifecycle',
+        'behavior', 'receiver',
         'command', 'flag',
         'native',
         /# 'category', 'remark',
@@ -11502,7 +11510,7 @@ scope:
         if show_times:
           width += len(time_titles) * (4+1)
         if show_files:
-          for kind, abbrev, kwidth in file_titles:  
+          for kind, abbrev, kwidth in file_titles:
             width += 1 + kwidth
         sep = indent + '-' * width + '\n'
         /# fp.write(sep)
@@ -11689,7 +11697,7 @@ scope:
       other = []
       details = []
       rootdir = fs.join(self.repositoryPath(), self.basePath())
-      
+
       groupmap = None  # maps metafile to group it belongs to.
       if cli.metasrcfile:
         groupmap = {}
@@ -11749,7 +11757,7 @@ scope:
           if verbose:
             print('Compiler._parseArg: working on %s:' % arg)
 
-          argmatch = None if suffmatch else ImplicitMatches(arg) 
+          argmatch = None if suffmatch else ImplicitMatches(arg)
 
           if suffmatch and fs.exists(arg):
             /# A meta source file
@@ -11788,12 +11796,12 @@ scope:
               if verbose:
                 print('  implicit match')
           else:
-            /# Check if the arg represents a valid fqn target. 
+            /# Check if the arg represents a valid fqn target.
             /#  - if we are looking at arg 'nm.sp.Class.methname', we check
             /#    for 'nm.sp.Class.methname' in $repo/nm/sp/.Class.py.map
             /#  - if the arg 'nm.sp.Class.methname' is part of a test request
             /#    (almost always the case!), we should actually be looking for
-            /#    'nm.sp.ClassTest.test_methname' in 
+            /#    'nm.sp.ClassTest.test_methname' in
             /#    $repo/nm/sp_test/.ClassTest.py.map instead!
             tdata = baselang.fqnToTarget(arg, verbose=verbose)
             if tdata.get('error', None) is None:
@@ -12617,9 +12625,9 @@ scope:
        - verifies that the specified fqn can be tested using bazel or raw.
 
       From commandline:
-        % meta2 bazel-verify demo.cards2
-        % meta2 bazel-verify demo.cards2.Card
-        % meta2 bazel-verify demo.cards2.Deck.shuffle
+        % metac bazel-verify demo.cards2
+        % metac bazel-verify demo.cards2.Card
+        % metac bazel-verify demo.cards2.Deck.shuffle
     params:
       var fqn : str;
     scope:
@@ -13352,9 +13360,9 @@ scope:
       /# actual filesystem
       ifp = test.fp("""
         >|Traceback (most recent call last):
-        >|  File "/Users/wmh/src/meta/bin/meta2", line 40, in <module>
+        >|  File "/Users/wmh/src/meta/bin/metac", line 40, in <module>
         >|    Main()
-        >|  File "/Users/wmh/src/meta/bin/meta2", line 36, in Main
+        >|  File "/Users/wmh/src/meta/bin/metac", line 36, in Main
         >|    metac.interact(args)
         >|  File "/Users/wmh/src/meta/lib/beta/python/metax/c.py", line 15436, in interact
         >|    self.compileHook()
@@ -13377,21 +13385,21 @@ scope:
       return
       test.iseqtext("""
         >|Traceback (most recent call last):
-        >|  File "/Users/wmh/src/meta/bin/meta2", line 40, in <module>
+        >|  File "/Users/wmh/src/meta/bin/metac", line 40, in <module>
         >|    Main()
-        >|  File "/Users/wmh/src/meta/bin/meta2", line 36, in Main
+        >|  File "/Users/wmh/src/meta/bin/metac", line 36, in Main
         >|    metac.interact(args)
-        >|  ../../../../../meta2/src/kernel/parser.meta:12706 (c.py:15436), in interact
+        >|  ../../../../../metac/src/kernel/parser.meta:12706 (c.py:15436), in interact
         >|    self.compileHook()
-        >|  ../../../../../meta2/src/kernel/parser.meta:13006 (c.py:15520), in compileHook
+        >|  ../../../../../metac/src/kernel/parser.meta:13006 (c.py:15520), in compileHook
         >|    metafiles, errors, warnings = self.processMeta(metafile_paths, fp=fp)
-        >|  ../../../../../meta2/src/kernel/parser.meta:12646 (c.py:15376), in processMeta
+        >|  ../../../../../metac/src/kernel/parser.meta:12646 (c.py:15376), in processMeta
         >|    file_construct.translateMeta()
-        >|  ../../../../../meta2/src/kernel/parser.meta:6710 (c.py:8693), in translateMeta
+        >|  ../../../../../metac/src/kernel/parser.meta:6710 (c.py:8693), in translateMeta
         >|    child.translateMeta()
-        >|  ../../../../../meta2/src/kernel/parser.meta:7487 (c.py:9279), in translateMeta
+        >|  ../../../../../metac/src/kernel/parser.meta:7487 (c.py:9279), in translateMeta
         >|    basefiles = self.compilePython(kind='merge', triples=triples)
-        >|  ../../../../../meta2/src/kernel/parser.meta:7536 (c.py:9428), in compilePython
+        >|  ../../../../../metac/src/kernel/parser.meta:7536 (c.py:9428), in compilePython
         >|    print 'HERE with %s' % initpath
         >|TypeError: not all arguments converted during string formatting
         >|-------------------------------- Meta File Map ---------------------------------
@@ -13693,7 +13701,7 @@ scope:
           self.parseRepositoryFile(
             base, suffixes, errors, result['user'], testnmspmap=result['test'],
             fp=fp)
-          
+
       /# testdata contains all unprocessed files in the test namespace
       /# directory associated with this namespace directory.
       /#  - process each file as if it were a class file, populating
@@ -13808,6 +13816,23 @@ scope:
             'bld': '.__init__.bld',
             'build': 'BUILD',
             'classes': {
+              'Dummy': {
+                'meta': {
+                  'defn': '.DummyMeta.py',
+                  'map': '.DummyMeta.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                },
+                'test': {
+                  'defn': '../test_test/.DummyTest.py',
+                  'map': '../test_test/.DummyTest.py.map',
+                },
+                'user': {
+                  'defn': '.Dummy.py',
+                  'map': '.Dummy.py.map',
+                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                }
+              },
+
               'FakeFcntl': {
                 'meta': {
                   'defn': '.FakeFcntlMeta.py',
@@ -14124,7 +14149,7 @@ scope:
       /#   construct: NamespaceConstruct
       /#   scope: metax.attr.ComplexBlock
       /#   classes: collections.OrderedDict()
-      /#     Maps class ids to 
+      /#     Maps class ids to
       /#
       /# Also create a mapping from class fqn to dict containing:
       /#    name: str
@@ -14222,7 +14247,7 @@ scope:
       /#  - TODO(wmh): Generalize to all baselangs.
       if baselang.id() == 'python':
         classes['object'] = {
-          'name': 'object', 
+          'name': 'object',
           'fqn': 'object',
           'construct': None,
           'field': {},
@@ -14635,7 +14660,7 @@ scope:
           'live' metax.* code, we can recover from such issues.
         - Snapshots are a fourth layer to the traditional three-layer version:
             <major>.<minor>.<release>.<snapshot>
-      
+
       A release is a public copy of the meta and baselang source code needed to
       implement Meta.
       - Releases will be available on http://metaxy.org for download
@@ -14650,7 +14675,7 @@ scope:
       var make_release : bool = false #:
         If true, make a public release (creates .tgz file)
     scope:
-      /###  
+      /###
       /# We first check if there are any .meta symlinks below the kernel dir.
       /#  - such symlinks usually occur because of an accidental invocation of
       /#    meta within a subdir.
@@ -14661,7 +14686,7 @@ scope:
       /#  - we'll need to loosen this up a bit in the future, but better safe than
       /#    broken.
       config = meta.Config()
-      
+
       kerneldir = fs.join(config['src_root'], 'src', 'kernel')
       for path in (
         fs.join(kerneldir, 'testdata', '.meta'),
@@ -14725,7 +14750,7 @@ scope:
         new_version = release_version + '.00'
       else:
         new_version = 'v%d.%d.%d.%02d' % (major, minor, release, snapshot + 1)
-        
+
       newpath = fs.join(release_dir, new_version)
 
       /###
@@ -14749,11 +14774,11 @@ scope:
       /###
       /# Copy <<src_root>>/src/{kernel,lib}/*.meta to <newpath>/src/{kernel,lib}
       destsrcdir = fs.join(newpath, 'src')
-      fs.mkdir(destsrcdir, 0o755)  
+      fs.mkdir(destsrcdir, 0o755)
       for srcsub in ('kernel', 'lib'):
         srcpath = fs.join(config['src_root'], 'src', srcsub)
         destpath = fs.join(destsrcdir, srcsub)
-        fs.mkdir(destpath, 0o755)  
+        fs.mkdir(destpath, 0o755)
         for base in fs.listdir(srcpath):
           if '.meta' in base and base != '.meta':
             srcfile = fs.join(srcpath, base)
@@ -14761,7 +14786,7 @@ scope:
             fs.copyfile(srcfile, destfile)
             if verbose:
               print('NOTE: Copied %s to %s' % (srcfile, destfile))
-            
+
       /###
       /# Copy <<repository_path>>/oopl/python/metax to <newpath>/lib
       /#  - we specifically want symlinks to be converted into real files so
@@ -14778,12 +14803,12 @@ scope:
 
       /###
       /# Copy <<src_root>>/src/schema/{meta,oopl}/schema.meta to <newpath>/schema
-      schemasrc = fs.join(config['src_root'], 'src', 'schema')  
+      schemasrc = fs.join(config['src_root'], 'src', 'schema')
       schemadir = fs.join(newpath, 'schema')
-      fs.mkdir(schemadir, 0o755)  
+      fs.mkdir(schemadir, 0o755)
       for metal in ('meta', 'oopl', 'doc'):
         subdir = fs.join(schemadir, metal)
-        fs.mkdir(subdir, 0o755)  
+        fs.mkdir(subdir, 0o755)
         schema_src = fs.join(schemasrc, metal, 'schema.meta')
         schema_dst = fs.join(subdir, 'schema.meta')
         fs.copyfile(schema_src, schema_dst)
@@ -14793,7 +14818,7 @@ scope:
         /# TODO(wmh): Remove following ... above code replaces.
         metadir = fs.join(schemadir, 'meta')
         oopldir = fs.join(schemadir, 'oopl')
-        fs.mkdir(metadir, 0o755)  
+        fs.mkdir(metadir, 0o755)
         fs.mkdir(oopldir, 0o755)
         meta_schema_src = fs.join(schemasrc, 'meta', 'schema.meta')
         oopl_schema_src = fs.join(schemasrc, 'oopl', 'schema.meta')
@@ -15343,7 +15368,7 @@ scope:
 
       def time2hms(ts):
         return datetime.datetime.fromtimestamp(mtime).strftime('%H:%M:%S')
-      
+
       /# Maps path to mtime, so we can detect changes.
       pathmap = {}
 
@@ -15448,7 +15473,7 @@ scope:
                 print('ERROR: Explicit --baselang %s (%s) does not match baselang %s (%s) implied by source suffixes' % (
                   baselang_flag.value(), canbasel, basel, cansuff))
                 sys.exit(1)
-          
+
       else:
         /# TODO(wmh): If -b was explicitly provided (rather than being obtained
         /# from default), we should report a warning or error.
@@ -15709,7 +15734,7 @@ scope:
         TODO(wmh): Conflicts with --debug (but shouldn't ... flags and args
         can conceptually be given same name, although this may be problematic
         in current implementation).
-                                           
+
       scope:
         print('baselang debugging not yet implemented')
       end command debug2;
@@ -15834,7 +15859,7 @@ scope:
             repodir=self.repodir())
         else:
           metac = self
-          
+
         cli = metac.cli()
         fs = metac.fs()
 
@@ -16167,7 +16192,7 @@ scope:
       scope:
         cli = self.cli()
         verbose = cli.verbose
-        
+
         metaoopl = self.metalang()
         if metaoopl.id() != 'oopl':
           print('ERROR: Do not use -L %s' % metaoopl.id())
@@ -16807,7 +16832,7 @@ scope:
       /# See https://gist.github.com/JeffPaine/3145490
       url = 'https://api.github.com/repos/%s/%s/import/issues' % (
         self.owner(), self.name())
-        
+
       issue = {
         'title': title,
         'body': body,
@@ -16959,7 +16984,7 @@ scope:
       for part in parts:
         if part == '..':
           if node.parent():
-            node = node.parent() 
+            node = node.parent()
         elif part == '.':
           pass
         else:
@@ -16997,7 +17022,14 @@ scope:
   end class MetaNode;
 
   test
-  native scope:
+  native ##:
+    TODO(wmh): This should be marked 'pre' so that it is attached to the
+    TestCase below. Currently, doing so produces:
+      E17024: native block requests placement in non-existent test class
+    which is ironic because it highlights that the code is currently doing
+    the wrong thing (it is attaching to the non-test-class MetaNode) and
+    failing to find the right thing (test class below it).
+  scope:
     /# IMPORTANT: TestCase.cachedInfo() returns a cached
     /# baselang/metalang/context/compiler. Assuming none of the test code
     /# modifies the schema/context/compiler, it should be safe to use these
@@ -17135,9 +17167,9 @@ scope:
           >|    scope:
           >|    end;
           >|
-          >|    method show params: 
-          >|      var fp : ostream = out; 
-          >|      var indent : str = ''; 
+          >|    method show params:
+          >|      var fp : ostream = out;
+          >|      var indent : str = '';
           >|    scope:
           >|    end;
           >|
@@ -17213,9 +17245,9 @@ scope:
           >|          v = 7
           >|    end method bmi;
           >|
-          >|    method show params: 
-          >|      var fp : ostream = out; 
-          >|      var indent : str = ''; 
+          >|    method show params:
+          >|      var fp : ostream = out;
+          >|      var indent : str = '';
           >|    scope:
           >|    end;
           >|
@@ -17304,7 +17336,7 @@ scope:
       self.newbasic(
         'python', statements=statements,
         expand=expand, imports=imports, translate=translate, compile=compile)
-    end method tpy;   
+    end method tpy;
 
     method tcc #:
       See newbasic
@@ -17323,7 +17355,7 @@ scope:
       self.newbasic(
         'cpp', statements=statements,
         expand=expand, imports=imports, translate=translate, compile=compile)
-    end method tcc;   
+    end method tcc;
 
     method tjs #:
       See newbasic
@@ -17342,7 +17374,7 @@ scope:
       self.newbasic(
         'javascript', statements=statements,
         expand=expand, imports=imports, translate=translate, compile=compile)
-    end method tjs;   
+    end method tjs;
 
     method newbasic #:
       Preferred method to use to initialize the following test fields:
