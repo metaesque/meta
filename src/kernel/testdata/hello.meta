@@ -4,8 +4,46 @@ scope:
 
   class Greeting #:
     A generic greeting class.
+  assocs:
+    lib assoc absl.strings.str_format target "@absl//absl/strings:str_format";
   scope:
 
+    field name : str;
+    field greeting : str;
+
+    lifecycle params:
+      var name -> name;
+      var greeting -> greeting = 'Hello';
+    scope:
+    setup:
+      /# std::cout << "Here in GreetingTest setup" << std::endl;
+      test.greeting1Is(
+        absl::make_unique<demo::hello::Greeting>("Bob", "Greetings"));
+    end;
+
+    method greet #:
+      Write a greeting to given file stream.
+    params:
+      var fp : &ostream = out #:
+        Where to write.
+      var indent : str = '' #:
+        Indentation before each line.
+    scope:
+      std::cout << "Hello" << std::endl;
+      /# absl::PrintF("Here with %s and %s!\n", this->name(), self.greeting());
+    test:
+      test.greeting1Ref()->greet();
+    end method greet;
+
+    test rwx field greeting1 : u*demo.hello.Greeting;
+
   end class Greeting;
+
+  test
+  class TestCase < metax.test.TestCase scope:
+    lifecycle setup:
+      /# std::cout << "Here in TestCase setup" << std::endl;
+    end;
+  end class TestCase;
 
 end namespace demo.hello;

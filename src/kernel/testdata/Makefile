@@ -23,7 +23,7 @@ canx-%:
 # target: sample_logs
 #   WARNING: Be careful about regenerating these logs ... new data will
 #   break metax.c.Compiler.{parseBazelOutput,formatBazelOutput} tests.
-#	
+#
 #   How to create new sample_logs for use in metax.c.Compiler.parseBazelOutput
 #    % cd $METAROOT/src/kernel/testdata2
 #    % cd sample_logs
@@ -45,7 +45,7 @@ sample_logs:
 #
 #   WARNING: This will probably break tests (they will need to be fixed).
 #
-#   NOTE: We do NOT use the 'meta2' capability of implicitly detecting 
+#   NOTE: We do NOT use the 'meta2' capability of implicitly detecting
 #   .meta2 and fqns because this target is used when we are first setting
 #   up bazel log parsing code in a new language (the files in the repo
 #   directory will help us parse the logs for a new baselang).

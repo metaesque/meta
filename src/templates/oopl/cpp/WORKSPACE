@@ -44,3 +44,15 @@ cc_library(
     strip_prefix = 'googletest-release-1.8.1',
     sha256 = '927827c183d01734cc5cfef85e0ff3f5a92ffe6188e0d18e909c5efebf28a0c7'
 )
+
+# Abseil for C++
+#  - https://abseil.io/docs/cpp/quickstart
+#  - the WORKSPACE in 'git clone https://github.com/abseil/abseil-hello.git'
+#    uses the following (docs only discuss local_repository, but http_archive
+#    is better).
+http_archive(
+  name = "absl",
+  urls = ["https://github.com/abseil/abseil-cpp/archive/7c7754fb3ed9ffb57d35fe8658f3ba4d73a31e72.zip"],  # 2019-03-14
+  strip_prefix = "abseil-cpp-7c7754fb3ed9ffb57d35fe8658f3ba4d73a31e72",
+  sha256 = "71d00d15fe6370220b6685552fb66e5814f4dd2e130f3836fc084c894943753f",
+)

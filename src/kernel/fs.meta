@@ -5,9 +5,10 @@ scope:
 
   class Error < metax.root.Error;
 
-  post native ##:
+  pre native ##:
     TODO(wmh): Use metqx.c.REQUIRED
   defn<py>:
+    /# Test 1
     REQUIRED = object()
   end;
 

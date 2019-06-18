@@ -2,8 +2,8 @@ DIFF_FLAGS = -y --suppress-common-lines -W 160
 
 METAGROUP = "Meta"
 METAFILES = parser.meta attr.meta fs.meta cli.meta shells.meta logs.meta \
-	    root.meta test.meta metameta.meta metaoopl.meta metadoc.meta \
-	    ../lib/markdown.meta ../lib/shells.meta ../lib/units.meta	
+	    root.meta tests.meta metameta.meta metaoopl.meta metadoc.meta \
+	    ../lib/markdown.meta ../lib/shells.meta ../lib/units.meta
 
 include $(WMH)/Makefile.meta
 
@@ -61,7 +61,7 @@ slowtest: fullmeta-py
 #   - required:
 #     - root.meta: everything inherits from metax.root.Object and relies on 
 #       metax.root.MetaObject for resources, etc.
-#     - test.meta: all unit tests inherit from metax.test.TestCase
+#     - tests.meta: all unit tests inherit from metax.test.TestCase
 #   - pseudo-optional:
 #     - cli.meta: only needed if the Meta code needs metax.root.MetaObject.CLI(),
 #       which is simply set to null when the CLI is unavailable.
@@ -71,7 +71,7 @@ slowtest: fullmeta-py
 #     - logs.meta: only needed by parser.meta
 #     - shell.meta: only needed if the Meta code uses metax.c.shell or metax.lib.shell
 meta-%:
-	metac -b $* root.meta test.meta
+	metac -b $* root.meta tests.meta
 
 up%:
 	cd ../schema/$*; metac meta$*.meta

@@ -2,7 +2,7 @@
 
 namespace nm {
 
-int VARIABLE = 10;
+int VARIABLE = 11;
 
 int FUNCTION(int a) {
   std::cout << "Here in nm namespace with a=" << a

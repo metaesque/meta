@@ -4,286 +4,34 @@ namespace metax.test #:
 scope:
 
   pre
-  native fixme scope<py>:
+  native fixme
+  decl<py>:
     import io
     StrStrClass = io.StringIO().__class__
     /# TODO(wmh): define a field or enum. Consider using metax.c.* (define
     /# MISSING therein, or use one of the existing ones instead of MISSING).
     MISSING = object()
+    MISSING_STR = '__meta__missing'
+    MISSING_INT = -2147483648
+    MISSING_FLOAT = float('nan')
+    MISSING_PTR = MISSING
+    MISSING_VEC = MISSING
   decl<cc>:
-    extern int MISSING;
+    extern void* MISSING;
+    extern std::string MISSING_STR;
+    extern int MISSING_INT;
+    extern void* MISSING_PTR;
+    extern std::vector<void*>* MISSING_VEC;
+    extern float MISSING_FLOAT;
   defn<cc>:
-    int MISSING = 1;
+    void* MISSING = (void*)1;
+    std::string MISSING_STR = "__meta__missing";
+    int MISSING_INT = -2147483648;
+    void* MISSING_PTR = MISSING;
+    float MISSING_FLOAT = NAN;
+    static std::vector<void*> __v;
+    std::vector<void*>* MISSING_VEC = &__v;
   end native;
-
-  specific
-  class FakeFcntl parent<py> ^object #:
-    A fake fcntl object.
-  assocs<py>:
-    std assoc fcntl;
-  scope<py>:
-
-    meta
-    lifecycle scope:
-      meta.LOCK_UN = fcntl.LOCK_UN
-      meta.LOCK_SH = fcntl.LOCK_SH
-      meta.LOCK_EX = fcntl.LOCK_EX
-    end lifecycle;
-
-    field filesystem : any;
-
-    lifecycle params:
-      var fs : any;
-    scope:
-      self._filesystem = fs
-    test:
-      pass
-    end lifecycle;
-
-    method fcntl params:
-      var fd : any;
-      var op : any;
-      var arg : any = 0;
-    scope:
-      pass
-    test:
-      /# noop
-      /# TODO(wmh): Is there a way to verify this method does nothing?
-      pass
-    end method fcntl;
-
-    method ioctl params:
-      var fd : any;
-      var op : any;
-      var arg : any = 0;
-      var mutate_flag : any = false;
-    scope:
-      pass
-    test:
-      /# noop
-      /# TODO(wmh): Is there a way to verify this method does nothing?
-      pass
-    end method ioctl;
-
-    method flock params:
-      var fd : any;
-      var op : any;
-    scope:
-      pass
-    test:
-      /# noop
-      /# TODO(wmh): Is there a way to verify this method does nothing?
-      pass
-    end method flock;
-
-    method lockf params:
-      var fd : any;
-      var op : any;
-      var length : any = 0;
-      var start : any = 0;
-      var whence : any = 0;
-    scope:
-      pass
-    test:
-      /# noop
-      /# TODO(wmh): Is there a way to verify this method does nothing?
-      pass
-    end method lockf;
-  end class FakeFcntl;
-
-  specific
-  class StubHolder parent<py> ^object
-  comment:
-    Support class for stubbing methods out for unit testing.
-
-    Sample Usage:
-
-    You want os.path.exists() to always return true during testing.
-
-       stubs = StubHolder()
-       stubs.Set(os.path, 'exists', lambda x: 1)
-         ...
-       stubs.CleanUp()
-
-    The above changes os.path.exists into a lambda that returns 1.  Once
-    the ... part of the code finishes, the CleanUp() looks up the old
-    value of os.path.exists and restores it.
-  scope<py>:
-
-    lifecycle scope:
-      self.cache = []
-      self.stubs = []
-    test:
-      pass
-    end lifecycle;
-
-    method __del__ comment:
-      Do not rely on the destructor to undo your stubs.
-
-      You cannot guarantee exactly when the destructor will get called without
-      relying on implementation details of a Python VM that may change.
-    scope:
-      self.CleanUp()
-    test:
-      pass
-    end method __del__;
-
-    method __enter__ scope:
-      return self
-    test:
-      pass
-    end method __enter__;
-
-    method __exit__ params:
-      var unused_exc_type : any;
-      var unused_exc_value : any;
-      var unused_tb : any;
-    scope:
-      self.CleanUp()
-    test:
-      pass
-    end method __exit__;
-
-    method CleanUp comment:
-      Undoes all SmartSet() & Set() calls, restoring original definitions.
-    scope:
-      self.SmartUnsetAll()
-      self.UnsetAll()
-    test:
-      pass
-    end method CleanUp;
-
-    method SmartSet params:
-      var obj : any #:
-        The object whose attributes we want to modify.
-      var attr_name : str #:
-        The name of the attribute to modify.
-      var new_attr : any #:
-        The new value for the attribute.
-    comment:
-      Replace obj.attr_name with new_attr.
-
-      This method is smart and works at the module, class, and instance level
-      while preserving proper inheritance. It will not stub out C types however
-      unless that has been explicitly allowed by the type.
-
-      This method supports the case where attr_name is a staticmethod or a
-      classmethod of obj.
-
-      Notes:
-       - If obj is an instance, then it is its class that will actually be
-         stubbed. Note that the method Set() does not do that: if obj is
-         an instance, it (and not its class) will be stubbed.
-       - The stubbing is using the builtin getattr and setattr. So, the __get__
-         and __set__ will be called when stubbing.
-
-      Raises:
-        AttributeError: If the attribute cannot be found.
-    scope:
-      if (inspect.ismodule(obj) or
-          (not inspect.isclass(obj) and attr_name in obj.__dict__)):
-        orig_obj = obj
-        orig_attr = getattr(obj, attr_name)
-      else:
-        if not inspect.isclass(obj):
-          mro = list(inspect.getmro(obj.__class__))
-        else:
-          mro = list(inspect.getmro(obj))
-
-        mro.reverse()
-
-        orig_attr = None
-        found_attr = False
-
-        for cls in mro:
-          try:
-            orig_obj = cls
-            orig_attr = getattr(obj, attr_name)
-            found_attr = True
-          except AttributeError:
-            continue
-
-        if not found_attr:
-          raise AttributeError('Attribute not found.')
-
-      /# Calling getattr() on a staticmethod transforms it to a 'normal' function.
-      /# We need to ensure that we put it back as a staticmethod.
-      old_attribute = obj.__dict__.get(attr_name)
-      if old_attribute is not None and isinstance(old_attribute, staticmethod):
-        orig_attr = staticmethod(orig_attr)
-
-      self.stubs.append((orig_obj, attr_name, orig_attr))
-      setattr(orig_obj, attr_name, new_attr)
-    test:
-      pass
-    end method SmartSet;
-
-    method SmartUnsetAll comment:
-      Reverses SmartSet() calls, restoring things to original definitions.
-
-      This method is automatically called when the StubOutForTesting()
-      object is deleted; there is no need to call it explicitly.
-
-      It is okay to call SmartUnsetAll() repeatedly, as later calls have
-      no effect if no SmartSet() calls have been made.
-    scope:
-      for args in reversed(self.stubs):
-        setattr(*args)
-
-      self.stubs = []
-    test:
-      pass
-    end method SmartUnsetAll;
-
-    method Set params:
-      var parent : *any #:
-        The_context_in_which_the_attribute_child_name_is_to_be_changed.
-      var child_name : *any #:
-        The_name_of_the_attribute_to_change.
-      var new_child : *any #:
-        The_new_value_of_the_attribute
-    comment:
-      In parent, replace child_name's old definition with new_child.
-
-      The parent could be a module when the child is a function at
-      module scope.  Or the parent could be a class when a class' method
-      is being replaced.  The named child is set to new_child, while the
-      prior definition is saved away for later, when UnsetAll() is
-      called.
-
-      This method supports the case where child_name is a staticmethod or a
-      classmethod of parent.
-    scope:
-      old_child = getattr(parent, child_name)
-
-      old_attribute = parent.__dict__.get(child_name)
-      if old_attribute is not None and isinstance(old_attribute, staticmethod):
-        old_child = staticmethod(old_child)
-
-      self.cache.append((parent, old_child, child_name))
-      setattr(parent, child_name, new_child)
-    test:
-      pass
-    end method Set;
-
-    method UnsetAll comment:
-      Reverses Set() calls, restoring things to their original definitions.
-
-      This method is automatically called when the StubOutForTesting()
-      object is deleted; there is no need to call it explicitly.
-
-      It is okay to call UnsetAll() repeatedly, as later calls have no
-      effect if no Set() calls have been made.
-    scope:
-      /# Undo calls to Set() in reverse order, in case Set() was called on the
-      /# same arguments repeatedly (want the original call to be last one undone)
-      for (parent, old_child, child_name) in reversed(self.cache):
-        setattr(parent, child_name, old_child)
-      self.cache = []
-    test:
-      pass
-    end method UnsetAll;
-  end class StubHolder;
 
   class TestCase #:
     /# The JUnit testing infrastructure for Java (which came from a testing
@@ -331,17 +79,17 @@ scope:
     /#    test class <N>_test.<C>Test in file <N>/<C>_test.js.
     /#  - The <C>_test.js file does NOT goog.require('goog.testing.jsunit').
     /#  - The <C>Test class inherits (directly or indirectly) from
-    /#    metax.test.TestCase (which inherits from goog.testing.TestCase),
-    /#    and has zero or more 'test_<M>*' methods defined for every user-defined
-    /#    method <M> defined on <C> depending on the presence of 'test' or 'tests'
-    /#    attributes on <M>.
+    /#    metax.test.TestCase (which inherits from goog.testing.TestCase), and
+    /#    has zero or more 'test_<M>*' methods defined for every user-defined
+    /#    method <M> defined on <C> depending on the presence of 'test' or
+    /#    'tests' attributes on <M>.
     /#  - In <C>_test.js file, after the definition of <C>Test, the following
     /#    code exists:
     /#      var testCase = new <N>.<C>Test('<N>.<C>Test');
     /#      testCase.run();
     /#  - The 'run' method (metax.test.TestCase.run) does the following:
-    /#     - Invokes jsunit(), which does similar work to what goog.testing.jsunit
-    /#       does.
+    /#     - Invokes jsunit(), which does similar work to what
+    /#       goog.testing.jsunit does
     /#     - Invokes setTestObj(), which does similar work to
     /#       goog.testing.TestCase.setTestObj()
     /#     - Invokes gTestRunner.setStrict(false) to all 0 tests
@@ -357,7 +105,8 @@ scope:
     /#      % cd rules_closure
     /#  - modified
     /#     closure/testing/phantomjs_harness.js
-    /#      - parse out optional --key=value args before the html file and .js files
+    /#      - parse out optional --key=value args before the html file and .js
+    /#        files
     /#      - create query string
     /#      - add query string to url
     /#      - change 'path == VIRTUAL_PAGE' to 'page.startsWith(VIRTUAL_PAGE)'
@@ -367,7 +116,8 @@ scope:
     /#      - TODO(wmh): How to get access to --test_arg (and/or --test_env)?
     /#        ctx.configuration.default_shell_env doesn't store --test_env,
     /#        and ctx.configuration.test_env doesn't even exist, contrary to
-    /#        https://bazel.build/versions/master/docs/skylark/lib/configuration.html
+    /#        https://bazel.build/versions/master/docs/skylark/lib/\
+    /#          configuration.html
   parent<py> ^unittest.TestCase
   parent<js> ^goog.testing.TestCase
   parent<cc> ^.testing.Test
@@ -415,9 +165,13 @@ scope:
       Provides stubbing functionality.
 
   assocs<cc>:
+    std assoc cmath #:
+      For NAN.
     std assoc strstream;
     std assoc typeinfo;
-    lib assoc gtest.gtest target "@gtest//:main";
+    lib assoc gtest.gtest target "@gtest//:gtest";
+    lib assoc absl.strings.str_format target "@absl//absl/strings:str_format";
+    lib assoc absl.memory.memory target "@absl//absl/memory";
     cls assoc metax.root.Error;
   scope:
 
@@ -1756,7 +1510,8 @@ scope:
 
       /# Revert fake-filesystem-related modules
       for modname, mod in self._hacks.iteritems():
-        /# print('Here with %s = %s vs %s' % (modname, getattr(module, modname, None), mod))
+        /# print('Here with %s = %s vs %s' %
+        /#   (modname, getattr(module, modname, None), mod))
         setattr(module, modname, mod)
 
     test<py>:
@@ -1792,7 +1547,10 @@ scope:
     test<py>:
       test.iseq('abc$', metax.test.TestCase.FormStr('abcdef', 4))
     scope<cc>:
-      absl::PrintF("TestCase.FormStr not yet implemented\n");
+      std::string result;
+      int v = val.size();
+      absl::PrintF("TestCase.FormStr not yet implemented (%d)\n", v);
+      return result;
     end method FormStr;
 
     method recursiveCompare #:
@@ -1804,7 +1562,7 @@ scope:
       var obj2 : any;
       var depth : int #:
         How much indentation to apply
-      var fp : ostream = out #:
+      var fp : &ostream = out #:
         Where to write output.
       var keywidth : int = 20 #:
         Width of key
@@ -1942,23 +1700,12 @@ scope:
         '  2                    here                        here                       \n'
         " cantelope             [True, 7, 'cold']           [True, 7, 'cold']          \n",
         test.out())
+    scope<cc>:
+      throw metax::root::Error(
+        "TestCase.recursiveCompare() not yet implemented");
     end method recursiveCompare;
 
-    method assertDictContains #:
-        keyval iterate over subdata into (k,v) scope:
-          expr switch scope:
-            case [k not in data] scope:
-              @self.fail('Failed to find ${k} in dict');
-            case [data[k] != v] scope:
-              @self.fail('${k} = ${data[k]} != ${v}');
-
-        iterate subdata (k,v) scope:
-          expr switch scope:
-            case [k not in data] scope:
-              @self.fail('Failed to find ${k} in dict');
-            case [data[k] != v] scope:
-              @self.fail('${k} = ${data[k]} != ${v}');
-    params:
+    method assertDictContains params:
       var data : map;
       var subdata : map;
     scope<py>:
@@ -2006,12 +1753,12 @@ scope:
       var first : str #:
         If second is non-null, first is the suffix. If second is null, first
         is the full string.
-      var second : str = MISSING #:
+      var second : str = MISSING_STR #:
         If null, it is a request to print out first, which represents the
         full string. If non-null, first is a suffix, and second is the
         full string to search in.
     scope<py>:
-      if second is MISSING:
+      if second is MISSING_STR:
         print(first)
       else:
         suffix = first
@@ -2136,7 +1883,7 @@ scope:
     params:
       var item : any;
       var expected : any = MISSING;
-      var message : any = null;
+      var message : str = null;
     scope<py>:
       if expected is MISSING:
         /# This is a request to print out the item, rather than compare against
@@ -2171,14 +1918,14 @@ scope:
       encourages people to use methods that won't work in <cc> and <*>.
     params:
       var item : int;
-      var expected : int = MISSING;
+      var expected : int = MISSING_INT;
       var message : any = null;
     scope<py>:
       if message is None:
         eval = str(expected).replace('\n', '\\n')
         aval = str(item).replace('\n', '\\n')
         message = '"%s" != "%s"' % (eval, aval)
-      if expected is MISSING:
+      if expected is MISSING_INT:
         print(u'iseqint: %d' % item)
       else:
         self.assertEqual(expected, item, message)
@@ -2205,7 +1952,7 @@ scope:
     params:
       var item : any;
       var expected : any = MISSING;
-      var message : any = null;
+      var message : str = null;
     scope<py>:
       if message is None:
         message = '%s == %s' % (str(expected), str(item))
@@ -2236,12 +1983,12 @@ scope:
       encourages people to use methods that won't work in <cc> and <*>.
     params:
       var item : str;
-      var expected : str = MISSING;
+      var expected : str = MISSING_STR;
       var message : str = null;
     scope<py>:
       if message is None:
         message = '%s != %s' % (expected, item)
-      if expected is MISSING:
+      if expected is MISSING_STR:
         print('iseqstr: %s' % item)
       else:
         self.assertEqual(expected, item, message)
@@ -2293,10 +2040,10 @@ scope:
 
     method iseqvec params:
       var items : vec;
-      var expected : vec = MISSING;
+      var expected : vec = MISSING_VEC;
       var message : str = null;
     scope<py>:
-      if expected is MISSING:
+      if expected is MISSING_VEC:
         print('iseqvec: %s' % str(items))
       else:
         elen = len(expected)
@@ -2335,11 +2082,11 @@ scope:
 
     method iseqmap params:
       var data : any;
-      var expected : any = MISSING;
+      var expected : any = MISSING_PTR;
       var msg : any = null;
       var width : int = 30;
     scope<py>:
-      if expected is MISSING:
+      if expected is MISSING_PTR:
         print('iseqmap:')
         pprint.pprint(data)
       elif expected != data:
@@ -2366,10 +2113,10 @@ scope:
 
     method iseqtext params:
       var first : str;
-      var second : str = MISSING;
+      var second : str = MISSING_STR;
       var text : str = null;
     scope<py>:
-      if second is MISSING:
+      if second is MISSING_PTR:
         print(u'iseqtext:')
         for line in first.split('\n'):
           print('     >|' + line)
@@ -2467,11 +2214,11 @@ scope:
       Compare two float values for closeness.
     params:
       var f1 : double;
-      var f2 : double = MISSING;
+      var f2 : double = MISSING_FLOAT;
       var delta : double = 0.00001;
       var msg : str = null;
     scope<py>:
-      if f2 is MISSING:
+      if f2 is MISSING_FLOAT:
         print('isapprox: %f' % f1)
       else:
         self.assertAlmostEqual(f1, f2, delta=delta, msg=msg)
@@ -2493,15 +2240,15 @@ scope:
     method isapproxvec #:
       Compare two lists of float values for closeness.
     params:
-      var lf1 : double;
-      var lf2 : double = MISSING;
+      var lf1 : vec<double>;
+      var lf2 : vec = MISSING_VEC;
       var delta : double = 0.00001;
       var msg : str = null;
     scope<py>:
       /# TODO(wmh): Make this more robust
       /# TODO(wmh): Make a general purpose comparison method that can handle
       /# nested dicts/lists and supports approximate float comparisons.
-      if lf2 is MISSING:
+      if lf2 is MISSING_PTR:
         print('isapproxvec: %s' % str(lf1))
       else:
         len1 = len(lf1)
@@ -2754,11 +2501,11 @@ scope:
     method isinst params:
       var obj : any #:
         The object to test.
-      var cls : any = MISSING #:
+      var cls : any = MISSING_PTR #:
         The class the object is expected to be an instance of.
         In javascript, this is the constructor function.
     scope<py>:
-      if cls is MISSING:
+      if cls is MISSING_PTR:
         print('isinst: %s is %s' % (obj, obj.__class__))
       else:
         self.istrue(
@@ -2791,6 +2538,9 @@ scope:
       tc.setUp()
       tc.exists(tc.filepath)
       tc.raises(AssertionError, tc.exists, tc.filepath + '.missing')
+    scope<cc>:
+      throw metax::root::Error(
+        "TestCase.exists() not yet implemented");
     end method exists;
 
     method notexists #:
@@ -2800,13 +2550,16 @@ scope:
         A path to verify does not exist.
       var msg : str = null #:
         The message to print on failure.
-    scope:
+    scope<py>:
       self.isfalse(os.path.exists(path), msg or '%s unexpectedly exists' % path)
     test<py>:
       tc = self._tc
       tc.setUp()
       tc.notexists('/not-a-file')
       tc.raises(AssertionError, tc.notexists, '/tmp')
+    scope<cc>:
+      throw metax::root::Error(
+        "TestCase.notexists() not yet implemented");
     end method notexists;
 
     method fail #:
@@ -2843,6 +2596,276 @@ scope:
     end;
 
   end class TestCase;
+
+
+  specific
+  class FakeFcntl parent<py> ^object #:
+    A fake fcntl object.
+  assocs<py>:
+    std assoc fcntl;
+  scope<py>:
+
+    meta
+    lifecycle scope:
+      meta.LOCK_UN = fcntl.LOCK_UN
+      meta.LOCK_SH = fcntl.LOCK_SH
+      meta.LOCK_EX = fcntl.LOCK_EX
+    end lifecycle;
+
+    field filesystem : any;
+
+    lifecycle params:
+      var fs : any;
+    scope:
+      self._filesystem = fs
+    test:
+      pass
+    end lifecycle;
+
+    method fcntl params:
+      var fd : any;
+      var op : any;
+      var arg : any = 0;
+    scope:
+      pass
+    test:
+      /# noop
+      /# TODO(wmh): Is there a way to verify this method does nothing?
+      pass
+    end method fcntl;
+
+    method ioctl params:
+      var fd : any;
+      var op : any;
+      var arg : any = 0;
+      var mutate_flag : any = false;
+    scope:
+      pass
+    test:
+      /# noop
+      /# TODO(wmh): Is there a way to verify this method does nothing?
+      pass
+    end method ioctl;
+
+    method flock params:
+      var fd : any;
+      var op : any;
+    scope:
+      pass
+    test:
+      /# noop
+      /# TODO(wmh): Is there a way to verify this method does nothing?
+      pass
+    end method flock;
+
+    method lockf params:
+      var fd : any;
+      var op : any;
+      var length : any = 0;
+      var start : any = 0;
+      var whence : any = 0;
+    scope:
+      pass
+    test:
+      /# noop
+      /# TODO(wmh): Is there a way to verify this method does nothing?
+      pass
+    end method lockf;
+  end class FakeFcntl;
+
+  specific
+  class StubHolder parent<py> ^object
+  comment:
+    Support class for stubbing methods out for unit testing.
+
+    Sample Usage:
+
+    You want os.path.exists() to always return true during testing.
+
+       stubs = StubHolder()
+       stubs.Set(os.path, 'exists', lambda x: True)
+         ...
+       stubs.CleanUp()
+
+    The above changes os.path.exists into a lambda that returns True.  Once
+    the ... part of the code finishes, the CleanUp() looks up the old
+    value of os.path.exists and restores it.
+  scope<py>:
+
+    lifecycle scope:
+      self.cache = []
+      self.stubs = []
+    test:
+      pass
+    end lifecycle;
+
+    method __del__ comment:
+      Do not rely on the destructor to undo your stubs.
+
+      You cannot guarantee exactly when the destructor will get called without
+      relying on implementation details of a Python VM that may change.
+    scope:
+      self.CleanUp()
+    test:
+      pass
+    end method __del__;
+
+    method __enter__ scope:
+      return self
+    test:
+      pass
+    end method __enter__;
+
+    method __exit__ params:
+      var unused_exc_type : any;
+      var unused_exc_value : any;
+      var unused_tb : any;
+    scope:
+      self.CleanUp()
+    test:
+      pass
+    end method __exit__;
+
+    method CleanUp comment:
+      Undoes all SmartSet() & Set() calls, restoring original definitions.
+    scope:
+      self.SmartUnsetAll()
+      self.UnsetAll()
+    test:
+      pass
+    end method CleanUp;
+
+    method SmartSet params:
+      var obj : any #:
+        The object whose attributes we want to modify.
+      var attr_name : str #:
+        The name of the attribute to modify.
+      var new_attr : any #:
+        The new value for the attribute.
+    comment:
+      Replace obj.attr_name with new_attr.
+
+      This method is smart and works at the module, class, and instance level
+      while preserving proper inheritance. It will not stub out C types however
+      unless that has been explicitly allowed by the type.
+
+      This method supports the case where attr_name is a staticmethod or a
+      classmethod of obj.
+
+      Notes:
+       - If obj is an instance, then it is its class that will actually be
+         stubbed. Note that the method Set() does not do that: if obj is
+         an instance, it (and not its class) will be stubbed.
+       - The stubbing is using the builtin getattr and setattr. So, the __get__
+         and __set__ will be called when stubbing.
+
+      Raises:
+        AttributeError: If the attribute cannot be found.
+    scope:
+      if (inspect.ismodule(obj) or
+          (not inspect.isclass(obj) and attr_name in obj.__dict__)):
+        orig_obj = obj
+        orig_attr = getattr(obj, attr_name)
+      else:
+        if not inspect.isclass(obj):
+          mro = list(inspect.getmro(obj.__class__))
+        else:
+          mro = list(inspect.getmro(obj))
+
+        mro.reverse()
+
+        orig_attr = None
+        found_attr = False
+
+        for cls in mro:
+          try:
+            orig_obj = cls
+            orig_attr = getattr(obj, attr_name)
+            found_attr = True
+          except AttributeError:
+            continue
+
+        if not found_attr:
+          raise AttributeError('Attribute not found.')
+
+      /# Calling getattr() on a staticmethod transforms it to a 'normal' function.
+      /# We need to ensure that we put it back as a staticmethod.
+      old_attribute = obj.__dict__.get(attr_name)
+      if old_attribute is not None and isinstance(old_attribute, staticmethod):
+        orig_attr = staticmethod(orig_attr)
+
+      self.stubs.append((orig_obj, attr_name, orig_attr))
+      setattr(orig_obj, attr_name, new_attr)
+    test:
+      pass
+    end method SmartSet;
+
+    method SmartUnsetAll comment:
+      Reverses SmartSet() calls, restoring things to original definitions.
+
+      This method is automatically called when the StubOutForTesting()
+      object is deleted; there is no need to call it explicitly.
+
+      It is okay to call SmartUnsetAll() repeatedly, as later calls have
+      no effect if no SmartSet() calls have been made.
+    scope:
+      for args in reversed(self.stubs):
+        setattr(*args)
+
+      self.stubs = []
+    test:
+      pass
+    end method SmartUnsetAll;
+
+    method Set params:
+      var parent : *any #:
+        The_context_in_which_the_attribute_child_name_is_to_be_changed.
+      var child_name : *any #:
+        The_name_of_the_attribute_to_change.
+      var new_child : *any #:
+        The_new_value_of_the_attribute
+    comment:
+      In parent, replace child_name's old definition with new_child.
+
+      The parent could be a module when the child is a function at
+      module scope.  Or the parent could be a class when a class' method
+      is being replaced.  The named child is set to new_child, while the
+      prior definition is saved away for later, when UnsetAll() is
+      called.
+
+      This method supports the case where child_name is a staticmethod or a
+      classmethod of parent.
+    scope:
+      old_child = getattr(parent, child_name)
+
+      old_attribute = parent.__dict__.get(child_name)
+      if old_attribute is not None and isinstance(old_attribute, staticmethod):
+        old_child = staticmethod(old_child)
+
+      self.cache.append((parent, old_child, child_name))
+      setattr(parent, child_name, new_child)
+    test:
+      pass
+    end method Set;
+
+    method UnsetAll comment:
+      Reverses Set() calls, restoring things to their original definitions.
+
+      This method is automatically called when the StubOutForTesting()
+      object is deleted; there is no need to call it explicitly.
+
+      It is okay to call UnsetAll() repeatedly, as later calls have no
+      effect if no Set() calls have been made.
+    scope:
+      /# Undo calls to Set() in reverse order, in case Set() was called on the
+      /# same arguments repeatedly (want the original call to be last one undone)
+      for (parent, old_child, child_name) in reversed(self.cache):
+        setattr(parent, child_name, old_child)
+      self.cache = []
+    test:
+      pass
+    end method UnsetAll;
+  end class StubHolder;
 
   post
   native main #:

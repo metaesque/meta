@@ -100,6 +100,7 @@ config:
   config:
     Attribute location;
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope:;
   end Construct _symbol_;
@@ -142,6 +143,7 @@ config:
       Lines to insert before any imports within a test namespace.
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: children <class|behavior|native|field|method>;
 
@@ -283,6 +285,7 @@ config:
     end Attribute kind;
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope:;
   end Construct _classic_;
@@ -405,6 +408,7 @@ config:
     children <assoc|resource|remark>;
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: children <lifecycle|method|field|native|category|remark|command>;
 
@@ -748,6 +752,7 @@ config:
       of the field (is it a vec/map/etc?)
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: children <accessor>;
 
@@ -790,6 +795,7 @@ config:
       already initialized, and to perform the initialization code if not.
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: : simplex children <_statement_>;
 
@@ -1024,6 +1030,7 @@ config:
       nm.sp.FooTest.test_name_c
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: : simplex children <_statement_>;
 
@@ -1088,6 +1095,7 @@ config:
     Attribute tests:;
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: : simplex children <var|block|loop|switch>;
 
@@ -1153,6 +1161,7 @@ config:
     Template cpp_defn_test scope:
       >|
       >|TEST_F(${class_base}, ${method}) {
+      >|  auto& test = *this;
       >|  ${scope}
       >|}
     end Template cpp_defn_test;
@@ -1197,6 +1206,7 @@ config:
     Attribute tests:;
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: : simplex aliases <init:|::> children <_statement_> #:
       The initializer block.
@@ -1301,6 +1311,7 @@ config:
       TODO(wmh): This is not yet implemented ... experimental.
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: : complex children <receiver>;
 
@@ -1337,6 +1348,7 @@ config:
       nm.sp.FooTest.test_name_c
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: : simplex children <_statement_>;
 
@@ -1367,6 +1379,7 @@ config:
       The name of the category.
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: children <_statement_>;
 
@@ -1381,6 +1394,7 @@ config:
       The name of the remark.
 
     Attribute comment: : simple;
+    Attribute icomment:;
 
   end Construct remark;
 
@@ -1483,6 +1497,7 @@ config:
       Otherwise, it should be a fully qualified BUILD target.
 
     Attribute comment:;
+    Attribute icomment:;
 
   end Construct assoc;
 
@@ -1501,6 +1516,7 @@ config:
       The name of the testx.
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: : simplex children <_statement_>;
 
@@ -1526,6 +1542,7 @@ config:
     end Attribute path;
 
     Attribute comment:;
+    Attribute icomment:;
 
   end Construct resource;
 
@@ -1590,6 +1607,7 @@ config:
       make code require python3 instead of python2.
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute scope: : simple;
 
     secondary
@@ -1627,6 +1645,7 @@ config:
     end Attribute default;
 
     Attribute comment:;
+    Attribute icomment:;
 
   end Construct flag;
 
@@ -1639,6 +1658,7 @@ config:
   config:
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: : simplex children <_statement_> ;
 
@@ -1690,6 +1710,7 @@ config:
       The name of the block.
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: : simplex children <_statement_> ;
 
@@ -1727,6 +1748,7 @@ config:
     end Attribute default;
 
     Attribute comment:;
+    Attribute icomment:;
 
   end Construct var;
 
@@ -1783,6 +1805,7 @@ config:
       either 'to' is specified and var is numeric.
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
     Attribute scope: : simplex children <_statement_>;
 
@@ -1807,6 +1830,7 @@ config:
       specified, as we have replacer semantics on the id to this attribute.
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
 
     Attribute scope: : complex children <case> #:
@@ -1833,6 +1857,7 @@ config:
       specified, as we can obtain it from id.
 
     Attribute comment:;
+    Attribute icomment:;
     Attribute config:;
 
     Attribute scope: : simplex children <_statement_> #:

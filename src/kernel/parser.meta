@@ -203,7 +203,10 @@ scope:
         var default : any = metax.c.REQUIRED;
     Only the 'Meta' is being parsed, and the '.REQUIRED' is being silently
     ignored.
-  scope<py>:
+  defn<py>:
+    /# Handle both python2 and python3
+    from past.builtins import basestring
+
     ERROR = -1234567891
     REQUIRED = -1234567892
     LOOKUP = -1234567893
@@ -2681,6 +2684,11 @@ scope:
   end class VarSet;
 
   class BaseStreams #:
+    DEPRECATED. This class is being removed in favor of
+    SymbolConstruct.streams() and SymbolConstruct.streamNamed(), which
+    allow ClassConstruct, NamespaceConstruct, MethodConstruct, etc. to
+    maintain their own streams.
+
     Provides support for writing output to multiple streams with aggregation.
 
     When compiling a Meta construct into base language constructs, the following
@@ -2790,6 +2798,7 @@ scope:
       multi var names : vec;
     scope:
       for name in names:
+        /# print('Initializing metafile stream %s' % name)
         self.stream(name, clear=True, create=True)
     test:
       /# setup has invoked initStreams() on test.bs2
@@ -3280,15 +3289,19 @@ scope:
             metaline = attribute.line() + 1
             mapping.append((baseline, metaline, fullid))
 
-          /# Handle both python2 and python3
-          from past.builtins import basestring
-          if not chunk:
-            chunk = ''
-          elif not isinstance(chunk, basestring):
-            /# Handle opaque data
-            chunk = str(chunk)
+          /# TODO(wmh): Optimize this code
+          /#  - deal with str/unicode properly and efficiently
+          /#  - avoid indenting if chunk is empty, but don't waste time
+          /#    copying strings unnecessarily when indentation is needed.
           try:
-            lines.append(indent + chunk)
+            if not chunk:
+              chunk = ''
+            else:
+              if not isinstance(chunk, basestring):
+                /# Handle opaque data
+                chunk = str(chunk)
+              chunk = indent + chunk
+            lines.append(chunk)
           except UnicodeDecodeError as e:
             /# TODO(wmh): Fix this! Must be able to handle unicode chars in meta
             /# source code! This was working fine before I made all literal
@@ -5601,6 +5614,7 @@ scope:
       /# 'str' meaning '&'.
       strtype = cls.Instance('str', default_prefix='*')
       assert sorted(cls.Repository.keys()) == ['&str', '*str', 'str']
+      cls.Str = strtype
       /# TODO(wmh): Are there other types we should intern?
     setup:
       metax.c.Type.Repository = None
@@ -5803,6 +5817,24 @@ scope:
          metax.c.Type.ParseTypes(
            'str,int,*a.Person,*int,a.Person,&a.Person,*#a.A,**a.A,&#a.A')])
     end method isPtr;
+
+    method isUniquePtr : any #:
+      True if this is a unique ptr.
+    ##:
+      TODO(wmh): Should we write a more general function that can test for all
+      kinds of ptrs (unique, shared, weak, and any others we create?)
+      TODO(wmh): Is a pointer to a unique ptr (e.g. *u*T) considered a unique
+      ptr?
+    scope:
+      prefix = self.prefix()
+      return prefix and prefix[0] == 'u'
+    test:
+      test.iseq(
+        [False, False, False, True, False, True, True],
+        [t.isUniquePtr() for t in
+         metax.c.Type.ParseTypes(
+           'str,int,*a.Person,u*int,*a.Person,u*#a.A,u**a.A')])
+    end method isUniquePtr;
 
     method isRef : bool #:
       Determine if this is a reference type or not.
@@ -6092,9 +6124,6 @@ scope:
       Every user-defined construct that is created during parsing is added to this
       dict.  Keys are construct kinds, values are lists of Construct.
 
-    field streams : BaseStreams #:
-      The collection of streams one can write to when compiling this metafile.
-
     field classdeps : set<str> #:
       The fully-qualified names of classes depended on within this metafile.
       Used to determine which .meta files need to be imported during importMeta.
@@ -6150,7 +6179,6 @@ scope:
       if not text or text[-1] != '\n':
         text += '\n'
       lines = Line.FromText(text)
-      streams = BaseStreams()
 
       /# TODO(wmh): field files of type @set is not properly initializing a set.
       self.filesIs(set())
@@ -6159,7 +6187,6 @@ scope:
 
       self.linesIs(lines)
       self.textIs(text)
-      self.streamsIs(streams)
     clinit:
       /# AttrTypeMap maps conceptual attribute value type strings to
       /# three-tuples containing
@@ -13803,6 +13830,8 @@ scope:
 
       path2 = fs.join(root, 'oopl', 'python', 'metax', 'test')
       res2 = metaoopl.parseRepositoryNamespace('metax.test', path2)
+      errors = res2.get('errors', None)
+      test.isnull(errors)
       test.iseqmap(
         {
           'test': {
@@ -13816,28 +13845,11 @@ scope:
             'bld': '.__init__.bld',
             'build': 'BUILD',
             'classes': {
-              'Dummy': {
-                'meta': {
-                  'defn': '.DummyMeta.py',
-                  'map': '.DummyMeta.py.map',
-                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
-                },
-                'test': {
-                  'defn': '../test_test/.DummyTest.py',
-                  'map': '../test_test/.DummyTest.py.map',
-                },
-                'user': {
-                  'defn': '.Dummy.py',
-                  'map': '.Dummy.py.map',
-                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
-                }
-              },
-
               'FakeFcntl': {
                 'meta': {
                   'defn': '.FakeFcntlMeta.py',
                   'map': '.FakeFcntlMeta.py.map',
-                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                  'metapath': homedir + '/src/meta/src/kernel/tests.meta',
                 },
                 'test': {
                   'defn': '../test_test/.FakeFcntlTest.py',
@@ -13846,14 +13858,14 @@ scope:
                 'user': {
                   'defn': '.FakeFcntl.py',
                   'map': '.FakeFcntl.py.map',
-                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                  'metapath': homedir + '/src/meta/src/kernel/tests.meta',
                 }
               },
               'StubHolder': {
                 'meta': {
                   'defn': '.StubHolderMeta.py',
                   'map': '.StubHolderMeta.py.map',
-                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                  'metapath': homedir + '/src/meta/src/kernel/tests.meta',
                 },
                 'test': {
                   'defn': '../test_test/.StubHolderTest.py',
@@ -13862,14 +13874,14 @@ scope:
                 'user': {
                   'defn': '.StubHolder.py',
                   'map': '.StubHolder.py.map',
-                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                  'metapath': homedir + '/src/meta/src/kernel/tests.meta',
                 },
               },
               'TestCase': {
                 'meta': {
                   'defn': '.TestCaseMeta.py',
                   'map': '.TestCaseMeta.py.map',
-                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                  'metapath': homedir + '/src/meta/src/kernel/tests.meta',
                 },
                 'resources': {
                   'cipherfile': '.__resources/TestCase_cipherfile',
@@ -13882,7 +13894,7 @@ scope:
                 'user': {
                   'defn': '.TestCase.py',
                   'map': '.TestCase.py.map',
-                  'metapath': homedir + '/src/meta/src/kernel/test.meta',
+                  'metapath': homedir + '/src/meta/src/kernel/tests.meta',
                 },
               },
             },
@@ -17426,6 +17438,13 @@ scope:
       test.mscope = test.method.attr('scope:')  # simplex
       test.method2 = test.cscope.cons('show')
 
+      /# Some consistency issues
+      test.method.myclassIs(test.klass)
+      test.field.myclassIs(test.klass)
+      test.klass.namespaceIs(test.namespace)
+      test.method.namespaceIs(test.namespace)
+      test.field.namespaceIs(test.namespace)
+
       if statements:
         /# mscope is ComplexBlock (if statement is False, it is SimpleBlock)
 
@@ -18013,7 +18032,10 @@ scope:
         'show', context, parent=kscope,
         features=[('kind', 'instance')],
         secondaries=[
-          ('comment:', ['This is a test', 'of a multiline comment'])
+          ('comment:', [
+           'This is a test.',
+           '',
+           'Multiline comment with blank line.'])
         ],
         precount=1,
       )

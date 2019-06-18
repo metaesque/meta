@@ -78,11 +78,12 @@ scope:
   end class ObjectMetaRoot;
 
   pre
-  native #:
-    Without comment (so that 'scope<py>' is attribute after primary,
-    an explicit id is required even though this is an auto-aassigned
-    construct. It is the selector posing the problem.
-  scope<py>:
+  native ##:
+    TODO(wmh): Meta issue to fix. If this 'native' construct is defined without
+    adding a comment (so that 'scope<py>' is the attribute after primary), an
+    explicit id is required even though this is an auto-aassigned construct. The
+    selector at the end of the attribute key is confusing the auto-assign logic.
+  decl<py>:
     /# NaN: float
     /#   The not-a-number value.
     NaN = float('nan')
@@ -115,6 +116,7 @@ scope:
     std assoc logging;
   assocs<cc>:
     cls assoc metax.root.ObjectMetaRoot;
+    std assoc iostream;
   scope:
 
     static
@@ -221,7 +223,7 @@ scope:
          invocation from a subclass will break the naming.
        - allows resources from one class to be accessed from another class
        - will work with non-meta classes (assuming the non-meta BUILD
-         files are properly defined).                                          
+         files are properly defined).
     params:
       var resource_id : str #:
         The id of the resource (that is, the value of the primary attribute
@@ -286,7 +288,7 @@ scope:
           logging.warning('Implicitly invoking metastrap.Setup()')
           metastrap.Setup()
           version = metastrap.Version
-      
+
         /# Convert the fqn to a relative path.
         if os.getenv('TEST_SRCDIR', None) or os.getenv('IN_UNITTEST'):
           /# We are in bazel running a test.  All such tests are invoked from
@@ -317,7 +319,7 @@ scope:
         /# the caller to decide how to proceed, there was never a time where I
         /# wanted the non-realpath version, so I've decided to always convert.
         /# This does introduce an inconsistency though, because paths that do not
-        /# exist will stay in non-realpath format. 
+        /# exist will stay in non-realpath format.
         /# TODO(wmh): How to avoid using baselang I/O commands here??
         result = os.path.realpath(path)
       return result

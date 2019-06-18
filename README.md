@@ -33,7 +33,7 @@ METAROOT=$(metac config src_root)
       - ${Id}Construct < metax.c.Construct
         - ${construct}Construct, for each construct in the metalang
       - BaseLanguage$Id < metax.c.BaseLanguageConstruct
-        - ${Id}${baselang}, for each baselang in the metalang     
+        - ${Id}${baselang}, for each baselang in the metalang
         - example: for Meta(Doc) we have Id=Doc id=doc, and for baselang markdown
           we have baselang=Markdown baseid=markdown.  So we are creating subclass
           DocMarkdown of BaseLanguageDoc.
@@ -70,22 +70,22 @@ individuals interested in using Meta, see the [[UserGuide]] instead.
 
 This implementation of Meta is written in Meta(Oopl)<Python>.
 
- - The compilation of the .meta source code is performed by an older 
+ - The compilation of the .meta source code is performed by an older
    implementation of Meta written purely in Python.
     - The older python implementation is NOT stored in this repository
-    
+
  - During the transition period from v1 to v2, we need to support both
    versions in a seamless way, so the following correspondences exist:
-   
+
                     v1                           v2
         compiler:   $METAROOT/bin/metac          $METAROOT2/bin/meta2
         filterer:   $METAROOT/bin/metafilt       $METAROOT2/bin/metafilt2
         metastrap:  $METAROOT/lib/metameta.py    $METAROOT2/lib/metameta2.py
- 
+
 
  - The following structure exists in this directory
     - Every directory has a README file that describes every subfile and subdir.
- 
+
      bin/                         # Executables
        meta2                      # The meta compiler
        metafilt2                  # Service script for mapping line numbers
@@ -106,10 +106,10 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
          oopl/
            schema.meta
        templates/
- 
+
  - Meta avoids using environment variables where possible, instead preferring
    to store user-specific customizations in $HOME/.config/meta
-   
+
  - When Meta compiles .meta source files into baselang source code,
    by default it writes the baselang source code into a repository shared by
    all Meta source code across all base languages and all meta languages.
@@ -125,7 +125,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
            <namespace1>
            <namespace2>
            ...
-           
+
    In particular:
     - Meta uses Google's Bazel build environment in all baselangs.
        - All thirdparty source code needed to implement Meta (and to
@@ -139,7 +139,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
 
  - All bugs/issues/feature-requests are stored in
    https://github.com/metaesque/meta/issues
-   
+
  - Meta can auto-generate emacs major-modes for MetaLang syntax.
      % meta2 --metalang=<lang> emacs
    The major mode is written to $METAROOT2/src/schema/meta/meta<lang>-mode.el
@@ -148,25 +148,25 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
 ## Adding support for a new baselang
 
  - Update src/kernel/parser.meta with baselang-specific code:
- 
+
     - Define OoplFoo by copying a pre-existing Oopl* class like OoplPython.
       - The class itself contains only an initializer and a test lifecycle, all
         other functionality is defined via behaviors.
-      - For each behavior defined below the Oopl* classes, add a 'receiver' for 
+      - For each behavior defined below the Oopl* classes, add a 'receiver' for
         OoplFoo with appropriate code and unittests.
-      - Use 
+      - Use
           % metac -r parser.meta metax.c.OoplFoo
         to iteratively add new code and test it.
- 
+
  - Update src/kernel/{root,test}.meta2 by adding baselang specific code
     - search for <py> and do the same thing in <foo> as was done in python.
-    - use 
+    - use
         % meta2 -b foo root.meta2
         % meta2 -b foo --implicit_scopes test.meta2
       The --implicit_scopes flag is to stop the compiler from producing
       warnings like
         metax.test.TestCase.iseq is general but missing scope<foo>
-      
+
  - Look at the generated baselang files to see if they look syntactically correct:
     - The repository directory can be found with:
         % repopath=$(meta2 config repository_path)
@@ -178,14 +178,14 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
    extending the test method to support baselang foo.
     - it is critically import that meta-level types be properly converted
       to baselang variants.
-      
+
  - Use the 'cards1-*' target in src/kernel/Makefile as a starting point:
     % make cards1-cc
  - Deal with whatever error arises next, until no errors arise.
     - define OoplFoo.metaMethodBody()
     - define OoplFoo.formatParams()
     - define OoplFoo.formatParentSpec()
-    
+
  - Use the 'cards2-*' target in src/kernel/Makefile to continue the
    support for the new baselang
    - this target generates unit testing code, which will require additional
@@ -340,9 +340,9 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
       - cons of '&#'
         - constness not statically enforceable in many baselangs
         - non-nullness not statically enforceable in many baselangs
-        
+
 - For native types:
-  - if all native types are class types in baselangs, it makes sense that 
+  - if all native types are class types in baselangs, it makes sense that
     native types would use the same default as for class types, but I'm not
     sure all native types will be baselang class types.
      - more contemplation needed.
@@ -357,7 +357,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
   - ability to indicate at the type level whether the 'str' can be null or not
   - ability to efficiently concatenate values of type 'str' with other strings
     (of type 'str' or other variants)
-    
+
   - using the Meta type system, we have the following variants:
     - *str : can be null
     - &str : cannot be null  (unless we special-case it)
@@ -366,31 +366,35 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
 
 - In languages like Perl and Python, which have good support for text
   manipulation, strings are immutable and conditionally interned.
-  
+
    - in python (http://guilload.com/python-string-interning)
       - '' and all length 1 strings are interned
-      - from the above url, all literal strings matching regexp 
+      - from the above url, all literal strings matching regexp
           ^[a-zA-Z0-9_]{1,20}$
         are interned, but my experiments show that
           'foo!' is 'foo!'
         returns True, and it appears that ALL literal strings
         are interned (even a string of 1025 'o's is interned)
-        
+
    - the conditional internment allows for O(1) equality testing between strings
      if both are interned (falling back to the O(N) algorithm if either isn't
      interned). Because strings are often keys within dicts, efficient equality
      testing is beneficial.
-     
+
    - a variable of type 'str' (Python), 'String' (Javascript), or scalar (Perl)
      can be null, and in some languages (Javascript) one can indicate a
      distinction between "string that can be null" and "string that cannot be
      null"
 
 - In C++
-   - there are a variety of types that can be used to represent a string:
+   - there are a variety of types that can be used to represent a str:
      - char*
      - std::string
      - str::string_view  (points to pre-existing char* or string)
+        - especially in conjunction with user-defined literals: https://en.cppreference.com/w/cpp/language/user_literal
+     - boost::flyweight<char*> or boost::flyweight<std::string> etc https://www.boost.org/doc/libs/1_39_0/libs/flyweight/doc/index.html
+     - rs::stringintern::StringIntern from https://github.com/RipcordSoftware/libstringintern
+     - interned --> https://alexpolt.github.io/intern.html
    - when needed to convert between types:
       - char* to string requires a copy: O(N)
       - char* to string_view does not require a copy: O(1)
@@ -401,7 +405,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
       - string_view to string: O(N)
       - creating string_view from char* needs strlen(): O(N) unless explicit length passed
       - creating string_vew from string shares state: O(1)
-      
+
    - implementing 'str' using 'const char*'
       - no length, no convenient methods for various things.
       - not viable
@@ -419,10 +423,10 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
          - string cannot separate "empty" from "null/invalid"
          - string_view can separate "empty" from "null/invalid"
            (.length()==0 vs .data()==nullptr vs )
-           
+
    - implementing 'str' using 'const std::string'
       - variants:
-        - *str --> const std::string* 
+        - *str --> const std::string*
         - &str --> const std::string&
         - @str --> std::string
       - notes:
@@ -432,7 +436,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
           cumbersome
         - no internment, so using 'str' as the key in a map incurs relatively
           expensive string comparisons.
-       
+
    - implementing 'str' using a special IStr class
      - variants:
        - *str --> IStr*
@@ -447,7 +451,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
             us?  I don't think so.
           - see proposal http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2014/n4173.pdf
             is this in c++17?
-       
+
    - implementing 'str' using a special IStr class that stores nullable as state
      - variants:
        - *str --> IStr (with state indicating null allowed)
@@ -456,7 +460,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
      - notes:
        - by having state in IStr store whether nullable, we lose static
          type-checking on that aspect!
-         
+
     - implement 'str' using two classes, 'IStrPtr' (nullable) and 'IStrRef' (non-nullable)
 
 - The 'str' type is immutable and (partially?) interned
@@ -473,7 +477,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
    - no methods on this type provide the ability to modify state, so instances
      are inherently const.  '#' adds clutter, which we can avoid by making
      illegal.
-     
+
 - In languages without builtin support for interned strings (e.g. C++),
   a class would be defined (e.g. meta::root::IStr) to represent the interned
   string.
@@ -548,7 +552,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
      - cons
        - people are very use to 'const std::string&' (aka &#str = &str since str
          is implicitly const)
-           
+
    - Notes:
       - it is absolutely crucial to provide some mechanism for distinguishing
         between
@@ -568,22 +572,22 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
       - cons
         - user has to remember that @str is illegal, unlike every other
           type (not a big issue).
-        
+
    - Variant #2: value cannot be null
       - pros
          - synonym for &str?
-         - alternative for &str if &str is made illegal.     
+         - alternative for &str if &str is made illegal.
       - cons
          - special-case semantics (does NOT mean copy-by-value, although
            @ does mean copy-by-value everywhere else).
-        
+
    - Variant #3: value can be null
       - pros
          - ??
       - cons
          - special-case semantics (does NOT mean copy-by-value, although
            @ does mean copy-by-value everywhere else).
-               
+
 - str  (variant #1)
    - Variant 1: 'str' means '*str'
       - pros:
@@ -599,7 +603,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
            allowed to be null, and having to dreference string pointers is
            very cumbersome (but see '*str' discussion above for
            possible workaround).
-           
+
    - Variant 2: 'str' means '&str'
       - pros:
          - Python, Perl and Javascript all use interned strings everywhere, and
@@ -618,7 +622,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
            str maps to &str, and &str cannot be null, almost every
            variable in these languages would need to be explicitly
            marked as \*str.  DEAL BREAKER ... this variant is nonviable.
-           
+
    - Variant 3: 'str' means '@str'
       - pros:
          - none?
@@ -632,7 +636,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
            null values for @str), 'str' meaning '@str' would mean there is no
            type to clearly state 'interned string that cannot be null'
            (we would need to introduce another type like !str to handle this).
-           
+
    - Variant 4: 'str' means '&str' or '*str' depending on value assigned to var
       - details:
            .
@@ -662,7 +666,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
              var name2 : str = null;
              var name3 : str = '';
            similar reasoning as for fields (not for params!).
-                      
+
       - pros:
          - the user rarely needs to explicitly specify *str or &str, using
            'str' everywhere, then adding *str or &str only when forced by
@@ -674,14 +678,14 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
 
 ## Implementation of Classes in Meta<javascript>
 
- - The user-level class nm.sp.Foo is written to 
+ - The user-level class nm.sp.Foo is written to
      $METAREP/oopl/javascript/nm/sp/Foo.js
    and Foo.js is implemented using goog.module('nm.sp.Foo'), and exports a
    single value (the defined class Foo), which allows any other namespace
    requiring nm.sp.Foo to obtain it with:
       const Foo = goog.require('nm.sp.Foo');
-      
- - The metaclass for nm.sp.Foo is written to 
+
+ - The metaclass for nm.sp.Foo is written to
      $METAREP/oopl/javascript/nm/sp/FooMeta.js
    and FooMeta.js is implemented using goog.module('nm.sp.FooMeta'), but
    unlike Foo.js it exports two values (the defined metaclass FooMeta and
@@ -689,9 +693,9 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
    namespaces needing access to the metaclass must specify which symbol(s)
    they want, with:
      const {MetaFoo} = goog.require('nm.sp.FooMeta')
-   or 
+   or
      const {FooMeta} = goog.require('nm.sp.FooMeta')
-   or 
+   or
      const {MetaFoo,FooMeta} = goog.require('nm.sp.FooMeta')
 
  - The above inconsistency in how the modules are imported is unfortunate,
@@ -713,7 +717,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
       the metainst (and thus the metaclass). Should we disallow the
       explicit importing of nm.sp.FooMeta ... that would hide the above
       inconsistency quite nicely.
-      
+
  - Another subtle issue here. We do NOT want to return multiple symbols
    from goog.require('nm.sp.Foo'), because if multiple symbols are provided,
    the user must explicitly specify which symbols are desired.
@@ -726,7 +730,7 @@ This implementation of Meta is written in Meta(Oopl)<Python>.
       uses of Object.  So we need to instead do something like:
         class Object_ extends Object { ... }
         exports = Object_;
-        
+
       This works fine if clients use the following:
         const Object = goog.require('metax.root.Object');
       but if the module for metax.root.Object returned multiple objects
@@ -789,7 +793,7 @@ Notes:
        - for languages with properties, the reffer is
          a property instead of a method (not optimal,
          but better than nothing).
- 
+
  - the type of a field determines the type of args/return of
    accessors:
     - if field F has type @T
@@ -858,7 +862,7 @@ a metaclass hierarchy and a testclass hierarchy.
         nm.sp2.BsubA
            nm.sp2.DsubB
         nm.sp3.CsubA
-        
+
  - Meta Class Hierarchy
 
     baselang metaclass class (if exists and compatible with Meta metaclasses)
@@ -867,12 +871,12 @@ a metaclass hierarchy and a testclass hierarchy.
           nm.sp2.BSubAMeta
             nm.sp2.DsubBMeta
           nm.sp3.CsubAMeta
-          
+
    In particular, the metaclass hierarchy exactly mirrors the userclass
    hierarchy, differing only above the root (Object) level.
 
  - Test Class Hierarchy
- 
+
     baselang testclass class (if appropriate, although we may forego these in favor of a pure-meta implementation)
       metax.test.TestCase
         metax.root_test.ObjectTest
@@ -880,7 +884,7 @@ a metaclass hierarchy and a testclass hierarchy.
             nm.sp2_test.BSubATest
               nm.sp2_test.DsubBTest
             nm.sp3_test.CsubATest
-            
+
     The testclass hierarchy also mirrors the userclass hierarchy, but test
     classes are placed in a different namespace than the classes they test
     (classes in namespace 'nm.sp' have test classes in namespace 'nm.sp_test').
@@ -890,12 +894,12 @@ IMPORTANT QUESTIONS RELATED TO CLASS HIERARCHY:
    metaclasses where present, or should the meta-defined metaclass
    hierarchy instead inherit from metax.root.Object and contain the
    baselang-specific metaclass when it is present?
-   
+
     - The metaclass hierarchy defined by Meta inherits from the metaclass(es)
       defined by baselangs.
        - pros:
           - we aren't maintaining two separate hierarchies in languages
-            that provide 
+            that provide
           - the features added by Meta integrate seamlessly into the
             features provided by the baselang, instead of the two sets
             of features being forced to be independent
@@ -912,7 +916,7 @@ IMPORTANT QUESTIONS RELATED TO CLASS HIERARCHY:
             world, inheriting from whatever baselang-specific class is used
             for metaclasses. If such a class does not exist, this class
             inherits from the root class in the baselang. If such a class
-            does not exist, this class inherits from nothing. We 
+            does not exist, this class inherits from nothing. We
             intentionally do NOT have this class inherit from
             metax.root.Object in such cases because that would mean that
             metax.root.Object functionality would be available in some
@@ -1020,8 +1024,8 @@ IMPORTANT QUESTIONS RELATED TO CLASS HIERARCHY:
       - out_of_range
     - runtime_error
       - range_error
-      - overflow_error 
-      - underflow_error     - 
+      - overflow_error
+      - underflow_error     -
     ...
 
   Suppose Meta also wants to define a hierarchy of exceptions
@@ -1059,8 +1063,8 @@ IMPORTANT QUESTIONS RELATED TO CLASS HIERARCHY:
          - $!{...}
          - !${...}  --> conflicts with Perl
          - $!{...}  <-- this one is promising (slight problem related to ! field access, but acceptable)
-         
-         
+
+
 ## Variable interpolation within literal strings
 
 Suppose we want to form a string providing a person's name, dob, height and weight.
@@ -1068,13 +1072,13 @@ Suppose we want to form a string providing a person's name, dob, height and weig
   python:
     print 'Person %s born %s height %1.2fm weight %1.2fkg' % (
       p.name(), p.dob(), p.height(), p.weight())
-      
+
   javascript:
     console.log(
         'Person ' + p.name() + ' born ' + p.dob() +
         ' height ' + p.height().toFixed(2) + 'm' +
         ' weight ' + p.weight().toFixed(2) + 'kg');
-       
+
   C++
     cout << "Person " << p.name()
          << " born " << p.dob()
@@ -1090,15 +1094,15 @@ baselang source code.
    limited to situations where an arbitrary block of code can be inserted.
     - NOTE: not strictly true, in that Meta could define a method, but passing in all
       necessary local vars becomes complicated ... maybe later.
-      
+
  - rather than introducing escape syntax within baselang code to indicate
    creation of a string object based on this special syntax, we can do the more
    general thing ... use meta-level statements. Added bonus: provide a mechanism
    to embed meta-level statements inside a baselang simple block!
-   
+
     method show
     scope<*>:
-      var msg : str = 
+      var msg : str =
         "Person ${.name} born ${.dob} "
         "height ${.height:1.2f}m weight ${.weight:1.2f}kg\n";
       block
@@ -1109,7 +1113,7 @@ baselang source code.
       :cc:
         cout << msg << endl;
     end method;
-    
+
 Meta can provide lots of convenience syntax within these variables:
  - ${.name} means @self.name
  - ${!name} means @self!name
@@ -1125,7 +1129,7 @@ Meta can provide lots of convenience syntax within these variables:
  - By providing the ability to define many namespaces/classes/methods in
    a single file, we introduce a problem not present in other languages ...
    how to find the right definition of a class/method/field by id.
-    
+
  - Variant #1:
     - search for 'class <id>' or 'method <id>' or 'field <id>'
        - pros:
@@ -1137,7 +1141,7 @@ Meta can provide lots of convenience syntax within these variables:
                 with given name.
           - because a method 'foo' might be defined via 'field' or 'behavior',
             it is not so easy to find.
-            
+
  - Variant #2:
     - rely on IDE support
        - emacs and vim support for:
@@ -1178,16 +1182,16 @@ Meta to be C++17-enabled from the get-go. However:
       |Target: x86_64-apple-darwin16.7.0
       |Thread model: posix
       |InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
-      
- - apple clang 9.0.0 is mapped to LLVM 4.? 
-     - LLVM releases at http://releases.llvm.org/ 
+
+ - apple clang 9.0.0 is mapped to LLVM 4.?
+     - LLVM releases at http://releases.llvm.org/
      - C++ status for LLVM at https://clang.llvm.org/cxx_status.html
      - apple version numbers to LLVM version numbers: https://en.wikipedia.org/wiki/Xcode#cite_note-LLVM_versions-80
         - nothing specified for most recent apple clang, but presumably LLVM 4*
      - one can supposedly use -std=c++1z (according to https://clang.llvm.org/cxx_status.html
        in the 'C++17 implementation status' section), but that doesn't work:
          % cd meta2/src/kernel/tests/cc/c++17
-         % make 
+         % make
          % /usr/bin/clang++ -std=c++1z main.cc
          |main.cc:2:10: fatal error: 'any' file not found
          |#include <any>
@@ -1198,14 +1202,14 @@ Meta to be C++17-enabled from the get-go. However:
          % cd /usr/include
          % find . -name '*any*'
          |./apr-1/apr_anylock.h
-         
+
  - g++ does handle C++17 properly:
      % cd meta2/src/kernel/tests/cc/c++17
      % /usr/local/wmh/gcc-7.2/bin/g++ -std=c++17 main.cc
      % ./main
      |Hello World
      |val1 = 1
-     
+
  - bazel's default CROSSTOOL uses clang:
      % cd meta2/src/kernel/tests/cc/c++17
      % make bazel-clobber
@@ -1214,7 +1218,7 @@ Meta to be C++17-enabled from the get-go. However:
      |main.cc:2:10: fatal error: 'any' file not found
      |#include <any>
      |         ^~~~~
-     
+
      % grep cxx $(find $(bazel info execution_root) -name CROSSTOOL)
      |...
      |cxx_builtin_include_directory: "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/9.0.0/include"
@@ -1236,18 +1240,18 @@ Meta to be C++17-enabled from the get-go. However:
 
     - Looks like the crosstool generation code defined in cc_configure is accidentally
       inserting some compiler_flag options that aren't legal for gcc.
-        - comment out 
+        - comment out
              compiler_flag: "-Wthread-safety"
              compiler_flag: "-Wself-assign"
           in
             % emacsclient $(find $(bazel info execution_root) -name CROSSTOOL)
- 
+
     - Retrying the build:
         % blaze build --cxxopt=-std=c++17 --verbose_failures :main
         |...
         |collect2: fatal error: cannot find 'ld'
         |...
- 
+
   https://stackoverflow.com/questions/41356173/how-to-use-clang-instead-g-in-bazel
 
 
@@ -1263,7 +1267,7 @@ As well, there are means of perform whole-program conversion to other languages:
  - emscripten (https://en.wikipedia.org/wiki/Emscripten) compiles C++ and
    outputs asm.js, a subset of Javascript !!!
  - mono/.NET
- 
+
 Meta can make these cross-language capabilities much easier:
 
   Suppose we have a program written in python. A specific method could instead
@@ -1271,7 +1275,7 @@ Meta can make these cross-language capabilities much easier:
   to interface between the languages).
 
     class Matrix scope:
-    
+
       method times : Matrix #:
         Implemented in C++ for efficiency.
       params:
@@ -1281,10 +1285,10 @@ Meta can make these cross-language capabilities much easier:
           ... add C++ code here ...
         end;
       end method times;
-        
+
   Note that my original idea that an entire method could be marked
   'native' does not work because we need to specify both the target baselang
-  and the native baselang, which would only be possible if we put the 
+  and the native baselang, which would only be possible if we put the
   target baselang on the 'scope:' of 'class' (that is too limiting).
    - Will need to expand this idea further.
 
@@ -1297,7 +1301,7 @@ javascript version of 'meta2 repl') we can use phantomjs.
 TODO(wmh): Establish how to properly specify the needed dependencies if a
 certain javascript class uses phantomjs libraries like 'require(webpage)', etc.
 
-Note that 
+Note that
   https://github.com/bazelbuild/rules_closure/blob/master/closure/testing/phantomjs_harness.js
 (and the other files in its directory) may be helpful here.  For example,
 note how one types phantomjs objects:
@@ -1338,7 +1342,7 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
  - Meta (uwo, in Meta<perl>)
  - Meta (sf, in python)
  - Meta2 (in Meta<python>)
- 
+
 ## Units of Measurement
 
  - Research
@@ -1408,7 +1412,7 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
   scope: because the code is looking for a class to attach the native code
   to.  Need to support this usecase ... it will be common to add a native
   block before any classes.
-  
+
 - NamespaceConstruct._mergeClassesPython() has to deal with the fact that
   we sometimes want to refer to class nm.sp.Class2 from within nm.sp.Class1
   as nm.sp.Class2, when python prefers we use Class2 when they share a
@@ -1416,11 +1420,11 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
   parsed).  The code currently inserts some magic at the top of each
   module to define nm.sp within nm.sp, but it is entirely possible that this
   code will break something in python's control flow.
-  
+
 - The Emacs major-mode has various weaknesses:
   - Within Meta comment blocks, inserting the character \" immediately kills
     all syntax highligting
-    
+
   - When in a comment block, if the current line has a '(' without matching
     ')' and newline-tab is entered, the cursor is moved below the unmatch
     ')' rather than being moved to the start of block position.
@@ -1437,10 +1441,10 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
   'location'. That means it does not have a location in the metafile, which
   means locattr.line() will not be meaningful ... but often the whole point
   of keeping locattr around is to get the meta linenum!
-  
+
    - In such situations, attrpair() should return (None, <value>) instead of
      returning the misleading special Attribute instance.
-  
+
    - To identify places where this is causing problems, we could initialize
      the 'line' field of the special Attribute instances cached in attrinfo
      to some sentinal like -123, and whenever Attribute.line() is invoked, if
@@ -1480,12 +1484,12 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
       map<{name:str,height:float,cards:int,present:bool}>
     vs
       map<str,any>
-      
+
 - For every native type, introduce a class in the Meta library that
   provides a baselang-independent implementation and describes the
   public interface available.  Introduce some secondary simplex attribute
   on 'executable' to allow specification of native code:
-  
+
     class Vector<T> < Container<T> #:
       A collection of contiguous element indexed by integer
        - get(index) = O(1)
@@ -1495,18 +1499,18 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
     nativetype<cc> std::vector<$T>
     nativetype<js> Array
     scope:
-    
+
       field allocated : int #:
         How many elements are allocated.
       field size : int #:
         How many elements are assigned.
-       
+
       lifecycle params:
         var size : int = 0 #:
           Initialize size of list.
       scope:
       end;
-      
+
       method size : int aliases "len,length" #:
         Number of elements in vector.
       scope<*>:
@@ -1516,7 +1520,7 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
       native<js> 'this.length'
       end method;
     end class;
-    
+
     NOTES:
      - there should be both 'native' and 'native:' defined on methods
         - native accepts a string, and represents baselang code that can be
@@ -1528,7 +1532,7 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
           baselang code stream before the line requiring the RHS.
 
 - Support aliases for method and field names
-  - will at the very least be useful for 
+  - will at the very least be useful for
 
 
 - The 'default' attribute of 'var', 'field' and 'flag' should have type 'expr'
@@ -1537,7 +1541,7 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
         var item : nm.sp.Class = @nm.sp.Class2.Func;
      or
         var item : map = {'a': 1, 'b': 2};
-        
+
 - In describing Meta, emphasize the utility in being able to add good ideas
   from arbitrary languages into all baselangs
    - 'new' vs 'override' semantics on methods is crucial ... not all baselangs
@@ -1562,17 +1566,17 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
   'id' with no dots in it. The code in
      NamespaceConstruct.createImplicitParents()
   was designed for use in the namespace initializer, but similar code can be
-  crafter for expandMeta. 
+  crafter for expandMeta.
    - start with the test namespace, which is being created within expandMeta
      (instead of creating a namespace with multi-dots, create individual
-     namespaces). 
+     namespaces).
    - once the test namespace is working properly, move on to updating the
      user namespace, which is a bit more subtle because it already exists.
-        
+
 - Statement level support!!
   - recursive loading of dependency classes
   - proper initialization of symbol tables
-     
+
 - Decide how to handle exceptions
   - See discussion above entitled 'Exception classes'.
   - Looks like providing a mapping from conceptual exception naems to
@@ -1580,7 +1584,7 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
     - This could be a real problem moving forward...
 
 Define metax.error, a namespace consisting solely of exception classes.
-   - each exception class should inherit from appropriate baselang 
+   - each exception class should inherit from appropriate baselang
      classes where possible.
    - each should be clearly documented with when it should be raised
    - all code in the Meta implementation should use these classes.
@@ -1657,7 +1661,7 @@ Define metax.error, a namespace consisting solely of exception classes.
     super (a)
     scope:
     end;
-    
+
   For bonus points, can skip type and comment because meta can look it up
   from the parent method:
     method f params:
@@ -1671,7 +1675,7 @@ Define metax.error, a namespace consisting solely of exception classes.
     scope:
     end;
   because Meta can find the parent definition to determine that param
-  'a' has type int (and can insert parent comment block, etc.) 
+  'a' has type int (and can insert parent comment block, etc.)
 
   NOTE: may need to make 'super' a secondary attribute, not feature attribute,
   in order to specify position within super() call.
@@ -1701,12 +1705,12 @@ Define metax.error, a namespace consisting solely of exception classes.
      0b010001100010100
      0xab8373a
      123
-   
+
    Note: Meta does NOT support 0235 as being base 8! (too ambiguous)
-   
-   Note: How will this interact with literal units? 
+
+   Note: How will this interact with literal units?
      83kg in base 8?
-     
+
    Note that suffixes like Ki, Mi, Gi, Ti, and Pi implicitly
    encode a base-2 interpretation, but somewhat special in nature.
     - Ki = 2^10
@@ -1725,10 +1729,10 @@ Define metax.error, a namespace consisting solely of exception classes.
        --> creating a 'hierarchy' summary of a meta file using org-mode
          --> supporting 'aliases' attribute on 'command' construct
            --> getting 'str' attribute type working
-             --> auto-filtering exceptions raised when meta2 invoked 
+             --> auto-filtering exceptions raised when meta2 invoked
                - blocked because exception was occuring during creation of Compiler
                  and since filterMetaOutput is an instance method I have a catch-22
-             - solution to 'str' issue was 
+             - solution to 'str' issue was
                  Attribute path : str = <empty> #:
                vs
                  Attribute path : str = empty #:

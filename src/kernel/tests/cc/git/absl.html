@@ -1,0 +1,4178 @@
+<html>
+ <head>
+  <style>
+   body {
+     color: white;
+     background-color: black;
+   }
+   .file {
+     border: 1px solid black;
+     width: 650px;
+     padding: 10px;
+     margin: 10px auto;
+     color: black;
+     background-color: white;
+   }
+   .func {
+     color: black;
+     background-color: #E5E5E5;
+     border: 1px solid black;
+     margin: 10px;
+     padding: 10px;
+   }
+  </style>
+ </head>
+ <body>
+
+  <div class="file">
+   <h2>algorithm/container.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/algorithm/container.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>c_accumulate()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::accumulate()` function
+to accumulate the element values of a container to `init` and return that
+accumulation by value.
+
+Note: Due to a language technicality this function has return type
+absl::decay_t&lt;T&gt;. As a user of this function you can casually read
+this as "returns T by value" and assume it does the right thing.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_adjacent_difference()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::adjacent_difference()`
+function to compute the difference between each element and the one preceding
+it and write it to an iterator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_adjacent_find()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::adjacent_find()` function to
+find equal adjacent elements within a container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_all_of()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::all_of()` function to
+test a condition on all elements within a container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_any_of()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::any_of()` function to
+test if any element in a container fulfills a condition.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_binary_search()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::binary_search()` function
+to test if any element in the sorted container contains a value equivalent to
+'value'.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_copy()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::copy()` function to copy a
+container's elements into an iterator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_copy_backward()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::copy_backward()` function to
+copy a container's elements in reverse order into an iterator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_copy_if()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::copy_if()` function to copy
+a container's elements satisfying some condition into an iterator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_copy_n()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::copy_n()` function to copy a
+container's first N elements into an iterator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_count()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::count()` function to count
+values that match within a container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_count_if()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::count_if()` function to
+count values matching a condition within a container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_distance()</h3>
+    <pre><code>
+Container-based version of the &lt;iterator&gt; `std::distance()` function to
+return the number of elements within a container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_equal()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::equal()` function to
+test whether two containers are equal.
+
+NOTE: the semantics of c_equal() are slightly different than those of
+equal(): while the latter iterates over the second container only up to the
+size of the first container, c_equal() also checks whether the container
+sizes are equal.  This better matches expectations about c_equal() based on
+its signature.
+
+Example:
+  vector v1 = &lt;1, 2, 3&gt;;
+  vector v2 = &lt;1, 2, 3, 4&gt;;
+  equal(std::begin(v1), std::end(v1), std::begin(v2)) returns true
+  c_equal(v1, v2) returns false
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_equal_range()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::equal_range()` function
+to return an iterator pair pointing to the first and last elements in a
+sorted container which compare equal to `value`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_fill()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::fill()` function to fill a
+container with some value.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_fill_n()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::fill_n()` function to fill
+the first N elements in a container with some value.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_find()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::find()` function to find
+the first element containing the passed value within a container value.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_find_end()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::find_end()` function to
+find the last subsequence within a container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_find_first_of()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::find_first_of()` function to
+find the first elements in an ordered set within a container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_find_if()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::find_if()` function to find
+the first element in a container matching the given condition.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_find_if_not()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::find_if_not()` function to
+find the first element in a container not matching the given condition.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_for_each()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::for_each()` function to
+apply a function to a container's elements.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_generate()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::generate()` function to
+assign a container's elements to the values provided by the given generator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_generate_n()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::generate_n()` function to
+assign a container's first N elements to the values provided by the given
+generator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_includes()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::includes()` function
+to test whether a sorted container `c1` entirely contains another sorted
+container `c2`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_inner_product()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::inner_product()` function
+to compute the cumulative inner product of container element pairs.
+
+Note: Due to a language technicality this function has return type
+absl::decay_t&lt;T&gt;. As a user of this function you can casually read
+this as "returns T by value" and assume it does the right thing.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_inplace_merge()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::inplace_merge()` function
+to merge a supplied iterator `middle` into a container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_iota()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::iota()` function
+to compute successive values of `value`, as if incremented with `++value`
+after each element is written. and write them to the container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_is_heap()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::is_heap()` function
+to check whether the given container is a heap.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_is_heap_until()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::is_heap_until()` function
+to find the first element in a given container which is not in heap order.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_is_partitioned()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::is_partitioned()` function
+to test whether all elements in the container for which `pred` returns `true`
+precede those for which `pred` is `false`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_is_permutation()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::is_permutation()` function
+to test whether a container is a permutation of another.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_is_sorted()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::is_sorted()` function
+to evaluate whether the given container is sorted in ascending order.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_is_sorted_until()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::is_sorted_until()` function
+to return the first element within a container that is not sorted in
+ascending order as an iterator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_lexicographical_compare()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::lexicographical_compare()`
+function to lexicographically compare (e.g. sort words alphabetically) two
+container sequences. The comparison is performed using `operator&lt;`. Note
+that capital letters ("A-Z") have ASCII values less than lowercase letters
+("a-z").
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_linear_search()</h3>
+    <pre><code>
+Container-based version of absl::linear_search() for performing a linear
+search within a container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_lower_bound()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::lower_bound()` function
+to return an iterator pointing to the first element in a sorted container
+which does not compare less than `value`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_make_heap()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::make_heap()` function
+to make a container a heap.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_max_element()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::max_element()` function
+to return an iterator pointing to the element with the largest value, using
+`operator&lt;` to make the comparisons.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_merge()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::merge()` function
+to merge two sorted containers into a single sorted iterator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_min_element()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::min_element()` function
+to return an iterator pointing to the element with the smallest value, using
+`operator&lt;` to make the comparisons.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_minmax_element()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::minmax_element()` function
+to return a pair of iterators pointing to the elements containing the
+smallest and largest values, respectively, using `operator&lt;` to make the
+comparisons.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_mismatch()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::mismatch()` function to
+return the first element where two ordered containers differ.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_move()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::move()` function to move
+a container's elements into an iterator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_next_permutation()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::next_permutation()` function
+to rearrange a container's elements into the next lexicographically greater
+permutation.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_none_of()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::none_of()` function to
+test if no elements in a container fulfil a condition.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_nth_element()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::nth_element()` function
+to rearrange the elements within a container such that the `nth` element
+would be in that position in an ordered sequence; other elements may be in
+any order, except that all preceding `nth` will be less than that element,
+and all following `nth` will be greater than that element.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_partial_sort()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::partial_sort()` function
+to rearrange elements within a container such that elements before `middle`
+are sorted in ascending order.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_partial_sort_copy()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::partial_sort_copy()`
+function to sort elements within a container such that elements before
+`middle` are sorted in ascending order, and return the result within an
+iterator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_partial_sum()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::partial_sum()` function
+to compute the partial sum of the elements in a sequence and write them
+to an iterator. The partial sum is the sum of all element values so far in
+the sequence.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_partition()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::partition()` function
+to rearrange all elements in a container in such a way that all elements for
+which `pred` returns `true` precede all those for which it returns `false`,
+returning an iterator to the first element of the second group.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_partition_copy()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::partition_copy()` function
+to partition a container's elements and return them into two iterators: one
+for which `pred` returns `true`, and one for which `pred` returns `false.`
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_partition_point()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::partition_point()` function
+to return the first element of an already partitioned container for which
+the given `pred` is not `true`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_pop_heap()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::pop_heap()` function
+to pop a value from a heap container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_prev_permutation()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::prev_permutation()` function
+to rearrange a container's elements into the next lexicographically lesser
+permutation.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_push_heap()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::push_heap()` function
+to push a value onto a container heap.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_remove_copy()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::remove_copy()` function to
+copy a container's elements while removing any elements matching the given
+`value`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_remove_copy_if()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::remove_copy_if()` function
+to copy a container's elements while removing any elements matching the given
+condition.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_replace()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::replace()` function to
+replace a container's elements of some value with a new value. The container
+is modified in place.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_replace_copy()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::replace_copy()` function to
+replace a container's elements of some value with a new value  and return the
+results within an iterator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_replace_copy_if()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::replace_copy_if()` function
+to replace a container's elements of some value with a new value based on
+some condition, and return the results within an iterator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_replace_if()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::replace_if()` function to
+replace a container's elements of some value with a new value based on some
+condition. The container is modified in place.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_reverse()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::reverse()` function to
+reverse a container's elements.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_reverse_copy()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::reverse()` function to
+reverse a container's elements and write them to an iterator range.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_rotate()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::rotate()` function to
+shift a container's elements leftward such that the `middle` element becomes
+the first element in the container.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_rotate_copy()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::rotate_copy()` function to
+shift a container's elements leftward such that the `middle` element becomes
+the first element in a new iterator range.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_search()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::search()` function to search
+a container for a subsequence.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_search_n()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::search_n()` function to
+search a container for the first sequence of N elements.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_set_difference()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::set_difference()` function
+to return an iterator containing elements present in the first container but
+not in the second.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_set_intersection()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::set_intersection()` function
+to return an iterator containing the intersection of two containers.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_set_symmetric_difference()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::set_symmetric_difference()`
+function to return an iterator containing elements present in either one
+container or the other, but not both.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_set_union()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::set_union()` function
+to return an iterator containing the union of two containers; duplicate
+values are not copied into the output.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_shuffle()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::shuffle()` function to
+randomly shuffle elements within the container using a `gen()` uniform random
+number generator.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_sort()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::sort()` function
+to sort elements in ascending order of their values.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_sort_heap()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::sort_heap()` function
+to sort a heap into ascending order (after which it is no longer a heap).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_stable_partition()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::stable_partition()` function
+to rearrange all elements in a container in such a way that all elements for
+which `pred` returns `true` precede all those for which it returns `false`,
+preserving the relative ordering between the two groups. The function returns
+an iterator to the first element of the second group.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_stable_sort()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::stable_sort()` function
+to sort elements in ascending order of their values, preserving the order
+of equivalents.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_swap_ranges()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::swap_ranges()` function to
+swap a container's elements with another container's elements.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_transform()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::transform()` function to
+transform a container's elements using the unary operation, storing the
+result in an iterator pointing to the last transformed element in the output
+range.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_unique_copy()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::unique_copy()` function to
+copy a container's elements while removing any elements containing duplicate
+values.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>c_upper_bound()</h3>
+    <pre><code>
+Container-based version of the &lt;algorithm&gt; `std::upper_bound()` function
+to return an iterator pointing to the first element in a sorted container
+which is greater than `value`.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>base/call_once.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/base/call_once.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>call_once()</h3>
+    <pre><code>
+For all invocations using a given `once_flag`, invokes a given `fn` exactly
+once across all threads. The first call to `call_once()` with a particular
+`once_flag` argument (that does not throw an exception) will run the
+specified function with the provided `args`; other calls with the same
+`once_flag` argument will not run the function, but will wait
+for the provided function to finish running (if it is still running).
+
+This mechanism provides a safe, simple, and fast mechanism for one-time
+initialization in a multi-threaded process.
+
+Example:
+
+class MyInitClass {
+ public:
+ ...
+ mutable absl::once_flag once_;
+
+ MyInitClass* init() const {
+   absl::call_once(once_, &MyInitClass::Init, this);
+   return ptr_;
+ }
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>base/casts.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/base/casts.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>bit_cast()</h3>
+    <pre><code>
+Performs a bitwise cast on a type without changing the underlying bit
+representation of that type's value. The two types must be of the same size
+and both types must be trivially copyable. As with most casts, use with
+caution. A `bit_cast()` might be needed when you need to temporarily treat a
+type as some other type, such as in the following cases:
+
+   * Serialization (casting temporarily to `char *` for those purposes is
+     always allowed by the C++ standard)
+   * Managing the individual bits of a type within mathematical operations
+     that are not normally accessible through that type
+   * Casting non-pointer types to pointer types (casting the other way is
+     allowed by `reinterpret_cast()` but round-trips cannot occur the other
+     way).
+
+Example:
+
+  float f = 3.14159265358979;
+  int i = bit_cast&lt;int32_t&gt;(f);
+  // i = 0x40490fdb
+
+Casting non-pointer types to pointer types and then dereferencing them
+traditionally produces undefined behavior.
+
+Example:
+
+  // WRONG
+  float f = 3.14159265358979;            // WRONG
+  int i = * reinterpret_cast&lt;int*&gt;(&f);  // WRONG
+
+The address-casting method produces undefined behavior according to the ISO
+C++ specification section [basic.lval]. Roughly, this section says: if an
+object in memory has one type, and a program accesses it with a different
+type, the result is undefined behavior for most values of "different type".
+
+Such casting results in type punning: holding an object in memory of one type
+and reading its bits back using a different type. A `bit_cast()` avoids this
+issue by implementing its casts using `memcpy()`, which avoids introducing
+this undefined behavior.
+
+NOTE: The requirements here are more strict than the bit_cast of standard
+proposal p0476 due to the need for workarounds and lack of intrinsics.
+Specifically, this implementation also requires `Dest` to be
+default-constructible.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>implicit_cast()</h3>
+    <pre><code>
+Performs an implicit conversion between types following the language
+rules for implicit conversion; if an implicit conversion is otherwise
+allowed by the language in the given context, this function performs such an
+implicit conversion.
+
+Example:
+
+  // If the context allows implicit conversion:
+  From from;
+  To to = from;
+
+  // Such code can be replaced by:
+  implicit_cast&lt;To&gt;(from);
+
+An `implicit_cast()` may also be used to annotate numeric type conversions
+that, although safe, may produce compiler warnings (such as `long` to `int`).
+Additionally, an `implicit_cast()` is also useful within return statements to
+indicate a specific implicit conversion is being undertaken.
+
+Example:
+
+  return implicit_cast&lt;double&gt;(size_in_bytes) / capacity_;
+
+Annotating code with `implicit_cast()` allows you to explicitly select
+particular overloads and template instantiations, while providing a safer
+cast than `reinterpret_cast()` or `static_cast()`.
+
+Additionally, an `implicit_cast()` can be used to allow upcasting within a
+type hierarchy where incorrect use of `static_cast()` could accidentally
+allow downcasting.
+
+Finally, an `implicit_cast()` can be used to perform implicit conversions
+from unrelated types that otherwise couldn't be implicitly cast directly;
+C++ will normally only implicitly cast "one step" in such conversions.
+
+That is, if C is a type which can be implicitly converted to B, with B being
+a type that can be implicitly converted to A, an `implicit_cast()` can be
+used to convert C to B (which the compiler can then implicitly convert to A
+using language rules).
+
+Example:
+
+  // Assume an object C is convertible to B, which is implicitly convertible
+  // to A
+  A a = implicit_cast&lt;B&gt;(C);
+
+Such implicit cast chaining may be useful within template logic.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>base/config.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/base/config.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>ABSL_HAVE_BUILTIN()</h3>
+    <pre><code>
+Checks whether the compiler supports a Clang Feature Checking Macro, and if
+so, checks whether it supports the provided builtin function "x" where x
+is one of the functions noted in
+https://clang.llvm.org/docs/LanguageExtensions.html
+
+Note: Use this macro to avoid an extra level of #ifdef __has_builtin check.
+http://releases.llvm.org/3.3/tools/clang/docs/LanguageExtensions.html
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>base/internal/thread_annotations.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/base/internal/thread_annotations.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>EXCLUSIVE_LOCK_FUNCTION()</h3>
+    <pre><code>
+Documents functions that acquire a lock in the body of a function, and do
+not release it.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>GUARDED_BY()</h3>
+    <pre><code>
+Documents if a shared field or global variable needs to be protected by a
+mutex. GUARDED_BY() allows the user to specify a particular mutex that
+should be held when accessing the annotated variable.
+
+Although this annotation (and PT_GUARDED_BY, below) cannot be applied to
+local variables, a local variable and its associated mutex can often be
+combined into a small class or struct, thereby allowing the annotation.
+
+Example:
+
+  class Foo {
+    Mutex mu_;
+    int p1_ GUARDED_BY(mu_);
+    ...
+  };
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>LOCKS_EXCLUDED()</h3>
+    <pre><code>
+Documents the locks acquired in the body of the function. These locks
+cannot be held when calling this function (as Abseil's `Mutex` locks are
+non-reentrant).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>LOCK_RETURNED()</h3>
+    <pre><code>
+Documents a function that returns a mutex without acquiring it.  For example,
+a public getter method that returns a pointer to a private mutex should
+be annotated with LOCK_RETURNED.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>PT_GUARDED_BY()</h3>
+    <pre><code>
+Documents if the memory location pointed to by a pointer should be guarded
+by a mutex when dereferencing the pointer.
+
+Example:
+  class Foo {
+    Mutex mu_;
+    int *p1_ PT_GUARDED_BY(mu_);
+    ...
+  };
+
+Note that a pointer variable to a shared memory location could itself be a
+shared variable.
+
+Example:
+
+  // `q_`, guarded by `mu1_`, points to a shared memory location that is
+  // guarded by `mu2_`:
+  int *q_ GUARDED_BY(mu1_) PT_GUARDED_BY(mu2_);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SHARED_LOCK_FUNCTION()</h3>
+    <pre><code>
+Documents functions that acquire a shared (reader) lock in the body of a
+function, and do not release it.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>UNLOCK_FUNCTION()</h3>
+    <pre><code>
+Documents functions that expect a lock to be held on entry to the function,
+and release it in the body of the function.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>base/macros.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/base/macros.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>ABSL_ARRAYSIZE()</h3>
+    <pre><code>
+Returns the number of elements in an array as a compile-time constant, which
+can be used in defining new arrays. If you use this macro on a pointer by
+mistake, you will get a compile-time error.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ABSL_ASSERT()</h3>
+    <pre><code>
+In C++11, `assert` can't be used portably within constexpr functions.
+ABSL_ASSERT functions as a runtime assert but works in C++11 constexpr
+functions.  Example:
+
+constexpr double Divide(double a, double b) {
+  return ABSL_ASSERT(b != 0), a / b;
+}
+
+This macro is inspired by
+https://akrzemi1.wordpress.com/2017/05/18/asserts-in-constexpr-functions/
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ABSL_BAD_CALL_IF()</h3>
+    <pre><code>
+Used on a function overload to trap bad calls: any call that matches the
+overload will cause a compile-time error. This macro uses a clang-specific
+"enable_if" attribute, as described at
+http://clang.llvm.org/docs/AttributeReference.html#enable-if
+
+Overloads which use this macro should be bracketed by
+`#ifdef ABSL_BAD_CALL_IF`.
+
+Example:
+
+  int isdigit(int c);
+  #ifdef ABSL_BAD_CALL_IF
+  int isdigit(int c)
+    ABSL_BAD_CALL_IF(c &lt;= -1 || c &gt; 255,
+                      "'c' must have the value of an unsigned char or EOF");
+  #endif // ABSL_BAD_CALL_IF
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ABSL_DEPRECATED()</h3>
+    <pre><code>
+Marks a deprecated class, struct, enum, function, method and variable
+declarations. The macro argument is used as a custom diagnostic message (e.g.
+suggestion of a better alternative).
+
+Example:
+
+  class ABSL_DEPRECATED("Use Bar instead") Foo {...};
+  ABSL_DEPRECATED("Use Baz instead") void Bar() {...}
+
+Every usage of a deprecated entity will trigger a warning when compiled with
+clang's `-Wdeprecated-declarations` option. This option is turned off by
+default, but the warnings will be reported by clang-tidy.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>base/thread_annotations.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/base/thread_annotations.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>ABSL_EXCLUSIVE_LOCK_FUNCTION()</h3>
+    <pre><code>
+Documents functions that acquire a lock in the body of a function, and do
+not release it.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ABSL_GUARDED_BY()</h3>
+    <pre><code>
+Documents if a shared field or global variable needs to be protected by a
+mutex. ABSL_GUARDED_BY() allows the user to specify a particular mutex that
+should be held when accessing the annotated variable.
+
+Although this annotation (and ABSL_PT_GUARDED_BY, below) cannot be applied to
+local variables, a local variable and its associated mutex can often be
+combined into a small class or struct, thereby allowing the annotation.
+
+Example:
+
+  class Foo {
+    Mutex mu_;
+    int p1_ ABSL_GUARDED_BY(mu_);
+    ...
+  };
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ABSL_LOCKS_EXCLUDED()</h3>
+    <pre><code>
+Documents the locks acquired in the body of the function. These locks
+cannot be held when calling this function (as Abseil's `Mutex` locks are
+non-reentrant).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ABSL_LOCK_RETURNED()</h3>
+    <pre><code>
+Documents a function that returns a mutex without acquiring it.  For example,
+a public getter method that returns a pointer to a private mutex should
+be annotated with ABSL_LOCK_RETURNED.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ABSL_PT_GUARDED_BY()</h3>
+    <pre><code>
+Documents if the memory location pointed to by a pointer should be guarded
+by a mutex when dereferencing the pointer.
+
+Example:
+  class Foo {
+    Mutex mu_;
+    int *p1_ ABSL_PT_GUARDED_BY(mu_);
+    ...
+  };
+
+Note that a pointer variable to a shared memory location could itself be a
+shared variable.
+
+Example:
+
+  // `q_`, guarded by `mu1_`, points to a shared memory location that is
+  // guarded by `mu2_`:
+  int *q_ ABSL_GUARDED_BY(mu1_) ABSL_PT_GUARDED_BY(mu2_);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ABSL_SHARED_LOCK_FUNCTION()</h3>
+    <pre><code>
+Documents functions that acquire a shared (reader) lock in the body of a
+function, and do not release it.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ABSL_UNLOCK_FUNCTION()</h3>
+    <pre><code>
+Documents functions that expect a lock to be held on entry to the function,
+and release it in the body of the function.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>debugging/failure_signal_handler.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/debugging/failure_signal_handler.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>InstallFailureSignalHandler()</h3>
+    <pre><code>
+Installs a signal handler for the common failure signals `SIGSEGV`, `SIGILL`,
+`SIGFPE`, `SIGABRT`, `SIGTERM`, `SIGBUG`, and `SIGTRAP` (provided they exist
+on the given platform). The failure signal handler dumps program failure data
+useful for debugging in an unspecified format to stderr. This data may
+include the program counter, a stacktrace, and register information on some
+systems; do not rely on an exact format for the output, as it is subject to
+change.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>debugging/leak_check.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/debugging/leak_check.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>DoIgnoreLeak()</h3>
+    <pre><code>
+Implements `IgnoreLeak()` below. This function should usually
+not be called directly; calling `IgnoreLeak()` is preferred.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>HaveLeakSanitizer()</h3>
+    <pre><code>
+Returns true if a leak-checking sanitizer (either ASan or standalone LSan) is
+currently built into this target.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>IgnoreLeak()</h3>
+    <pre><code>
+Instruct the leak sanitizer to ignore leak warnings on the object referenced
+by the passed pointer, as well as all heap objects transitively referenced
+by it. The passed object pointer can point to either the beginning of the
+object or anywhere within it.
+
+Example:
+
+  static T* obj = IgnoreLeak(new T(...));
+
+If the passed `ptr` does not point to an actively allocated object at the
+time `IgnoreLeak()` is called, the call is a no-op; if it is actively
+allocated, the object must not get deallocated later.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>RegisterLivePointers()</h3>
+    <pre><code>
+Registers `ptr[0,size-1]` as pointers to memory that is still actively being
+referenced and for which leak checking should be ignored. This function is
+useful if you store pointers in mapped memory, for memory ranges that we know
+are correct but for which normal analysis would flag as leaked code.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>UnRegisterLivePointers()</h3>
+    <pre><code>
+Deregisters the pointers previously marked as active in
+`RegisterLivePointers()`, enabling leak checking of those pointers.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>debugging/stacktrace.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/debugging/stacktrace.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>DefaultStackUnwinder()</h3>
+    <pre><code>
+Records program counter values of up to `max_depth` frames, skipping the most
+recent `skip_count` stack frames, and stores their corresponding values in
+`pcs`. (Note that the frame generated for this call itself is also skipped.)
+This function acts as a generic stack-unwinder; prefer usage of the more
+specific `GetStack{Trace,Frames}{,WithContext}()` functions above.
+
+If you have set your own stack unwinder (with the `SetStackUnwinder()`
+function above, you can still get the default stack unwinder by calling
+`DefaultStackUnwinder()`, which will ignore any previously set stack unwinder
+and use the default one instead.
+
+Because this function is generic, only `pcs` is guaranteed to be non-null
+upon return. It is legal for `sizes`, `uc`, and `min_dropped_frames` to all
+be null when called.
+
+The semantics are the same as the corresponding `GetStack*()` function in the
+case where `absl::SetStackUnwinder()` was never called. Equivalents are:
+
+                      null sizes         |        non-nullptr sizes
+            |==========================================================|
+    null uc | GetStackTrace()            | GetStackFrames()            |
+non-null uc | GetStackTraceWithContext() | GetStackFramesWithContext() |
+            |==========================================================|
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>GetStackFrames()</h3>
+    <pre><code>
+Records program counter values for up to `max_depth` frames, skipping the
+most recent `skip_count` stack frames, and stores their corresponding values
+and sizes in `results` and `sizes` buffers. (Note that the frame generated
+for the `absl::GetStackFrames()` routine itself is also skipped.)
+routine itself.
+
+Example:
+
+     main() { foo(); }
+     foo() { bar(); }
+     bar() {
+       void* result[10];
+       int sizes[10];
+       int depth = absl::GetStackFrames(result, sizes, 10, 1);
+     }
+
+The current stack frame would consist of three function calls: `bar()`,
+`foo()`, and then `main()`; however, since the `GetStackFrames()` call sets
+`skip_count` to `1`, it will skip the frame for `bar()`, the most recently
+invoked function call. It will therefore return two program counters and will
+produce values that map to the following function calls:
+
+     result[0]       foo()
+     result[1]       main()
+
+(Note: in practice, a few more entries after `main()` may be added to account
+for startup processes.)
+
+Corresponding stack frame sizes will also be recorded:
+
+   sizes[0]       16
+   sizes[1]       16
+
+(Stack frame sizes of `16` above are just for illustration purposes.)
+
+Stack frame sizes of 0 or less indicate that those frame sizes couldn't
+be identified.
+
+This routine may return fewer stack frame entries than are
+available. Also note that `result` and `sizes` must both be non-null.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>GetStackFramesWithContext()</h3>
+    <pre><code>
+Records program counter values obtained from a signal handler. Records
+program counter values for up to `max_depth` frames, skipping the most recent
+`skip_count` stack frames, and stores their corresponding values and sizes in
+`results` and `sizes` buffers. (Note that the frame generated for the
+`absl::GetStackFramesWithContext()` routine itself is also skipped.)
+
+The `uc` parameter, if non-null, should be a pointer to a `ucontext_t` value
+passed to a signal handler registered via the `sa_sigaction` field of a
+`sigaction` struct. (See
+http://man7.org/linux/man-pages/man2/sigaction.2.html.) The `uc` value may
+help a stack unwinder to provide a better stack trace under certain
+conditions. `uc` may safely be null.
+
+The `min_dropped_frames` output parameter, if non-null, points to the
+location to note any dropped stack frames, if any, due to buffer limitations
+or other reasons. (This value will be set to `0` if no frames were dropped.)
+The number of total stack frames is guaranteed to be &gt;= skip_count +
+max_depth + *min_dropped_frames.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>GetStackTrace()</h3>
+    <pre><code>
+Records program counter values for up to `max_depth` frames, skipping the
+most recent `skip_count` stack frames, and stores their corresponding values
+in `results`. Note that this function is similar to `absl::GetStackFrames()`
+except that it returns the stack trace only, and not stack frame sizes.
+
+Example:
+
+     main() { foo(); }
+     foo() { bar(); }
+     bar() {
+       void* result[10];
+       int depth = absl::GetStackTrace(result, 10, 1);
+     }
+
+This produces:
+
+     result[0]       foo
+     result[1]       main
+          ....       ...
+
+`result` must not be null.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>GetStackTraceWithContext()</h3>
+    <pre><code>
+Records program counter values obtained from a signal handler. Records
+program counter values for up to `max_depth` frames, skipping the most recent
+`skip_count` stack frames, and stores their corresponding values in
+`results`. (Note that the frame generated for the
+`absl::GetStackFramesWithContext()` routine itself is also skipped.)
+
+The `uc` parameter, if non-null, should be a pointer to a `ucontext_t` value
+passed to a signal handler registered via the `sa_sigaction` field of a
+`sigaction` struct. (See
+http://man7.org/linux/man-pages/man2/sigaction.2.html.) The `uc` value may
+help a stack unwinder to provide a better stack trace under certain
+conditions. `uc` may safely be null.
+
+The `min_dropped_frames` output parameter, if non-null, points to the
+location to note any dropped stack frames, if any, due to buffer limitations
+or other reasons. (This value will be set to `0` if no frames were dropped.)
+The number of total stack frames is guaranteed to be &gt;= skip_count +
+max_depth + *min_dropped_frames.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SetStackUnwinder()</h3>
+    <pre><code>
+Provides a custom function for unwinding stack frames that will be used in
+place of the default stack unwinder when invoking the static
+GetStack{Frames,Trace}{,WithContext}() functions above.
+
+The arguments passed to the unwinder function will match the
+arguments passed to `absl::GetStackFramesWithContext()` except that sizes
+will be non-null iff the caller is interested in frame sizes.
+
+If unwinder is set to null, we revert to the default stack-tracing behavior.
+
+*****************************************************************************
+WARNING
+*****************************************************************************
+
+absl::SetStackUnwinder is not suitable for general purpose use.  It is
+provided for custom runtimes.
+Some things to watch out for when calling `absl::SetStackUnwinder()`:
+
+(a) The unwinder may be called from within signal handlers and
+therefore must be async-signal-safe.
+
+(b) Even after a custom stack unwinder has been unregistered, other
+threads may still be in the process of using that unwinder.
+Therefore do not clean up any state that may be needed by an old
+unwinder.
+*****************************************************************************
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>debugging/symbolize.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/debugging/symbolize.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>InitializeSymbolizer()</h3>
+    <pre><code>
+Initializes the program counter symbolizer, given the path of the program
+(typically obtained through `main()`s `argv[0]`). The Abseil symbolizer
+allows you to read program counters (instruction pointer values) using their
+human-readable names within output such as stack traces.
+
+Example:
+
+int main(int argc, char *argv[]) {
+  absl::InitializeSymbolizer(argv[0]);
+  // Now you can use the symbolizer
+}
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Symbolize()</h3>
+    <pre><code>
+Symbolizes a program counter (instruction pointer value) `pc` and, on
+success, writes the name to `out`. The symbol name is demangled, if possible.
+Note that the symbolized name may be truncated and will be NUL-terminated.
+Demangling is supported for symbols generated by GCC 3.x or newer). Returns
+`false` on failure.
+
+Example:
+
+  // Print a program counter and its symbol name.
+  static void DumpPCAndSymbol(void *pc) {
+    char tmp[1024];
+    const char *symbol = "(unknown)";
+    if (absl::Symbolize(pc, tmp, sizeof(tmp))) {
+      symbol = tmp;
+    }
+    absl::PrintF("%*p  %s\n", pc, symbol);
+ }
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>flags/declare.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/flags/declare.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>ABSL_DECLARE_FLAG()</h3>
+    <pre><code>
+This macro is a convenience for declaring use of an `absl::Flag` within a
+translation unit. This macro should be used within a header file to
+declare usage of the flag within any .cc file including that header file.
+
+The ABSL_DECLARE_FLAG(type, name) macro expands to:
+
+  extern absl::Flag&lt;type&gt; FLAGS_name;
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>flags/flag.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/flags/flag.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>ABSL_FLAG()</h3>
+    <pre><code>
+This macro defines an `absl::Flag&lt;T&gt;` instance of a specified type `T`:
+
+  ABSL_FLAG(T, name, default_value, help);
+
+where:
+
+  * `T` is a supported flag type (See below),
+  * `name` designates the name of the flag (as a global variable
+    `FLAGS_name`),
+  * `default_value` is an expression holding the default value for this flag
+    (which must be implicitly convertible to `T`),
+  * `help` is the help text, which can also be an expression.
+
+This macro expands to a flag named 'FLAGS_name' of type 'T':
+
+  absl::Flag&lt;T&gt; FLAGS_name = ...;
+
+Note that all such instances are created as global variables.
+
+For `ABSL_FLAG()` values that you wish to expose to other translation units,
+it is recommended to define those flags within the `.cc` file associated with
+the header where the flag is declared.
+
+Note: do not construct objects of type `absl::Flag&lt;T&gt;` directly. Only use the
+`ABSL_FLAG()` macro for such construction.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>GetFlag()</h3>
+    <pre><code>
+Returns the value (of type `T`) of an `absl::Flag&lt;T&gt;` instance, by value. Do
+not construct an `absl::Flag&lt;T&gt;` directly and call `absl::GetFlag()`;
+instead, refer to flag's constructed variable name (e.g. `FLAGS_name`).
+Because this function returns by value and not by reference, it is
+thread-safe, but note that the operation may be expensive; as a result, avoid
+`absl::GetFlag()` within any tight loops.
+
+Example:
+
+  // FLAGS_count is a Flag of type `int`
+  int my_count = absl::GetFlag(FLAGS_count);
+
+  // FLAGS_firstname is a Flag of type `std::string`
+  std::string first_name = absl::GetFlag(FLAGS_firstname);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SetFlag()</h3>
+    <pre><code>
+Sets the value of an `absl::Flag` to the value `v`. Do not construct an
+`absl::Flag&lt;T&gt;` directly and call `absl::SetFlag()`; instead, use the
+flag's variable name (e.g. `FLAGS_name`). This function is
+thread-safe, but is potentially expensive. Avoid setting flags in general,
+but especially within performance-critical code.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>flags/marshalling.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/flags/marshalling.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>ParseFlag()</h3>
+    <pre><code>
+Parses a string value into a flag value of type `T`. Do not add overloads of
+this function for your type directly; instead, add an `AbslParseFlag()`
+free function as documented above.
+
+Some implementations of `AbslParseFlag()` for types which consist of other,
+constituent types which already have Abseil flag support, may need to call
+`absl::ParseFlag()` on those consituent string values. (See above.)
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>UnparseFlag()</h3>
+    <pre><code>
+Unparses a flag value of type `T` into a string value. Do not add overloads
+of this function for your type directly; instead, add an `AbslUnparseFlag()`
+free function as documented above.
+
+Some implementations of `AbslUnparseFlag()` for types which consist of other,
+constituent types which already have Abseil flag support, may want to call
+`absl::UnparseFlag()` on those constituent types. (See above.)
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>flags/parse.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/flags/parse.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>ParseCommandLine()</h3>
+    <pre><code>
+Parses the set of command-line arguments passed in the `argc` (argument
+count) and `argv[]` (argument vector) parameters from `main()`, assigning
+values to any defined Abseil flags. (Any arguments passed after the
+flag-terminating delimiter (`--`) are treated as positional arguments and
+ignored.)
+
+Any command-line flags (and arguments to those flags) are parsed into Abseil
+Flag values, if those flags are defined. Any undefined flags will either
+return an error, or be ignored if that flag is designated using `undefok` to
+indicate "undefined is OK."
+
+Any command-line positional arguments not part of any command-line flag (or
+arguments to a flag) are returned in a vector, with the program invocation
+name at position 0 of that vector. (Note that this includes positional
+arguments after the flag-terminating delimiter `--`.)
+
+After all flags and flag arguments are parsed, this function looks for any
+built-in usage flags (e.g. `--help`), and if any were specified, it reports
+help messages and then exits the program.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>flags/usage_config.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/flags/usage_config.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>SetFlagsUsageConfig()</h3>
+    <pre><code>
+Sets the usage reporting configuration callbacks. If any of the callbacks are
+not set in usage_config instance, then the default value of the callback is
+used.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>hash/internal/hash.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/hash/internal/hash.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>Seed()</h3>
+    <pre><code>
+A non-deterministic seed.
+
+The current purpose of this seed is to generate non-deterministic results
+and prevent having users depend on the particular hash values.
+It is not meant as a security feature right now, but it leaves the door
+open to upgrade it to a true per-process random seed. A true random seed
+costs more and we don't need to pay for that right now.
+
+On platforms with ASLR, we take advantage of it to make a per-process
+random value.
+See https://en.wikipedia.org/wiki/Address_space_layout_randomization
+
+On other platforms this is still going to be non-deterministic but most
+probably per-build and not per-process.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>hash_bytes()</h3>
+    <pre><code>
+Convenience function that combines `hash_state` with the byte representation
+of `value`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>hash_range_or_bytes()</h3>
+    <pre><code>
+
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>hash_tuple()</h3>
+    <pre><code>
+Helper function for hashing a tuple. The third argument should
+be an index_sequence running from 0 to tuple_size&lt;Tuple&gt; - 1.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>is_hashable()</h3>
+    <pre><code>
+Trait class which returns true if T is hashable by the absl::Hash framework.
+Used for the AbslHashValue implementations for composite types below.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>memory/memory.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/memory/memory.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>RawPtr()</h3>
+    <pre><code>
+-----------------------------------------------------------------------------
+
+Extracts the raw pointer from a pointer-like value `ptr`. `absl::RawPtr` is
+useful within templates that need to handle a complement of raw pointers,
+`std::nullptr_t`, and smart pointers.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ShareUniquePtr()</h3>
+    <pre><code>
+-----------------------------------------------------------------------------
+
+Adopts a `std::unique_ptr` rvalue and returns a `std::shared_ptr` of deduced
+type. Ownership (if any) of the held value is transferred to the returned
+shared pointer.
+
+Example:
+
+    auto up = absl::make_unique&lt;int&gt;(10);
+    auto sp = absl::ShareUniquePtr(std::move(up));  // shared_ptr&lt;int&gt;
+    CHECK_EQ(*sp, 10);
+    CHECK(up == nullptr);
+
+Note that this conversion is correct even when T is an array type, and more
+generally it works for *any* deleter of the `unique_ptr` (single-object
+deleter, array deleter, or any custom deleter), since the deleter is adopted
+by the shared pointer as well. The deleter is copied (unless it is a
+reference).
+
+Implements the resolution of [LWG 2415](http://wg21.link/lwg2415), by which a
+null shared pointer does not attempt to call the deleter.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>WeakenPtr()</h3>
+    <pre><code>
+-----------------------------------------------------------------------------
+
+Creates a weak pointer associated with a given shared pointer. The returned
+value is a `std::weak_ptr` of deduced type.
+
+Example:
+
+   auto sp = std::make_shared&lt;int&gt;(10);
+   auto wp = absl::WeakenPtr(sp);
+   CHECK_EQ(sp.get(), wp.lock().get());
+   sp.reset();
+   CHECK(wp.lock() == nullptr);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>WrapUnique()</h3>
+    <pre><code>
+-----------------------------------------------------------------------------
+
+Adopts ownership from a raw pointer and transfers it to the returned
+`std::unique_ptr`, whose type is deduced. Because of this deduction, *do not*
+specify the template type `T` when calling `WrapUnique`.
+
+Example:
+  X* NewX(int, int);
+  auto x = WrapUnique(NewX(1, 2));  // 'x' is std::unique_ptr&lt;X&gt;.
+
+Do not call WrapUnique with an explicit type, as in
+`WrapUnique&lt;X&gt;(NewX(1, 2))`.  The purpose of WrapUnique is to automatically
+deduce the pointer type. If you wish to make the type explicit, just use
+`std::unique_ptr` directly.
+
+  auto x = std::unique_ptr&lt;X&gt;(NewX(1, 2));
+                 - or -
+  std::unique_ptr&lt;X&gt; x(NewX(1, 2));
+
+While `absl::WrapUnique` is useful for capturing the output of a raw
+pointer factory, prefer 'absl::make_unique&lt;T&gt;(args...)' over
+'absl::WrapUnique(new T(args...))'.
+
+  auto x = WrapUnique(new X(1, 2));  // works, but nonideal.
+  auto x = make_unique&lt;X&gt;(1, 2);     // safer, standard, avoids raw 'new'.
+
+Note that `absl::WrapUnique(p)` is valid only if `delete p` is a valid
+expression. In particular, `absl::WrapUnique()` cannot wrap pointers to
+arrays, functions or void, and it must not be used to capture pointers
+obtained from array-new expressions (even though that would compile!).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>make_unique&lt;T&gt;()</h3>
+    <pre><code>
+-----------------------------------------------------------------------------
+
+Creates a `std::unique_ptr&lt;&gt;`, while avoiding issues creating temporaries
+during the construction process. `absl::make_unique&lt;&gt;` also avoids redundant
+type declarations, by avoiding the need to explicitly use the `new` operator.
+
+This implementation of `absl::make_unique&lt;&gt;` is designed for C++11 code and
+will be replaced in C++14 by the equivalent `std::make_unique&lt;&gt;` abstraction.
+`absl::make_unique&lt;&gt;` is designed to be 100% compatible with
+`std::make_unique&lt;&gt;` so that the eventual migration will involve a simple
+rename operation.
+
+For more background on why `std::unique_ptr&lt;T&gt;(new T(a,b))` is problematic,
+see Herb Sutter's explanation on
+(Exception-Safe Function Calls)[https://herbsutter.com/gotw/_102/].
+(In general, reviewers should treat `new T(a,b)` with scrutiny.)
+
+Example usage:
+
+   auto p = make_unique&lt;X&gt;(args...);  // 'p'  is a std::unique_ptr&lt;X&gt;
+   auto pa = make_unique&lt;X[]&gt;(5);     // 'pa' is a std::unique_ptr&lt;X[]&gt;
+
+Three overloads of `absl::make_unique` are required:
+
+  - For non-array T:
+
+      Allocates a T with `new T(std::forward&lt;Args&gt; args...)`,
+      forwarding all `args` to T's constructor.
+      Returns a `std::unique_ptr&lt;T&gt;` owning that object.
+
+  - For an array of unknown bounds T[]:
+
+      `absl::make_unique&lt;&gt;` will allocate an array T of type U[] with
+      `new U[n]()` and return a `std::unique_ptr&lt;U[]&gt;` owning that array.
+
+      Note that 'U[n]()' is different from 'U[n]', and elements will be
+      value-initialized. Note as well that `std::unique_ptr` will perform its
+      own destruction of the array elements upon leaving scope, even though
+      the array [] does not have a default destructor.
+
+      NOTE: an array of unknown bounds T[] may still be (and often will be)
+      initialized to have a size, and will still use this overload. E.g:
+
+        auto my_array = absl::make_unique&lt;int[]&gt;(10);
+
+  - For an array of known bounds T[N]:
+
+      `absl::make_unique&lt;&gt;` is deleted (like with `std::make_unique&lt;&gt;`) as
+      this overload is not useful.
+
+      NOTE: an array of known bounds T[N] is not considered a useful
+      construction, and may cause undefined behavior in templates. E.g:
+
+        auto my_array = absl::make_unique&lt;int[10]&gt;();
+
+      In those cases, of course, you can still use the overload above and
+      simply initialize it to its desired size:
+
+        auto my_array = absl::make_unique&lt;int[]&gt;(10);
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>meta/type_traits.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/meta/type_traits.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>Swap()</h3>
+    <pre><code>
+Performs the swap idiom from a namespace where valid candidates may only be
+found in `std` or via ADL.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>is_trivially_copy_assignable()</h3>
+    <pre><code>
+Determines whether the passed type `T` is trivially copy assignable.
+
+This metafunction is designed to be a drop-in replacement for the C++11
+`std::is_trivially_copy_assignable()` metafunction for platforms that have
+incomplete C++11 support (such as libstdc++ 4.x). On any platforms that do
+fully support C++11, we check whether this yields the same result as the std
+implementation.
+
+NOTE: `is_assignable&lt;T, U&gt;::value` is `true` if the expression
+`declval&lt;T&gt;() = declval&lt;U&gt;()` is well-formed when treated as an unevaluated
+operand. `is_trivially_assignable&lt;T, U&gt;` requires the assignment to call no
+operation that is not trivial. `is_trivially_copy_assignable&lt;T&gt;` is simply
+`is_trivially_assignable&lt;T&, const T&&gt;`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>is_trivially_copy_constructible()</h3>
+    <pre><code>
+Determines whether the passed type `T` is trivially copy constructible.
+
+This metafunction is designed to be a drop-in replacement for the C++11
+`std::is_trivially_copy_constructible()` metafunction for platforms that have
+incomplete C++11 support (such as libstdc++ 4.x). On any platforms that do
+fully support C++11, we check whether this yields the same result as the std
+implementation.
+
+NOTE: `T obj(declval&lt;const T&&gt;());` needs to be well-formed and not call any
+nontrivial operation.  Nontrivially destructible types will cause the
+expression to be nontrivial.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>is_trivially_copyable()</h3>
+    <pre><code>
+Determines whether the passed type `T` is trivially copyable.
+
+This metafunction is designed to be a drop-in replacement for the C++11
+`std::is_trivially_copyable()` metafunction for platforms that have
+incomplete C++11 support (such as libstdc++ 4.x). We use the C++17 definition
+of TriviallyCopyable.
+
+NOTE: `is_trivially_copyable&lt;T&gt;::value` is `true` if all of T's copy/move
+constructors/assignment operators are trivial or deleted, T has at least
+one non-deleted copy/move constructor/assignment operator, and T is trivially
+destructible. Arrays of trivially copyable types are trivially copyable.
+
+We expose this metafunction only for internal use within absl.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>is_trivially_default_constructible()</h3>
+    <pre><code>
+Determines whether the passed type `T` is trivially default constructible.
+
+This metafunction is designed to be a drop-in replacement for the C++11
+`std::is_trivially_default_constructible()` metafunction for platforms that
+have incomplete C++11 support (such as libstdc++ 4.x). On any platforms that
+do fully support C++11, we check whether this yields the same result as the
+std implementation.
+
+NOTE: according to the C++ standard, Section: 20.15.4.3 [meta.unary.prop]
+"The predicate condition for a template specialization is_constructible&lt;T,
+Args...&gt; shall be satisfied if and only if the following variable
+definition would be well-formed for some invented variable t:
+
+T t(declval&lt;Args&gt;()...);
+
+is_trivially_constructible&lt;T, Args...&gt; additionally requires that the
+variable definition does not call any operation that is not trivial.
+For the purposes of this check, the call to std::declval is considered
+trivial."
+
+Notes from https://en.cppreference.com/w/cpp/types/is_constructible:
+In many implementations, is_nothrow_constructible also checks if the
+destructor throws because it is effectively noexcept(T(arg)). Same
+applies to is_trivially_constructible, which, in these implementations, also
+requires that the destructor is trivial.
+GCC bug 51452: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=51452
+LWG issue 2116: http://cplusplus.github.io/LWG/lwg-active.html#2116.
+
+"T obj();" need to be well-formed and not call any nontrivial operation.
+Nontrivially destructible types will cause the expression to be nontrivial.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>is_trivially_destructible()</h3>
+    <pre><code>
+Determines whether the passed type `T` is trivially destructable.
+
+This metafunction is designed to be a drop-in replacement for the C++11
+`std::is_trivially_destructible()` metafunction for platforms that have
+incomplete C++11 support (such as libstdc++ 4.x). On any platforms that do
+fully support C++11, we check whether this yields the same result as the std
+implementation.
+
+NOTE: the extensions (__has_trivial_xxx) are implemented in gcc (version &gt;=
+4.3) and clang. Since we are supporting libstdc++ &gt; 4.7, they should always
+be present. These  extensions are documented at
+https://gcc.gnu.org/onlinedocs/gcc/Type-Traits.html#Type-Traits.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>is_trivially_move_assignable()</h3>
+    <pre><code>
+Determines whether the passed type `T` is trivially move assignable.
+
+This metafunction is designed to be a drop-in replacement for the C++11
+`std::is_trivially_move_assignable()` metafunction for platforms that have
+incomplete C++11 support (such as libstdc++ 4.x). On any platforms that do
+fully support C++11, we check whether this yields the same result as the std
+implementation.
+
+NOTE: `is_assignable&lt;T, U&gt;::value` is `true` if the expression
+`declval&lt;T&gt;() = declval&lt;U&gt;()` is well-formed when treated as an unevaluated
+operand. `is_trivially_assignable&lt;T, U&gt;` requires the assignment to call no
+operation that is not trivial. `is_trivially_copy_assignable&lt;T&gt;` is simply
+`is_trivially_assignable&lt;T&, T&gt;`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>is_trivially_move_constructible()</h3>
+    <pre><code>
+Determines whether the passed type `T` is trivially move constructible.
+
+This metafunction is designed to be a drop-in replacement for the C++11
+`std::is_trivially_move_constructible()` metafunction for platforms that have
+incomplete C++11 support (such as libstdc++ 4.x). On any platforms that do
+fully support C++11, we check whether this yields the same result as the std
+implementation.
+
+NOTE: `T obj(declval&lt;T&gt;());` needs to be well-formed and not call any
+nontrivial operation.  Nontrivially destructible types will cause the
+expression to be nontrivial.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>void_t()</h3>
+    <pre><code>
+Ignores the type of any its arguments and returns `void`. In general, this
+metafunction allows you to create a general case that maps to `void` while
+allowing specializations that map to specific types.
+
+This metafunction is designed to be a drop-in replacement for the C++17
+`std::void_t` metafunction.
+
+NOTE: `absl::void_t` does not use the standard-specified implementation so
+that it can remain compatible with gcc &lt; 5.1. This can introduce slightly
+different behavior, such as when ordering partial specializations.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>numeric/int128.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/numeric/int128.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>MakeUInt128()</h3>
+    <pre><code>
+Constructs a `uint128` numeric value from two 64-bit unsigned integers.
+Note that this factory function is the only way to construct a `uint128`
+from integer values greater than 2^64.
+
+Example:
+
+  absl::uint128 big = absl::MakeUint128(1, 0);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Uint128High64()</h3>
+    <pre><code>
+Returns the higher 64-bit value of a `uint128` value.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Uint128Low64()</h3>
+    <pre><code>
+Returns the lower 64-bit value of a `uint128` value.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Uint128Max()</h3>
+    <pre><code>
+Returns the highest value for a 128-bit unsigned integer.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/ascii.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/ascii.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>ascii_isalnum()</h3>
+    <pre><code>
+Determines whether the given character is an alphanumeric character.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_isalpha()</h3>
+    <pre><code>
+Determines whether the given character is an alphabetic character.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_isascii()</h3>
+    <pre><code>
+Determines whether the given character is ASCII.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_isblank()</h3>
+    <pre><code>
+Determines whether the given character is a blank character (tab or space).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_iscntrl()</h3>
+    <pre><code>
+Determines whether the given character is a control character.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_isdigit()</h3>
+    <pre><code>
+Determines whether the given character can be represented as a decimal
+digit character (i.e. {0-9}).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_isgraph()</h3>
+    <pre><code>
+Determines whether the given character has a graphical representation.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_islower()</h3>
+    <pre><code>
+Determines whether the given character is lowercase.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_isprint()</h3>
+    <pre><code>
+Determines whether the given character is printable, including whitespace.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_ispunct()</h3>
+    <pre><code>
+Determines whether the given character is a punctuation character.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_isspace()</h3>
+    <pre><code>
+Determines whether the given character is a whitespace character (space,
+tab, vertical tab, formfeed, linefeed, or carriage return).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_isupper()</h3>
+    <pre><code>
+Determines whether the given character is uppercase.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_isxdigit()</h3>
+    <pre><code>
+Determines whether the given character can be represented as a hexadecimal
+digit character (i.e. {0-9} or {A-F}).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_tolower()</h3>
+    <pre><code>
+Returns an ASCII character, converting to lowercase if uppercase is
+passed. Note that character values &gt; 127 are simply returned.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ascii_toupper()</h3>
+    <pre><code>
+Returns the ASCII character, converting to upper-case if lower-case is
+passed. Note that characters values &gt; 127 are simply returned.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/escaping.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/escaping.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>Base64Escape()</h3>
+    <pre><code>
+Encodes a `src` string into a base64-encoded string, with padding characters.
+This function conforms with RFC 4648 section 4 (base64).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Base64Unescape()</h3>
+    <pre><code>
+Converts a `src` string encoded in Base64 to its binary equivalent, writing
+it to a `dest` buffer, returning `true` on success. If `src` contains invalid
+characters, `dest` is cleared and returns `false`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>BytesToHexString()</h3>
+    <pre><code>
+Converts binary data into an ASCII text string, returning a string of size
+`2*from.size()`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>CEscape()</h3>
+    <pre><code>
+Escapes a 'src' string using C-style escapes sequences
+(https://en.cppreference.com/w/cpp/language/escape), escaping other
+non-printable/non-whitespace bytes as octal sequences (e.g. "\377").
+
+Example:
+
+  std::string s = "foo\rbar\tbaz\010\011\012\013\014\x0d\n";
+  std::string escaped_s = absl::CEscape(s);
+  EXPECT_EQ(escaped_s, "foo\\rbar\\tbaz\\010\\t\\n\\013\\014\\r\\n");
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>CHexEscape()</h3>
+    <pre><code>
+Escapes a 'src' string using C-style escape sequences, escaping
+other non-printable/non-whitespace bytes as hexadecimal sequences (e.g.
+"\xFF").
+
+Example:
+
+  std::string s = "foo\rbar\tbaz\010\011\012\013\014\x0d\n";
+  std::string escaped_s = absl::CHexEscape(s);
+  EXPECT_EQ(escaped_s, "foo\\rbar\\tbaz\\x08\\t\\n\\x0b\\x0c\\r\\n");
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>CUnescape()</h3>
+    <pre><code>
+Unescapes a `source` string and copies it into `dest`, rewriting C-style
+escape sequences (https://en.cppreference.com/w/cpp/language/escape) into
+their proper code point equivalents, returning `true` if successful.
+
+The following unescape sequences can be handled:
+
+  * ASCII escape sequences ('\n','\r','\\', etc.) to their ASCII equivalents
+  * Octal escape sequences ('\nnn') to byte nnn. The unescaped value must
+    resolve to a single byte or an error will occur. E.g. values greater than
+    0xff will produce an error.
+  * Hexadecimal escape sequences ('\xnn') to byte nn. While an arbitrary
+    number of following digits are allowed, the unescaped value must resolve
+    to a single byte or an error will occur. E.g. '\x0045' is equivalent to
+    '\x45', but '\x1234' will produce an error.
+  * Unicode escape sequences ('\unnnn' for exactly four hex digits or
+    '\Unnnnnnnn' for exactly eight hex digits, which will be encoded in
+    UTF-8. (E.g., `\u2019` unescapes to the three bytes 0xE2, 0x80, and
+    0x99).
+
+If any errors are encountered, this function returns `false`, leaving the
+`dest` output parameter in an unspecified state, and stores the first
+encountered error in `error`. To disable error reporting, set `error` to
+`nullptr` or use the overload with no error reporting below.
+
+Example:
+
+  std::string s = "foo\\rbar\\nbaz\\t";
+  std::string unescaped_s;
+  if (!absl::CUnescape(s, &unescaped_s) {
+    ...
+  }
+  EXPECT_EQ(unescaped_s, "foo\rbar\nbaz\t");
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>HexStringToBytes()</h3>
+    <pre><code>
+Converts an ASCII hex string into bytes, returning binary data of length
+`from.size()/2`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Utf8SafeCEscape()</h3>
+    <pre><code>
+Escapes a 'src' string using C-style escape sequences, escaping bytes as
+octal sequences, and passing through UTF-8 characters without conversion.
+I.e., when encountering any bytes with their high bit set, this function
+will not escape those values, whether or not they are valid UTF-8.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Utf8SafeCHexEscape()</h3>
+    <pre><code>
+Escapes a 'src' string using C-style escape sequences, escaping bytes as
+hexadecimal sequences, and passing through UTF-8 characters without
+conversion.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>WebSafeBase64Escape()</h3>
+    <pre><code>
+Encodes a `src` string into a base64-like string, using '-' instead of '+'
+and '_' instead of '/', and without padding. This function conforms with RFC
+4648 section 5 (base64url).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>WebSafeBase64Unescape()</h3>
+    <pre><code>
+Converts a `src` string encoded in Base64 to its binary equivalent, writing
+it to a `dest` buffer, but using '-' instead of '+', and '_' instead of '/'.
+If `src` contains invalid characters, `dest` is cleared and returns `false`.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/match.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/match.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>EndsWith()</h3>
+    <pre><code>
+Returns whether a given string `text` ends with `suffix`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>EndsWithIgnoreCase()</h3>
+    <pre><code>
+Returns whether a given ASCII string `text` ends with `suffix`, ignoring
+case in the comparison.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>EqualsIgnoreCase()</h3>
+    <pre><code>
+Returns whether given ASCII strings `piece1` and `piece2` are equal, ignoring
+case in the comparison.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StartsWith()</h3>
+    <pre><code>
+Returns whether a given string `text` begins with `prefix`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StartsWithIgnoreCase()</h3>
+    <pre><code>
+Returns whether a given ASCII string `text` starts with `prefix`,
+ignoring case in the comparison.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StrContains()</h3>
+    <pre><code>
+Returns whether a given string `haystack` contains the substring `needle`.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/numbers.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/numbers.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>SimpleAtob()</h3>
+    <pre><code>
+Converts the given string into a boolean, returning `true` if successful.
+The following case-insensitive strings are interpreted as boolean `true`:
+"true", "t", "yes", "y", "1". The following case-insensitive strings
+are interpreted as boolean `false`: "false", "f", "no", "n", "0". If any
+errors are encountered, this function returns `false`, leaving `out` in an
+unspecified state.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SimpleAtod()</h3>
+    <pre><code>
+Converts the given string (optionally followed or preceded by ASCII
+whitespace) into a double, which may be rounded on overflow or underflow.
+See https://en.cppreference.com/w/c/string/byte/strtof for details about the
+allowed formats for `str`. If any errors are encountered, this function
+returns `false`, leaving `out` in an unspecified state.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SimpleAtof()</h3>
+    <pre><code>
+Converts the given string (optionally followed or preceded by ASCII
+whitespace) into a float, which may be rounded on overflow or underflow.
+See https://en.cppreference.com/w/c/string/byte/strtof for details about the
+allowed formats for `str`. If any errors are encountered, this function
+returns `false`, leaving `out` in an unspecified state.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SimpleAtoi()</h3>
+    <pre><code>
+Converts a string to an integer, using `safe_strto?()` functions for actual
+parsing, returning `true` if successful. The `safe_strto?()` functions apply
+strict checking; the string must be a base-10 integer, optionally followed or
+preceded by ASCII whitespace, with a value in the range of the corresponding
+integer type.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/str_cat.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/str_cat.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>StrAppend()</h3>
+    <pre><code>
+-----------------------------------------------------------------------------
+
+Appends a string or set of strings to an existing string, in a similar
+fashion to `StrCat()`.
+
+WARNING: `StrAppend(&str, a, b, c, ...)` requires that none of the
+a, b, c, parameters be a reference into str. For speed, `StrAppend()` does
+not try to check each of its input arguments to be sure that they are not
+a subset of the string being appended to. That is, while this will work:
+
+  std::string s = "foo";
+  s += s;
+
+This output is undefined:
+
+  std::string s = "foo";
+  StrAppend(&s, s);
+
+This output is undefined as well, since `absl::string_view` does not own its
+data:
+
+  std::string s = "foobar";
+  absl::string_view p = s;
+  StrAppend(&s, p);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StrCat()</h3>
+    <pre><code>
+-----------------------------------------------------------------------------
+
+Merges given strings or numbers, using no delimiter(s).
+
+`StrCat()` is designed to be the fastest possible way to construct a string
+out of a mix of raw C strings, string_views, strings, bool values,
+and numeric values.
+
+Don't use `StrCat()` for user-visible strings. The localization process
+works poorly on strings built up out of fragments.
+
+For clarity and performance, don't use `StrCat()` when appending to a
+string. Use `StrAppend()` instead. In particular, avoid using any of these
+(anti-)patterns:
+
+  str.append(StrCat(...))
+  str += StrCat(...)
+  str = StrCat(str, ...)
+
+The last case is the worst, with a potential to change a loop
+from a linear time operation with O(1) dynamic allocations into a
+quadratic time operation with O(n) dynamic allocations.
+
+See `StrAppend()` below for more information.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/str_format.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/str_format.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>FPrintF()</h3>
+    <pre><code>
+Writes to a file given a format string and zero or more arguments. This
+function is functionally equivalent to `std::fprintf()` (and type-safe);
+prefer `absl::FPrintF()` over `std::fprintf()`.
+
+Example:
+
+  std::string_view s = "Ulaanbaatar";
+  absl::FPrintF(stdout, "The capital of Mongolia is %s", s);
+
+  Outputs: "The capital of Mongolia is Ulaanbaatar"
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Format()</h3>
+    <pre><code>
+Writes a formatted string to an arbitrary sink object (implementing the
+`absl::FormatRawSink` interface), using a format string and zero or more
+additional arguments.
+
+By default, `std::string` and `std::ostream` are supported as destination
+objects.
+
+`absl::Format()` is a generic version of `absl::StrFormat(), for custom
+sinks. The format string, like format strings for `StrFormat()`, is checked
+at compile-time.
+
+On failure, this function returns `false` and the state of the sink is
+unspecified.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>FormatStreamed()</h3>
+    <pre><code>
+Takes a streamable argument and returns an object that can print it
+with '%s'. Allows printing of types that have an `operator&lt;&lt;` but no
+intrinsic type support within `StrFormat()` itself.
+
+Example:
+
+  absl::StrFormat("%s", absl::FormatStreamed(obj));
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>FormatUntyped()</h3>
+    <pre><code>
+Writes a formatted string to an arbitrary sink object (implementing the
+`absl::FormatRawSink` interface), using an `UntypedFormatSpec` and zero or
+more additional arguments.
+
+This function acts as the most generic formatting function in the
+`str_format` library. The caller provides a raw sink, an unchecked format
+string, and (usually) a runtime specified list of arguments; no compile-time
+checking of formatting is performed within this function. As a result, a
+caller should check the return value to verify that no error occurred.
+On failure, this function returns `false` and the state of the sink is
+unspecified.
+
+The arguments are provided in an `absl::Span&lt;const absl::FormatArg&gt;`.
+Each `absl::FormatArg` object binds to a single argument and keeps a
+reference to it. The values used to create the `FormatArg` objects must
+outlive this function call. (See `str_format_arg.h` for information on
+the `FormatArg` class.)_
+
+Example:
+
+  std::optional&lt;std::string&gt; FormatDynamic(
+      const std::string& in_format,
+      const vector&lt;std::string&gt;& in_args) {
+    std::string out;
+    std::vector&lt;absl::FormatArg&gt; args;
+    for (const auto& v : in_args) {
+      // It is important that 'v' is a reference to the objects in in_args.
+      // The values we pass to FormatArg must outlive the call to
+      // FormatUntyped.
+      args.emplace_back(v);
+    }
+    absl::UntypedFormatSpec format(in_format);
+    if (!absl::FormatUntyped(&out, format, args)) {
+      return std::nullopt;
+    }
+    return std::move(out);
+  }
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>PrintF()</h3>
+    <pre><code>
+Writes to stdout given a format string and zero or more arguments. This
+function is functionally equivalent to `std::printf()` (and type-safe);
+prefer `absl::PrintF()` over `std::printf()`.
+
+Example:
+
+  std::string_view s = "Ulaanbaatar";
+  absl::PrintF("The capital of Mongolia is %s", s);
+
+  Outputs: "The capital of Mongolia is Ulaanbaatar"
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SNPrintF()</h3>
+    <pre><code>
+Writes to a sized buffer given a format string and zero or more arguments.
+This function is functionally equivalent to `std::snprintf()` (and
+type-safe); prefer `absl::SNPrintF()` over `std::snprintf()`.
+
+Example:
+
+  std::string_view s = "Ulaanbaatar";
+  char output[128];
+  absl::SNPrintF(output, sizeof(output),
+                 "The capital of Mongolia is %s", s);
+
+  Post-condition: output == "The capital of Mongolia is Ulaanbaatar"
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StrAppendFormat()</h3>
+    <pre><code>
+Appends to a `dst` string given a format string, and zero or more additional
+arguments, returning `*dst` as a convenience for chaining purposes. Appends
+nothing in case of error (but possibly alters its capacity).
+
+Example:
+
+  std::string orig("For example PI is approximately ");
+  std::cout &lt;&lt; StrAppendFormat(&orig, "%12.6f", 3.14);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StrFormat()</h3>
+    <pre><code>
+Returns a `string` given a `printf()`-style format string and zero or more
+additional arguments. Use it as you would `sprintf()`. `StrFormat()` is the
+primary formatting function within the `str_format` library, and should be
+used in most cases where you need type-safe conversion of types into
+formatted strings.
+
+The format string generally consists of ordinary character data along with
+one or more format conversion specifiers (denoted by the `%` character).
+Ordinary character data is returned unchanged into the result string, while
+each conversion specification performs a type substitution from
+`StrFormat()`'s other arguments. See the comments for `FormatSpec` for full
+information on the makeup of this format string.
+
+Example:
+
+  std::string s = absl::StrFormat(
+      "Welcome to %s, Number %d!", "The Village", 6);
+  EXPECT_EQ("Welcome to The Village, Number 6!", s);
+
+Returns an empty string in case of error.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StreamFormat()</h3>
+    <pre><code>
+Writes to an output stream given a format string and zero or more arguments,
+generally in a manner that is more efficient than streaming the result of
+`absl:: StrFormat()`. The returned object must be streamed before the full
+expression ends.
+
+Example:
+
+  std::cout &lt;&lt; StreamFormat("%12.6f", 3.14);
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/str_join.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/str_join.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>AlphaNumFormatter()</h3>
+    <pre><code>
+Default formatter used if none is specified. Uses `absl::AlphaNum` to convert
+numeric arguments to strings.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StrJoin()</h3>
+    <pre><code>
+-----------------------------------------------------------------------------
+
+Joins a range of elements and returns the result as a std::string.
+`absl::StrJoin()` takes a range, a separator string to use between the
+elements joined, and an optional Formatter responsible for converting each
+argument in the range to a string.
+
+If omitted, the default `AlphaNumFormatter()` is called on the elements to be
+joined.
+
+Example 1:
+  // Joins a collection of strings. This pattern also works with a collection
+  // of `absl::string_view` or even `const char*`.
+  std::vector&lt;std::string&gt; v = {"foo", "bar", "baz"};
+  std::string s = absl::StrJoin(v, "-");
+  EXPECT_EQ("foo-bar-baz", s);
+
+Example 2:
+  // Joins the values in the given `std::initializer_list&lt;&gt;` specified using
+  // brace initialization. This pattern also works with an initializer_list
+  // of ints or `absl::string_view` -- any `AlphaNum`-compatible type.
+  std::string s = absl::StrJoin({"foo", "bar", "baz"}, "-");
+  EXPECT_EQ("foo-bar-baz", s);
+
+Example 3:
+  // Joins a collection of ints. This pattern also works with floats,
+  // doubles, int64s -- any `StrCat()`-compatible type.
+  std::vector&lt;int&gt; v = {1, 2, 3, -4};
+  std::string s = absl::StrJoin(v, "-");
+  EXPECT_EQ("1-2-3--4", s);
+
+Example 4:
+  // Joins a collection of pointer-to-int. By default, pointers are
+  // dereferenced and the pointee is formatted using the default format for
+  // that type; such dereferencing occurs for all levels of indirection, so
+  // this pattern works just as well for `std::vector&lt;int**&gt;` as for
+  // `std::vector&lt;int*&gt;`.
+  int x = 1, y = 2, z = 3;
+  std::vector&lt;int*&gt; v = {&x, &y, &z};
+  std::string s = absl::StrJoin(v, "-");
+  EXPECT_EQ("1-2-3", s);
+
+Example 5:
+  // Dereferencing of `std::unique_ptr&lt;&gt;` is also supported:
+  std::vector&lt;std::unique_ptr&lt;int&gt;&gt; v
+  v.emplace_back(new int(1));
+  v.emplace_back(new int(2));
+  v.emplace_back(new int(3));
+  std::string s = absl::StrJoin(v, "-");
+  EXPECT_EQ("1-2-3", s);
+
+Example 6:
+  // Joins a `std::map`, with each key-value pair separated by an equals
+  // sign. This pattern would also work with, say, a
+  // `std::vector&lt;std::pair&lt;&gt;&gt;`.
+  std::map&lt;std::string, int&gt; m = {
+      std::make_pair("a", 1),
+      std::make_pair("b", 2),
+      std::make_pair("c", 3)};
+  std::string s = absl::StrJoin(m, ",", absl::PairFormatter("="));
+  EXPECT_EQ("a=1,b=2,c=3", s);
+
+Example 7:
+  // These examples show how `absl::StrJoin()` handles a few common edge
+  // cases:
+  std::vector&lt;std::string&gt; v_empty;
+  EXPECT_EQ("", absl::StrJoin(v_empty, "-"));
+
+  std::vector&lt;std::string&gt; v_one_item = {"foo"};
+  EXPECT_EQ("foo", absl::StrJoin(v_one_item, "-"));
+
+  std::vector&lt;std::string&gt; v_empty_string = {""};
+  EXPECT_EQ("", absl::StrJoin(v_empty_string, "-"));
+
+  std::vector&lt;std::string&gt; v_one_item_empty_string = {"a", ""};
+  EXPECT_EQ("a-", absl::StrJoin(v_one_item_empty_string, "-"));
+
+  std::vector&lt;std::string&gt; v_two_empty_string = {"", ""};
+  EXPECT_EQ("-", absl::StrJoin(v_two_empty_string, "-"));
+
+Example 8:
+  // Joins a `std::tuple&lt;T...&gt;` of heterogeneous types, converting each to
+  // a std::string using the `absl::AlphaNum` class.
+  std::string s = absl::StrJoin(std::make_tuple(123, "abc", 0.456), "-");
+  EXPECT_EQ("123-abc-0.456", s);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StreamFormatter()</h3>
+    <pre><code>
+Formats its argument using the &lt;&lt; operator.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/str_replace.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/str_replace.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>StrReplaceAll()</h3>
+    <pre><code>
+Replaces character sequences within a given string with replacements provided
+within an initializer list of key/value pairs. Candidate replacements are
+considered in order as they occur within the string, with earlier matches
+taking precedence, and longer matches taking precedence for candidates
+starting at the same position in the string. Once a substitution is made, the
+replaced text is not considered for any further substitutions.
+
+Example:
+
+  std::string s = absl::StrReplaceAll(
+      "$who bought $count #Noun. Thanks $who!",
+      {{"$count", absl::StrCat(5)},
+       {"$who", "Bob"},
+       {"#Noun", "Apples"}});
+  EXPECT_EQ("Bob bought 5 Apples. Thanks Bob!", s);
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/str_split.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/str_split.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>AllowEmpty()</h3>
+    <pre><code>
+Always returns `true`, indicating that all strings--including empty
+strings--should be included in the split output. This predicate is not
+strictly needed because this is the default behavior of `StrSplit()`;
+however, it might be useful at some call sites to make the intent explicit.
+
+Example:
+
+ std::vector&lt;std::string&gt; v = absl::StrSplit(" a , ,,b,", ',', AllowEmpty());
+
+ // v[0] == " a ", v[1] == " ", v[2] == "", v[3] = "b", v[4] == ""
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>MaxSplits()</h3>
+    <pre><code>
+A delimiter that limits the number of matches which can occur to the passed
+`limit`. The last element in the returned collection will contain all
+remaining unsplit pieces, which may contain instances of the delimiter.
+The collection will contain at most `limit` + 1 elements.
+Example:
+
+  using absl::MaxSplits;
+  std::vector&lt;std::string&gt; v = absl::StrSplit("a,b,c", MaxSplits(',', 1));
+
+  // v[0] == "a", v[1] == "b,c"
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SkipEmpty()</h3>
+    <pre><code>
+Returns `false` if the given `absl::string_view` is empty, indicating that
+`StrSplit()` should omit the empty string.
+
+Example:
+
+  std::vector&lt;std::string&gt; v = absl::StrSplit(",a,,b,", ',', SkipEmpty());
+
+  // v[0] == "a", v[1] == "b"
+
+Note: `SkipEmpty()` does not consider a string containing only whitespace
+to be empty. To skip such whitespace as well, use the `SkipWhitespace()`
+predicate.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SkipWhitespace()</h3>
+    <pre><code>
+Returns `false` if the given `absl::string_view` is empty *or* contains only
+whitespace, indicating that `StrSplit()` should omit the string.
+
+Example:
+
+  std::vector&lt;std::string&gt; v = absl::StrSplit(" a , ,,b,",
+                                              ',', SkipWhitespace());
+  // v[0] == " a ", v[1] == "b"
+
+  // SkipEmpty() would return whitespace elements
+  std::vector&lt;std::string&gt; v = absl::StrSplit(" a , ,,b,", ',', SkipEmpty());
+  // v[0] == " a ", v[1] == " ", v[2] == "b"
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StrSplit()</h3>
+    <pre><code>
+Splits a given string based on the provided `Delimiter` object, returning the
+elements within the type specified by the caller. Optionally, you may pass a
+`Predicate` to `StrSplit()` indicating whether to include or exclude the
+resulting element within the final result set. (See the overviews for
+Delimiters and Predicates above.)
+
+Example:
+
+  std::vector&lt;std::string&gt; v = absl::StrSplit("a,b,c,d", ',');
+  // v[0] == "a", v[1] == "b", v[2] == "c", v[3] == "d"
+
+You can also provide an explicit `Delimiter` object:
+
+Example:
+
+  using absl::ByAnyChar;
+  std::vector&lt;std::string&gt; v = absl::StrSplit("a,b=c", ByAnyChar(",="));
+  // v[0] == "a", v[1] == "b", v[2] == "c"
+
+See above for more information on delimiters.
+
+By default, empty strings are included in the result set. You can optionally
+include a third `Predicate` argument to apply a test for whether the
+resultant element should be included in the result set:
+
+Example:
+
+  std::vector&lt;std::string&gt; v = absl::StrSplit(" a , ,,b,",
+                                              ',', SkipWhitespace());
+  // v[0] == " a ", v[1] == "b"
+
+See above for more information on predicates.
+
+------------------------------------------------------------------------------
+StrSplit() Return Types
+------------------------------------------------------------------------------
+
+The `StrSplit()` function adapts the returned collection to the collection
+specified by the caller (e.g. `std::vector` above). The returned collections
+may contain `std::string`, `absl::string_view` (in which case the original
+string being split must ensure that it outlives the collection), or any
+object that can be explicitly created from an `absl::string_view`. This
+behavior works for:
+
+1) All standard STL containers including `std::vector`, `std::list`,
+   `std::deque`, `std::set`,`std::multiset`, 'std::map`, and `std::multimap`
+2) `std::pair` (which is not actually a container). See below.
+
+Example:
+
+  // The results are returned as `absl::string_view` objects. Note that we
+  // have to ensure that the input string outlives any results.
+  std::vector&lt;absl::string_view&gt; v = absl::StrSplit("a,b,c", ',');
+
+  // Stores results in a std::set&lt;std::string&gt;, which also performs
+  // de-duplication and orders the elements in ascending order.
+  std::set&lt;std::string&gt; a = absl::StrSplit("b,a,c,a,b", ',');
+  // v[0] == "a", v[1] == "b", v[2] = "c"
+
+  // `StrSplit()` can be used within a range-based for loop, in which case
+  // each element will be of type `absl::string_view`.
+  std::vector&lt;std::string&gt; v;
+  for (const auto sv : absl::StrSplit("a,b,c", ',')) {
+    if (sv != "b") v.emplace_back(sv);
+  }
+  // v[0] == "a", v[1] == "c"
+
+  // Stores results in a map. The map implementation assumes that the input
+  // is provided as a series of key/value pairs. For example, the 0th element
+  // resulting from the split will be stored as a key to the 1st element. If
+  // an odd number of elements are resolved, the last element is paired with
+  // a default-constructed value (e.g., empty string).
+  std::map&lt;std::string, std::string&gt; m = absl::StrSplit("a,b,c", ',');
+  // m["a"] == "b", m["c"] == ""     // last component value equals ""
+
+Splitting to `std::pair` is an interesting case because it can hold only two
+elements and is not a collection type. When splitting to a `std::pair` the
+first two split strings become the `std::pair` `.first` and `.second`
+members, respectively. The remaining split substrings are discarded. If there
+are less than two split substrings, the empty string is used for the
+corresponding
+`std::pair` member.
+
+Example:
+
+  // Stores first two split strings as the members in a std::pair.
+  std::pair&lt;std::string, std::string&gt; p = absl::StrSplit("a,b,c", ',');
+  // p.first == "a", p.second == "b"       // "c" is omitted.
+
+The `StrSplit()` function can be used multiple times to perform more
+complicated splitting logic, such as intelligently parsing key-value pairs.
+
+Example:
+
+  // The input string "a=b=c,d=e,f=,g" becomes
+  // { "a" =&gt; "b=c", "d" =&gt; "e", "f" =&gt; "", "g" =&gt; "" }
+  std::map&lt;std::string, std::string&gt; m;
+  for (absl::string_view sp : absl::StrSplit("a=b=c,d=e,f=,g", ',')) {
+    m.insert(absl::StrSplit(sp, absl::MaxSplits('=', 1)));
+  }
+  EXPECT_EQ("b=c", m.find("a")-&gt;second);
+  EXPECT_EQ("e", m.find("d")-&gt;second);
+  EXPECT_EQ("", m.find("f")-&gt;second);
+  EXPECT_EQ("", m.find("g")-&gt;second);
+
+WARNING: Due to a legacy bug that is maintained for backward compatibility,
+splitting the following empty string_views produces different results:
+
+  absl::StrSplit(absl::string_view(""), '-');  // {""}
+  absl::StrSplit(absl::string_view(), '-');    // {}, but should be {""}
+
+Try not to depend on this distinction because the bug may one day be fixed.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/string_view.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/string_view.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>ClippedSubstr()</h3>
+    <pre><code>
+Like `s.substr(pos, n)`, but clips `pos` to an upper bound of `s.size()`.
+Provided because std::string_view::substr throws if `pos &gt; size()`
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>NullSafeStringView()</h3>
+    <pre><code>
+Creates an `absl::string_view` from a pointer `p` even if it's null-valued.
+This function should be used where an `absl::string_view` can be created from
+a possibly-null pointer.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/strip.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/strip.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>ConsumePrefix()</h3>
+    <pre><code>
+Strips the `expected` prefix from the start of the given string, returning
+`true` if the strip operation succeeded or false otherwise.
+
+Example:
+
+  absl::string_view input("abc");
+  EXPECT_TRUE(absl::ConsumePrefix(&input, "a"));
+  EXPECT_EQ(input, "bc");
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ConsumeSuffix()</h3>
+    <pre><code>
+Strips the `expected` suffix from the end of the given string, returning
+`true` if the strip operation succeeded or false otherwise.
+
+Example:
+
+  absl::string_view input("abcdef");
+  EXPECT_TRUE(absl::ConsumeSuffix(&input, "def"));
+  EXPECT_EQ(input, "abc");
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StripPrefix()</h3>
+    <pre><code>
+Returns a view into the input string 'str' with the given 'prefix' removed,
+but leaving the original string intact. If the prefix does not match at the
+start of the string, returns the original string instead.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>StripSuffix()</h3>
+    <pre><code>
+Returns a view into the input string 'str' with the given 'suffix' removed,
+but leaving the original string intact. If the suffix does not match at the
+end of the string, returns the original string instead.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>strings/substitute.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/strings/substitute.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>Substitute()</h3>
+    <pre><code>
+Substitutes variables into a given format string. See file comments above
+for usage.
+
+The declarations of `Substitute()` below consist of overloads for passing 0
+to 10 arguments, respectively.
+
+NOTE: A zero-argument `Substitute()` may be used within variadic templates to
+allow a variable number of arguments.
+
+Example:
+ template &lt;typename... Args&gt;
+ void VarMsg(absl::string_view format, const Args&... args) {
+   std::string s = absl::Substitute(format, args...);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SubstituteAndAppend()</h3>
+    <pre><code>
+Substitutes variables into a given format string and appends to a given
+output string. See file comments above for usage.
+
+The declarations of `SubstituteAndAppend()` below consist of overloads
+for passing 0 to 10 arguments, respectively.
+
+NOTE: A zero-argument `SubstituteAndAppend()` may be used within variadic
+templates to allow a variable number of arguments.
+
+Example:
+ template &lt;typename... Args&gt;
+ void VarMsg(std::string* boilerplate, absl::string_view format,
+     const Args&... args) {
+   absl::SubstituteAndAppend(boilerplate, format, args...);
+ }
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>synchronization/mutex.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/synchronization/mutex.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>EnableMutexInvariantDebugging()</h3>
+    <pre><code>
+Enable or disable global support for Mutex invariant debugging.  If enabled,
+then invariant predicates can be registered per-Mutex for debug checking.
+See Mutex::EnableInvariantDebugging().
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SetMutexDeadlockDetectionMode()</h3>
+    <pre><code>
+Enable or disable global support for detection of potential deadlocks
+due to Mutex lock ordering inversions.  When set to 'kIgnore', tracking of
+lock ordering is disabled.  Otherwise, in debug builds, a lock ordering graph
+will be maintained internally, and detected cycles will be reported in
+the manner chosen here.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>time/civil_time.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/time/civil_time.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>FormatCivilTime()</h3>
+    <pre><code>
+Formats the given civil-time value into a string value of the following
+format:
+
+ Type        | Format
+ ---------------------------------
+ CivilSecond | YYYY-MM-DDTHH:MM:SS
+ CivilMinute | YYYY-MM-DDTHH:MM
+ CivilHour   | YYYY-MM-DDTHH
+ CivilDay    | YYYY-MM-DD
+ CivilMonth  | YYYY-MM
+ CivilYear   | YYYY
+
+Example:
+
+  absl::CivilDay d = absl::CivilDay(1969, 7, 20);
+  std::string day_string = absl::FormatCivilTime(d);  // "1969-07-20"
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>GetWeekday()</h3>
+    <pre><code>
+Returns the absl::Weekday for the given absl::CivilDay.
+
+Example:
+
+  absl::CivilDay a(2015, 8, 13);
+  absl::Weekday wd = absl::GetWeekday(a);  // wd == absl::Weekday::thursday
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>GetYearDay()</h3>
+    <pre><code>
+Returns the day-of-year for the given absl::CivilDay.
+
+Example:
+
+  absl::CivilDay a(2015, 1, 1);
+  int yd_jan_1 = absl::GetYearDay(a);   // yd_jan_1 = 1
+  absl::CivilDay b(2015, 12, 31);
+  int yd_dec_31 = absl::GetYearDay(b);  // yd_dec_31 = 365
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>NextWeekday()</h3>
+    <pre><code>
+PrevWeekday()
+
+Returns the absl::CivilDay that strictly follows or precedes a given
+absl::CivilDay, and that falls on the given absl::Weekday.
+
+Example, given the following month:
+
+      August 2015
+  Su Mo Tu We Th Fr Sa
+                     1
+   2  3  4  5  6  7  8
+   9 10 11 12 13 14 15
+  16 17 18 19 20 21 22
+  23 24 25 26 27 28 29
+  30 31
+
+  absl::CivilDay a(2015, 8, 13);
+  // absl::GetWeekday(a) == absl::Weekday::thursday
+  absl::CivilDay b = absl::NextWeekday(a, absl::Weekday::thursday);
+  // b = 2015-08-20
+  absl::CivilDay c = absl::PrevWeekday(a, absl::Weekday::thursday);
+  // c = 2015-08-06
+
+  absl::CivilDay d = ...
+  // Gets the following Thursday if d is not already Thursday
+  absl::CivilDay thurs1 = absl::NextWeekday(d - 1, absl::Weekday::thursday);
+  // Gets the previous Thursday if d is not already Thursday
+  absl::CivilDay thurs2 = absl::PrevWeekday(d + 1, absl::Weekday::thursday);
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>time/clock.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/time/clock.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>GetCurrentTimeNanos()</h3>
+    <pre><code>
+Returns the current time, expressed as a count of nanoseconds since the Unix
+Epoch (https://en.wikipedia.org/wiki/Unix_time). Prefer `absl::Now()` instead
+for all but the most performance-sensitive cases (i.e. when you are calling
+this function hundreds of thousands of times per second).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Now()</h3>
+    <pre><code>
+Returns the current time, expressed as an `absl::Time` absolute time value.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>SleepFor()</h3>
+    <pre><code>
+Sleeps for the specified duration, expressed as an `absl::Duration`.
+
+Notes:
+* Signal interruptions will not reduce the sleep duration.
+* Returns immediately when passed a nonpositive duration.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>time/time.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/time/time.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>AbsDuration()</h3>
+    <pre><code>
+Returns the absolute value of a duration.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Ceil()</h3>
+    <pre><code>
+Returns the ceiling of a duration using the passed duration unit to its
+smallest value not less than the duration.
+
+Example:
+
+  absl::Duration d = absl::Nanoseconds(123456789);
+  absl::Duration c = absl::Ceil(d, absl::Microseconds(1));   // 123457us
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ConvertDateTime()</h3>
+    <pre><code>
+Legacy version of `absl::TimeZone::At(absl::CivilSecond)` that takes
+the civil time as six, separate values (YMDHMS).
+
+The input month, day, hour, minute, and second values can be outside
+of their valid ranges, in which case they will be "normalized" during
+the conversion.
+
+Example:
+
+  // "October 32" normalizes to "November 1".
+  absl::TimeConversion tc =
+      absl::ConvertDateTime(2013, 10, 32, 8, 30, 0, lax);
+  // tc.kind == TimeConversion::UNIQUE && tc.normalized == true
+  // absl::ToCivilDay(tc.pre, tz).month() == 11
+  // absl::ToCivilDay(tc.pre, tz).day() == 1
+
+Deprecated. Use `absl::TimeZone::At(CivilSecond)`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>DurationFromTimespec()</h3>
+    <pre><code>
+DurationFromTimeval()
+ToTimespec()
+ToTimeval()
+TimeFromTimespec()
+TimeFromTimeval()
+ToTimespec()
+ToTimeval()
+
+Some APIs use a timespec or a timeval as a Duration (e.g., nanosleep(2)
+and select(2)), while others use them as a Time (e.g. clock_gettime(2)
+and gettimeofday(2)), so conversion functions are provided for both cases.
+The "to timespec/val" direction is easily handled via overloading, but
+for "from timespec/val" the desired type is part of the function name.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>FDivDuration()</h3>
+    <pre><code>
+Divides a `Duration` numerator into a fractional number of units of a
+`Duration` denominator.
+
+See also the notes on `InfiniteDuration()` below regarding the behavior of
+division involving zero and infinite durations.
+
+Example:
+
+  double d = absl::FDivDuration(absl::Milliseconds(1500), absl::Seconds(1));
+  // d == 1.5
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>FixedTimeZone()</h3>
+    <pre><code>
+Returns a TimeZone that is a fixed offset (seconds east) from UTC.
+Note: If the absolute value of the offset is greater than 24 hours
+you'll get UTC (i.e., no offset) instead.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Floor()</h3>
+    <pre><code>
+Floors a duration using the passed duration unit to its largest value not
+greater than the duration.
+
+Example:
+
+  absl::Duration d = absl::Nanoseconds(123456789);
+  absl::Duration b = absl::Floor(d, absl::Microseconds(1));  // 123456us
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>FormatDuration()</h3>
+    <pre><code>
+Returns a string representing the duration in the form "72h3m0.5s".
+Returns "inf" or "-inf" for +/- `InfiniteDuration()`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>FormatTime()</h3>
+    <pre><code>
+Formats the given `absl::Time` in the `absl::TimeZone` according to the
+provided format string. Uses strftime()-like formatting options, with
+the following extensions:
+
+  - %Ez  - RFC3339-compatible numeric UTC offset (+hh:mm or -hh:mm)
+  - %E*z - Full-resolution numeric UTC offset (+hh:mm:ss or -hh:mm:ss)
+  - %E#S - Seconds with # digits of fractional precision
+  - %E*S - Seconds with full fractional precision (a literal '*')
+  - %E#f - Fractional seconds with # digits of precision
+  - %E*f - Fractional seconds with full precision (a literal '*')
+  - %E4Y - Four-character years (-999 ... -001, 0000, 0001 ... 9999)
+
+Note that %E0S behaves like %S, and %E0f produces no characters.  In
+contrast %E*f always produces at least one digit, which may be '0'.
+
+Note that %Y produces as many characters as it takes to fully render the
+year.  A year outside of [-999:9999] when formatted with %E4Y will produce
+more than four characters, just like %Y.
+
+We recommend that format strings include the UTC offset (%z, %Ez, or %E*z)
+so that the result uniquely identifies a time instant.
+
+Example:
+
+  absl::CivilSecond cs(2013, 1, 2, 3, 4, 5);
+  absl::Time t = absl::FromCivil(cs, lax);
+  std::string f = absl::FormatTime("%H:%M:%S", t, lax);  // "03:04:05"
+  f = absl::FormatTime("%H:%M:%E3S", t, lax);  // "03:04:05.000"
+
+Note: If the given `absl::Time` is `absl::InfiniteFuture()`, the returned
+string will be exactly "infinite-future". If the given `absl::Time` is
+`absl::InfinitePast()`, the returned string will be exactly "infinite-past".
+In both cases the given format string and `absl::TimeZone` are ignored.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>FromChrono()</h3>
+    <pre><code>
+Converts a std::chrono::system_clock::time_point to an absl::Time.
+
+Example:
+
+  auto tp = std::chrono::system_clock::from_time_t(123);
+  absl::Time t = absl::FromChrono(tp);
+  // t == absl::FromTimeT(123)
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>FromCivil()</h3>
+    <pre><code>
+Helper for TimeZone::At(CivilSecond) that provides "order-preserving
+semantics." If the civil time maps to a unique time, that time is
+returned. If the civil time is repeated in the given time zone, the
+time using the pre-transition offset is returned. Otherwise, the
+civil time is skipped in the given time zone, and the transition time
+is returned. This means that for any two civil times, ct1 and ct2,
+(ct1 &lt; ct2) =&gt; (FromCivil(ct1) &lt;= FromCivil(ct2)), the equal case
+being when two non-existent civil times map to the same transition time.
+
+Note: Accepts civil times of any alignment.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>FromDateTime()</h3>
+    <pre><code>
+A convenience wrapper for `absl::ConvertDateTime()` that simply returns
+the "pre" `absl::Time`.  That is, the unique result, or the instant that
+is correct using the pre-transition offset (as if the transition never
+happened).
+
+Example:
+
+  absl::Time t = absl::FromDateTime(2017, 9, 26, 9, 30, 0, lax);
+  // t = 2017-09-26 09:30:00 -0700
+
+Deprecated. Use `absl::FromCivil(CivilSecond, TimeZone)`. Note that the
+behavior of `FromCivil()` differs from `FromDateTime()` for skipped civil
+times. If you care about that see `absl::TimeZone::At(absl::CivilSecond)`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>FromTM()</h3>
+    <pre><code>
+Converts the `tm_year`, `tm_mon`, `tm_mday`, `tm_hour`, `tm_min`, and
+`tm_sec` fields to an `absl::Time` using the given time zone. See ctime(3)
+for a description of the expected values of the tm fields. If the indicated
+time instant is not unique (see `absl::TimeZone::At(absl::CivilSecond)`
+above), the `tm_isdst` field is consulted to select the desired instant
+(`tm_isdst` &gt; 0 means DST, `tm_isdst` == 0 means no DST, `tm_isdst` &lt; 0
+means use the post-transition offset).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>FromUnixNanos()</h3>
+    <pre><code>
+FromUnixMicros()
+FromUnixMillis()
+FromUnixSeconds()
+FromTimeT()
+FromUDate()
+FromUniversal()
+
+Creates an `absl::Time` from a variety of other representations.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>IDivDuration()</h3>
+    <pre><code>
+Divides a numerator `Duration` by a denominator `Duration`, returning the
+quotient and remainder. The remainder always has the same sign as the
+numerator. The returned quotient and remainder respect the identity:
+
+  numerator = denominator * quotient + remainder
+
+Returned quotients are capped to the range of `int64_t`, with the difference
+spilling into the remainder to uphold the above identity. This means that the
+remainder returned could differ from the remainder returned by
+`Duration::operator%` for huge quotients.
+
+See also the notes on `InfiniteDuration()` below regarding the behavior of
+division involving zero and infinite durations.
+
+Example:
+
+  constexpr absl::Duration a =
+      absl::Seconds(std::numeric_limits&lt;int64_t&gt;::max());  // big
+  constexpr absl::Duration b = absl::Nanoseconds(1);       // small
+
+  absl::Duration rem = a % b;
+  // rem == absl::ZeroDuration()
+
+  // Here, q would overflow int64_t, so rem accounts for the difference.
+  int64_t q = absl::IDivDuration(a, b, &rem);
+  // q == std::numeric_limits&lt;int64_t&gt;::max(), rem == a - b * q
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>InfiniteDuration()</h3>
+    <pre><code>
+Returns an infinite `Duration`.  To get a `Duration` representing negative
+infinity, use `-InfiniteDuration()`.
+
+Duration arithmetic overflows to +/- infinity and saturates. In general,
+arithmetic with `Duration` infinities is similar to IEEE 754 infinities
+except where IEEE 754 NaN would be involved, in which case +/-
+`InfiniteDuration()` is used in place of a "nan" Duration.
+
+Examples:
+
+  constexpr absl::Duration inf = absl::InfiniteDuration();
+  const absl::Duration d = ... any finite duration ...
+
+  inf == inf + inf
+  inf == inf + d
+  inf == inf - inf
+  -inf == d - inf
+
+  inf == d * 1e100
+  inf == inf / 2
+  0 == d / inf
+  INT64_MAX == inf / d
+
+  d &lt; inf
+  -inf &lt; d
+
+  // Division by zero returns infinity, or INT64_MIN/MAX where appropriate.
+  inf == d / 0
+  INT64_MAX == d / absl::ZeroDuration()
+
+The examples involving the `/` operator above also apply to `IDivDuration()`
+and `FDivDuration()`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>InfiniteFuture()</h3>
+    <pre><code>
+Returns an `absl::Time` that is infinitely far in the future.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>InfinitePast()</h3>
+    <pre><code>
+Returns an `absl::Time` that is infinitely far in the past.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>LoadTimeZone()</h3>
+    <pre><code>
+Loads the named zone. May perform I/O on the initial load of the named
+zone. If the name is invalid, or some other kind of error occurs, returns
+`false` and `*tz` is set to the UTC time zone.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>LocalTimeZone()</h3>
+    <pre><code>
+Convenience method returning the local time zone, or UTC if there is
+no configured local zone.  Warning: Be wary of using LocalTimeZone(),
+and particularly so in a server process, as the zone configured for the
+local machine should be irrelevant.  Prefer an explicit zone name.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Nanoseconds()</h3>
+    <pre><code>
+Microseconds()
+Milliseconds()
+Seconds()
+Minutes()
+Hours()
+
+Factory functions for constructing `Duration` values from an integral number
+of the unit indicated by the factory function's name.
+
+Note: no "Days()" factory function exists because "a day" is ambiguous.
+Civil days are not always 24 hours long, and a 24-hour duration often does
+not correspond with a civil day. If a 24-hour duration is needed, use
+`absl::Hours(24)`. (If you actually want a civil day, use absl::CivilDay
+from civil_time.h.)
+
+Example:
+
+  absl::Duration a = absl::Seconds(60);
+  absl::Duration b = absl::Minutes(1);  // b == a
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ParseDuration()</h3>
+    <pre><code>
+Parses a duration string consisting of a possibly signed sequence of
+decimal numbers, each with an optional fractional part and a unit
+suffix.  The valid suffixes are "ns", "us" "ms", "s", "m", and "h".
+Simple examples include "300ms", "-1.5h", and "2h45m".  Parses "0" as
+`ZeroDuration()`. Parses "inf" and "-inf" as +/- `InfiniteDuration()`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ParseTime()</h3>
+    <pre><code>
+Parses an input string according to the provided format string and
+returns the corresponding `absl::Time`. Uses strftime()-like formatting
+options, with the same extensions as FormatTime(), but with the
+exceptions that %E#S is interpreted as %E*S, and %E#f as %E*f.  %Ez
+and %E*z also accept the same inputs.
+
+%Y consumes as many numeric characters as it can, so the matching data
+should always be terminated with a non-numeric.  %E4Y always consumes
+exactly four characters, including any sign.
+
+Unspecified fields are taken from the default date and time of ...
+
+  "1970-01-01 00:00:00.0 +0000"
+
+For example, parsing a string of "15:45" (%H:%M) will return an absl::Time
+that represents "1970-01-01 15:45:00.0 +0000".
+
+Note that since ParseTime() returns time instants, it makes the most sense
+to parse fully-specified date/time strings that include a UTC offset (%z,
+%Ez, or %E*z).
+
+Note also that `absl::ParseTime()` only heeds the fields year, month, day,
+hour, minute, (fractional) second, and UTC offset.  Other fields, like
+weekday (%a or %A), while parsed for syntactic validity, are ignored
+in the conversion.
+
+Date and time fields that are out-of-range will be treated as errors
+rather than normalizing them like `absl::CivilSecond` does.  For example,
+it is an error to parse the date "Oct 32, 2013" because 32 is out of range.
+
+A leap second of ":60" is normalized to ":00" of the following minute
+with fractional seconds discarded.  The following table shows how the
+given seconds and subseconds will be parsed:
+
+  "59.x" -&gt; 59.x  // exact
+  "60.x" -&gt; 00.0  // normalized
+  "00.x" -&gt; 00.x  // exact
+
+Errors are indicated by returning false and assigning an error message
+to the "err" out param if it is non-null.
+
+Note: If the input string is exactly "infinite-future", the returned
+`absl::Time` will be `absl::InfiniteFuture()` and `true` will be returned.
+If the input string is "infinite-past", the returned `absl::Time` will be
+`absl::InfinitePast()` and `true` will be returned.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ToChronoNanoseconds()</h3>
+    <pre><code>
+ToChronoMicroseconds()
+ToChronoMilliseconds()
+ToChronoSeconds()
+ToChronoMinutes()
+ToChronoHours()
+
+Converts an absl::Duration to any of the pre-defined std::chrono durations.
+If overflow would occur, the returned value will saturate at the min/max
+chrono duration value instead.
+
+Example:
+
+  absl::Duration d = absl::Microseconds(123);
+  auto x = absl::ToChronoMicroseconds(d);
+  auto y = absl::ToChronoNanoseconds(d);  // x == y
+  auto z = absl::ToChronoSeconds(absl::InfiniteDuration());
+  // z == std::chrono::seconds::max()
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ToChronoTime()</h3>
+    <pre><code>
+Converts an absl::Time to a std::chrono::system_clock::time_point. If
+overflow would occur, the returned value will saturate at the min/max time
+point value instead.
+
+Example:
+
+  absl::Time t = absl::FromTimeT(123);
+  auto tp = absl::ToChronoTime(t);
+  // tp == std::chrono::system_clock::from_time_t(123);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ToCivilSecond()</h3>
+    <pre><code>
+ToCivilMinute()
+ToCivilHour()
+ToCivilDay()
+ToCivilMonth()
+ToCivilYear()
+
+Helpers for TimeZone::At(Time) to return particularly aligned civil times.
+
+Example:
+
+  absl::Time t = ...;
+  absl::TimeZone tz = ...;
+  const auto cd = absl::ToCivilDay(t, tz);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ToDoubleNanoSeconds()</h3>
+    <pre><code>
+ToDoubleMicroseconds()
+ToDoubleMilliseconds()
+ToDoubleSeconds()
+ToDoubleMinutes()
+ToDoubleHours()
+
+Helper functions that convert a Duration to a floating point count of the
+indicated unit. These functions are shorthand for the `FDivDuration()`
+function above; see its documentation for details about overflow, etc.
+
+Example:
+
+  absl::Duration d = absl::Milliseconds(1500);
+  double dsec = absl::ToDoubleSeconds(d);  // dsec == 1.5
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ToInt64Nanoseconds()</h3>
+    <pre><code>
+ToInt64Microseconds()
+ToInt64Milliseconds()
+ToInt64Seconds()
+ToInt64Minutes()
+ToInt64Hours()
+
+Helper functions that convert a Duration to an integral count of the
+indicated unit. These functions are shorthand for the `IDivDuration()`
+function above; see its documentation for details about overflow, etc.
+
+Example:
+
+  absl::Duration d = absl::Milliseconds(1500);
+  int64_t isec = absl::ToInt64Seconds(d);  // isec == 1
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ToTM()</h3>
+    <pre><code>
+Converts the given `absl::Time` to a struct tm using the given time zone.
+See ctime(3) for a description of the values of the tm fields.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ToUnixNanos()</h3>
+    <pre><code>
+ToUnixMicros()
+ToUnixMillis()
+ToUnixSeconds()
+ToTimeT()
+ToUDate()
+ToUniversal()
+
+Converts an `absl::Time` to a variety of other representations.  Note that
+these operations round down toward negative infinity where necessary to
+adjust to the resolution of the result type.  Beware of possible time_t
+over/underflow in ToTime{T,val,spec}() on 32-bit platforms.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>Trunc()</h3>
+    <pre><code>
+Truncates a duration (toward zero) to a multiple of a non-zero unit.
+
+Example:
+
+  absl::Duration d = absl::Nanoseconds(123456789);
+  absl::Duration a = absl::Trunc(d, absl::Microseconds(1));  // 123456us
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>UTCTimeZone()</h3>
+    <pre><code>
+Convenience method returning the UTC time zone.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>UniversalEpoch()</h3>
+    <pre><code>
+Returns the `absl::Time` representing "0001-01-01 00:00:00.0 +0000", the
+epoch of the ICU Universal Time Scale.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>UnixEpoch()</h3>
+    <pre><code>
+Returns the `absl::Time` representing "1970-01-01 00:00:00.0 +0000".
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>ZeroDuration()</h3>
+    <pre><code>
+Returns a zero-length duration. This function behaves just like the default
+constructor, but the name helps make the semantics clear at call sites.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>types/any.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/types/any.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>any_cast()</h3>
+    <pre><code>
+Statically casts the value of a `const absl::any` type to the given type.
+This function will throw `absl::bad_any_cast` if the stored value type of the
+`absl::any` does not match the cast.
+
+`any_cast()` can also be used to get a reference to the internal storage iff
+a reference type is passed as its `ValueType`:
+
+Example:
+
+  absl::any my_any = std::vector&lt;int&gt;();
+  absl::any_cast&lt;std::vector&lt;int&gt;&&gt;(my_any).push_back(42);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>make_any()</h3>
+    <pre><code>
+Constructs an `absl::any` of type `T` with the given arguments.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>swap()</h3>
+    <pre><code>
+Swaps two `absl::any` values. Equivalent to `x.swap(y) where `x` and `y` are
+`absl::any` types.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>types/optional.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/types/optional.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>make_optional()</h3>
+    <pre><code>
+Creates a non-empty `optional&lt;T&gt;` where the type of `T` is deduced. An
+`absl::optional` can also be explicitly instantiated with
+`make_optional&lt;T&gt;(v)`.
+
+Note: `make_optional()` constructions may be declared `constexpr` for
+trivially copyable types `T`. Non-trivial types require copy elision
+support in C++17 for `make_optional` to support `constexpr` on such
+non-trivial types.
+
+Example:
+
+  constexpr absl::optional&lt;int&gt; opt = absl::make_optional(1);
+  static_assert(opt.value() == 1, "");
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>swap()</h3>
+    <pre><code>
+Performs a swap between two `absl::optional` objects, using standard
+semantics.
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>types/span.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/types/span.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>MakeConstSpan()</h3>
+    <pre><code>
+Constructs a `Span&lt;const T&gt;` as with `MakeSpan`, deducing `T` automatically,
+but always returning a `Span&lt;const T&gt;`.
+
+Examples:
+
+  void ProcessInts(absl::Span&lt;const int&gt; some_ints);
+
+  // Call with a pointer and size.
+  int array[3] = { 0, 0, 0 };
+  ProcessInts(absl::MakeConstSpan(&array[0], 3));
+
+  // Call with a [begin, end) pair.
+  ProcessInts(absl::MakeConstSpan(&array[0], &array[3]));
+
+  // Call directly with an array.
+  ProcessInts(absl::MakeConstSpan(array));
+
+  // Call with a contiguous container.
+  std::vector&lt;int&gt; some_ints = ...;
+  ProcessInts(absl::MakeConstSpan(some_ints));
+  ProcessInts(absl::MakeConstSpan(std::vector&lt;int&gt;{ 0, 0, 0 }));
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>MakeSpan()</h3>
+    <pre><code>
+Constructs a mutable `Span&lt;T&gt;`, deducing `T` automatically from either a
+container or pointer+size.
+
+Because a read-only `Span&lt;const T&gt;` is implicitly constructed from container
+types regardless of whether the container itself is a const container,
+constructing mutable spans of type `Span&lt;T&gt;` from containers requires
+explicit constructors. The container-accepting version of `MakeSpan()`
+deduces the type of `T` by the constness of the pointer received from the
+container's `data()` member. Similarly, the pointer-accepting version returns
+a `Span&lt;const T&gt;` if `T` is `const`, and a `Span&lt;T&gt;` otherwise.
+
+Examples:
+
+  void MyRoutine(absl::Span&lt;MyComplicatedType&gt; a) {
+    ...
+  };
+  // my_vector is a container of non-const types
+  std::vector&lt;MyComplicatedType&gt; my_vector;
+
+  // Constructing a Span implicitly attempts to create a Span of type
+  // `Span&lt;const T&gt;`
+  MyRoutine(my_vector);                // error, type mismatch
+
+  // Explicitly constructing the Span is verbose
+  MyRoutine(absl::Span&lt;MyComplicatedType&gt;(my_vector));
+
+  // Use MakeSpan() to make an absl::Span&lt;T&gt;
+  MyRoutine(absl::MakeSpan(my_vector));
+
+  // Construct a span from an array ptr+size
+  absl::Span&lt;T&gt; my_span() {
+    return absl::MakeSpan(&array[0], num_elements_);
+  }
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>types/variant.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/types/variant.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>ConvertVariantTo()</h3>
+    <pre><code>
+Helper functions to convert an `absl::variant` to a variant of another set of
+types, provided that the alternative type of the new variant type can be
+converted from any type in the source variant.
+
+Example:
+
+  absl::variant&lt;name1, name2, float&gt; InternalReq(const Req&);
+
+  // name1 and name2 are convertible to name
+  absl::variant&lt;name, float&gt; ExternalReq(const Req& req) {
+    return absl::ConvertVariantTo&lt;absl::variant&lt;name, float&gt;&gt;(
+             InternalReq(req));
+  }
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>get()</h3>
+    <pre><code>
+Returns a reference to the value currently within a given variant, using
+either a unique alternative type amongst the variant's set of alternative
+types, or the variant's index value. Attempting to get a variant's value
+using a type that is not unique within the variant's set of alternative types
+is a compile-time error. If the index of the alternative being specified is
+different from the index of the alternative that is currently stored, throws
+`absl::bad_variant_access`.
+
+Example:
+
+  auto a = absl::variant&lt;int, std::string&gt;;
+
+  // Get the value by type (if unique).
+  int i = absl::get&lt;int&gt;(a);
+
+  auto b = absl::variant&lt;int, int&gt;;
+
+  // Getting the value by a type that is not unique is ill-formed.
+  int j = absl::get&lt;int&gt;(b);     // Compile Error!
+
+  // Getting value by index not ambiguous and allowed.
+  int k = absl::get&lt;1&gt;(b);
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>get_if()</h3>
+    <pre><code>
+Returns a pointer to the value currently stored within a given variant, if
+present, using either a unique alternative type amongst the variant's set of
+alternative types, or the variant's index value. If such a value does not
+exist, returns `nullptr`.
+
+As with `get`, attempting to get a variant's value using a type that is not
+unique within the variant's set of alternative types is a compile-time error.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>hash()</h3>
+    <pre><code>
+
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>holds_alternative()</h3>
+    <pre><code>
+Checks whether the given variant currently holds a given alternative type,
+returning `true` if so.
+
+Example:
+
+  absl::variant&lt;int, std::string&gt; foo = 42;
+  if (absl::holds_alternative&lt;int&gt;(foo)) {
+      std::cout &lt;&lt; "The variant holds an integer";
+  }
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>swap()</h3>
+    <pre><code>
+Swaps two `absl::variant` values. This function is equivalent to `v.swap(w)`
+where `v` and `w` are `absl::variant` types.
+
+Note that this function requires all alternative types to be both swappable
+and move-constructible, because any two variants may refer to either the same
+type (in which case, they will be swapped) or to two different types (in
+which case the values will need to be moved).
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>visit()</h3>
+    <pre><code>
+Calls a provided functor on a given set of variants. `absl::visit()` is
+commonly used to conditionally inspect the state of a given variant (or set
+of variants).
+
+The functor must return the same type when called with any of the variants'
+alternatives.
+
+Example:
+
+  // Define a visitor functor
+  struct GetVariant {
+      template&lt;typename T&gt;
+      void operator()(const T& i) const {
+        std::cout &lt;&lt; "The variant's value is: " &lt;&lt; i;
+      }
+  };
+
+  // Declare our variant, and call `absl::visit()` on it.
+  // Note that `GetVariant()` returns void in either case.
+  absl::variant&lt;int, std::string&gt; foo = std::string("foo");
+  GetVariant visitor;
+  absl::visit(visitor, foo);  // Prints `The variant's value is: foo'
+    </code></pre>
+   </div>
+
+  </div>
+
+  <div class="file">
+   <h2>utility/utility.h</h2>
+   <p><a href="https://github.com/abseil/abseil-cpp/tree/master/absl/utility/utility.h" target="git">git</a></p>
+
+   <div class="func">
+    <h3>forward()</h3>
+    <pre><code>
+A constexpr version of `std::forward()`, designed to be a drop-in replacement
+for C++14's `std::forward()`.
+    </code></pre>
+   </div>
+
+   <div class="func">
+    <h3>move()</h3>
+    <pre><code>
+A constexpr version of `std::move()`, designed to be a drop-in replacement
+for C++14's `std::move()`.
+    </code></pre>
+   </div>
+
+  </div>
+
+ </body>
+</html>
