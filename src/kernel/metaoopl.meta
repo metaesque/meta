@@ -1,6 +1,103 @@
 
 namespace metax.oopl scope:
 
+  class MetaxOopl < metax.meta.MetaLanguageConstruct #:
+    A subclass of MetaLanguageConstruct representing Meta(Oopl)
+
+    NOTE(wmh): Until we support multiple inheritance, note that this class
+    is NOT a subclass of OoplConstruct, because it needs to be a subclass
+    of metax.meta.MetaLanguageConstruct
+  scope:
+
+    lifecycle clinit:
+      /# TODO(wmh): This needs to be put someplace else (config file, etc).
+      /# Preferably, it would be described in meta syntax and available to
+      /# programmers to extend.
+      cls.NATIVE = {
+        'map': {
+          /# TODO(wmh): In Javascript, use goog.structs.Map instead of Object to
+          /# represent hashmap? Problem is that 'var a = {};' is an Object, so
+          /# we'd have a mismatch.
+          'size': {
+            'args': None,
+            'alias': ('len', 'length'),
+            'code': {
+              'cc': '${rec}${sep}size()',
+              'js': '${rec}.getCount()',  # goog.structs.Map instance
+              'jv': '${rec}.size()',
+              'pm': {'ptr': 'scalar(@$${rec})', 'ref': 'scalar(@${rec})'},
+              'py': 'len(${rec})',
+            },
+          },
+          'keys': {
+            'args': None,
+            'code': {
+              'cc': 'meta::lang::Dictionary::Keys(${rec})',
+              'js': '${rec}.getKeys()',
+              'jv': '${rec}.keys()',
+              'pm': {'ptr': 'keys(@$${rec})', 'ref': 'keys(@${rec})'},
+              'py': '${rec}.keys()',
+            },
+          },
+          'values': {
+            'args': None,
+            'code': {
+              'cc': 'meta::lang::Dictionary::Values(${rec})',
+              'js': '${rec}.getValues()',
+              'jv': '${rec}.elements()',
+              'pm': {'ptr': 'values(@$${rec})', 'ref': 'values(@${rec})'},
+              'py': '${rec}.values()',
+            },
+          },
+          'get': {
+            'args': [{'type': '$K'}],
+            'alias': ('at',),
+            'code': {
+              'cc': '${rec}[${arg1}]',
+              'js': '${rec}[${arg1}]',
+              'jv': '${rec}[${arg1}]',
+              'pm': {'ptr': '${rec}->[${arg1}]', 'ref': '${rec}[${arg1}]'},
+              'py': '${rec}[${arg1}]',
+            },
+          },
+        },
+        'vec': {
+          'append': {
+            'args': [{'type': '$V'}],
+            'alias': ('push', 'push_back'),
+            'code': {
+              'cc': '${rec}.push_back(${arg1})',
+              'js': '${rec}.push(${arg1})',
+              'jv': '${rec}.add(${arg1})',
+              'pm': {'ptr': 'push(@$${rec}, ${arg1})',
+                     'ref': 'push(@${rec}, ${arg1})'},
+              'py': '${rec}.append(${arg1})',
+            },
+          },
+        },
+        'meta!ostream': {
+          'write': {
+            'alias': ('echo', 'print'),
+            'args': [{'type': 'str'}],
+            'code': {
+              /# TODO(wmh): This needs more work. String interpolation needs to
+              /# work
+              'cc': '${rec} << ${arg1}',
+              /# TODO(wmh): console.log() is just a hack till we get real streams
+              /# in javascript via phantomjs or Meta.
+              'js': 'console.log(${arg1})',
+              'jv': '${rec}.print(${arg1})',
+              'pm': {'ptr': '${rec}.print(${arg1})',
+                     'ref': '${rec}.print(${arg1})'},
+              'py': '${rec}.write(${arg1})',
+            },
+          },
+        },
+      }
+    end;
+
+  end class MetaxOopl;
+
   abstract
   class OoplConstruct < metax.meta.Construct #:
     @_oopl_: Abstract construct from which all Meta(Oopl) constructs inheret.
@@ -4412,7 +4509,7 @@ namespace metax.oopl scope:
       metac = metafile.compiler()
       context = self.context()
       namespace = self.namespace()
-      incnmsp = namespace.fqn() == 'metax.c'
+      incnmsp = namespace.fqn() in ('metax.c', 'metax.meta')
 
       /# We first parse the parent specification into self.parentclasses().
       /#  - TODO(wmh): Support 'parents:' in addition to 'parent' (along
@@ -4928,15 +5025,49 @@ namespace metax.oopl scope:
 
         /# Perform auto-generation of serializers, sizers, etc.
         if self.isUser():
-          /# For now, we do not generate these methods for test or meta classes,
-          /# but we may want to...
-          if not metac.importlist() and not self.isErrorClass():
+          if False and metac.importlist():
+            /# If this metafile is being parsed implicitly (not explicitly
+            /# specified on the command line), we do not need to generate
+            /# the various auto methods. HOWEVER, although we can determine
+            /# whether we are currently performing an import by looking at
+            /# importlist(), we do not currently have a convenient way of
+            /# establishing whether the current metafile is ALSO explicitly
+            /# specified on the commandline. This is important because of the
+            /# following:
+            /#  - suppose we do:
+            /#     % metac a.meta b.meta
+            /#  - support further that a.meta depends on b.meta and will thus
+            /#    parse b.meta as part of parsing itself.
+            /#  - if, when invoking expandMeta() on b.meta during the processing
+            /#    of a.meta, they will be missing from the output even though
+            /#    if b.meta were compiled by itself the autogen methods would
+            /#    be added.
+            /# Some solutions:
+            /#  1. Do not disable autogen for implicit methods (easy)
+            /#  2. Invoke _autogenAll() somewhere more general, such that it
+            /#     is always invoked on explicitly specified metafiles.
+            /#      - probably quite easy, but not verified
+            /#  3. Maintain the list of explicitly specified metafiles someplace
+            /#     accessible from this code point, and conditionally invoke
+            /#     _autogenAll based on whether the metafile is also explicitly
+            /#     specified.
+            /#
+            /# Currently implementing 1. but 2. is probably easy and 3. is
+            /# not preferred.
+            print(
+              'No  %s, doing import so not invoking _autogenAll' %
+              self.kindfqn())
+          elif self.isErrorClass():
+            /# no autogen
+            pass
+          else:
             /# For now, we do not generate these methods for classes found
             /# during importMeta.
             /# TODO(wmh): Determine whether the above optimization is safe, or
             /# if there are situations where it is important for such methods to
             /# be autogened for dependended-on classes too.
             self._autogenAll()
+            /# print('Yes %s, invoking _autogenAll' % self.kindfqn())
 
         if self.isTest():
           /# There are two different kinds of classes that can appear within a
@@ -5873,7 +6004,7 @@ namespace metax.oopl scope:
                 '%s has no scope but has features that will be dropped when '
                 'implicit initializer is created: %s' %
                 (self.kindfqn(), ' '.join(fvals)),
-                line=self.primary().line())
+                attr=self.primary())
           if secondaries:
             skeys = [sec.key() for sec in secondaries]
             try:
@@ -5887,7 +6018,8 @@ namespace metax.oopl scope:
               metafile.warning(
                 '%s has no scope but has secondaries that will be dropped when '
                 'implicit initializer is created: %s' %
-                (self.kindfqn(), ' '.join(skeys)))
+                (self.kindfqn(), ' '.join(skeys)),
+                attr=self.primary())
 
         /# Create a finalizer method if there is a 'finalize' attribute in this
         /# lifecycle.
@@ -6379,18 +6511,31 @@ namespace metax.oopl scope:
     end receiver NativeConstruct;
 
     receiver CommandConstruct ::
-      /# Expand the entry.
+      /# Expand the command.
       /#
-      /# Create a meta method on the class within which the entry is found
-      /# representing the code to execute for this entry point. This involves
-      /# compiling all 'flag', 'arg' and 'command' subconstructs of the
-      /# 'interface:' attribute, and the code in scope:, into a collection of
-      /# lines that represent the body of the to-be-added meta method.
+      /# A 'command' construct within a class representing a class-specific
+      /# entry point into the codebase, with support for parsing command-line
+      /# flags/args/subcommands. To expand a 'command', we need to create two
+      /# methods on the class within which the command resides:
+      /#
+      /# 1. A method with name metax.c.METAX_CMD_NAME (aka 'MetaxCLI') that
+      /#    creates an instance of metax.cli.Command, properly initialized
+      /#    with metax.cli.Flag, metax.cli.Arg, and metax.cli.Command
+      /#    instances representing the 'flag', 'arg' and 'command' constructs
+      /#    found within the 'interface:' attribute of this 'command'.
+      /#     - TODO(wmh): This method is currently meta, but should be static.
+      /#
+      /# 2. A method with name metax.c.METAX_ENTRY_NAME (aka 'MetaxEntry')
+      /#    that accepts a collection of strings representing command-line
+      /#    arguments and identifiers a fully instantiated metax.cli.Command
+      /#    instance (within the metax.cli.Command instance returned by
+      /#    'MetaxCLI') based on those args. This method also invokes the
+      /#    code in the 'scope:' portion of the identified 'command'.
       /#
       /# TODO(wmh): This code is invoked on every command defined in any
       /# transitively included meta source file, which is unnecessary (we only
-      /# need to generate the entry method for metafiles that have specificly
-      /# been requested to be compiled.
+      /# need to generate the entry method for metafiles that have explicitly
+      /# specified for compilation.
       metax.c.D.expand.sinfo(self.kindfqn())
 
       metafile = self.metafile()
@@ -6490,6 +6635,7 @@ namespace metax.oopl scope:
         /# This first invocation creates the command_body. Subsequent
         /# invocations will use the same vec<str> as created here.
         klass.streamNamed('command_body')
+        klass.streamNamed('command_init')
         /# TODO(wmh): Determine why the following produces a problem in
         /# importMeta() when we specify ('metax.cli', 'lib', ...). This yields
         /# class path .../metax/.cli.py (instead of metax/cli/__init__.py) and
@@ -6502,9 +6648,9 @@ namespace metax.oopl scope:
         /# to generate executable binaries within ClassConstruct.compileMeta().
         userclass.commands().append(self)
 
-      command_init = []
+      command_init = klass.streamNamed('command_init')
       command_body = klass.streamNamed('command_body')
-
+      /# print('For %-50s command_init is %s (%d)' % (self.kindfqn(), id(command_init), len(command_init)))
       /# print('*** For %s found %s lines in body before start' % (self.kindfqn(), len(command_body)))
 
       /# We need to add code to command_init to create a new
@@ -8955,7 +9101,10 @@ namespace metax.oopl scope:
         /# The representation of numbers is pretty consistent across languages.
         /# In Meta, the legal syntax for a number matches that in json, which
         /# should be valid in all baselangs.
-        /# TODO(wmh): Do we want to support Perl's 100_000 syntax?
+        /# TODO(wmh): Support Perl's 100_000 syntax (rather than C++17's use of
+        /# single quotes. Unfortunately cannot support commas, as they will
+        /# mess up arg parsing (unless we require a space after commas in
+        /# param lists?)
         /#
         /# For now, meta literal numbers are valid in all baselangs.
         /# We use the verbatim str value provided by the user (data['str'])
@@ -9100,209 +9249,9 @@ namespace metax.oopl scope:
           {'lhs': lhs_code, 'op': opname, 'rhs': rhs_code})
 
       elif kind == 'call':
-        /# A call site. The value() dict is:
-        /#   rec: receiver of call
-        /#   subcalls: list of dict
-        /#     name: name of method or field to invoke on current receiver.
-        /#     field: boolean true means field access (if not present, method call)
-        /#     args: list of dict
-        /#       same structure as 'data' itself
-        val = expr.value()
-        rec = val['rec']
-        subcalls = val['subcalls']
-        subcall_index = 0
-
-        /# Establish the baselang receiver and its type.
-        recstr, metatype = self.analyzeVariable(rec, executable=executable)
-
-        /# TODO(wmh): This code is currently broken ... fix it!
-        print('HERE with recstr=%s metatype=%s' % (recstr, metatype))
-        print('#' * 70)
-        print(metafile.path())
-        print(expr)
-        print(executable.kindfqn())
-        print(executable.primary().line())
-        print('#' * 70)
-
-        if metatype:
-          rec = recstr
-
-        else:
-          /# It is possible that 'rec' is the name of a top-level namespace,
-          /# and that we are attempting to access some method or field within
-          /# a non-local namespace or class.
-          filecons = metafile.construct()
-          namespace = filecons.symbol(rec)
-          if namespace:
-            /# TODO(wmh): Define meta!namespace as shorthand for
-            /# meta.lang.Namespace, and implement that class. Each namespace
-            /# results in an auto-generated singleton class being defined within
-            /# the namespace, with a single instance that provides first-class
-            /# object status to namespaces. It will also be where namespace-level
-            /# variables will be implemented in languages that do not support them
-            /# directly.
-            construct = namespace
-            for i in range(0, len(subcalls)):
-              subcall = subcalls[i]
-              subvar = subcall['name']
-              /# print('Looking for %s (%s)' % (subvar, subcall))
-              /#construct.showSymbols()
-              child = construct.symbol(subvar)
-              if not child:
-                break
-              elif child.isnamespace():
-                /# we continue iterating thru subcalls.
-                construct = child
-                subcall_index = i + 1
-                rec += '.' + subvar
-                pass
-              elif child.isclass():
-                /# We've reached a point where subsequent subcalls should be
-                /# processed as method invocations or field accesses, using
-                /# child as the executable.
-                subcall_index = i + 1
-                executable = child
-                rec += '.' + subvar
-                /#print('HERE with %s' % child.kindfqn())
-                /#child.showSymbols()
-                metatype = child.implicitType()
-                /#print(subcalls[subcall_index:])
-                /#print(metatype)
-                break
-              else:
-                raise metax.c.Error('Unexpected %s' % child.kindfqn())
-
-          if not metatype and typecheck:
-            metafile.warning(
-              'Failed to establish a type for receiver "%s"' % recstr, line=lnum)
-            global DC
-            DC += 1
-            if DC > 10:
-              raise metax.c.Error('here')
-            /# print('Here with %s and %s' % (executable.kindfqn() if executable else executable, rec))
-            if executable:
-              executable.showSymbols()
-
-        /#print('Here with receiver %s : %s' % (rec, metatype))
-
-        /# Now process the cascading call-sites.
-        /#  - update what the receiver looks like, in 'rec'
-        /#  - maintain the metatype of the receiver
-        /#  - typecheck arguments
-        for subcall in subcalls[subcall_index:]:
-          is_field = subcall.get('field', False)
-          argsdata = subcall.get('args', None)
-
-          /# First, we establish the separator that appears between the receiver
-          /# and the method/field.
-          /#  - almost always '.'
-          /#  - in C++ and Perl, is '->' if the receiver is a ptr type
-          sep = '.'
-          if basel in ('python', 'cpp'):
-            /# If metatype is pointer type.
-            if False:
-              sep = '->'
-
-          /# Establish the field/method name
-          /#  - note that for field access, it is the raw field name, which is
-          /#    highly discouraged in Meta except for public raw fields.
-          /#  - this name may be changed (later, when we do type analysis), if
-          /#    the receiver is a native type.
-          name = subcall['name']
-
-          /# Now process the args.
-          /#  - Each element of argsdata is a dict suitable for passing into a
-          /#    recursive call to _compileExpr.
-          if is_field:
-            /# For a field, there are two possibilities:
-            /#  - an arglist with exactly one arg, representing a request to set
-            /#    the field to a given value.
-            /#  - no arglist, which is a request to get the value of a field.
-            /#     - the return value of a getter is the type of the field being
-            /#       gotten.
-            /#  - note that if the receiver is a native type, no field access
-            /#    is allowed (the native interface is method-only).
-            if argsdata:
-              if len(argsdata) != 1:
-                raise metax.c.Error('bad!')
-              /# We have a field assignment request.
-              /#  - there can be no further subcalls, since we need to return
-              /#    a single baselang statement (TODO(wmh): maybe in some
-              /#    baselangs we can assign and proceed in the same statement?
-              /#    Also, are we sure that we have to return a single statement?
-              /#    Maybe that is too limiting (oh ... but this will often be the
-              /#    rhs or an arg to a method invocation, so yeah, almost certainly
-              /#    needs to be a single statement).
-              valcode, valtype = self.compileExpr(
-                argsdata[0], metafile, executable=executable)
-              callcode = name + ' = ' + valcode
-
-              /# NOTE: Do NOT need to update the current receiver type 'metatype'
-              /#  - the return value of a setter (at least one generated by
-              /#    Meta) is the receiver, so the return type after is the same
-              /#    as the return type before.
-              /#  - No updates needed normally, but what if a person overrides a
-              /#    getter/setter with an explicit method? (note that if they
-              /#    override via the field 'scope' block they have no ability to
-              /#    change the return type and self is implicitly returned if they
-              /#    don't do it themselves.
-              /#  - Overriding of getters via explicit method is disallowed by
-              /#    the unique-id-per-scope rule, but one could override fieldIs()
-              /#    or fieldRef()
-              /#  - TODO(wmh): explicitly disallow overriding of field accessors
-              /#    via 'method' constructs!
-
-              /# TODO(wmh): enforce no subcalls after field set elsewhere!
-
-            else:
-              /# We have a field access request. No args.
-              callcode = name
-
-              /# TODO(wmh): Update the rectype ... the type of the field being
-              /# accessed.
-              if typecheck:
-                /# Note that rectype will be None if no type info was found.
-                metatype = self.typecheckField(metafile, metatype, name)
-
-            rec += sep + callcode
-
-          else:
-            /# For a method, we just process each arg.
-            /#  - Note that meta doesn't require () for no-arg method invocations,
-            /#    but baselangs do.
-            /#     - In C++, this->f returns a pointer to the function, and
-            /#       this->f() invokes the function.
-            /#     - In Meta, this!f returns a pointer to the function, and
-            /#       this.f (and this.f()) invokes the function.
-            args = []
-            if argsdata:
-              for argdata in argsdata:
-                argcode, argtype = self.compileExpr(
-                  argdata, metafile, executable=executable)
-                args.append(argcode)
-
-            /# Establish the method name/type.
-            /#  - note that for field access, it is the raw field name, which is
-            /#    highly discouraged in Meta except for public raw fields.
-            /#  - we perform type analysis to establish the legality of the given
-            /#    name (and to convert native-type names to baselang equivalents)
-            name = subcall['name']
-            if typecheck and metatype:
-              /# We have enough info to do type analysis on the requested
-              /# method invocation ... maybe.
-              rec, metatype = self.compileMethodInvocation(
-                metafile, rec, metatype, name, args)
-              /# print('FOUND return type "%s" [%s]' % (str(metatype), metatype.raw()))
-            else:
-              /# Without typechecking (or without a receiver type), we cannot
-              /# handle native-type method renaming, so the following code is
-              /# very likely to be incorrect.
-              metatype = None
-              callcode = name + '(' + ', '.join(args) + ')'
-              rec += sep + name + '(' + ', '.join(args) + ')'
-            /# TODO(wmh): Update the rectype ... the return type of the method
-
-        lines[-1] += rec
+        metatype = self._compileCall(
+          expr, metafile, lines,
+          indent=indent, executable=executable, typecheck=typecheck)
 
       elif kind == 'hash':
         metatype = self._compileHash(
@@ -9339,7 +9288,238 @@ namespace metax.oopl scope:
       pass
     end method _compileExpr;
 
-    method _compileHash : str #:
+    method _compileCall : metax.c.Type #:
+      Produce baselang syntax for a callsite.
+    params:
+      var expr : *metax.oopl.Expr #:
+        An Expr of kind 'call'
+      var metafile : *metax.oopl.MetaFile;
+      var lines : vec<str> #:
+        Where to write the output.
+      var indent : str = '';
+      var executable : metax.oopl.ExecutableConstruct = null;
+      var typecheck : bool = true;
+    scope:
+      /# A call site. The value() dict is:
+      /#   rec: receiver of call
+      /#   subcalls: list of dict
+      /#     name: name of method or field to invoke on current receiver.
+      /#     field: boolean true means field access (if not present, method call)
+      /#     args: list of dict
+      /#       same structure as 'data' itself
+      val = expr.value()
+      rec = val['rec']
+      subcalls = val['subcalls']
+      subcall_index = 0
+      basel = self.id()
+
+      /# Establish the baselang receiver and its type.
+      recstr, metatype = self.analyzeVariable(rec, executable=executable)
+
+      /# TODO(wmh): This code is currently broken ... fix it!
+      print('HERE with recstr=%s metatype=%s' % (recstr, metatype))
+      print('#' * 70)
+      print(metafile.path())
+      print(expr)
+      print(executable.kindfqn())
+      print(executable.primary().line())
+      print('#' * 70)
+
+      if metatype:
+        rec = recstr
+
+      else:
+        /# It is possible that 'rec' is the name of a top-level namespace,
+        /# and that we are attempting to access some method or field within
+        /# a non-local namespace or class.
+        filecons = metafile.construct()
+        namespace = filecons.symbol(rec)
+        if namespace:
+          /# TODO(wmh): Define meta!namespace as shorthand for
+          /# meta.lang.Namespace, and implement that class. Each namespace
+          /# results in an auto-generated singleton class being defined within
+          /# the namespace, with a single instance that provides first-class
+          /# object status to namespaces. It will also be where namespace-level
+          /# variables will be implemented in languages that do not support them
+          /# directly.
+          construct = namespace
+          for i in range(0, len(subcalls)):
+            subcall = subcalls[i]
+            subvar = subcall['name']
+            /# print('Looking for %s (%s)' % (subvar, subcall))
+            /#construct.showSymbols()
+            child = construct.symbol(subvar)
+            if not child:
+              break
+            elif child.isnamespace():
+              /# we continue iterating thru subcalls.
+              construct = child
+              subcall_index = i + 1
+              rec += '.' + subvar
+              pass
+            elif child.isclass():
+              /# We've reached a point where subsequent subcalls should be
+              /# processed as method invocations or field accesses, using
+              /# child as the executable.
+              subcall_index = i + 1
+              executable = child
+              rec += '.' + subvar
+              /#print('HERE with %s' % child.kindfqn())
+              /#child.showSymbols()
+              metatype = child.implicitType()
+              /#print(subcalls[subcall_index:])
+              /#print(metatype)
+              break
+            else:
+              raise metax.c.Error('Unexpected %s' % child.kindfqn())
+
+        if not metatype and typecheck:
+          metafile.warning(
+            'Failed to establish a type for receiver "%s"' % recstr, line=lnum)
+          global DC
+          DC += 1
+          if DC > 10:
+            raise metax.c.Error('here')
+          /# print('Here with %s and %s' % (executable.kindfqn() if executable else executable, rec))
+          if executable:
+            executable.showSymbols()
+
+      /#print('Here with receiver %s : %s' % (rec, metatype))
+
+      /# Now process the cascading call-sites.
+      /#  - update what the receiver looks like, in 'rec'
+      /#  - maintain the metatype of the receiver
+      /#  - typecheck arguments
+      for subcall in subcalls[subcall_index:]:
+        is_field = subcall.get('field', False)
+        argsdata = subcall.get('args', None)
+
+        /# First, we establish the separator that appears between the receiver
+        /# and the method/field.
+        /#  - almost always '.'
+        /#  - in C++ and Perl, is '->' if the receiver is a ptr type
+        sep = '.'
+        if basel in ('python', 'cpp'):
+          /# If metatype is pointer type.
+          if False:
+            sep = '->'
+
+        /# Establish the field/method name
+        /#  - note that for field access, it is the raw field name, which is
+        /#    highly discouraged in Meta except for public raw fields.
+        /#  - this name may be changed (later, when we do type analysis), if
+        /#    the receiver is a native type.
+        name = subcall['name']
+
+        /# Now process the args.
+        /#  - Each element of argsdata is a dict suitable for passing into a
+        /#    recursive call to _compileExpr.
+        if is_field:
+          /# For a field, there are two possibilities:
+          /#  - an arglist with exactly one arg, representing a request to set
+          /#    the field to a given value.
+          /#  - no arglist, which is a request to get the value of a field.
+          /#     - the return value of a getter is the type of the field being
+          /#       gotten.
+          /#  - note that if the receiver is a native type, no field access
+          /#    is allowed (the native interface is method-only).
+          if argsdata:
+            if len(argsdata) != 1:
+              raise metax.c.Error('bad!')
+            /# We have a field assignment request.
+            /#  - there can be no further subcalls, since we need to return
+            /#    a single baselang statement (TODO(wmh): maybe in some
+            /#    baselangs we can assign and proceed in the same statement?
+            /#    Also, are we sure that we have to return a single statement?
+            /#    Maybe that is too limiting (oh ... but this will often be the
+            /#    rhs or an arg to a method invocation, so yeah, almost certainly
+            /#    needs to be a single statement).
+            valcode, valtype = self.compileExpr(
+              argsdata[0], metafile, executable=executable)
+            callcode = name + ' = ' + valcode
+
+            /# NOTE: Do NOT need to update the current receiver type 'metatype'
+            /#  - the return value of a setter (at least one generated by
+            /#    Meta) is the receiver, so the return type after is the same
+            /#    as the return type before.
+            /#  - No updates needed normally, but what if a person overrides a
+            /#    getter/setter with an explicit method? (note that if they
+            /#    override via the field 'scope' block they have no ability to
+            /#    change the return type and self is implicitly returned if they
+            /#    don't do it themselves.
+            /#  - Overriding of getters via explicit method is disallowed by
+            /#    the unique-id-per-scope rule, but one could override fieldIs()
+            /#    or fieldRef()
+            /#  - TODO(wmh): explicitly disallow overriding of field accessors
+            /#    via 'method' constructs!
+
+            /# TODO(wmh): enforce no subcalls after field set elsewhere!
+
+          else:
+            /# We have a field access request. No args.
+            callcode = name
+
+            /# TODO(wmh): Update the rectype ... the type of the field being
+            /# accessed.
+            if typecheck:
+              /# Note that rectype will be None if no type info was found.
+              metatype = self.typecheckField(metafile, metatype, name)
+
+          rec += sep + callcode
+
+        else:
+          /# For a method, we just process each arg.
+          /#  - Note that meta doesn't require () for no-arg method invocations,
+          /#    but baselangs do.
+          /#     - In C++, this->f returns a pointer to the function, and
+          /#       this->f() invokes the function.
+          /#     - In Meta, this!f returns a pointer to the function, and
+          /#       this.f (and this.f()) invokes the function.
+          args = []
+          if argsdata:
+            for argdata in argsdata:
+              argcode, argtype = self.compileExpr(
+                argdata, metafile, executable=executable)
+              args.append(argcode)
+
+          /# Establish the method name/type.
+          /#  - note that for field access, it is the raw field name, which is
+          /#    highly discouraged in Meta except for public raw fields.
+          /#  - we perform type analysis to establish the legality of the given
+          /#    name (and to convert native-type names to baselang equivalents)
+          name = subcall['name']
+          if typecheck and metatype:
+            /# We have enough info to do type analysis on the requested
+            /# method invocation ... maybe.
+            rec, metatype = self.compileMethodInvocation(
+              metafile, rec, metatype, name, args)
+            /# print('FOUND return type "%s" [%s]' % (str(metatype), metatype.raw()))
+          else:
+            /# Without typechecking (or without a receiver type), we cannot
+            /# handle native-type method renaming, so the following code is
+            /# very likely to be incorrect.
+            metatype = None
+            callcode = name + '(' + ', '.join(args) + ')'
+            rec += sep + name + '(' + ', '.join(args) + ')'
+          /# TODO(wmh): Update the rectype ... the return type of the method
+
+      lines[-1] += rec
+    tests:
+      testx py ::
+        test.tpy()
+        baselang = test.baselang
+        compiler = test.compiler
+        metafile = test.metafile
+
+        bmi = test.method
+        expr = metax.c.Expr.FromStr('@self.weight;\n', attribute=None)
+        lines = []
+        mtype = baselang._compileCall(expr, metafile, lines, executable=bmi)
+        print(mtype)
+        print('\n'.join(lines))
+    end method _compileCall;
+
+    method _compileHash : metax.c.Type #:
       Compile a literal hash into python syntax.
 
       Returns:
@@ -9391,7 +9571,7 @@ namespace metax.oopl scope:
       pass
     end method _compileHash;
 
-    method _compileList : str #:
+    method _compileList : metax.c.Type #:
       Compile a literal list into python syntax.
 
       Returns: str
@@ -9434,6 +9614,158 @@ namespace metax.oopl scope:
       /# Tested in compileExpr().  Do we need more tests?
       pass
     end method _compileList;
+
+    method compileMethodInovcation : tuple<str,metax.c.Type> #:
+      Generate baselang syntax of an invocation of method 'name' on rectype.
+
+      Returns:
+       0. the baselang method invocation syntax (including receiver, method and args)
+       1. the meta Type the callsite returns.
+    params:
+      var metafile : MetaFile #:
+        Where to report errors
+      var receiver : str #:
+        The baselang code representing the receiver of the current method
+        invocation.
+      var rectype : metax.c.Type #:
+        The receiver type
+      var name : str #:
+        The name of the method being invoked on the receiver type.
+        This is the meta-level name, which may change in the resulting
+        baselang code (e.g. if rectype is a native type).
+      var args : vec<str> #:
+        The args passed in meta-level invocation.
+      var line : int #:
+        The line number in meta source code where the method invocation resides.
+    scope:
+      metatype = None
+
+      if rectype is None:
+        /#  The receiver type is unknown ... this code is likely to be incorrect.
+        code = receiver + '.' + name + '(' + ', '.join(args) + ')'
+
+      elif rectype.isNative():
+        /#  We have a native type ... obtain the method invocation code and
+        /#  return type from nativeMethodToBase().
+        code, metatype = self.nativeMethodToBase(
+          metafile, receiver, rectype, name, args)
+
+      elif rectype.isPrimitive():
+        /#  We have a primitive type. In Meta, all primiitve types benefit from
+        /#  the same meta-level-to-base-level mapping of syntax, so we obtain
+        /#  the baeslang syntax from nativeMethodToBase().
+        code, metatype = self.nativeMethodToBase(
+          metafile, receiver, rectype, name, args)
+
+      else:
+        /#  We have a class type.  No renaming of the method, and args are
+        /#  just comma-separated (at least in all baselangs impelemented so far).
+        /#
+        /#  TODO(wmh): Compute sep properly based on current rectype
+        sep = '.'
+        code = receiver + sep + name + '(' + ', '.join(args) + ')'
+
+        /#  We establish the return type by finding the method named 'name' within
+        /#  the class identified by rectype.
+        fqcn = rectype.base()
+        classy = metafile.compiler().baselang().getClass(fqcn, default=None)
+        if classy:
+          executable = classy.executableNamed(name, default=None)
+          if executable:
+           /#  Have found the executable being invoked.
+            metatype = executable.attrval('returns')
+          else:
+            classy.showExecutables()
+            metafile.warning('Class %s has no executable "%s"' % (fqcn, name))
+        else:
+          metafile.warning('Class %s not found' % fqcn)
+
+      return code, metatype
+    test:
+    end method compileMethodInovcation;
+
+    method nativeMethodToBase : tuple<str,Type> #:
+      Type check the method 'methname' applied to rectype.
+
+      Returns:
+        0. the baselang method name for 'name'.
+        1. the meta Type the method returns.
+    params:
+      var metafile : MetaFile #:
+        Where to report errors
+      var receiver : str #:
+        The baselang code representing the receiver of the current method
+        invocation.
+      var rectype : metax.c.Type #:
+        The receiver type
+      var name : str #:
+        The name of a method being invoked on the native receiver type.
+      var args : vec<str> #:
+        The args passed in meta-level infocation.
+        TODO(wmh): We need something higher-level than just the strings ...
+        we need the type info for these args too.
+    scope:
+      code = None
+      metatype = None
+
+      /#  print 'Here with receiver=%s rectype=%s name=%s args=%s' % (receiver, rectype, name, args)
+
+      /#  Verify that 'name' is defined on the native type in question.
+      native_type = rectype.base()
+      metalang = metafile.compiler().metalang()
+      native = metalang.__class__.NATIVE
+      interface = native.get(native_type, None)
+      fullname = native_type + '.' + name
+
+      if interface:
+        /#  We've found an interface for the native type
+        methinfo = interface.get(name, None)
+        if methinfo:
+          /#  We've confirmed that the specified method name is understood
+          argsinfo = methinfo['args'] or []
+          codeinfo = methinfo['code']
+          codetmpl = codeinfo.get(self.suffix(), None)
+          /#  pprint.pprint(methinfo)
+          if codetmpl:
+            /#  We have a baselang code template for the method.
+
+            /#  We typecheck the args against argsinfo.
+            /#  TODO(wmh): Support optional args in 'args' specification.
+            argsok = True
+            if len(args) > len(argsinfo):
+              argsok = False
+              metafile.error(
+                'native %s expects %d args but received %d' %
+                (fullname, len(argsinfo), len(args)))
+            /#  Note that it is acceptable for there to be fewer elements in
+            /#  args than in argsinfo if some args are optional ... we check below.
+            data = {'rec': receiver}
+            n = len(argsinfo)
+            for i, argd in enumerate(args):
+              /#  TODO(wmh): argd needs to be more than just the arg value ...
+              /#  need type, etc.)
+              value = argd
+              /#  TODO(wmh): typecheck the value against argexptype
+              arginfo = argsinfo[i]
+              argexptype = arginfo['type']
+              /#  Record the mapping for this arg.
+              data['arg%d' % (i+1)] = value
+
+            if argsok:
+              code = codetmpl % data
+
+          else:
+            metafile.error(
+              'Native "%s" not implemented for %s' % (full, name, self.id()))
+        else:
+          metafile.error(
+            'Native type "%s" does not understand method "%s"' %
+            (native_type, name))
+      else:
+        metafile.error('Unrecognized native type "%s"' % native_type)
+
+      return code, metatype
+    end method nativeMethodToBase;
 
     method analyzeVariable : tuple<str,Type> #:
       Identify the baselang representation for a varname (and its metatype).

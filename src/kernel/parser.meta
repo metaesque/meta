@@ -6263,7 +6263,7 @@ scope:
         r'((?P<end>end)(?:\s+(?P<kind>\S+)(?:\s+(?P<id>\S+))?)?)?;')
     setup:
       test.text = (
-        'MetaLanguage Test config:\n'
+        'MetaLanguage test config:\n'
         'end MetaLanguage;\n'
       )
       test.metafile, test.context = test.schemaParser(test.text)
@@ -6325,7 +6325,7 @@ scope:
       return (self._text, index, self._lnum, col, line)
     test:
       test.iseq(
-        ('MetaLanguage Test config:\nend MetaLanguage;\n', 0, 0, 0, test.metafile.line()),
+        ('MetaLanguage test config:\nend MetaLanguage;\n', 0, 0, 0, test.metafile.line()),
         test.metafile.current())
     end method current;
 
@@ -6340,7 +6340,7 @@ scope:
         lnum = self._lnum
       return lines[lnum] if lnum < len(lines) else None
     test:
-      test.iseq('MetaLanguage Test config:', test.metafile.line().line())
+      test.iseq('MetaLanguage test config:', test.metafile.line().line())
     end method line;
 
     method column : int #:
@@ -6362,7 +6362,7 @@ scope:
       return result
     test:
       metafile, context = test.schemaParser(
-        'MetaLanguage Test config:\nend MetaLanguage;\n')
+        'MetaLanguage test config:\nend MetaLanguage;\n')
       test.iseq(0, metafile.column())
       metafile.indexIs(7)
       test.iseq(7, metafile.column())
@@ -6977,7 +6977,7 @@ scope:
       test.iseqtext(
         '################################################################################\n'
         'lnum:index:in:line\n'
-        '   0:    0: 0:MetaLanguage Test config:\n'
+        '   0:    0: 0:MetaLanguage test config:\n'
         '   1:   26: 0:end MetaLanguage;\n'
         '################################################################################\n',
         fp.getvalue())
@@ -7024,7 +7024,7 @@ scope:
       self.indexIs(line.start() + line.indent())
     test:
       text = (
-        'MetaLanguage Test comment:\n'
+        'MetaLanguage test comment:\n'
         '  This is a test\n'
         '\n'
         '  to verify simple block parsing.\n'
@@ -7075,7 +7075,7 @@ scope:
         block.registerConstruct(construct)
     test:
       text = (
-        'MetaLanguage Test config:\n'
+        'MetaLanguage test config:\n'
         '  Construct A;\n'
         '  Construct B;\n'
         '  Construct C;\n'
@@ -7094,6 +7094,19 @@ scope:
         '  Construct C;\n',
         fp.getvalue())
     end method parseComplexBlock;
+
+    method dynamicallyObtainMetaxSymbol : module #:
+      Obtain a metax sub module
+    params:
+      var modname : str #:
+        The module below 'metax' to obtain.
+    scope:
+      metax_module = sys.modules['metax']
+      sub_module = getattr(metax_module, modname, None)
+      return sub_module
+    test:
+      test.notnull(test.metafile.dynamicallyObtainMetaxSymbol('c'))
+    end method dynamicallyObtainMetaxSymbol;
 
     method parseConstruct : Construct #:
       Parse a Construct at the current parser position.
@@ -7360,8 +7373,8 @@ scope:
       construct_class = consinfo._construct_class
       if consinfo.name() == 'BaseLanguage':
         /# BaseLanguage constructs are special
-        /#  - all other constructs of a given kind are implemented by a class
-        /#    identified solely by the kind.
+        /#  - almost all constructs of a given kind are implemented by a class
+        /#    identified solely by the kind, but this is not true for BaseLanguage
         /#  - for baselang constructs, each instance is implemented by its
         /#    own class, based on both kind and id.
         /#  - for metalang <Y> and baselang <X>, the class is <Y><X>.
@@ -7369,18 +7382,77 @@ scope:
         /#    but this should only happen if we are in code like command schema,
         /#    where we don't expect the classes to be defined yet.
         parent_construct = parent.parent()
-        metal = parent_construct.id().capitalize()
+        /# TODO(wmh): Rather than metalang id capitalize, we should use metalang
+        /# 'name' attribute.
+        metalang_id = parent_construct.id()
+        metal = metalang_id.capitalize()
         basel = primary.value().capitalize()
         class_name = metal + basel
-        metax_module = sys.modules['metax']
-        /# TODO(mwh): Generalize this (need to know which metalang the baselang
-        /# is in!!)
-        metax_c_module = metax_module.oopl
-        better_construct_class = getattr(metax_c_module, class_name, None)
+        /# This obtains the module metax.oopl, metax.doc, metax.meta, etc.
+        metax_metalang_module = self.dynamicallyObtainMetaxSymbol(metalang_id)
+        better_construct_class = None
+        if metax_metalang_module is not None:
+          better_construct_class = getattr(metax_metalang_module, class_name, None)
         if better_construct_class:
           construct_class = better_construct_class
         /# print('MetaFile.parseSecondaryAttribute: metalang %s baselang %s = %s [%s]' % (
         /#   metal, basel, class_name, construct_class))
+      elif consinfo.name() == 'MetaLanguage':
+        /# MetaLanguage constructs are special
+        /#  - almost all constructs of a given kind are implemented by a class
+        /#    identified solely by the kind, but this is not true for
+        /#    MetaLanguage
+        /#  - for metalang constructs, each instance is implemented by its own
+        /#    class, based on both kind and id.
+        /#  - for metalang with id <y>, the class is Metax<Y> where <Y> is the
+        /#    capitalized version of id <y>
+        /#     - Note that we are using 'Metax' as a prefix, not 'Meta'. It is
+        /#       likely we will disallow any class defined in Meta to start
+        /#       with 'Metax' or end with 'Metax' (using 'Metax' instead of
+        /#       'Meta' is safer as far fewer people will be using the former
+        /#       in their day-to-day code, so will rarely encounter the
+        /#       limitation).
+        /#     - IMPORTANT: The MetaLanguage construct has a 'name' secondary
+        /#       attribute that is the sensible item to use when establishing
+        /#       the capitalized version of id, but here at the time we
+        /#       need it, we have not yet parsed it.
+        /#        - for now, we simply capitalized the id
+        /#        - we can consider requiring the name to always be the
+        /#          attribute immediately following the primary attribute,
+        /#          and peek forward to obtain its value.
+        metal = primary_value
+        /# TODO(wmh): The following assumes that meta languages reside in
+        /# module 'metax.<metalang>', but that is only true for the official
+        /# metalangs (metax.meta, metax.oopl, metax.doc, etc.).  For custom
+        /# metalangs, the module is specified in the 'nmsp' attribute of
+        /# the MetaLanguage construct (which is problematic because we are
+        /# currently parsing that construct and have not yet reached the
+        /# 'nmsp' attribute. For now, this means that custom metalangs cannot
+        /# define their own MetaLanguageConstruct subclasses.
+        metax_metalang_module = self.dynamicallyObtainMetaxSymbol(metal)
+        /# TODO(wmh): Use the 'name' attribute (by requiring it to be the next
+        /# attribute after the MetaLanguage primary attribute, and peeking
+        /# forward two tokens.
+        class_name = 'Metax' + metal.capitalize()
+        better_construct_class = getattr(metax_metalang_module, class_name, None)
+        if better_construct_class is None:
+          /# TODO(wmh): We are no longer writing code into schema.meta files,
+          /# but should definitely continue to support the option. This new code
+          /# related to each Meta-language having a subclass of
+          /# MetaLanguageConstruct is NOT yet supported in that paradigm. Remind
+          /# yourself how BaseLanguageConstruct was working in the schema files
+          /# and do something similar for MetaLanguageConstruct subclasses.
+          if metal != 'test':
+            /# TODO(wmh): Rather than special-casing test, define a TestMeta < MetaLanguageConstruct.
+            print(
+              'WARNING: Failed to find metax.%s.%s so using %s.%s' %
+              (metal, class_name, construct_class.__module__,
+               construct_class.__name__))
+        else:
+          construct_class = better_construct_class
+          /# print(
+          /#   'Here with better %s.%s' %
+          /#   (better_construct_class.__module__, better_construct_class.__name__))
 
       /# Create the construct
       if construct_class:
@@ -7567,7 +7639,7 @@ scope:
     tests:
       testx basics scope:
         text = (
-          'MetaLanguage Test config:\n'
+          'MetaLanguage test config:\n'
           '  Construct A config:\n'
           '    Attribute default : word = <empty> aliases <=>;\n'
           '    kind primary noval Attribute Attribute : id = <required>;\n'
@@ -7655,7 +7727,7 @@ scope:
 
         /# Now an edge-case that was at one point causing an infiite loop
         text = (
-          'MetaLanguage Meta\n'
+          'MetaLanguage meta\n'
           'comment:\n'
           '  Here with notes\n'
           'config:\n'
@@ -7669,7 +7741,7 @@ scope:
         fp = test.fp()
         schema.write(fp=fp)
         test.iseqtext(
-          'MetaLanguage Meta\n'
+          'MetaLanguage meta\n'
           'comment:\n'
           '  Here with notes\n'
           'config:\n'
@@ -8084,7 +8156,7 @@ scope:
     tests:
       testx t1 scope:
         text = (
-          'MetaLanguage Test config:\n'
+          'MetaLanguage test config:\n'
           '  Construct A config:\n'
           '    Attribute type : word = <empty> aliases <:> #:\n'
           '      A comment\n'
@@ -8097,7 +8169,7 @@ scope:
           'File f path "/this/is/a/test space.txt";\n'
         )
         badtext = (
-          'MetaLanguage Test config:\n'
+          'MetaLanguage test config:\n'
           '  Construct A config:\n'
           '    Attribute type : word = <empty> aliases >:< #: extra text\n'
           '      A comment\n'
@@ -8287,7 +8359,7 @@ scope:
         index = line.start()
       return (termcode, index)
     test:
-      text = 'MetaLanguage Test config:\nend MetaLanguage;\n'
+      text = 'MetaLanguage test config:\nend MetaLanguage;\n'
       construct, context, metafile = test.newTestSchema(text)
       metafile.nextLine()
       test.iseq((7, 43), metafile.parseEnd(construct))
@@ -8303,7 +8375,7 @@ scope:
       metafile, context = test.schemaParser('end MetaLanguage;\n')
       test.iseq((7, 17), metafile.parseEnd(construct))
 
-      metafile, context = test.schemaParser('end MetaLanguage Test;\n')
+      metafile, context = test.schemaParser('end MetaLanguage test;\n')
       test.iseq((15, 22), metafile.parseEnd(construct))
       test.iseq([], metafile.errors())
 
@@ -8317,7 +8389,7 @@ scope:
       metafile, context = test.schemaParser('end MetaLanguage Bork;\n')
       test.iseq((15, 22), metafile.parseEnd(construct))
       test.iseq(
-        [{'message': 'Parsing MetaLanguage Test but found terminator for MetaLanguage Bork',
+        [{'message': 'Parsing MetaLanguage test but found terminator for MetaLanguage Bork',
          'line': 0, 'kind': 'E', 'col': 0}],
         metafile.errors())
     end method parseEnd;
@@ -8341,11 +8413,11 @@ scope:
       self._index = result[2]
       return result
     test:
-      text = 'MetaLanguage Test config:\nend MetaLanguage;\n'
+      text = 'MetaLanguage test config:\nend MetaLanguage;\n'
       metafile, context = test.schemaParser(text)
       test.iseq(('MetaLanguage', 13, 13), metafile.parseWord(0))
       test.iseq(13, metafile.column())
-      test.iseq(('Test', 5, 18), metafile.parseWord(13))
+      test.iseq(('test', 5, 18), metafile.parseWord(13))
       test.iseq(18, metafile.column())
       test.iseq(('config:', 7, 25), metafile.parseWord(18))
       test.iseq(25, metafile.column())
@@ -8384,10 +8456,10 @@ scope:
       while text[index] == ' ': index += 1
       return (word, index - start, index)
     test:
-      text = 'MetaLanguage Test config:\nend MetaLanguage;\n'
+      text = 'MetaLanguage test config:\nend MetaLanguage;\n'
       metafile, context = test.schemaParser(text)
       test.iseq(('MetaLanguage', 13, 13), metafile.peekWord(0))
-      test.iseq(('Test', 5, 18), metafile.peekWord(13))
+      test.iseq(('test', 5, 18), metafile.peekWord(13))
       test.iseq(('config:', 7, 25), metafile.peekWord(18))
 
       assert text[25] == '\n'
@@ -8474,7 +8546,7 @@ scope:
       return (token, attrkv, selector, form, index, data, lnum, start - line.start())
     test:
       text = (
-        'MetaLanguage Test config:\n'
+        'MetaLanguage test config:\n'
         '  Construct Cons config:\n'
         '    kind secondary Attribute Attr : word;\n'
         '    kind<py> secondary Attribute Attr2 : word;\n'
@@ -8520,7 +8592,7 @@ scope:
       /# Parse a feature/primary token when one does not exist.
       metafile.lnumIs(0)
       test.iseq(
-        ('Test', 'Test', None, 'error', 18, None, 0, 13),
+        ('test', 'test', None, 'error', 18, None, 0, 13),
         metafile.peekFeatureOrPrimaryToken(13, context.legalInfo(['MetaLanguage'])))
     end method peekFeatureOrPrimaryToken;
 
@@ -8677,7 +8749,7 @@ scope:
         test.iseq(expected, value)
 
       text = (
-        'MetaLanguage Test config:\n'
+        'MetaLanguage test config:\n'
         '  Construct Cons config:\n'
         '    kind secondary Attribute Attr : word;\n'
         '  end Construct Cons;\n'
@@ -8882,7 +8954,7 @@ scope:
       return line, index, matches
     test:
       mf, _ = test.schemaParser(
-        'MetaLanguage Test config:\n  Construct A config:\n  end;\nend;\n')
+        'MetaLanguage test config:\n  Construct A config:\n  end;\nend;\n')
       lines = mf.lines()
       test.iseq(0, mf.lnum())
 
@@ -8947,10 +9019,10 @@ scope:
       self.set(index=index, lnum=lnum)
       return (line, index, matches, skipped)
     test:
-      metafile, _ = test.schemaParser('MetaLanguage Test config:\nend;\n')
+      metafile, _ = test.schemaParser('MetaLanguage test config:\nend;\n')
       test.iseq((metafile.lines()[0], 0, True, 0), metafile.skipEmptyLines())
       test.iseq(0, metafile.column())
-      metafile, _ = test.schemaParser('\n    \nMetaLanguage Test config:\nend;\n')
+      metafile, _ = test.schemaParser('\n    \nMetaLanguage test config:\nend;\n')
       test.iseq((metafile.lines()[2], 6, True, 2), metafile.skipEmptyLines())
       test.iseq(0, metafile.column())
       metafile, _ = test.schemaParser( '\n    \n    class Person scope:\n')
@@ -8975,9 +9047,9 @@ scope:
       return result
     test:
       metafile, _ = test.schemaParser(
-        '  a = 1;\n  b = 2;\nMetaLanguage Test config:\nend;\n')
+        '  a = 1;\n  b = 2;\nMetaLanguage test config:\nend;\n')
       line = metafile.skipToIndent(0)
-      test.iseq('   3: 0:MetaLanguage Test config:', line.asStr())
+      test.iseq('   3: 0:MetaLanguage test config:', line.asStr())
       test.iseq(2, metafile.lnum())
     end method skipToIndent;
 
@@ -9267,7 +9339,7 @@ scope:
       out = fp.getvalue()
       test.iseqtext(
         'File fauxpath scope:\n'
-        '  MetaLanguage Test config:\n'
+        '  MetaLanguage test config:\n'
         '  end MetaLanguage;\n',
         out)
     end method parseMeta;
@@ -9276,6 +9348,9 @@ scope:
       Expand all top-level constructs in this file.
     scope:
       D.expand.sinfo(self.path())
+
+      /# print(
+      /#   'For %s we have %s' % (self.path(), self.compiler().importlist()))
 
       self.stateIs('expanding')
       start = time.time()
@@ -16751,7 +16826,7 @@ scope:
     test:
       metapath = test.resourcePath('ex1')
       metafile, constructs = test.metaenv.parseMeta(metapath)
-      test.iseq('MetaLanguage Test', constructs[0].kindfqn())
+      test.iseq('MetaLanguage test', constructs[0].kindfqn())
     end method parseMeta;
 
     method compileMeta : MetaFile #:
@@ -17864,7 +17939,7 @@ scope:
         The text making up the metalang schema file.
     scope:
       metafile, context = self.schemaParser(text)
-      schema = metax.meta.MetaLanguageConstruct('Test', None, context)
+      schema = metax.meta.MetaLanguageConstruct('test', None, context)
       return schema, context, metafile
     test:
     end method newTestSchema;

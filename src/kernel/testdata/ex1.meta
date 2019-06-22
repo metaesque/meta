@@ -1,4 +1,4 @@
-MetaLanguage Test name Test parent Meta toplevel <test> #:
+MetaLanguage test name Test parent Meta toplevel <test> #:
   THIS FILE SHOULD STAY FROZEN (it is used verbatim by unittests)
 config:
 
@@ -17,4 +17,4 @@ config:
       A description of the attribute.
   end Construct;
 
-end MetaLanguage Test;
+end MetaLanguage test;

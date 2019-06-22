@@ -45,6 +45,7 @@ scope:
         units[name] = unit
         index += 1
       self.unitsIs(units)
+    scope<cc>:
     end;
 
   end class Dimension;
@@ -71,6 +72,7 @@ scope:
       var suffix -> suffix;
       var scale -> scale;
     scope<py>:
+    scope<cc>:
     end;
   end class Unit;
 
@@ -90,7 +92,7 @@ scope:
       The value of the unit.
 
     field powers : int #:
-      Encodes the exponents 
+      Encodes the exponents
          a b c d e f g h
         L M T I O N J !
 
@@ -550,6 +552,7 @@ scope:
       test.q4 = Quantity.New('6m / s')
       test.q5 = Quantity.New('2')
       test.q6 = Quantity.New('1 / 3s')
+    scope<cc>:
     end lifecycle;
 
     meta
@@ -649,7 +652,7 @@ scope:
           value *= val
 
         /# Encode the power in powers.
-        /#  - each dimension is assigned a chunk of bits within 'powers' 
+        /#  - each dimension is assigned a chunk of bits within 'powers'
         /#    starting at index PowerBits * udata['index']
         /#  - In b bits we can representing numbers from 0 to (2^b)-1
         /#  - If we subtract 2^(b-1) from the above range, we get numbers from
@@ -676,7 +679,7 @@ scope:
           pass
         else:
           raise Error('Invalid separator "%s" within "%s"' % (sep, repr))
-         
+
         /# Advance to next unit spec.
         i += 4
 
@@ -706,6 +709,7 @@ scope:
     params:
       var path : str = '/usr/share/misc/units.lib' #:
         The path to the units file to parse.
+    scope<cc>:
     scope<py>:
       /# Each line is one of:
       /#  - comment: starts with '/'
@@ -774,6 +778,7 @@ scope:
         the result of current + value must be non-negative.
       var incr : bool = false #:
         If true, increment rather than set.
+    scope<cc>:
     scope<py>:
       /# We need to replace the width bits of 'bits' from position 'start'
       /# to 'start+width-1' with either 'value' or 'current value + value'
@@ -818,7 +823,7 @@ scope:
 
       /# Form the result
       result = (bits & unaffected_mask) | (value << start)
-      
+
       /# print('result   = ' + bin(result)[2:])
       return result
     test<py>:
@@ -838,6 +843,7 @@ scope:
     params:
       var units : map #:
         Maps unit names/aliases/abbrevs to integer powers (positive or negative)
+    scope<cc>:
     scope<py>:
       nb = cls.PowerBits()
       result = cls.ZeroPowers
@@ -875,6 +881,7 @@ scope:
         The second encoding
       var negate : bool = false #:
         If true, subtract encoding2 rather than add.
+    scope<cc>:
     scope<py>:
       PowerBits = Quantity.PowerBits()
       N = len(Quantity.Dimensions())
@@ -917,13 +924,13 @@ scope:
     field Str : map<int,str> #:
       Maps integer powers to ascii string representations.
       TODO(wmh): Convert the keys to strings (also contains 'times': '*', which
-      won't fly in C++).                                              
+      won't fly in C++).
 
     static
     field Unicode : map<int,str> #:
       Maps integer powers to unicode string representations.
       TODO(wmh): Convert the keys to strings (also contains 'times': '*', which
-      won't fly in C++).                                              
+      won't fly in C++).
 
     meta
     field PowerBits : int = 4 #:
@@ -1059,6 +1066,7 @@ scope:
 
     method clone : Quantity #:
       Create a new instance of this quantity.
+    scope<cc>:
     scope<py>:
       return self.__class__(self.value(), self.powers())
     test<py>:
@@ -1071,6 +1079,7 @@ scope:
       Returns:
         An instance of a subclass if a subclass matching self.units() exists,
         else null.
+    scope<cc>:
     scope<py>:
       cls = self.__class__
       subclasses = cls.Subclasses
@@ -1108,6 +1117,7 @@ scope:
 
     method __str__ : str #:
       Obtain the printable representation of this quantity.
+    scope<cc>:
     scope<py>:
       return self.asStr()
     test<py>:
@@ -1129,6 +1139,7 @@ scope:
         How many digits to use to represent the numeric portion.
       var unicode : bool = false #:
         If true, express result in unicde.
+    scope<cc>:
     scope<py>:
       form = u'%8.5f'
       suffix = self.units(units=units, unicode=unicode)
@@ -1154,6 +1165,7 @@ scope:
         If specified, indicates for some subset of units which unit to use.
       var unicode : bool = false #:
         If true, return unicode, else str.
+    scope<cc>:
     scope<py>:
       if units is None:
         units = {}
@@ -1188,10 +1200,11 @@ scope:
       Return a new Quantity produced by adding self and other
     params:
       var other : Quantity;
+    scope<cc>:
     scope<py>:
       if self.powers() != other.powers():
         raise TypeError(
-          'Cannot add %s and %s' % 
+          'Cannot add %s and %s' %
           (self.asStr(unicode=True), other.asStr(unicode=True)))
       return Quantity(self.value() + other.value(), self.powers())
     test<py>:
@@ -1204,10 +1217,11 @@ scope:
       Modify self by adding other, returning self.
     params:
       var other : Quantity;
+    scope<cc>:
     scope<py>:
       if self.powers() != other.powers():
         raise TypeError(
-          'Cannot add %s and %s' % 
+          'Cannot add %s and %s' %
           (self.asStr(unicode=True), other.asStr(unicode=True)))
       self._value += other.value()
       return self
@@ -1222,6 +1236,7 @@ scope:
       Modify self by adding other
     params:
       var other : Quantity;
+    scope<cc>:
     scope<py>:
       return self.plus(other)
     test<py>:
@@ -1235,10 +1250,11 @@ scope:
       Return a new Quantity produced by subtracting other from self
     params:
       var other : Quantity;
+    scope<cc>:
     scope<py>:
       if self.powers() != other.powers():
         raise TypeError(
-          'Cannot subtract %s from %s' % 
+          'Cannot subtract %s from %s' %
           (other.asStr(unicode=True), self.asStr(unicode=True)))
       return Quantity(self.value() - other.value(), self.powers())
     test<py>:
@@ -1251,10 +1267,11 @@ scope:
       Modify self by subtracting other, returning self.
     params:
       var other : Quantity;
+    scope<cc>:
     scope<py>:
       if self.powers() != other.powers():
         raise TypeError(
-          'Cannot subtract %s from %s' % 
+          'Cannot subtract %s from %s' %
           (other.asStr(unicode=True), self.asStr(unicode=True)))
       self._value -= other.value()
       return self
@@ -1269,6 +1286,7 @@ scope:
       Modify self by subtracting other
     params:
       var other : Quantity;
+    scope<cc>:
     scope<py>:
       return self.minus(other)
     test<py>:
@@ -1283,6 +1301,7 @@ scope:
     params:
       var other : any #:
         Either Quantity or scalar.
+    scope<cc>:
     scope<py>:
       cls = self.__class__
       if isinstance(other, (int, float)):
@@ -1307,6 +1326,7 @@ scope:
     params:
       var other : any #:
         Either Quantity or scalar.
+    scope<cc>:
     scope<py>:
       cls = self.__class__
       if isinstance(other, (int, float)):
@@ -1337,6 +1357,7 @@ scope:
     params:
       var other : any #:
         Either Quantity or scalar.
+    scope<cc>:
     scope<py>:
       return self.times(other)
     test<py>:
@@ -1349,6 +1370,7 @@ scope:
     params:
       var other : any #:
         Either Quantity or scalar.
+    scope<cc>:
     scope<py>:
       cls = self.__class__
       if isinstance(other, (int, float)):
@@ -1376,6 +1398,7 @@ scope:
     params:
       var other : any #:
         Either Quantity or scalar.
+    scope<cc>:
     scope<py>:
       cls = self.__class__
       if isinstance(other, (int, float)):
@@ -1404,6 +1427,7 @@ scope:
     params:
       var other : any #:
         Either Quantity or scalar.
+    scope<cc>:
     scope<py>:
       return self.divideby(other)
     test<py>:
@@ -1415,6 +1439,7 @@ scope:
     implicit
     command wunits #:
       Wade's units.
+    scope<cc>:
     scope<py>:
       for line in cli.rest:
         q = Quantity.New(line)
@@ -1422,12 +1447,15 @@ scope:
     end command wunits;
 
     test
-    method test_v1 scope<py>:
+    method test_v1
+    scope<cc>:
+    scope<py>:
       Quantity = metax.units.Quantity
       /# TODO(wmh): Fix temperature (deleted 'to' and 'from' ... need better
       /# solution).
       /#q = Quantity.New('273.15C')
       /# print(q)
+    end method test_v1;
 
   end class Quantity;
 
@@ -1446,33 +1474,41 @@ scope:
       var value : double;
     scope<py>:
       super(FixedDimensionQuantity, self).__init__(value, self.__class__.Powers())
+    scope<cc>:
+    end lifecycle;
 
   end class FixedDimensionQuantity;
 
   class Length < FixedDimensionQuantity ::
 
-    lifecycle clinit:
+    lifecycle _ clinit<py>:
       cls.PowersIs(Quantity.DimensionEncoding({'length': 1}))
-    setup:
+    setup<py>:
       test.l1 = metax.units.Length(7.5)
     end;
 
     test
     method testx_basics scope<py>:
       test.iseq(' 7.50000 m', test.l1.asStr())
+    scope<cc>:
+    end method testx_basics;
 
   end class Length;
 
   class Mass < FixedDimensionQuantity ::
 
-    lifecycle clinit:
+    lifecycle _ clinit<py>:
       cls.PowersIs(Quantity.DimensionEncoding({'mass': 1}))
-    setup:
+    setup<py>:
       test.l1 = metax.units.Mass(7.5)
     end;
 
-    test method testx_basics scope<py>:
+    test
+    method testx_basics
+    scope<py>:
       test.iseq(' 7.50000 kg', test.l1.asStr())
+    scope<cc>:
+    end method testx_basics;
 
   end class Mass;
 
@@ -1492,11 +1528,12 @@ scope:
       var si -> si;
       var units -> units;
     scope<py>:
+    scope<cc>:
     end;
 
   end class NonSIQuantity;
 
-  test 
+  test
   class TestCase < metax.test.TestCase scope:
     lifecycle setup:
     end;

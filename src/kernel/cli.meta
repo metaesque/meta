@@ -35,7 +35,7 @@ namespace metax.cli #:
         - this command is a 'child' of the 'metac' command.
      - A meta program that was invoked via a Meta-generated Entry() method
        will have the (instantiated) command-line information available in
-       Meta().CLI(), 
+       Meta().CLI(),
         - is an instance of metax.cli.Values
         - common idiom:
             CLI = Meta().CLI()
@@ -93,7 +93,7 @@ scope:
 
     field desc : str #:
       A multi-line description of the flag or arg.
-        
+
     lifecycle params:
       var name -> name;
       var parent -> parent = null;
@@ -143,7 +143,7 @@ scope:
           result = True
         elif value == 'false':
           result = False
-        
+
       elif mytype == 'int':
         if isinstance(value, int):
           result = value
@@ -573,12 +573,12 @@ scope:
             /# Temporary hack while we migrate to metacnew
             print (
               'WARNING: %s "%s" of %s %s conflicts with pre-existing %s "%s"' %
-              (norakind, nora, partkind, part.name(), 
+              (norakind, nora, partkind, part.name(),
                existing.__class__.__name__, existing.name()))
           else:
             raise NameConflict(
               '%s "%s" of %s %s conflicts with pre-existing %s "%s"' %
-              (norakind, nora, partkind, part.name(), 
+              (norakind, nora, partkind, part.name(),
                existing.__class__.__name__, existing.name()))
         else:
           parts[nora] = part
@@ -625,7 +625,7 @@ scope:
         'cmd', aliases='cc', summary='Some command.')
       test.iseq([], sorted(cmd.parts()))
       test.iseq([], sorted(cmd.allParts()))
-      
+
       /# Create and register a Flag
       flag = metax.cli.Flag(
         'flaga', default='', aliases='a', summary='some flag')
@@ -644,7 +644,7 @@ scope:
       test.iseqvec(
         ['0', 'a', 'arg0', 'flaga', 'sa', 'somearg'],
         sorted(cmd.allParts(aliases=True)))
-      
+
       /# Ensure that a flag that has a name conflict raises an exception
       flag2 = metax.cli.Flag(
         'flagb', default='', aliases='a,b', summary='some other flag')
@@ -712,7 +712,7 @@ scope:
     test<py>:
       command = self.subcommand
       test.iseq(['e', 'expand'], sorted(command.parts()))
-      
+
       flag = command.newFlag(
         'test', 'bool', False, aliases='T,tst', summary='testing',
         desc='more testing')
@@ -961,7 +961,7 @@ scope:
                     (item, flagname, flag.value()))
             else:
               errors.append(
-                'Command %s does not recognize flag --%s' % 
+                'Command %s does not recognize flag --%s' %
                 (result.name(), flagname))
               break
         else:
@@ -1057,7 +1057,7 @@ scope:
       if debug:
         self.show()
 
-      return result              
+      return result
     tests:
       testx t1 scope<py>:
         command = test.faux
@@ -1086,7 +1086,7 @@ scope:
           >|    Height in meters.
           >|  --name : str = "Bob"
           >|    The name of the person
-          >|  --version|r : regexp = 
+          >|  --version|r : regexp = |<
           >|    Version to use.
           >|  image:
           >|    Image processing.
@@ -1117,7 +1117,7 @@ scope:
           >|    Height in meters.
           >|  --name : str = "Bob"
           >|    The name of the person
-          >|  --version|r : regexp = 
+          >|  --version|r : regexp = |<
           >|    Version to use.
           >|""",
           test.out())
@@ -1138,7 +1138,7 @@ scope:
         /#    the name field will be tromped, and was hiding an error in logic).
         top_command = metax.cli.Command('metac')
         command = metax.cli.Command(
-          'main', parent=top_command, 
+          'main', parent=top_command,
           summary='The public interface to the Meta compiler.')
         hierarchy_command = command.newCommand(
           'hierarchy', aliases='hier', summary='Print hierarchy')
@@ -1254,7 +1254,7 @@ scope:
     end field;
 
     field default : str #:
-      The string representation of the default value of the part. 
+      The string representation of the default value of the part.
 
     field start : any #:
       The value of the flag/arg as specified by the command line.  This will
@@ -1293,7 +1293,7 @@ scope:
     A single customizable (usually optional) name/value pair accessible
     within a program by name or alias.
   scope:
-      
+
     protected
     method instantiate : trilean #:
       Typecheck and conditionally assign a value to this flag.

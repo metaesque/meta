@@ -387,7 +387,7 @@ namespace metax.meta scope:
               secondary.lineIs(line)
           else:
             if '<*>' in skey:
-              /# If the attribute type is simplex, we need to convert it to 
+              /# If the attribute type is simplex, we need to convert it to
               /# complex.
               info = consinfo.secondaries().get(skey, None)
               type = info['type']
@@ -409,7 +409,7 @@ namespace metax.meta scope:
       /#    but hopefully not.
       if parent:
         parent.registerConstruct(construct, position=position)
-        /# TODO(wmh): 
+        /# TODO(wmh):
         consparent = parent.parent()
         if consparent and consparent.kind() == 'class':
           construct.myclassIs(consparent)
@@ -874,7 +874,7 @@ namespace metax.meta scope:
         If spec starts with '/', it is a request to find a child relative
         to the file construct that this construct is contained within, else
         it is relative to this construct.
-        
+
         On the last <term> in spec, <id> is optional, and if not present, it is
         a request to return an Attribute rather than a Construct. For example,
         '/nm.sp/Person/bmi@scope' returns the 'bmi' method construct, while
@@ -882,7 +882,7 @@ namespace metax.meta scope:
       var delim : str = None #:
         What is used to separate descendents.
          - Use '/' to avoid the issues with the non-nesting of namespace ids,
-           and for a more intuitive syntax for absolute specifications 
+           and for a more intuitive syntax for absolute specifications
            ('/nm.sp/Class/method' is more familiar than '.nm.sp.Class.method')
          - Use '.' to allow fqn's to be resolved. Note that fqns are resolved
            relative to the FileConstruct, so although '.nm.sp.Class.method' is
@@ -1436,7 +1436,7 @@ namespace metax.meta scope:
               user: show user value
               TODO(wmh): Define others?
           uplift: bool
-            If true and self is namespace, the scope: attribute are not 
+            If true and self is namespace, the scope: attribute are not
             printed, but each child is printed, at the same level as self
             (i.e. not indented).
           term: map
@@ -1498,7 +1498,7 @@ namespace metax.meta scope:
                 /# schema as having default <special> and
                 /# ConsInfo.registerSecondary() sets the value to None in such
                 /# cases.
-                /# 
+                /#
                 /# For now, we do not add these attributes.
                 pass
               else:
@@ -2529,7 +2529,7 @@ namespace metax.meta scope:
         print('Not writing %s due to errors' % outpath)
     test:
       /# We want to write into src/kernel/testdata/tmp, but cannot use
-      /# testMetaPath() because mtameta.meta is symlinked and __metafile__ 
+      /# testMetaPath() because mtameta.meta is symlinked and __metafile__
       /# expands to src/schema/meta/metameta.meta.
       mlcons = test.construct
       newdir = mlcons.compiler().metaPath(
@@ -2552,6 +2552,11 @@ namespace metax.meta scope:
 
   end class MetaLanguageConstruct;
 
+  class MetaxMeta < MetaLanguageConstruct #:
+    A subclass of MetaLanguageConstruct representing Meta(Meta).
+  scope:
+  end class MetaxMeta;
+
   class ConstructConstruct < MetaConstruct #:
     @Construct: The construct used to define constructs.
 
@@ -2564,10 +2569,10 @@ namespace metax.meta scope:
     appear to change aspects of the construct within all complex blocks of the
     construct.
   scope:
-    
+
     lifecycle setup:
       test.construct = test.constructInCode(
-        'test/special@config', name='meta', metal='meta')      
+        'test/special@config', name='meta', metal='meta')
     end;
 
     method kind : str scope:
@@ -2695,7 +2700,7 @@ namespace metax.meta scope:
         /# more difficult.
         /#
         /# In this code, we support finding the 'nm.sp' namespace for specs
-        /# like 'nm.sp.Person.bmi', and 'nm.sp@config.Class' but not 
+        /# like 'nm.sp.Person.bmi', and 'nm.sp@config.Class' but not
         /# nm@config.sp.Class' (there is no 'nm' so no 'config:' block within
         /# it).
         result = None
@@ -2712,7 +2717,7 @@ namespace metax.meta scope:
           idattr = ('.'.join(terms[:i+1])).split('@')
           id = idattr[0]
           attr = idattr[1] if len(idattr) > 1 else 'scope'
-      
+
           /# See notes in Construct.child() for why we do the following.
           attribute = (
             self.rawattr(attr + ':', default=None) or
@@ -2817,7 +2822,7 @@ namespace metax.meta scope:
 
           /# Canonicalize path
           if meta_path is None:
-            /# This can happen, for example, when a user specifies 
+            /# This can happen, for example, when a user specifies
             /#   cls assoc <class>;
             /# when <class> is not a legal class.
             klass = metac.classes().get(fqn, None)
@@ -3133,4 +3138,3 @@ namespace metax.meta scope:
   end;
 
 end namespace metax.meta;
-
