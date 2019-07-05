@@ -1086,7 +1086,6 @@ Suppose we want to form a string providing a person's name, dob, height and weig
          << " weight " << ios:setprecision(2) << p.weight() << "h"
          << endl;
 
-
 Meta provides a mechanism for identifying literal strings in baselang source code
 that contain special variable interpolation requests, and generating the appropriate
 baselang source code.
@@ -1120,9 +1119,12 @@ Meta can provide lots of convenience syntax within these variables:
  - ${rec.name} means @rec.name
  - ${rec!name} means @rec!name
  - ${name} means local variable 'name'
- - ${@name} means "name " + local variable 'name'
- - ${@.name} means "name " + @self.name
-
+ - ${age<10d} means left align ('<') and allocate at least 10 digits ('10d')
+ - ${name>12s!} means right align ('>') and allocate exact 12 chars ('12s!')
+ - ${weight~15.3f} means center ('~'), format as float allocating at least 15 chars and print 3 digits after decimal ('15.3f')
+ - ${=<spec>} means "name=" + ${<spec>}
+ - ${#<spec>} means print integer resulting from invoking size on <spec>
+ 
 
 ## Finding class/method/field definitions in meta files
 

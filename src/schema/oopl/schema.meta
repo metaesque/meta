@@ -1752,6 +1752,24 @@ config:
 
   end Construct var;
 
+  Construct call < _statement_ #:
+    This will not be used as a user-facing construct, but stores call
+    expressiosn.
+  config:
+
+    primary
+    Attribute call : id = <auto> #:
+      The name of the var.
+
+    secondary
+    Attribute expr : expr = <empty> #:
+      The expression.
+
+    Attribute comment:;
+    Attribute icomment:;
+
+  end Construct call;
+
   Construct loop < _statement_ #:
     @loop: A generalization of all looping syntax.
 

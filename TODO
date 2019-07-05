@@ -1,4 +1,22 @@
 --------------------------------------------------------------------------------
+IMPORTANT: The code at the top of each Meta-generated namespace is performing
+multiple invocations.
+
+  - Within nm/sp.py, I have code of the form:
+       try:
+         import nm.sp
+       except ImportError:
+         pass:
+       if not getattr(nm, 'sp', None):
+         import sys
+         nm.sp = sys.modules[__name__]
+  - The intention is to allow code within the namespace to refer to classes
+    using either A or nm.sp.A.
+  - The problem is that the try: import nm.sp is invoking the importation
+    code a second time, which means Meta__Initialize methods are invoked
+    twice.
+
+--------------------------------------------------------------------------------
 Suppose we have:
 
   test

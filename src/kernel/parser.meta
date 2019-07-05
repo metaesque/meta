@@ -693,10 +693,30 @@ scope:
           location = u' (%s)' % data['source'].kind() if full else ''
           notestr = data.get('note', None)
           note = ' [%s]' % notestr if notestr else ''
+          mtype = None
+          if construct:
+            kind = construct.kind()
+            if kind == 'field' or kind == 'var':
+              mtype = construct.attrval('type')
+            elif kind == 'method':
+              mtype = construct.attrval('returns')
+            elif kind == 'class':
+              /# TODO(wmh): Fix this.
+              mtype = None
+            else:
+              raise metax.c.Error(
+                'unknown symbol construct %s' % construct.kindfqn())
+          else:
+            print('For %s (%s) no type' % (symbol, construct.kindfqn()))
+            mtype = None
+          kindfqn = (
+            '%-6s %-30s' % (construct.kind(), construct.fqn()) if construct
+            else 'null')
           fp.write(
-            u'%s%s = %s%s%s\n' %
-            (subindent, symbol.ljust(width), construct.kindfqn(), location,
-             note))
+            u'%s%-20s = %s : %s%s%s\n' %
+            (subindent, symbol.ljust(width),
+            kindfqn, mtype.raw() if mtype else '?',
+            location, note))
       else:
         fp.write(u'%s  empty\n' % indent)
     test:
@@ -705,25 +725,24 @@ scope:
       test.mtable.show(fp=fp, full=True, width=20)
       test.ctable.show(fp=fp)
       test.ctable.show(fp=fp, full=True)
-
-      test.iseqtext(
-        >|"""SymbolTable for method nm.sp.Card.show:
-        >|  height               = var height
-        >|  name                 = var name
-        >|  self                 = var self
-        >|SymbolTable for method nm.sp.Card.show:
-        >|  height               = var height (method)
-        >|  name                 = var name (method)
-        >|  self                 = var self (method)
-        >|SymbolTable for class nm.sp.Card:
-        >|  __init__ = method nm.sp.Card.__init__
-        >|  f        = method nm.sp.Card.f
-        >|  show     = method nm.sp.Card.show
-        >|SymbolTable for class nm.sp.Card:
-        >|  Card     = class nm.sp.Card (namespace)
-        >|  __init__ = method nm.sp.Card.__init__ (class)
-        >|  f        = method nm.sp.Card.f (class)
-        >|  show     = method nm.sp.Card.show (class)
+      test.iseqtext("""\
+       >|SymbolTable for method nm.sp.Card.show:
+       >|  height               = var    height                         : real
+       >|  name                 = var    name                           : str
+       >|  self                 = var    self                           : nm.sp.Card
+       >|SymbolTable for method nm.sp.Card.show:
+       >|  height               = var    height                         : real (method)
+       >|  name                 = var    name                           : str (method)
+       >|  self                 = var    self                           : nm.sp.Card (method)
+       >|SymbolTable for class nm.sp.Card:
+       >|  __init__             = method nm.sp.Card.__init__            : void
+       >|  f                    = method nm.sp.Card.f                   : int
+       >|  show                 = method nm.sp.Card.show                : void
+       >|SymbolTable for class nm.sp.Card:
+       >|  Card                 = class  nm.sp.Card                     : ? (namespace)
+       >|  __init__             = method nm.sp.Card.__init__            : void (class)
+       >|  f                    = method nm.sp.Card.f                   : int (class)
+       >|  show                 = method nm.sp.Card.show                : void (class)
         >|""",
         test.out())
     end method show;
@@ -3994,12 +4013,10 @@ scope:
           meta_line = None
         else:
           diff = basenum - base_start
-          /# print('diff=%d (%d - %d for meta_start %d)' % (diff, basenum, base_start, meta_start))
+          /# print(
+          /#   'diff=%d (%d - %d for meta_start %d)' %
+          /#   (diff, basenum, base_start, meta_start))
           if diff < 0:
-            /#print(metapath)
-            /#print(self.path())
-            /#pprint.pprint(mapping)
-            /#raise InternalError('Should not be possible for diff to be %d' % diff)
             print('ERROR: Should not be possible for diff to be %d' % diff)
           meta_line = meta_start + diff
 
@@ -5654,21 +5671,56 @@ scope:
     params:
       var fp : ostream = out;
     scope:
-      fp.write(u'Type: %s\n' % self._raw)
-      fp.write(u'  prefix = %s\n' % self._prefix)
-      fp.write(u'  base   = %s\n' % self._base)
-      fp.write(u'  native = %s\n' % self._native)
-      fp.write(u'  params = %s\n' % self._params)
+      fp.write(u'Type: %s\n' % self.raw())
+      fp.write(u'  prefix       = %s\n' % self.prefix())
+      fp.write(u'  base         = %s\n' % self.base())
+      fp.write(u'  native       = %s\n' % self.native())
+      fp.write(u'  params       = %s\n' % self.params())
+      fp.write(u'  fqcn         = %s\n' % self.fqcn())
+      fp.write(u'  paramStr     = %s\n' % self.paramStr())
+      fp.write(u'  isIntegral   = %s\n' % self.isIntegral())
+      fp.write(u'  isPrimitive  = %s\n' % self.isPrimitive())
+      fp.write(u'  isNative     = %s\n' % self.isNative())
+      fp.write(u'  isVoid       = %s\n' % self.isVoid())
+      fp.write(u'  isBaseConst  = %s\n' % self.isBaseConst())
+      fp.write(u'  isTemplate   = %s\n' % self.isTemplate())
+      fp.write(u'  isPtr        = %s\n' % self.isPtr())
+      fp.write(u'  isUniquePtr  = %s\n' % self.isUniquePtr())
+      fp.write(u'  isRef        = %s\n' % self.isRef())
+      fp.write(u'  isRefPtr     = %s\n' % self.isRefPtr())
+      fp.write(u'  isValue      = %s\n' % self.isValue())
+      fp.write(u'  isStr        = %s\n' % self.isStr())
+      fp.write(u'  isVoid       = %s\n' % self.isVoid())
+      fp.write(u'  isAny        = %s\n' % self.isAny())
+      fp.write(u'  asStr        = %s\n' % self.asStr())
     test:
-      fp = test.fp()
-      test.type.dump(fp=fp)
-      test.iseqtext(
-        u'Type: @int<32>\n'
-        u'  prefix = @\n'
-        u'  base   = int\n'
-        u'  native = False\n'
-        u"  params = ['32']\n",
-        fp.getvalue())
+      test.type.dump(fp=test.fp())
+      out = test.out()
+      test.iseqtext("""\
+        >|Type: @int<32>
+        >|  prefix       = @
+        >|  base         = int
+        >|  native       = False
+        >|  params       = ['32']
+        >|  fqcn         = None
+        >|  paramStr     = <32>
+        >|  isIntegral   = True
+        >|  isPrimitive  = True
+        >|  isNative     = False
+        >|  isVoid       = False
+        >|  isBaseConst  = False
+        >|  isTemplate   = False
+        >|  isPtr        = False
+        >|  isUniquePtr  = False
+        >|  isRef        = False
+        >|  isRefPtr     = False
+        >|  isValue      = True
+        >|  isStr        = False
+        >|  isVoid       = False
+        >|  isAny        = False
+        >|  asStr        = @int<32>
+        >|""",
+        out)
     end method dump;
 
     method numericParam : int #:
@@ -7155,10 +7207,27 @@ scope:
       /# postcount each time this method is invoked.
       parent.postcountIs(precount)
 
+      /# Check for a special '@' call construct.
+      text = self.text()
+      if text[index] == '@':
+        print('************** HERE!')
+        col = index - line.start()
+        eprs = ExprParser(self, row=self.lnum(), col=col)
+        expr = eprs.parse()
+        cid = context.autoId()
+        construct = metax.oopl.CallConstruct.NewFromData(
+          cid, context, termcode=1,
+          secondaries=[('expr', expr)])
+        self.lnumIs(eprs.row())
+        new_index = self.line().start() + eprs.col() + 1
+        print('INDEx %d to %d' % (index, new_index))
+        self.indexIs(new_index)
+        construct.write()
+        return construct
+
       /# Consume feature attribute keys and values until we reach a token
       /# that is in 'consgroup' (a token identifying a construct kind that is
       /# legal in this context).
-      text = self.text()
       feature_tuples = []
       consinfo = None
       /# the position within text of the start of the primary key
@@ -8478,18 +8547,22 @@ scope:
       primary key is expected.
 
       Returns:
-       [0] word : str
+       [0] token : str
          The parsed token
-       [1] form : str
+       [1] attrkv : str
+         A feature attribute key or value
+       [2] selector : str
+         The selector on a key.
+       [3] form : str
          One of 'feature_value', 'feature_key', 'primary_key', or 'error'
-       [2] index : int
+       [4] index : int
          The absolute index of the next non-space token within self.text().
-       [3] data : any
+       [5] data : any
          A form-specific value (ConsInfo for primary_key, ...). If it has
          the value 'error', an error has arisen.
-       [4] lnum : int
+       [6] lnum : int
          The line number the token appears on (from 0)
-       [5] col : int
+       [7] col : int
          The column the token starts at (from 0)
     params:
       var start : int #:
@@ -9059,6 +9132,8 @@ scope:
       var index = -1 #:
         The indent to validate (if negative, self.index() is used).
     scope:
+      if self.hasErrors():
+        return False
       if index < 0:
         index = self.index()
       line = self.line()
@@ -10167,6 +10242,28 @@ scope:
       metac.registerClass(klass)
       test.iseq(n+1, len(set(metac.classes().keys())))
     end method registerClass;
+
+    method getClass : metax.oopl.ClassConstruct #:
+      Obtain a ClassConstruct by fqcn.
+    params:
+      var fqcn : str #:
+        The fully qualified class name.
+      var default : any = REQUIRED #:
+        The default to return if not present. If REQUIRED, raised error.
+    scope:
+      result = self.classes().get(fqcn, default)
+      if result is REQUIRED:
+        /# TODO(wmh): Raising an error may not be the right thing to do here.
+        /# Should the default value of 'default' be null instead?
+        raise Error('Failed to find class %s' % fqcn)
+      return result
+    test:
+      test.tpy(expand=True)
+      klass = test.compiler.getClass('demo.tmp.Student')
+      test.iseq('demo.tmp.Student', klass.fqn())
+      test.raises(metax.c.Error, test.compiler.getClass, 'not.a.class')
+      test.isnull(test.compiler.getClass('not.a.class', default=None))
+    end method getClass;
 
     method fs : metax.c.Filesystem #:
       The filesystem wrapper.
@@ -17193,7 +17290,7 @@ scope:
         'Attribute', 'BaseLanguage', 'Construct', 'FeatureValue', 'File',
         'MetaLanguage', 'Template',
         'accessor', 'assoc', 'behavior', 'block',
-        'case', 'category', 'class', 'command',
+        'call', 'case', 'category', 'class', 'command',
         'field', 'flag',
         'lifecycle', 'loop', 'method', 'namespace', 'native',
         'receiver', 'remark', 'resource', 'switch', 'testx', 'var',
@@ -17202,7 +17299,7 @@ scope:
         'Attribute', 'BaseLanguage', 'Construct', 'FeatureValue', 'File',
         'MetaLanguage', 'Template',
         'accessor', 'assoc', 'behavior', 'block',
-        'case', 'category', 'class', 'command',
+        'call', 'case', 'category', 'class', 'command',
         'field', 'flag',
         'lifecycle', 'loop', 'method', 'namespace', 'native', 'receiver',
         'remark', 'resource', 'switch', 'testx', 'var',
@@ -17311,6 +17408,7 @@ scope:
           >|      var f : int;
           >|      var g : int = 17;
           >|      var v : vec<int>;
+          >|      var v2 : @vec<int>;
           >|
           >|      loop l1 on i over v ::
           >|        print(i)
@@ -17525,7 +17623,7 @@ scope:
 
         /# We validate that the auto-assigned ids haven't changed.
         test.iseqvec(
-          ['var f', 'var g', 'var v',
+          ['var f', 'var g', 'var v', 'var v2',
            'loop l1', 'loop Meta__1__',
            'switch s1', 'switch Meta__4__'],
          [c.kindid() for c in test.mscope.value()])
@@ -17691,6 +17789,9 @@ scope:
 
       Important: The constructs have been parsed (via parseMeta()), but no
       expanding, translating or compiling has been done.
+
+      Sets following fields on the test instance:
+        metafile
     params:
       var child : str #:
         The path to the desired construct within the text.
@@ -17704,7 +17805,7 @@ scope:
       var basel : str = null;
       var debuglevel : int = 0;
     scope:
-      metafile = self.metafileFor(
+      metafile = test.metafileFor(
         text=text, name=name, metal=metal, basel=basel, debuglevel=debuglevel)
       metafile.parseMeta(test.context)
       if metafile.hasErrors(show=True):

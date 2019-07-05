@@ -1,4 +1,3 @@
-
 namespace metax.oopl scope:
 
   class MetaxOopl < metax.meta.MetaLanguageConstruct #:
@@ -13,87 +12,197 @@ namespace metax.oopl scope:
       /# TODO(wmh): This needs to be put someplace else (config file, etc).
       /# Preferably, it would be described in meta syntax and available to
       /# programmers to extend.
-      cls.NATIVE = {
+
+      /# NATIVE : map
+      /#   Each key is the name of a native type supported by Meta. The value
+      /#   is a map:
+      /#    - The '__template__' key is special, and is a vec<str>
+      /#       - number of elements indicates how many parameters this native
+      /#         type has.
+      /#       - each element is a string repr of a meta-level type, and
+      /#         represents the default type for the param in question. For
+      /#         example, 'map' is short for 'map<str,any>' and 'map<int>'
+      /#         is short for 'map<str,int>' because __templates__ for map is
+      /#           ['str', 'str']
+      /#       - if a particular template parameter is required, use a value
+      /#         of null within the __template__ list for it.
+      /#    - Keys are method names defined on the conceptual type, values are
+      /#      maps describing info about the method:
+      /#        args: vec<map>
+      /#         - if not present or null, the method has no args.
+      /#         - each element describes information about an arg of the method
+      /#             type: str
+      /#               The meta-level type of the arg (template substitutions
+      /#               are applied before passing to metax.c.Type.Instance).
+      /#             default: str
+      /#               Indicates the arg is optional, and specifies the value
+      /#               to use if one is not provided (a string representing
+      /#               legal Meta expr syntax?)
+      /#        alias: vec<str>
+      /#         - alternate names for the method.
+      /#        returns: str
+      /#         - the meta-level return type
+      /#         - template substitutions are applied before passing to
+      /#           metax.c.Type.Instance.
+      /#        code: map
+      /#         - keys are baselang suffixes starting with '.'
+      /#         - values are strings containing the following special
+      /#           substitutions:
+      /#            ${rec}   : the receiver
+      /#            ${recsep}: the receiver and separator ('val.', 'ptr->',..)
+      /#            ${T<k>}  : the kth template type (as a metatype string)
+      /#            ${A<k>}  : the kth argument (as baselang code)
+      /#
+      /#   IMPORTANT: The dict intentionally stores only strings (rather than
+      /#   richer types like metax.c.Type instance) so that we can easily move
+      /#   the dict into a config file.  We can perform optimization on the
+      /#   data after it is read in (by converting type strings to Type
+      /#   instances, etc.)
+      /#
+      /# TODO(wmh): An alternative way of defining the following would be to
+      /# provide a metax.native namespace that defines a class for each
+      /# native type. We could extract out the method bodies, etc. to obtain
+      /# native code.
+      native = {
+        'str': {
+          'scope': {
+            'size': {
+              'comment': 'Number of unicode characters in the string.',
+              'args': None,
+              'alias': ('len', 'length'),
+              'returns': 'int',
+              'code': {
+                '.cc': '%(recsep)ssize()',
+                '.js': '%(rec)s.length',
+                '.py': 'len(%(rec)s)',
+              },
+            },
+            'bytes': {
+              'comment': 'Number of bytes in the string.',
+              'args': None,
+              'returns': 'int',
+              'code': {
+                /# TODO(wmh): Fix these!
+                '.cc': '%(recsep)ssize()',
+                '.js': '%(rec)s.length',
+                /# TODO(wmh): Verify the following is valid in both py2 and py3
+                '.py': "len(%(rec)s.encode('utf8'))",
+              },
+            },
+          }
+        },
+        'vec': {
+          'alias': ['list', 'vector'],
+          'template': ['any'],
+          'scope': {
+            'size': {
+              'comment': 'Number of elements in the vector.',
+              'args': None,
+              'alias': ('len', 'length'),
+              'returns': 'int',
+              'code': {
+                '.cc': '%(recsep)ssize()',
+                '.js': '%(rec)s.length',
+                '.py': 'len(%(rec)s)',
+              },
+            },
+            'append': {
+              'args': [{'type': '$V'}],
+              'returns': '&vec<%(T1)s>',
+              'alias': ('push', 'push_back'),
+              'code': {
+                '.cc': '%(rec)s.push_back(%(A1)s)',
+                '.js': '%(rec)s.push(%(A1)s)',
+                '.py': '%(rec)s.append(%(A1)s)',
+              },
+            },
+          },
+        },
         'map': {
           /# TODO(wmh): In Javascript, use goog.structs.Map instead of Object to
           /# represent hashmap? Problem is that 'var a = {};' is an Object, so
           /# we'd have a mismatch.
-          'size': {
-            'args': None,
-            'alias': ('len', 'length'),
-            'code': {
-              'cc': '${rec}${sep}size()',
-              'js': '${rec}.getCount()',  # goog.structs.Map instance
-              'jv': '${rec}.size()',
-              'pm': {'ptr': 'scalar(@$${rec})', 'ref': 'scalar(@${rec})'},
-              'py': 'len(${rec})',
+          'alias': ['hash', 'dict'],
+          /# TODO(wmh): The 'template' key stores the number of template
+          /# parameters for this metatype. It indicates that 'map' is short for
+          /# 'map<str,any>'. It would be more convenient for 'map<int>' to
+          /# means 'map<str,int>' than 'map<int,any>', but that would require
+          /# that missing params be filled from the left when it is more common
+          /# to fill from the right). Look at other multi-param metatypes and
+          /# decide whether we need to special-case 'map' or can handle it
+          /# more generally.
+          'template': ['str', 'any'],
+          'scope': {
+            'size': {
+              'args': None,
+              'alias': ('len', 'length'),
+              'returns': 'int',
+              'code': {
+                '.cc': '%(recsep)ssize()',
+                '.js': '%(rec)s.getCount()',  # goog.structs.Map instance?
+                '.py': 'len(%(rec)s)',
+              },
             },
-          },
-          'keys': {
-            'args': None,
-            'code': {
-              'cc': 'meta::lang::Dictionary::Keys(${rec})',
-              'js': '${rec}.getKeys()',
-              'jv': '${rec}.keys()',
-              'pm': {'ptr': 'keys(@$${rec})', 'ref': 'keys(@${rec})'},
-              'py': '${rec}.keys()',
+            'keys': {
+              'args': None,
+              'returns':'vec<%(T1)s>',
+              'code': {
+                '.cc': 'meta::lang::Dictionary::Keys(%(rec)s)',
+                '.js': '%(rec)s.getKeys()',
+                '.py': '%(rec)s.keys()',
+              },
             },
-          },
-          'values': {
-            'args': None,
-            'code': {
-              'cc': 'meta::lang::Dictionary::Values(${rec})',
-              'js': '${rec}.getValues()',
-              'jv': '${rec}.elements()',
-              'pm': {'ptr': 'values(@$${rec})', 'ref': 'values(@${rec})'},
-              'py': '${rec}.values()',
+            'values': {
+              'args': None,
+              'returns':'vec<%(T2)s>',
+              'code': {
+                '.cc': 'meta::lang::Dictionary::Values(%(rec)s)',
+                '.js': '%(rec)s.getValues()',
+                '.py': '%(rec)s.values()',
+              },
             },
-          },
-          'get': {
-            'args': [{'type': '$K'}],
-            'alias': ('at',),
-            'code': {
-              'cc': '${rec}[${arg1}]',
-              'js': '${rec}[${arg1}]',
-              'jv': '${rec}[${arg1}]',
-              'pm': {'ptr': '${rec}->[${arg1}]', 'ref': '${rec}[${arg1}]'},
-              'py': '${rec}[${arg1}]',
-            },
-          },
-        },
-        'vec': {
-          'append': {
-            'args': [{'type': '$V'}],
-            'alias': ('push', 'push_back'),
-            'code': {
-              'cc': '${rec}.push_back(${arg1})',
-              'js': '${rec}.push(${arg1})',
-              'jv': '${rec}.add(${arg1})',
-              'pm': {'ptr': 'push(@$${rec}, ${arg1})',
-                     'ref': 'push(@${rec}, ${arg1})'},
-              'py': '${rec}.append(${arg1})',
+            'get': {
+              'args': [{'type': '%(T1)s'}],
+              'returns': '%(T2)s',
+              'alias': ('at',),
+              'code': {
+                '.cc': '%(rec)s[%(A1)s]',
+                '.js': '%(rec)s[%(A1)s]',
+                '.py': '%(rec)s[%(A1)s]',
+              },
             },
           },
         },
         'meta!ostream': {
-          'write': {
-            'alias': ('echo', 'print'),
-            'args': [{'type': 'str'}],
-            'code': {
-              /# TODO(wmh): This needs more work. String interpolation needs to
-              /# work
-              'cc': '${rec} << ${arg1}',
-              /# TODO(wmh): console.log() is just a hack till we get real streams
-              /# in javascript via phantomjs or Meta.
-              'js': 'console.log(${arg1})',
-              'jv': '${rec}.print(${arg1})',
-              'pm': {'ptr': '${rec}.print(${arg1})',
-                     'ref': '${rec}.print(${arg1})'},
-              'py': '${rec}.write(${arg1})',
+          'scope': {
+            'write': {
+              'alias': ('echo', 'print'),
+              'args': [{'type': 'str'}],
+              'code': {
+                '.cc': '%(rec)s << %(A1)s',
+                /# TODO(wmh): console.log() is just a hack till we get real
+                /# streams in javascript via phantomjs or Meta.
+                '.js': 'console.log(%(A1)s)',
+                '.py': '%(rec)s.write(%(A1)s)',
+              },
             },
           },
         },
       }
+      for ninfo in native.values():
+        /# TODO(wmh): Consider converting the elements in ninfo['template']
+        /# to metax.c.Type instances (they should never need instantiation,
+        /# and this avoids us having to convert every single time we compile
+        /# a callsite.
+
+        /# Extend scope with aliases.
+        scope = ninfo['scope']
+        for method in list(scope.keys()):
+          minfo = scope[method]
+          for alias in minfo.get('alias', []):
+            scope[alias] = minfo
+
+      cls.NATIVE = native
     end;
 
   end class MetaxOopl;
@@ -132,6 +241,28 @@ namespace metax.oopl scope:
       /# no instance of OoplConstruct available
       pass
     end method myclassIs;
+
+    method myexec : metax.oopl.ExecutableConstruct #:
+      Dummy implementation of myexec for use in constructs that don't have
+      an executable parent.
+    scope:
+      return None
+    test:
+      pass
+    end method myexec;
+
+    method myexecIs : any #:
+      Dummy implementation of myexecIs for use in constructs that do not have
+      an executable parent.
+    params:
+      var executable : metax.oopl.ExecutableConstruct;
+    scope:
+      print(
+        'TEMPORARY: Not that %s is dropping executable %s in myexecIs()' %
+        (self.kindfqn(), executable.kindfqn() if executable else None))
+    test:
+      pass
+    end method myexecIs;
 
     method _statementCode : metax.c.BaseSegment #:
       A service method used by statement-level constructs when implementing
@@ -678,7 +809,8 @@ namespace metax.oopl scope:
       /#    after our rejiggering attempts to invoke registerConstruct()
       /#    with the FileConstruct parent (the one we were trying to remap).
       /#  - constructor terminator code starts failing with
-      /#       E43: Parsing namespace cards1 but found terminator for namespace demo.cards1
+      /#       E43: Parsing namespace cards1 but found terminator for\
+      /#       namespace demo.cards1
       /#
       /# I'm going to experiment with an alternative solution in which we do
       /# the expansion in NamespaceConstruct.expandMeta() instead.
@@ -1073,12 +1205,12 @@ namespace metax.oopl scope:
         /#        import nm.sp
         /#      except ImportError as e:
         /#        pass
-        /#  - Within module nm.sp, we want users to be able to make reference
-        /#    to both SomeClass and nm.sp.SomeClass, but by default only
-        /#    the former is legal (nm.sp is not normally defined within nm.sp).
-        /#    To define it, we need to perform exactly the conditional
-        /#    import syntax mentioned above, plus some additional special
-        /#    work.
+        /#  - Within module nm.sp.ace, we want users to be able to make
+        /#    referenceto both SomeClass and nm.sp.ace.SomeClass, but by default
+        /#    only the former is legal (nm.sp is not, by default, available in
+        /#    the namespace defining nm.sp). To define it, we need to perform
+        /#    exactly the conditional import syntax mentioned above, plus some
+        /#    additional special work.
         try:
           my_index = all_lines.index('import ' + fqn)
           /# We need to add some lines of code after myindex to ensure the
@@ -1100,6 +1232,24 @@ namespace metax.oopl scope:
             if 'import sys' not in new_lines:
               new_lines.append('  import sys')
             new_lines.append('  %s = sys.modules[__name__]' % fqn)
+
+            if False:
+              /# TODO(wmh): This is new code based on
+              /#   src/kernel/tests/py/importsex.py
+              /# but it isn't working as expected for unittests.
+              /# Need to add a test namespace in
+              /#   src/kernel/tests/py/nm/sp/ace_test/__init__.py
+              /# and establish how to get it working there.
+              nmparts = fqn.split('.')
+              new_lines.append('import sys')
+              new_lines.append(
+                "%s = sys.modules['%s']" % (nmparts[0], nmparts[0]))
+              for i in range(1, len(nmparts)):
+                pmod = '.'.join(nmparts[:i])
+                mod = nmparts[i]
+                new_lines.append(
+                  "setattr(%s, '%s', sys.modules['%s.%s'])" %
+                  (pmod, mod, pmod, mod))
 
             /# Now some future-proofing imports to allow code to work in both
             /# python2 and python3. See
@@ -1322,7 +1472,8 @@ namespace metax.oopl scope:
         0. The list of lines in the namespace file
         1. The list of build targets needed by the namespace.
     params:
-      var triples : vec<tuple<metax.oopl.ClassConstruct,BaseFile,BaseFile>> = null #:
+      var triples
+      type vec<tuple<metax.oopl.ClassConstruct,BaseFile,BaseFile>> = null #:
         Each element is a triple containing a class construct, the
         BaseFile containing the class code, and a BaseFile containing
         the .bld fragment.
@@ -1385,7 +1536,9 @@ namespace metax.oopl scope:
       oldklass = self.myclass()
       klass = new_parent.parent().ancestor('class', proper=False)
       self.myclassIs(klass)
-      /# print('**** NOTE: Changed parent of %s which changes class from %s to %s' % (self.fqn(), oldklass.fqn() if oldklass else None, klass.fqn()))
+      /# print(
+      /#   '**** NOTE: Changed parent of %s which changes class from %s to %s'
+      /#  % (self.fqn(), oldklass.fqn() if oldklass else None, klass.fqn()))
     test:
       /# TODO(wmh): Test this!
       pass
@@ -1471,7 +1624,9 @@ namespace metax.oopl scope:
         /#  - NOTE(wmh): As of 2017/12/04 the above hypothesis is proved
         /#    incorrect ... classes with location 'test' have variant 'testuser'
         /#    and myclass is not initialized.
-        /# print('HERE with %s and %s and %s' % (self.fqn(), self.myclass(), myclass.fqn()))
+        /# print(
+        /#   'HERE with %s and %s and %s' %
+        /#   (self.fqn(), self.myclass(), myclass.fqn()))
         assert self.myclass() is myclass
 
       return myclass, moved
@@ -1684,7 +1839,8 @@ namespace metax.oopl scope:
         if '.' not in name:
           /# We have a relative class name ... prepend the namespace.
           if namespace is None:
-            raise metax.c.Error('No namespace provided: cannot qualify "%s"' % name)
+            raise metax.c.Error(
+              'No namespace provided: cannot qualify "%s"' % name)
           fqn = namespace.id() + metax.c.Context.Tokens()['scope_sep'] + name
         else:
           fqn = name
@@ -1759,8 +1915,10 @@ namespace metax.oopl scope:
         user: the user defined class
         test: the implicitly generated test class associated with a user class
         meta: the implicitly generated meta class associated with a user class
-        metatest: the implicit metaclass of an implicit test class for a user class
-        testmeta: the implicit testclass of an implicit meta class for a user class
+        metatest: the implicit metaclass of an implicit test class for a user
+                  class
+        testmeta: the implicit testclass of an implicit meta class for a user
+                  class
         testuser: a user-provided test class
         metauser: a user-provided meta class
         testmetauser: an implicit metaclass for a user-provided test class
@@ -1798,6 +1956,10 @@ namespace metax.oopl scope:
       Maps suppress commands to strings explaining why the error is being
       suppressed.
 
+    field receivers : @map<str,VarConstruct> #:
+      Maps certain special receiver names to VarContruct instances, to be
+      used within MethodConstructs when registering receivers in symboltables.
+
     lifecycle  clinit:
       /# TODO(wmh): These should not be ExprAttribute, but rather WordAttribute
       /# or some such.
@@ -1811,6 +1973,84 @@ namespace metax.oopl scope:
       test.istrue(test.klass.isClass())
       test.isfalse(test.method.isClass())
     end method isClass;
+
+    method receiver : VarConstruct #:
+      Obtain the receiver VarConstruct associated with a conceptual receiver.
+    params:
+      var name : str #:
+        One of 'self', 'meta' or 'test' optionally prefixed with '#' to indicate
+        a const receiver.
+    scope:
+      receivers = self.receivers()
+      result = receivers.get(name, None)
+      if result is None:
+        metafile = self.metafile()
+        context = metafile.context()
+        /# TODO(wmh): Normally the parent of a Var is an ExecutableConstruct,
+        /# but for these special receivers it makes sense to use a
+        /# ClassConstruct if it isn't too hacky to support it (avoids us having
+        /# to create a separate set of receiver instances for every method).
+        /# For now we add the class scope: as the parent of this var.
+        scope = self.attr('scope:')
+        const_mark = '#' if name[0] == '#' else ''
+        prefix = '&'
+        if name.endswith('self'):
+          varname = 'self'
+          basetype = self.fqn()
+        elif name.endswith('this'):
+          varname = 'this'
+          basetype = self.fqn()
+          prefix = '#*'
+        elif name.endswith('test'):
+          /# Do we need to verify that self is a test class? We shouldn't need
+          /# this receiver on non-test classes, right?
+          varname = 'test'
+          basetype = self.fqn()
+        elif name.endswith('meta'):
+          varname = 'meta'
+          basetype = ClassConstruct.MetaifyName(self.fqn())
+        else:
+          raise metax.c.Error('Invalid receiver name %s' % name)
+
+        vtype = metax.c.Type.Instance(
+          '%s%s%s' % (prefix, const_mark, basetype))
+        result = VarConstruct.NewFromData(
+          varname, context,
+          /# We do NOT pass 'scope' as parent because that would cause the new
+          /# instance to be registered with that parent, and we do NOT want
+          /# that for these pseudovars.
+          parent=None,
+          secondaries=[(':', vtype)],
+          termcode=1)
+        /# We link the new var to its parent block, but we do NOT register
+        /# the var within that block.
+        result.parentIs(scope)
+        receivers[name] = result
+      return result
+    test:
+      test.tpy()
+
+      selfvar = test.klass.receiver('self')
+      selfvar.write(fp=test.fp())
+      test.iseq('var self : &demo.tmp.Person;\n', test.out())
+      selfvar2 = test.klass.receiver('self')
+      test.issame(selfvar, selfvar2)
+
+      test.klass.receiver('#self').write(fp=test.fp())
+      test.iseq('var self : &#demo.tmp.Person;\n', test.out())
+
+      test.klass.receiver('this').write(fp=test.fp())
+      test.iseq('var this : #*demo.tmp.Person;\n', test.out())
+
+      test.klass.receiver('#this').write(fp=test.fp())
+      test.iseq('var this : #*#demo.tmp.Person;\n', test.out())
+
+      test.klass.receiver('meta').write(fp=test.fp())
+      test.iseq('var meta : &demo.tmp.PersonMeta;\n', test.out())
+
+      test.klass.receiver('#meta').write(fp=test.fp())
+      test.iseq('var meta : &#demo.tmp.PersonMeta;\n', test.out())
+    end method receiver;
 
     method __repr__ : str scope:
       return '<%s>' % self.kindfqn()
@@ -1832,7 +2072,9 @@ namespace metax.oopl scope:
         ('userclass', self.userclass()),
         ('initializer', self.initializer()),
       ):
-        fp.write(u'  %-12s: %s\n' % (ckind, construct.kindfqn() if construct else 'null'))
+        fp.write(
+          u'  %-12s: %s\n' %
+          (ckind, construct.kindfqn() if construct else 'null'))
       fields = self.fields()
       if fields:
         fp.write(u'  fields:\n')
@@ -2041,7 +2283,8 @@ namespace metax.oopl scope:
       if testclass is not None:
         assert meta.IsTestName(testclass.id())
       if metaclass is not None:
-        assert meta.IsMetaName(metaclass.id()), '%s does not have proper Meta name (%s)' % metaclass.id()
+        assert meta.IsMetaName(metaclass.id()), (
+          '%s does not have proper Meta name (%s)' % metaclass.id())
 
       if variant == 'user':
         assert userclass is self
@@ -2054,7 +2297,8 @@ namespace metax.oopl scope:
           assert testclass is None
 
         if autogen['meta']:
-          assert metaclass is not None, 'Expecting metaclass for %s (%s)' % (kfqn, self.isErrorClass())
+          assert metaclass is not None, (
+            'Expecting metaclass for %s (%s)' % (kfqn, self.isErrorClass()))
         else:
           assert metaclass is None
 
@@ -2102,7 +2346,12 @@ namespace metax.oopl scope:
       elif variant == 'metauser':
         /# TODO(wmh): These may need updating
         if False:
-          for cn, c in (('user', userclass), ('under', underclass), ('test', testclass), ('meta', metaclass)):
+          for cn, c in (
+            ('user', userclass),
+            ('under', underclass),
+            ('test', testclass),
+            ('meta', metaclass),
+          ):
             if c:
               print('%s = %s' % (cn, c.kindfqn()))
             else:
@@ -2118,7 +2367,8 @@ namespace metax.oopl scope:
       test.klass.validate()
     end method validate;
 
-    method testClassInfo : tuple<metax.oopl.NamespaceConstruct,metax.attr.ComplexBlock,str,str> #:
+    method testClassInfo
+    : tuple<metax.oopl.NamespaceConstruct,metax.attr.ComplexBlock,str,str> #:
       Obtain test class information.
 
       Returns:
@@ -2162,7 +2412,8 @@ namespace metax.oopl scope:
         test.klass.testClassInfo())
     end method testClassInfo;
 
-    method metaClassInfo : tuple<metax.oopl.NamespaceConstruct,metax.attr.ComplexBlock,str,str> #:
+    method metaClassInfo
+    : tuple<metax.oopl.NamespaceConstruct,metax.attr.ComplexBlock,str,str> #:
       Obtain the meta namespace and metaclass name.
 
       Returns:
@@ -2200,10 +2451,9 @@ namespace metax.oopl scope:
         else:
           /# TODO(wmh): Update this to use parentdata['class'] when we've
           /# implemented importMeta().
-          metaparent = metax.oopl.ClassConstruct.MetaifyName(parentdata['metafqn'])
-        /# print('******* HERE with %s and %s and %s' % (self.fqn(), metaparent, parentdata))
+          metaparent = metax.oopl.ClassConstruct.MetaifyName(
+            parentdata['metafqn'])
       else:
-        /# print('**** FOR %s found explicit metaparent %s' % (self.kindfqn(), metaparent))
         pass
 
       /# TODO(wmh): Delete following when we are using root.meta2
@@ -2215,7 +2465,8 @@ namespace metax.oopl scope:
 
       return (metaspace, metablock, metaname, metaparent)
     test:
-      test.tpy(expand=True, imports=True)  # parentclasses() iniitalized in importMeta
+      /# parentclasses() iniitalized in importMeta
+      test.tpy(expand=True, imports=True)
       test.iseq(
         (test.namespace,
          test.namespace.rawattr('scope:'),
@@ -2299,7 +2550,7 @@ namespace metax.oopl scope:
       test.istrue(errorclass.isErrorClass())
     end method isErrorClass;
 
-    method typeOfSelf : *metax.oopl.Type #:
+    method typeOfSelf : metax.oopl.Type #:
       Return the meta Type of 'self' for this class (or 'this' if dothis True)
     params:
       var dothis : bool = false #:
@@ -2428,7 +2679,8 @@ namespace metax.oopl scope:
     end method parentclass;
 
     method idfqn : str #:
-      Return id or fqn depending on whether this class is in same nmsp as parent.
+      Return id or fqn depending on whether this class is in same nmsp as
+      parent.
 
       WARNING: Should only be invoked after ClassConstruct.importMeta() has
       been invoked!
@@ -2585,14 +2837,17 @@ namespace metax.oopl scope:
         /# metaclass describing the class.
         mfqn = metaclass.fqn()
         if basel == 'javascript':
-          /# TODO(wmh): Clean up the special-casing in javascript ... the current
-          /# implementation is too messy!
-          /#  - the nm.sp.FooMeta module exports both nm.sp.FooMeta and nm.sp.MetaFoo
+          /# TODO(wmh): Clean up the special-casing in javascript ... the
+          /# current implementation is too messy!
+          /#  - the nm.sp.FooMeta module exports both nm.sp.FooMeta and
+          /#    nm.sp.MetaFoo
           /#  - if one wants to import either nm.sp.FooMeta or nm.sp.MetaFoo,
-          /#    special code must be generated in OoplJavascript.formatDependency.
+          /#    special code must be generated in
+          /#    OoplJavascript.formatDependency.
           /#  - when importing nm.sp.MetaFoo, one uses assoc kind 'cls' even
           /#    though MetaFoo is an instance of FooMeta, not a class.
-          metaclass_instname = metax.oopl.ClassConstruct.MetaInstifyName(self.id())
+          metaclass_instname = metax.oopl.ClassConstruct.MetaInstifyName(
+            self.id())
           mifqn = '.'.join(mfqn.split('.')[:-1] + [metaclass_instname])
           self.addDependency(
             mifqn, 'cls', 'implicit import in ClassConstruct.translateMeta()')
@@ -2625,8 +2880,8 @@ namespace metax.oopl scope:
               tsfqn, 'cls', 'implicit import in ClassConstruct.translateMeta()',
               target=None)
 
-          /# In python, the metax.test module is needed because metax.test.main()
-          /# is invoked to start the test suite.
+          /# In python, the metax.test module is needed because
+          /# metax.test.main() is invoked to start the test suite.
           if basel == 'python':
             self.addDependency(
               'metax.test', 'lib',
@@ -2649,7 +2904,8 @@ namespace metax.oopl scope:
             'target': '//metax/root:Object'},
           'metax.root.ObjectMeta': {
             'reason': 'every class depends on ObjectMeta', 'kind': 'cls',
-            'fqn': 'metax.root.ObjectMeta', 'target': '//metax/root:ObjectMeta'},
+            'fqn': 'metax.root.ObjectMeta',
+            'target': '//metax/root:ObjectMeta'},
           'os': {
             'reason': 'in assocs', 'kind': 'std', 'fqn': 'os',
             'target': None},
@@ -2818,7 +3074,8 @@ namespace metax.oopl scope:
       baselang = metac.baselang()
 
       /# Establish the path storing the resource.
-      path_attr, subpath_expr = resource.attrpair('path', default=metax.c.LOOKUP)
+      path_attr, subpath_expr = resource.attrpair(
+        'path', default=metax.c.LOOKUP)
       subpath = fs.expandvars(subpath_expr.asStr(unquote=True))
 
       src_path = fs.join(fs.dirname(metafile.path()), subpath)
@@ -3201,10 +3458,12 @@ namespace metax.oopl scope:
         comment = None
         preamble = None
         postamble = None
+        inamble = None
         retamble = None
       else:
         preamble = []
         postamble = []
+        inamble = []
         retamble = None
         attrkind = self.attrval('kind')
         inheritance = self.attrval('inheritance')
@@ -3245,7 +3504,19 @@ namespace metax.oopl scope:
           returntype = self.returntype()
           if returntype is None:
             raise metax.c.InternalError('returntype is uninitialized')
-          return_var = None if returntype.isVoid() else 'meta__super'
+          if returntype.isVoid():
+            return_var = None
+          else:
+            return_var = 'meta__super'
+            /# TODO(wmh): Some more work is needed here. If returntype is not
+            /# void, and the METAX_CALL_SUPER is indented within a conditional
+            /# block, we must initialize return_var in preamble to ensure it is
+            /# always safe to return it in postamble. Easy to do in python, but
+            /# more difficult to establish the proper default value in C++.
+            /# Certainly doable, as the needed code is used various other places
+            /# ... just need to do it.
+            if False:
+              preamble.append('%s = None' % return_var)
           if inheritance == 'postx':
             baselang.superCode(self, preamble, return_var=return_var)
             calls_super = True
@@ -3253,7 +3524,28 @@ namespace metax.oopl scope:
             baselang.superCode(self, postamble, return_var=return_var)
             calls_super = True
           elif inheritance == 'superx':
+            baselang.superCode(self, inamble, return_var=return_var)
             calls_super = True
+            old_lines = scope_lines
+            superx_re = BaseLanguageOopl.SuperxRE()
+            super_index = None
+            super_ws = None
+            for i, line in enumerate(old_lines):
+              m = superx_re.match(line)
+              if m:
+                super_index = i
+                super_ws = m.group('ws')
+                break
+            if super_index is None:
+              metafile.error(
+                'Missing required <METAX_CALL_SUPER> for superx method',
+                attr=scope_attr)
+            else:
+              scope_lines = old_lines[:super_index]
+              for line in inamble:
+                scope_lines.append(super_ws + line)
+              scope_lines.extend(old_lines[super_index+1:])
+
           if calls_super and return_var:
             /# TODO(wmh): How to guarantee that this is always the last
             /# line of output?
@@ -3295,8 +3587,8 @@ namespace metax.oopl scope:
             and not postamble
             and (
               not preamble
-              /# TODO(wmh): Testing for 'super(' is baselang specific. Generalize
-              /# this code.
+              /# TODO(wmh): Testing for 'super(' is baselang specific.
+              /# Generalize this code.
               or (len(preamble) == 1 and preamble[0].startswith('super('))
             )
           ):
@@ -3329,7 +3621,6 @@ namespace metax.oopl scope:
             if baserec is None:
               /# There is no variable we can initialize.
               pass
-              /# print('*** WARNING: for %s no baserec (not defining %s)' % (scope_parent.kindfqn(), metarec))
             elif baserec != metarec and len(scope_lines) > 0:
               /# TODO(wmh): If any parameter is defined with same name as
               /# metarec, we need to report warning or not tromp! Same for
@@ -3340,22 +3631,25 @@ namespace metax.oopl scope:
                 metarec, baseval=baserec, mtype=None)
               preamble.append(text)
 
-      return scope_attr, scope_lines, preamble, postamble, retamble, comment, params
+      return (
+        scope_attr, scope_lines, preamble, postamble, retamble, comment, params)
     tests:
       testx cc ::
         /# methodInfo relies on translation
         test.tcc(expand=True, imports=True, translate=True)
-        test.iseq(
+        test.iseqvec(
           (
             test.method.attr('scope:'),
             /# TODO(wmh): Fix this ... should not be returning None!
-            ['return None;'],
+            ['return 0.0;'],
             ['auto& self = (*this);'],
             [],
             None,
-            ['// Calculate body mass index of this person.',
-             '// Result is unitless, but relies on height in meters and',
-             '// weight in kilograms.'],
+            [
+              '// Calculate body mass index of this person.',
+              '// Result is unitless, but relies on height in meters and',
+              '// weight in kilograms.',
+            ],
             '()',
           ),
           test.method.methodInfo())
@@ -3363,14 +3657,23 @@ namespace metax.oopl scope:
       testx py ::
         /# methodInfo relies on translation
         test.tpy(expand=True, imports=True, translate=True)
-        test.iseq(
+        test.iseqvec(
           (
             test.method.attr('scope:'),
-            ['return 0.0'], [], [], None,
+            /# lines
+            ['return 0.0'],
+            /# preamble
+            [],
+            /# postamble
+            [],
+            /# retamble
+            None,
+            /# comment
             ['"""Calculate body mass index of this person.',
              'Result is unitless, but relies on height in meters and',
              'weight in kilograms.', '"""',
             ],
+            /# params
             '(self)'
           ),
           test.method.methodInfo())
@@ -3492,7 +3795,8 @@ namespace metax.oopl scope:
                   /# (something that doesn't make sense to put in the field
                   /# comment in all cases).
                   metafile.info(
-                    'Not currently using var comment (using field comment instead)',
+                    'Not currently using var comment '
+                    '(using field comment instead)',
                     line=comattr.line())
                 if multattr:
                   metafile.error(
@@ -3656,7 +3960,8 @@ namespace metax.oopl scope:
   end class RemarkConstruct;
 
   class NativeConstruct < OoplConstruct #:
-    @native: A means of dumping raw base-language code into a compilation stream.
+    @native: A means of dumping raw base-language code into a compilation
+    stream.
   scope:
 
     field namespace : *metax.oopl.NamespaceConstruct #:
@@ -3672,7 +3977,8 @@ namespace metax.oopl scope:
   end class AssocConstruct;
 
   class TestxConstruct < OoplConstruct #:
-    @testx: A construct allowing multiple test methods to be assigned to a method.
+    @testx: A construct allowing multiple test methods to be assigned to a
+    method.
 
     It would be better if this was called 'test', but we are already using
     'test' as a feature value and a secondary key, and we cannot have a
@@ -3835,7 +4141,8 @@ namespace metax.oopl scope:
       /# Now we make a symlink from oopl/bin/<id> to the above cmdpath.
       /#  - if the symlink file already exists
       /#     - if it is not a symlink, raise exception
-      /#     - if it does not link to the same thing as we expect, report warning, do nothing
+      /#     - if it does not link to the same thing as we expect, report
+      /#       warning, do nothing
       /#     - if it does link to same thing as we expect, do nothing
       /#  - else create ite.
       /#  - we do the same thing for any aliases of the command.
@@ -3855,7 +4162,8 @@ namespace metax.oopl scope:
 
         if fs.exists(linkpath):
           if not fs.islink(linkpath):
-            raise metax.c.Error('Expecting %s to be a symlink to %s' % (linkpath, relpath))
+            raise metax.c.Error(
+              'Expecting %s to be a symlink to %s' % (linkpath, relpath))
           currpath = fs.readlink(linkpath)
           f1 = fs.realpath(currpath)
           f2 = fs.realpath(relpath)
@@ -3998,6 +4306,10 @@ namespace metax.oopl scope:
       - SetConstruct is a statement but does not need a symboltable.
   scope:
 
+    field myexec : ExecutableConstruct #:
+      The executable this statement is a part of. This implements the
+      interface defined in OoplConstruct.
+
   end class StatementConstruct;
 
   class BlockConstruct < SymbolConstruct #:
@@ -4016,6 +4328,10 @@ namespace metax.oopl scope:
      1. It can also appear in params: blocks (not purely statement-level)
      2. StatementConstruct defines symboltable fields that are not needed in
         VarConstruct.
+
+    If we do move VarConstruct away from StatementConstruct, make sure to
+    implement myexec() and myexecIs(), presumably by defining the 'myexec'
+    field like it is defined in StatementConstruct.
   scope:
 
     field implicitType : metax.oopl.Type #:
@@ -4023,11 +4339,10 @@ namespace metax.oopl scope:
       value specified in a default attribute.  May be (and usually is) null.
 
     lifecycle setup:
-      test.scope = test.constructInCode(
-        '/demo.tmp/Test/test/@scope', name='statements')
-      test.var1 = test.scope.cons('f')
-      test.var2 = test.scope.cons('g')
-      test.var3 = test.scope.cons('v')
+      test.tpy(statements=True, expand=True)
+      test.var1 = test.mscope.cons('f')
+      test.var2 = test.mscope.cons('g')
+      test.var3 = test.mscope.cons('v')
     end;
 
     method effectiveType : metax.oopl.Type #:
@@ -4046,6 +4361,15 @@ namespace metax.oopl scope:
     end method effectiveType;
 
   end class VarConstruct;
+
+  class CallConstruct < StatementConstruct #:
+    @call: A placeholder for callsites.
+
+    This is not intended to be used as a normal construct. Instead, the
+    special '@' syntax is handled specially in parseConstruct() and a
+    CallConstruct is implicitly created.
+  scope:
+  end class CallConstruct;
 
   class LoopConstruct < StatementConstruct #:
     @loop: A generalization of all looping syntax.
@@ -4404,7 +4728,9 @@ namespace metax.oopl scope:
       if self.isUser():
         file_construct = self.ancestor('File')
         file_construct.currentIs(self)
-        /# print('Setting current of %s to %s' % (file_construct.kindfqn(), self.kindfqn()))
+        /# print(
+        /#   'Setting current of %s to %s' %
+        /#   (file_construct.kindfqn(), self.kindfqn()))
 
       /# Invoke expandMeta() on child constructs.
       /#  - we make a copy of children so that we do NOT expand the classes
@@ -4549,7 +4875,8 @@ namespace metax.oopl scope:
           /# printing implicit attributes during canonicalization.
           proceed = True
         else:
-          metafile.error('The concrete general %s has no scope' % self.kindfqn())
+          metafile.error(
+            'The concrete general %s has no scope' % self.kindfqn())
           proceed = False
 
       if not scope and span == 'specific':
@@ -4611,13 +4938,14 @@ namespace metax.oopl scope:
             ],
             precount=1)
 
-          /# Create the auto-generated metaclass for the auto-generated testclass
+          /# Create the auto-generated metaclass for the auto-generated
+          /# testclass
           if metax.c.Compiler.IMPL['metatestclass']:
             metatestname = metax.oopl.ClassConstruct.MetaifyName(testname)
             metatestblock = testblock
             metatestparent = metax.oopl.ClassConstruct.MetaifyName(testparent)
-            metatestparent2 = metax.oopl.ClassConstruct.MetaifyName('metax.test.TestCase')
-            /# print('For %s\n  %s\n  %s' % (self.kindfqn(), metatestparent, metatestparent2))
+            metatestparent2 = metax.oopl.ClassConstruct.MetaifyName(
+              'metax.test.TestCase')
             metatestclass = metax.oopl.ClassConstruct.NewFromData(
               /# TODO(wmh): Verify that metatest class should share same context
               /# as user class.
@@ -4667,8 +4995,8 @@ namespace metax.oopl scope:
               secondaries=[
                 ('parent', testmetaparent),
                 ('comment:',
-                 ['Auto-generated test class for auto-generated meta class %s.' %
-                  metaclass.fqn()]),
+                 ['Auto-generated test class for auto-generated '
+                 'meta class %s.' % metaclass.fqn()]),
                 ('scope:', []),
               ],
               precount=1)
@@ -4885,14 +5213,17 @@ namespace metax.oopl scope:
         /#  - a method for setting all packed fields???
         packed = self.packed()
         if packed:
-          recsepstr = 'self.'  # TODO(wmh): Fix this ... use baselang.receiverStr(method, style='base', sep=True)
+          /# TODO(wmh): Fix this ... use
+          /#   baselang.receiverStr(method, style='base', sep=True)
+          recsepstr = 'self.'
           stmtend = ''
           for pack in packed:
             rawpack = '_' + pack
             packmap = packed[pack]
             lines = []
             lines.append('value = %s%s%s' % (recsepstr, rawpack, stmtend))
-            /# fields with pack are sorted ascending by bit position within pack.
+            /# fields with pack are sorted ascending by bit position within
+            /# pack.
             fnames = sorted(packmap, key=lambda f: packmap[f][0])
             tlist = []
             for fld in fnames:
@@ -4906,10 +5237,12 @@ namespace metax.oopl scope:
                 lines.append('%s = value & 0x%x%s' % (fld, mask, stmtend))
               lines.append('value >>= %d%s' % (bits, stmtend))
               tlist.append('int' if signed else 'uint')
-            lines.append('return (%s)%s' % (', '.join(reversed(fnames)), stmtend))
-            /# TODO(wmh): Make this a tuple of ints and uints according to whether
-            /# each field above is signed or unsigned.
-            anytype = metax.c.Type.Instance('tuple<%s>' % ','.join(reversed(tlist)))
+            lines.append(
+              'return (%s)%s' % (', '.join(reversed(fnames)), stmtend))
+            /# TODO(wmh): Make this a tuple of ints and uints according to
+            /# whether each field above is signed or unsigned.
+            anytype = metax.c.Type.Instance(
+              'tuple<%s>' % ','.join(reversed(tlist)))
             spreader = metax.oopl.MethodConstruct.NewFromData(
               '%sSpread' % pack, context, parent=scope,
               features=[],
@@ -4951,7 +5284,8 @@ namespace metax.oopl scope:
 
           /# TODO(wmh): Need a cleaner way of determining whether a test class
           /# does NOT inherit from metax.test.TestCase.
-          if variant == 'user' or (variant == 'testuser' and self.id() != 'TestCase'):
+          if (variant == 'user' or
+              (variant == 'testuser' and self.id() != 'TestCase')):
             /# We need to ensure that we accept the same args as the parent, and
             /# pass those args up via super(). For meta and test classes the
             /# param list is not user-provided (so we don't provide params
@@ -4997,7 +5331,8 @@ namespace metax.oopl scope:
               /# TODO(wmh): Use the 'arguments' variable to handle this.
               pass
             else:
-              raise metax.c.Error('Not yet handling implicit initializers for %s' % basel)
+              raise metax.c.Error(
+                'Not yet handling implicit initializers for %s' % basel)
 
           secondaries.append(('scope:', [], -1))
           initializer = metax.oopl.MethodConstruct.NewFromData(
@@ -5007,7 +5342,9 @@ namespace metax.oopl scope:
             primary_line=-1,
             position='-')
 
-          /# print('WARNING: created implicit %s (%s)' % (initializer.fqn(), self.isTest()))
+          /# print(
+          /#   'WARNING: created implicit %s (%s)' %
+          /#   (initializer.fqn(), self.isTest()))
           /# initializer.write()
           self.registerInitializer(initializer)
 
@@ -5017,7 +5354,8 @@ namespace metax.oopl scope:
           /# note that the termcode for both of the above is 1. After inserting
           /# the implicit initializer, it is not very readable to terminate with
           /# just a semicolon, so we upgrade the termcode. Similarly, we insert
-          /# an empty line before such constructs in the interests of readability.
+          /# an empty line before such constructs in the interests of
+          /# readability.
           if self.termcode() == 1:
             self.termcodeIs(3)
           if self.precount() == 0:
@@ -5093,7 +5431,9 @@ namespace metax.oopl scope:
             params = initializer.attr('params:', default=None)
             if params is not None:
               metafile.error(
-                'testclass initializer %s (assumed to inherit from metax.test.TestCase) should not specify params:' %
+                'testclass initializer %s '
+                '(assumed to inherit from metax.test.TestCase) '
+                'should not specify params:' %
                 initializer.fqn())
             else:
               /# We add an explicit 'super' and 'params:' attributes.
@@ -5113,7 +5453,8 @@ namespace metax.oopl scope:
                     /# this by introducing a TEST_M macro that invokes the
                     /# constructor with the method name (after which we could
                     /# remove the default value below).
-                    (':', metax.c.Type.Instance('&str')), ('=', metax.c.Expr('str', '""', '""'))]},
+                    (':', metax.c.Type.Instance('&str')),
+                    ('=', metax.c.Expr('str', '""', '""'))]},
                     /# TODO(wmh): In Meta, we need a baselang-independent
                     /# mechanism for initializing a variable to the empty
                     /# value of its type (e.g. "" for string, [] for vec,
@@ -5234,10 +5575,11 @@ namespace metax.oopl scope:
         /#    testmetaclass).
         /#  - The first of these (metaclass) resides in the same namespace as
         /#    the user class, and needs to be explicitly expanded.
-        /#  - The rest of the autogened classes reside in the testspace associated
-        /#    with the namespace that the user class belongs to, so we do NOT
-        /#    need to expand them here (they will be expanded when the testspace
-        /#    is expanded at the end of NamespaceConstruct.expandMeta().
+        /#  - The rest of the autogened classes reside in the testspace
+        /#    associated with the namespace that the user class belongs to, so
+        /#    we do NOT need to expand them here (they will be expanded when the
+        /#    testspace is expanded at the end of
+        /#    NamespaceConstruct.expandMeta().
         for cls in newclasses:
           cls.expandMeta()
 
@@ -5257,8 +5599,8 @@ namespace metax.oopl scope:
       /# Expand the field
       /#  - produce accessor methods (getter, setter, reffer, etc.)
       /#    in appropriate class depending on level.
-      /#  - generate test methods for those fields that request it (when accessors
-      /#    are defined).
+      /#  - generate test methods for those fields that request it (when
+      /#    accessors are defined).
       /#  - leave the field construct in the user class no matter what
       /#    (translateMeta can decide whether to ignore or not on a per-baselang
       /#    basis).
@@ -5311,13 +5653,16 @@ namespace metax.oopl scope:
         /#    (e.g. Python and Perl), in which case we use the meta-level
         /#    receiver variable.
         if myclass:
-          location = 'test' if myclass.isTest() else ('meta' if myclass.isMeta() else 'user')
+          location = (
+            'test' if myclass.isTest()
+            else ('meta' if myclass.isMeta() else 'user'))
           receiver_code, receiver_special = (
             baselang.receiverStr(
               self, style='base', sep=True, location=location, myclass=myclass))
           if receiver_code is None:
             receiver_code = receiver_special
         else:
+          location = None
           receiver_code = ''
 
         /# print('FieldConstruct.expandMeta: %s' % fqn)
@@ -5356,7 +5701,7 @@ namespace metax.oopl scope:
         lazylines = None
         if scope:
           testclass = myclass.testclass()
-          testscope = testclass.attr('scope:')
+          testscope = testclass.attr('scope:') if testclass else None
           for accessor in accessors:
             acc = accessor.id()
             if acc not in legal_accessors:
@@ -5384,6 +5729,13 @@ namespace metax.oopl scope:
               if testattr and testsattr:
                 metafile.error(
                   'Cannot define both test: and tests:', attr=testsattr)
+
+              elif location == 'test' and (testattr or testsattr):
+                metafile.error(
+                  'Cannot define test: or tests: attribute on test-level '
+                  'fields',
+                  attr=testattr or testattr)
+
               elif testattr:
                 /# Simple block of lines.
                 testbase = metax.oopl.ExecutableConstruct.TestifyName(self.id())
@@ -5572,7 +5924,8 @@ namespace metax.oopl scope:
         /#    + we get to use a high-level receiver string instead of the
         /#      receiver varying from baselang to baselang (admittedly though,
         /#      there is still the 'self'/'meta'/'test' ambiguity).
-        /#    - fields use field id not rawfield, at getter needs to be suffixed with :get
+        /#    - fields use field id not rawfield, at getter needs to be
+        /#      suffixed with :get
         /#    - we need to define a means of mapping high-level symbols to
         /#      baselang level.
         /#    - The most intuitive "conceptual" name for a field is its id.
@@ -5612,9 +5965,9 @@ namespace metax.oopl scope:
       /# Expand the executable
       /#  - if level is meta, move method to metaclass
       /#  - if level is test, move method to testclass
-      /#  - currently, we do NOT recurse to children, as the children in scope: are
-      /#    either lines (simple block) or statement level constructs that do not
-      /#    need expansion.
+      /#  - currently, we do NOT recurse to children, as the children in
+      /#    scope: are either lines (simple block) or statement level constructs
+      /#    that do not need expansion.
       metax.c.D.expand.sinfo('%s (%s)' % (self.kindfqn(), self))
 
       myclass, moved = self.updateClass()
@@ -5646,7 +5999,7 @@ namespace metax.oopl scope:
 
         kind = self.attrval('kind')
         span = self.attrval('span')
-        scope = self.attrval('scope:', default=None)
+        scope_attr, scope = self.attrpair('scope:', default=None)
         autogen = self.attrval('autogen')
 
         if span == 'specific' and scope is None:
@@ -5668,8 +6021,15 @@ namespace metax.oopl scope:
           if variant == 'user':
             myclass.registerSymbol(self.id(), self)
 
+          /# If this is a complex block, we initialize myexec() for each
+          /# top-level statement within the block.
+          if scope_attr is not None and scope_attr.isComplexBlock():
+            for stmt in scope:
+              stmt.myexecIs(self)
+
           /# Now initialize the symbol table of the method.
-          /#  - for methods with simple blocks, we only have access to the params
+          /#  - for methods with simple blocks, we only have access to the
+          /#    params.
           /#  - for methods with complex blocks, we have all vars specified at
           /#    top-level within the method as well.
           /# Note that even though lifecycle constructs create MethodConstruct
@@ -5680,7 +6040,22 @@ namespace metax.oopl scope:
           params = self.attrval('params:', default=None) or []
           for i, pvar in enumerate(params):
             self.registerSymbol(pvar.id(), pvar, note='From param #%d' % (i+1))
-          /# TODO(wmh): Add self (and/or this?)
+          /# Now register the receiver.
+          /#  - if this is an instance method, the receiver is 'self' or 'this'
+          /#  - if this is a meta method, the receiver is 'cls' etc.
+          /#  - if this is a static method, there is no receiver.
+          /#     - TODO(wmh): In python, I'm defining 'cls' in static methods.
+          /#       Should we be calling this 'meta', and defining it in all
+          /#       metalangs? It won't be a receiver, but can still be a
+          /#       local variable present in static methods.
+          /# TODO(wmh): Define a 'var' construct representing 'self' (or 'this')
+          /# and 'cls' (or 'meta') stored in ExecutableConstruct, for use in
+          /# each method. For now using null.
+          mutability = self.attrval('mutability')
+          const_mark = '' if mutability == 'mutable' else '#'
+          recvar = myclass.receiver(const_mark + rec)
+          self.registerSymbol(
+            rec, recvar, note='%s for %s' % (rec, self.kindfqn()))
 
           /# TODO(wmh): In python, due to some unfortunate ways that metaclasses
           /# interact with @classmethod, we need to provide a @classmethod
@@ -5731,8 +6106,8 @@ namespace metax.oopl scope:
             /#        The key/value secondary attributes (except scope:)
             /#      scope : vec<str> or vec<Construct>
             /#        The value to assign to the scope: of the test method.
-            /#  - some general observations about feature and secondary attributes
-            /#    of test methods:
+            /#  - some general observations about feature and secondary
+            /#    attributes of test methods:
             /#     - feature attributes are almost always:
             /#        - level instance
             /#        - location user
@@ -5742,8 +6117,8 @@ namespace metax.oopl scope:
             /#        - extensibility extendable
             /#        - dispatch autodispatch
             /#        - inheritance new
-            /#       (which are the default values for all of these feature attrs,
-            /#        so feature attributes are rarely needed).
+            /#       (which are the default values for all of these feature
+            /#        attrs, so feature attributes are rarely needed).
             /#     - secondary attributes are almost always:
             /#        - no params
             /#        - return type void
@@ -5858,12 +6233,13 @@ namespace metax.oopl scope:
     receiver LifecycleConstruct ::
       /# Expand the lifecycle
       /#  - move to testclass or metaclass if location indicates such
-      /#  - create initializer method based on params, scope and most other attrs.
+      /#  - create initializer method based on params, scope and most other
+      /#    attrs.
       /#  - create finalizer method based on 'finalize:'
       /#  - create baselang-specific setup/teardown methods based on 'setup:'
       /#    and teardown: (and location).
-      /#     - if location is 'user', setup and teardown to not make sense except
-      /#       in the very special case of defining metax.test.TestCase
+      /#     - if location is 'user', setup and teardown to not make sense
+      /#       except in the very special case of defining metax.test.TestCase
       /#     - if location is 'meta', setup and teardown do not make sense
 
       /# Move to testclass or metaclass if appropriate
@@ -5978,8 +6354,8 @@ namespace metax.oopl scope:
             secondary.changeParent(initializer)
           myclass.registerInitializer(initializer)
 
-          /# Now expand the newly created initializer (to move the test attribute,
-          /# etc.)
+          /# Now expand the newly created initializer (to move the test
+          /# attribute, etc.)
           initializer.expandMeta()
         else:
           /# IMPORTANT: If there is no scope block, we do NOT create an
@@ -5987,9 +6363,9 @@ namespace metax.oopl scope:
           /# ClassConstruct.expandMeta() for creating a default initializer will
           /# be exercised.
           /#
-          /# HOWEVER, if any of the feature or secondary attributes of 'lifecycle'
-          /# that would be moved to the initializer are present, we warn the
-          /# programmer that they will be ignored.
+          /# HOWEVER, if any of the feature or secondary attributes of
+          /# 'lifecycle' that would be moved to the initializer are present, we
+          /# warn the programmer that they will be ignored.
           /#
           /# TODO(wmh): Certain feature attributes in this list should probably
           /# be except from warnings (like location).
@@ -6026,7 +6402,8 @@ namespace metax.oopl scope:
         /#   - TODO(wmh): Determine if there is something that can be done about
         /#     __del__ problems in Python within Meta. Note that __del__ is the
         /#     mirror of __new__, NOT of __init__. See
-        /#       http://www.algorithm.co.il/blogs/programming/python-gotchas-1-__del__-is-not-the-opposite-of-__init__/
+        /#       http://www.algorithm.co.il/blogs/programming/\
+        /#         python-gotchas-1-__del__-is-not-the-opposite-of-__init__/
         finalize_attr, finalize_lines = self.attrpair('finalize:', default=None)
         if finalize_attr is not None:
           finalname = baselang.finalizerName(myclass)
@@ -6035,14 +6412,15 @@ namespace metax.oopl scope:
             features=[],
             secondaries=[('scope:', finalize_lines)],
             primary_line=finalize_attr.line())
-          /# Remove 'finalize:' from self so that if we print out constructs after
-          /# expansion, the state is properly reflected.
+          /# Remove 'finalize:' from self so that if we print out constructs
+          /# after expansion, the state is properly reflected.
           self.unregisterAttribute(finalize_attr)
           /# TODO(wmh): Define registerFinalizer!
           /#myclass.registerFinalizer(finalizer)
 
         /# Handle the 'clinit' block.
-        /#  - create a Meta__Initialize method whose body is the scope of clinit:
+        /#  - create a Meta__Initialize method whose body is the scope of
+        /#    clinit:
         /#  - invoke the method after the class is defined.
         clinit_attr, clinit_lines = self.attrpair('clinit:', default=None)
         if clinit_attr is not None:
@@ -6074,11 +6452,13 @@ namespace metax.oopl scope:
           if block:
             if ((variant == 'metauser') or (variant == 'meta')):
               metafile.warning(
-                'For explicit meta lifecycles use scope: and finalize: not metainit: or metafinalize:',
+                'For explicit meta lifecycles use scope: and finalize: not '
+                'metainit: or metafinalize:',
                 line=self.primary().line())
             else:
               /# This is a user-level lifecycle ... we remember the block so we
-              /# can move it to an implicitly created lifecycle with location eta.
+              /# can move it to an implicitly created lifecycle with location
+              /# eta.
               meta_attrs[attr] = block
         if meta_attrs:
           /# We create a location=meta lifecycle construct and recursively
@@ -6142,7 +6522,8 @@ namespace metax.oopl scope:
               tmethod.expandMeta()
             else:
               /# This is a user-level lifecycle ... we remember the block so we
-              /# can move it to an implicitly created lifecycle with location test.
+              /# can move it to an implicitly created lifecycle with location
+              /# test.
               test_attrs[attr] = block
         if test_attrs:
           /# We create a location=test lifecycle construct and recursively
@@ -6650,8 +7031,6 @@ namespace metax.oopl scope:
 
       command_init = klass.streamNamed('command_init')
       command_body = klass.streamNamed('command_body')
-      /# print('For %-50s command_init is %s (%d)' % (self.kindfqn(), id(command_init), len(command_init)))
-      /# print('*** For %s found %s lines in body before start' % (self.kindfqn(), len(command_body)))
 
       /# We need to add code to command_init to create a new
       /# metax.cli.Command instance.
@@ -7754,6 +8133,7 @@ namespace metax.oopl scope:
 
         /# The 'current-body' stream will be updated by the following loop.
         for stmt in scope_attr.value():
+          /# print('HERE with %s' % stmt.kindfqn())
           stmt.translateMeta()
 
         /# Now we have all segments making up the complex block.
@@ -8018,7 +8398,12 @@ namespace metax.oopl scope:
       baselang = metac.baselang()
       /# TODO(wmh): Use a stream within the method instead (and have statements
       /# cache their method??)
-      myclass = self.ancestor('class')
+      method = self.myexec()
+      myclass = method.myclass()
+
+      /# Register the variable in the method's symbol table
+      method.registerSymbol(self.id(), self, note='Local variable')
+
       segments = myclass.streamNamed('current-body')
       expr = self.attrval('default', None)
 
@@ -8039,10 +8424,13 @@ namespace metax.oopl scope:
       segment = metax.c.BaseSegment(None)
       segments.append(segment)
 
+      test.var4 = test.mscope.cons('v2')
+
       test.var1.translateMeta()
       test.var2.translateMeta()
       test.var3.translateMeta()
-      test.iseq(['f = 0', 'g = 17', 'v = None'], segment.chunks())
+      test.var4.translateMeta()
+      test.iseq(['f = 0', 'g = 17', 'v = None', 'v2 = []'], segment.chunks())
       /# TODO(wmh): Lots more can be tested here as the code is made more
       /# robust.
     end receiver VarConstruct;
@@ -8499,9 +8887,27 @@ namespace metax.oopl scope:
       a request to suppress some Meta (or base-lang) warning.
 
     static
+    field SuperxRE : regexp #:
+      Required text if a method is marked superx.
+
+    static
     field CommentRE : regexp #:
       A regexp to apply to each line in a block to capture meta-level comment
       references (so we can convert to baselang comment).
+
+    static
+    field InterpolateRE : regexp #:
+      A regexp matching a single meta-level string literal interpolation
+      request. Examples:
+        ${name}
+        ${.name}
+        ${!name}
+        ${rec.name}
+        ${rec!name}
+        ${=name}
+        ${name<10d}
+        ${name>10d!}
+    end field InterpolateRE;
 
     static
     field PseudoVars : map<@str,metax.c.Type> #:
@@ -8524,10 +8930,38 @@ namespace metax.oopl scope:
       cls.SpecialREIs(re.compile(
         r'^(?P<indent>\s*)Meta:(?P<action>[a-zA-Z0-9_<>]+):\s*(?P<text>.*)'))
 
+      cls.SuperxREIs(re.compile(r'^(?P<ws>\s+)<METAX_CALL_SUPER>\s*$'))
+
       cls.CommentREIs(
         re.compile(
           r'^( *)%s( ?)(.*)' % re.escape(metax.c.Context.Tokens()['remark'])))
 
+      cls.InterpolateREIs(
+        re.compile(
+          r'\$\{'
+          r'(?P<prefix>[=#])?'
+          r'(?:'
+          r'(?P<receiver>[a-zA-Z0-9_]+)?'
+          r'(?P<sep>[.!])'
+          r')?'
+          r'(?P<id>[a-zA-Z0-9_]+)'
+          /# TODO(wmh): Consider supporting (...) params.
+          r'(?:'
+          r'(?P<align>[<>~])'
+          r'(?P<width>\d+)(?P<fraction>\.\d+)?'
+          r'(?P<type>[sdf])?'
+          r'(?P<strict>!)?'
+          r')?'
+          r'\}'
+        )
+      )
+
+      /# Note that the meta-level types of pseudovars are not
+      /# baselang-dependent, so they are defined a static field here in
+      /# BaseLanguageOopl. The keys here should, however, parallel the keys
+      /# in self.pseudovars(), instance fields defined in the BaseLanguageOopl
+      /# hierarchy.
+      /# CODETANGLE(pseudovars)
       cls.PseudoVarsIs({
         /# TODO(wmh): With the advent of TypeWrapper, should we have these be
         /# TypeWrapper instances whose underlying type is the fqcn of the actual
@@ -8538,11 +8972,12 @@ namespace metax.oopl scope:
         /# TODO(wmh): What is the type of null in Meta??
         'null': metax.c.Type.Instance('meta.Null'),
         'nan': float,
+        'false': metax.c.Type.Instance('bool'),
+        'true': metax.c.Type.Instance('bool'),
+        /# These are special ... the exact context is needed to establish type.
         'self': metax.c.SELF,
         'test': metax.c.SELF,
         'this': metax.c.SELF,
-        'false': metax.c.Type.Instance('bool'),
-        'true': metax.c.Type.Instance('bool'),
       })
 
       /# TODO(wmh): Change to std::any
@@ -8673,9 +9108,9 @@ namespace metax.oopl scope:
         ('true', 'True', 'true', 'true'),
         ('false', 'False', 'false', 'false'),
         ('null', 'None', 'null', 'nullptr'),
-        ('out', 'sys.stdout', '?', 'std::cout'),
-        ('err', 'sys.stderr', '?', 'std::cerr'),
-        ('in', 'sys.stdin', '?', 'std::cin'),
+        ('out', 'sys.stdout', 'fixme', 'std::cout'),
+        ('err', 'sys.stderr', 'fixme', 'std::cerr'),
+        ('in', 'sys.stdin', 'fixme', 'std::cin'),
       ):
         test.iseq(py, ooplpy.metabaseValue(metaval))
         test.iseq(js, oopljs.metabaseValue(metaval))
@@ -9290,6 +9725,9 @@ namespace metax.oopl scope:
 
     method _compileCall : metax.c.Type #:
       Produce baselang syntax for a callsite.
+
+      Returns:
+        The meta-level type of the value returned by the call.
     params:
       var expr : *metax.oopl.Expr #:
         An Expr of kind 'call'
@@ -9316,14 +9754,14 @@ namespace metax.oopl scope:
       /# Establish the baselang receiver and its type.
       recstr, metatype = self.analyzeVariable(rec, executable=executable)
 
-      /# TODO(wmh): This code is currently broken ... fix it!
-      print('HERE with recstr=%s metatype=%s' % (recstr, metatype))
-      print('#' * 70)
-      print(metafile.path())
-      print(expr)
-      print(executable.kindfqn())
-      print(executable.primary().line())
-      print('#' * 70)
+      if False:
+        print('HERE with recstr=%s executable=%s metatype=%s' % (recstr, executable.kindfqn(), metatype))
+        print('#' * 70)
+        print(metafile.path())
+        print(expr)
+        print(executable.kindfqn())
+        print(executable.primary().line())
+        print('#' * 70)
 
       if metatype:
         rec = recstr
@@ -9468,19 +9906,15 @@ namespace metax.oopl scope:
           rec += sep + callcode
 
         else:
-          /# For a method, we just process each arg.
-          /#  - Note that meta doesn't require () for no-arg method invocations,
-          /#    but baselangs do.
-          /#     - In C++, this->f returns a pointer to the function, and
-          /#       this->f() invokes the function.
-          /#     - In Meta, this!f returns a pointer to the function, and
-          /#       this.f (and this.f()) invokes the function.
+          /# For a method, we process each arg.
+          /#  - args will contain a list of two-tuples (argcode, argtype).
           args = []
           if argsdata:
             for argdata in argsdata:
-              argcode, argtype = self.compileExpr(
-                argdata, metafile, executable=executable)
-              args.append(argcode)
+              /# compileExpr returns a two-tuple (argcode, argtype)
+              args.append(
+                self.compileExpr(
+                  argdata, metafile, executable=executable))
 
           /# Establish the method name/type.
           /#  - note that for field access, it is the raw field name, which is
@@ -9493,30 +9927,40 @@ namespace metax.oopl scope:
             /# method invocation ... maybe.
             rec, metatype = self.compileMethodInvocation(
               metafile, rec, metatype, name, args)
-            /# print('FOUND return type "%s" [%s]' % (str(metatype), metatype.raw()))
+            /# print('FOUND return type "%s" [%s]' % (str(metatype), metatype.raw() if metatype else None))
           else:
             /# Without typechecking (or without a receiver type), we cannot
             /# handle native-type method renaming, so the following code is
             /# very likely to be incorrect.
             metatype = None
-            callcode = name + '(' + ', '.join(args) + ')'
-            rec += sep + name + '(' + ', '.join(args) + ')'
+            callcode = name + '(' + ', '.join([p[0] for p in args]) + ')'
+            rec += sep + callcode
           /# TODO(wmh): Update the rectype ... the return type of the method
 
       lines[-1] += rec
+
+      return metatype
     tests:
       testx py ::
-        test.tpy()
+        test.tpy(
+          /# needed so that classes are registered in compiler.classes().
+          expand=True)
         baselang = test.baselang
         compiler = test.compiler
         metafile = test.metafile
 
+        def Chk(method, code, expected_base, expected_type):
+          expr = metax.c.Expr.FromStr(code, attribute=None)
+          lines = ['']
+          mtype = baselang._compileCall(
+            expr, metafile, lines, executable=method)
+          test.iseq(expected_type, mtype.asStr() if mtype else 'None')
+          test.iseq(expected_base, '\n'.join(lines))
+          test.isfalse(metafile.hasErrors(show=True))
+
         bmi = test.method
-        expr = metax.c.Expr.FromStr('@self.weight;\n', attribute=None)
-        lines = []
-        mtype = baselang._compileCall(expr, metafile, lines, executable=bmi)
-        print(mtype)
-        print('\n'.join(lines))
+        Chk(bmi, '@self.weight;\n', 'self.weight()', 'float')
+        Chk(bmi, '@self.weight();\n', 'self.weight()', 'float')
     end method _compileCall;
 
     method _compileHash : metax.c.Type #:
@@ -9615,7 +10059,7 @@ namespace metax.oopl scope:
       pass
     end method _compileList;
 
-    method compileMethodInovcation : tuple<str,metax.c.Type> #:
+    method compileMethodInvocation : tuple<str,metax.c.Type> #:
       Generate baselang syntax of an invocation of method 'name' on rectype.
 
       Returns:
@@ -9633,9 +10077,10 @@ namespace metax.oopl scope:
         The name of the method being invoked on the receiver type.
         This is the meta-level name, which may change in the resulting
         baselang code (e.g. if rectype is a native type).
-      var args : vec<str> #:
-        The args passed in meta-level invocation.
-      var line : int #:
+      var args : vec<tuple<str,metax.c.Type>> #:
+        The baselang syntax for the args passed in the meta-level invocation,
+        along with the meta-level type of each arg.
+      var line : int = 0 #:
         The line number in meta source code where the method invocation resides.
     scope:
       metatype = None
@@ -9659,37 +10104,54 @@ namespace metax.oopl scope:
 
       else:
         /#  We have a class type.  No renaming of the method, and args are
-        /#  just comma-separated (at least in all baselangs impelemented so far).
-        /#
-        /#  TODO(wmh): Compute sep properly based on current rectype
-        sep = '.'
-        code = receiver + sep + name + '(' + ', '.join(args) + ')'
+        /#  just comma-separated (at least in all baselangs implemented so far).
+        sep = '->' if self.id() == 'cc' and rectype.isPtr() else '.'
+        code = receiver + sep + name + (
+          '(' + ', '.join([p[0] for p in args]) + ')')
 
         /#  We establish the return type by finding the method named 'name' within
         /#  the class identified by rectype.
         fqcn = rectype.base()
-        classy = metafile.compiler().baselang().getClass(fqcn, default=None)
+        classy = metafile.compiler().getClass(fqcn, default=None)
         if classy:
-          executable = classy.executableNamed(name, default=None)
+          executable = classy.symbols().find(name)
+          if isinstance(executable, FieldConstruct):
+            /# The field and the getter for the field have the same meta-level
+            /# name, so we've suffixed the getter with ':get'
+            executable = classy.symbols().find(name + ':get')
           if executable:
            /#  Have found the executable being invoked.
             metatype = executable.attrval('returns')
           else:
-            classy.showExecutables()
+            classy.symbols().show()
             metafile.warning('Class %s has no executable "%s"' % (fqcn, name))
         else:
-          metafile.warning('Class %s not found' % fqcn)
+          code = 'failed to find class for %s' % fqcn
+          metatype = None
 
       return code, metatype
     test:
-    end method compileMethodInovcation;
+      /# expand needed so that method/class link exists.
+      test.tpy(expand=True)
+      rectype = metax.c.Type.Instance('demo.tmp.Person')
+      code, mtype = test.baselang.compileMethodInvocation(
+        test.metafile, 'self', rectype, 'bmi', '', line=17)
+      test.iseq('self.bmi()', code)
+      test.issame(metax.c.Type.Instance('float'), mtype)
+    end method compileMethodInvocation;
 
     method nativeMethodToBase : tuple<str,Type> #:
       Type check the method 'methname' applied to rectype.
 
       Returns:
-        0. the baselang method name for 'name'.
+        0. the baselang code corresponding to an invocation of a native
+           meta-method (a native meta-method is a conceptual method defined
+           on some receiver, but which may be implemented by arbitrary baselang
+           code).
         1. the meta Type the method returns.
+
+      TODO(wmh): Since this method may return multiple lines of baselang code,
+      we should instead pass in a 'lines' param rather than returning a string.
     params:
       var metafile : MetaFile #:
         Where to report errors
@@ -9700,60 +10162,92 @@ namespace metax.oopl scope:
         The receiver type
       var name : str #:
         The name of a method being invoked on the native receiver type.
-      var args : vec<str> #:
-        The args passed in meta-level infocation.
-        TODO(wmh): We need something higher-level than just the strings ...
-        we need the type info for these args too.
+      var args : vec<tuple<str,metax.c.Type>> #:
+        The baselang syntax for the args passed in the meta-level invocation,
+        along with the meta-level type of each arg.
     scope:
       code = None
       metatype = None
+      iscc = self.id() == 'cc'
+      sep = '->' if iscc and rectype.isPtr() else '.'
 
       /#  print 'Here with receiver=%s rectype=%s name=%s args=%s' % (receiver, rectype, name, args)
 
       /#  Verify that 'name' is defined on the native type in question.
       native_type = rectype.base()
       metalang = metafile.compiler().metalang()
-      native = metalang.__class__.NATIVE
-      interface = native.get(native_type, None)
-      fullname = native_type + '.' + name
+      interface = metalang.__class__.NATIVE.get(native_type, None)
 
       if interface:
+        fullname = native_type + '.' + name
+
         /#  We've found an interface for the native type
-        methinfo = interface.get(name, None)
+        typeparams = interface.get('template', [])
+        methinfo = interface['scope'].get(name, None)
         if methinfo:
           /#  We've confirmed that the specified method name is understood
           argsinfo = methinfo['args'] or []
           codeinfo = methinfo['code']
+          retspec = methinfo['returns'] or 'void'
+          recparams = rectype.params() or []
           codetmpl = codeinfo.get(self.suffix(), None)
-          /#  pprint.pprint(methinfo)
           if codetmpl:
+
             /#  We have a baselang code template for the method.
 
             /#  We typecheck the args against argsinfo.
-            /#  TODO(wmh): Support optional args in 'args' specification.
-            argsok = True
+            /#   - it is ok for there to be fewer elements in args than in
+            /#     argsinfo if some args are optional.
+            /#   - If argsinfo[i]['default'] exists, that arg is optional.
             if len(args) > len(argsinfo):
-              argsok = False
               metafile.error(
                 'native %s expects %d args but received %d' %
                 (fullname, len(argsinfo), len(args)))
-            /#  Note that it is acceptable for there to be fewer elements in
-            /#  args than in argsinfo if some args are optional ... we check below.
-            data = {'rec': receiver}
-            n = len(argsinfo)
-            for i, argd in enumerate(args):
-              /#  TODO(wmh): argd needs to be more than just the arg value ...
-              /#  need type, etc.)
-              value = argd
-              /#  TODO(wmh): typecheck the value against argexptype
-              arginfo = argsinfo[i]
-              argexptype = arginfo['type']
-              /#  Record the mapping for this arg.
-              data['arg%d' % (i+1)] = value
+            elif len(recparams) > len(typeparams):
+              metafile.error(
+                'native %s has only %d template params but given %d' %
+                (fullname, len(typeparams), len(recparams)))
+            else:
+              data = {'rec': receiver}
+              if iscc:
+                data['recsep'] = receiver + sep
 
-            if argsok:
+              /# Establish argument key/values.
+              arg_index = 0
+              for argcode, argtype in args:
+                arginfo = argsinfo[arg_index]
+                /# TODO(wmh): Type-validate argtype against argexptype
+                /# (argtype must be equal or a subtype of argexptype).
+                argexptype = arginfo['type']
+                /#  Record the mapping for this arg.
+                data['A%d' % (arg_index + 1)] = argcode
+                arg_index += 1
+
+              /# Establish template param key/values.
+              /#  - Suppose typeparams = ['str', 'any'] and recparams = [].
+              /#     - we want to populate recparams with [T('str'), T('any')]
+              /#  - Suppose typeparams = ['str', 'any'] and
+              /#    recparams = [T('int')].
+              /#      - the default way to intpret this is that we want to
+              /#        fill out recparams to be [T('int'), T('any')]
+              /#      - however, at least for the 'map' type, it is better
+              /#        if we fill out recparams to [T('str'), T('int')]
+              /#        (by filling on the left, not the right).
+              np = len(recparams)
+              if True:
+                /# Fill in missing params on the right
+                for param_index in range(0, len(typeparams)):
+                  param = (
+                    recparams[param_index] if param_index < np
+                    else typeparams[param_index])
+                  data['T%d' % (param_index+1)] = param
+              else:
+                /# Fill in missing params on the left
+                pass
+
               code = codetmpl % data
 
+            metatype = metax.c.Type.Instance(retspec % data)
           else:
             metafile.error(
               'Native "%s" not implemented for %s' % (full, name, self.id()))
@@ -9765,6 +10259,62 @@ namespace metax.oopl scope:
         metafile.error('Unrecognized native type "%s"' % native_type)
 
       return code, metatype
+    tests:
+      testx py ::
+        test.tpy(
+          /# expanding so that classes are registered in compiler.classes()
+          expand=True)
+        baselang = test.baselang
+        T = metax.c.Type.Instance
+
+        def Chk(rectype, rec, meth, args, ecode, etype):
+          code, mtype = baselang.nativeMethodToBase(
+            test.metafile, rec, rectype, meth, args)
+          test.iseq(ecode, code)
+          test.iseq(etype, mtype.raw())
+
+        /# Tests on 'str'
+        strtype = T('str')
+        Chk(strtype, 'name', 'size', [], 'len(name)', 'int')
+        Chk(strtype, 'name', 'len', [], 'len(name)', 'int')
+        Chk(strtype, 'name', 'length', [], 'len(name)', 'int')
+        Chk(strtype, 'name', 'bytes', [], "len(name.encode('utf8'))", 'int')
+
+        /# Tests on 'vec<int>'
+        vectype = T('vec<int>')
+        Chk(vectype, 'values', 'size', [], 'len(values)', 'int')
+        Chk(vectype, 'values', 'append', [('3', T('int'))],
+           'values.append(3)', '&vec<int>')
+        /# Tests on 'vec'  # param defaults to 'any'
+        vectype = T('vec')
+        Chk(vectype, 'values', 'size', [], 'len(values)', 'int')
+        Chk(vectype, 'values', 'append', [('3', T('int'))],
+           'values.append(3)', '&vec<any>')
+
+        /# Tests on 'map<str,float>'
+        maptype = T('map<str,float>')
+        Chk(maptype, 'abbrevs', 'size', [], 'len(abbrevs)', 'int')
+        Chk(maptype, 'abbrevs', 'keys', [], 'abbrevs.keys()', 'vec<str>')
+        Chk(maptype, 'abbrevs', 'values', [], 'abbrevs.values()', 'vec<float>')
+        Chk(maptype, 'abbrevs', 'get', [("'apple'", T('str'))],
+            "abbrevs['apple']", 'float')
+        /# Tests on 'map' (defaults to map<str,any>)
+        maptype = T('map')
+        Chk(maptype, 'abbrevs', 'size', [], 'len(abbrevs)', 'int')
+        Chk(maptype, 'abbrevs', 'keys', [], 'abbrevs.keys()', 'vec<str>')
+        Chk(maptype, 'abbrevs', 'values', [], 'abbrevs.values()', 'vec<any>')
+        Chk(maptype, 'abbrevs', 'get', [("'apple'", T('str'))],
+            "abbrevs['apple']", 'any')
+        /# Tests on 'map<int>' (for now defaults to map<int,any> but should be map<str,int>)
+        maptype = T('map<int>')
+        Chk(maptype, 'abbrevs', 'size', [], 'len(abbrevs)', 'int')
+        Chk(maptype, 'abbrevs', 'keys', [], 'abbrevs.keys()', 'vec<int>')
+        Chk(maptype, 'abbrevs', 'values', [], 'abbrevs.values()', 'vec<any>')
+        Chk(maptype, 'abbrevs', 'get', [(3, T('int'))],
+            "abbrevs[3]", 'any')
+
+        /# Tests on ostream
+        otype = T('&ostream')
     end method nativeMethodToBase;
 
     method analyzeVariable : tuple<str,Type> #:
@@ -9779,30 +10329,43 @@ namespace metax.oopl scope:
       var varname : str;
       var executable : metax.oopl.ExecutableConstruct = null;
     scope:
-      basestr = self.pseudovars().get(varname, None)
-      if basestr:
-        /# We have a pseudovar, and basestr is the baselang representation.
-        result = basestr
-        /# The metatype of this special identifier is stored in
-        /# BaseLanguageOopl.PseudoVars(). Note that this code intentionally
-        /# assumes the key exists in PseudoVars() as a forcing function to keep
-        /# PseudoVars() in sync with pseudovars().
-        cls = self.__class__
-        metatype = cls.PseudoVars()[varname]
-        if metatype is metax.c.SELF:
-          /# Special indicator that the type matches that of the receiver.
-          if executable:
-            myclass = executable.myclass()
-            metatype = myclass.typeOfSelf(dothis=(varname=='this'))
-          else:
-            metatype = None
-            /# print('Warning: no executable - cannot currently identify type of self')
-        /# print('In analyzeVariable, varname=%s basestr=%s metatype=%s' % (varname, basestr, metatype))
+      /# We first establish if varname is a pseudovar.
+
+      cls = self.__class__
+      pseudo_metatype = cls.PseudoVars().get(varname, None)
+
+      /# print('HERE in analyzeVariable with %s and %s and %s and %s' % (varname, executable.kindfqn(), pseudo_metatype, metax.c.SELF))
+
+      if pseudo_metatype is not None:
+        /# We have a pseudovar.
+        pseudo_base = self.pseudovars().get(varname, None)
+        if pseudo_base is None:
+          /# TODO(wmh): Decide on the proper way to report implementation-level
+          /# errors (something stronger than metafile.error(), but maybe not
+          /# so stong as an exception ... or maybe that is exactly what we
+          /# want).  Do we return null for both result and metatype instead?
+          raise metax.c.Error(
+            'Pseudovar %s does not have a value in baselang %s' %
+            (varname, self.id()))
+        else:
+          result = pseudo_base
+          metatype = pseudo_metatype
+          if metatype is metax.c.SELF:
+            /# Special indicator that the type matches that of the receiver.
+            if executable:
+              myclass = executable.myclass()
+              metatype = myclass.typeOfSelf(dothis=(varname=='this'))
+            else:
+              metatype = None
+              /# TODO(wmh): Error is too strong ... how to handle this?
+              raise metx.c.Error(
+                'Warning: no executable - cannot identify type of self')
       else:
-        /# We have a variable reference.  It must be one of the variables
-        /# available in the current lexical context.
+        /# We do NOT have a pseudovar, so 'varname' must represent a symbol
+        /# within the executable's symbol table to be valid.
         result = varname
         metatype = executable.establishType(varname) if executable else None
+
       return result, metatype
     test:
       def Chk(expected_varname, expected_type, pair):
@@ -9826,7 +10389,7 @@ namespace metax.oopl scope:
       Chk('True', 'bool', ooplpy.analyzeVariable('true', executable=method))
       Chk('False', 'bool', ooplpy.analyzeVariable('false', executable=method))
       Chk('None', 'meta.Null', ooplpy.analyzeVariable('null', executable=method))
-      Chk(metax.c.metax.c.SELF, '&nm.sp.Card', ooplpy.analyzeVariable('self', executable=method))
+      Chk('self', '&nm.sp.Card', ooplpy.analyzeVariable('self', executable=method))
     end method analyzeVariable;
 
     method initCode #:
@@ -10284,6 +10847,22 @@ namespace metax.oopl scope:
         block, chunks=lines, metaline=block.line() - xlines)
       return segment
     test:
+      test.tpy()
+      method = test.method
+      comment = method.attr('comment:')
+      scope = method.attr('scope:')
+      segment = test.baselang.segmentForBlockAndComment(
+        /# TODO(wmh): Is cdent working properly?
+        scope, comment, cdent='  ')
+      test.iseq(
+        [
+          '',
+          '#   Calculate body mass index of this person.',
+          '#   Result is unitless, but relies on height in meters and',
+          '#   weight in kilograms.',
+        ],
+        segment.chunks())
+      test.iseq('', segment.indent())
     end method segmentForBlockAndComment;
 
     method formatBuildRule : str #:
@@ -10645,8 +11224,20 @@ namespace metax.oopl scope:
         'switch_level': 0,
       })
 
+      /# CODETANGLE(pseudovars)
       self.pseudovarsIs({
-        'self': metax.c.SELF,
+        'self': 'self',
+        /# TODO(wmh): Decide whether we are supporting 'this' as a meta-level
+        /# pseudovar, and if so, what it means to map it to baselang syntax.
+        /# For now I'm assuming the baselang syntax is the receiver in the
+        /# baselang that 'this' would be assigned to.
+        'this': 'self',
+        /# TODO(wmh): Decide whether we are supporting 'test' as a meta-level
+        /# pseudovar, and if so, what it means to map it to baselang syntax.
+        /# For now I'm assuming the baselang syntax is the receiver in the
+        /# baselang that 'test' would be assigned to.
+        'test': 'self',
+
         'true': 'True',
         'false': 'False',
         'null': 'None',
@@ -10795,14 +11386,20 @@ namespace metax.oopl scope:
         'switch_level': 2,
       })
 
+      /# CODETANGLE(pseudovars)
       self.pseudovarsIs({
-        'self': metax.c.SELF,
+        /# See comments in OoplPython when initializing this same pseudovars
+        /# field for details/questions about self, this, and test.
+        'self': 'this',
+        'this': 'this',
+        'test': 'this',
+
         'true': 'true',
         'false': 'false',
         'null': 'null',
-        'out': '?',
-        'in': '?',
-        'err': '?',
+        'out': 'fixme',
+        'in': 'fixme',
+        'err': 'fixme',
       })
     setup:
       baselang, _, context, _ = self.cachedInfo(basel='javascript')
@@ -10911,6 +11508,8 @@ namespace metax.oopl scope:
           80: {'base': 'long double', 'default': '0.0'},
           None: {'base': 'float', 'default': '0.0'},
         },
+        'float': {'base': 'float', 'default': '0.0'},
+        'double': {'base': 'double', 'default': '0.0'},
         /# The 'str' type has some special handling.
         /#   *str and str should be the same
         /#   &str should be a version that cannot be null
@@ -10993,14 +11592,20 @@ namespace metax.oopl scope:
       /# values. For example, 'null' is a common default for str-valued params,
       /# but if 'str' is std::string or absl::string_view or some other
       /# non-pointer class, it is invalid to assign nullptr to it.
+      /# CODETANGLE(pseudovars)
       self.pseudovarsIs({
+        /# See comments in OoplPython when initializing this same pseudovars
+        /# field for details/questions about self, this, and test.
+        'self': '(*this)',
+        'this': 'this',
+        'test': '(*this)',
+
         'true': 'true',
         'false': 'false',
         'null': 'nullptr',
         'out': 'std::cout',
         'in': 'std::cin',
         'err': 'std::cerr',
-        'self': metax.c.SELF,
       })
     setup:
       baselang, _, context, _ = self.cachedInfo(basel='cpp')
@@ -13430,7 +14035,7 @@ namespace metax.oopl scope:
       if message:
         result.append('std::cout << "%s" << std::endl;' % message)
       if executable:
-        returns = executable.attrval('returns', default=None)
+        returns = executable.attrval('returns')
         presence = executable.attrval('presence')
         if presence == 'abstract':
           /# In C++, abstract methods have no body whatsoever.
@@ -14630,7 +15235,7 @@ namespace metax.oopl scope:
       test.tjs(expand=True)
       preamble = []
       test.iseq(
-        "(fp=?, indent='')",
+        "(fp=fixme, indent='')",
         test.baselang.formatParams(test.method2, preamble))
       test.iseq([], preamble)
     end receiver OoplJavascript;
@@ -15172,6 +15777,223 @@ namespace metax.oopl scope:
     end receiver OoplCpp;
 
   end behavior initializerName;
+
+  behavior interpolateString #:
+    Given a meta-level string literal, interpolate references.
+  params:
+    var strlit : str #:
+      The string literal containing interpolation requests.
+    var output : vec<str> #:
+      Where to write output. Must be provided and must have at least one
+      string element, to which the first line of output is appended, with
+      zero or more additional lines appended by this method.
+    var method : ExecutableConstruct = null #:
+      If present, perform validation on the symbols references in the
+      interpolation string. If not present, blindly assume the symbols exist.
+      TODO(wmh): Should this be SymbolConstruct to support interpolation
+      requests within field attributes (use symboltable of class)?
+    var indent : int = 0 #:
+      How many spaces to insert before each line (other than first).
+      This is usually 0 because indentation is handled during template
+      instantiation instead.
+    var width : int = 80 #:
+      Maximum width of lines produced. If we are interpolation a template that
+      is indented 10 spaces, we'll want this to be 70 for a full width of 80.
+      Note that we do not know at the time interpolateString() is called what
+      the template-instantiated width is, so we'll have to be conservative.
+  scope:
+
+    receiver OoplCpp ::
+      pass
+    test:
+      test.tjs()
+      output = []
+      test.baselang.interpolateString(
+        '${name} is ${.weight}kg and ${!height}m\n'
+          '${=name~20s!} ${=.weight<5.1f} ${=!height>2d}',
+          output, method=test.method, width=70)
+      test.iseqvec([], output)
+    end receiver OoplCpp;
+
+    receiver OoplJavascript ::
+      pass
+    test:
+      test.tjs()
+      output = []
+      test.baselang.interpolateString(
+        '${name} is ${.weight}kg and ${!height}m\n'
+          '${=name~20s!} ${=.weight<5.1f} ${=!height>2d}',
+          output, method=test.method, width=70)
+      test.iseqvec([], output)
+    end receiver OoplJavascript;
+
+    receiver OoplPython ::
+      /# For now we are using python2 '%' syntax, but we may want to move
+      /# to python3's 'format' OR perform string concatenation if that turns
+      /# out to be more efficient.
+      if output is None:
+        output = []
+      cls = self.__class__
+
+      def Lit(val):
+        /# Convert to a string literal in baselang
+        /# TODO(wmh): BaseLanguageOopl.literalString could be used, but expects
+        /# an Expr arg.
+        /# TODO(wmh): Needs to be baselang-generic if we want this method to
+        /# be baselang-independent.
+        return repr(val)
+
+      /# method.symbols().show()
+
+      parts = []
+
+      start = 0
+      for m in cls.InterpolateRE().finditer(strlit):
+        s = m.start(0)
+        pre = strlit[start:s]
+        if pre:
+          parts.append(Lit(pre))
+        data = m.groupdict()
+
+        /# Establish the variable being references
+        /#  - a local variable if no sep
+        /#  - a field if sep == '!'
+        /#  - a method if sep == '.'
+        name = data['id']
+        sep = data['sep']
+        if not sep:
+          /# mostly generic but needs modification in perl.
+          namecode = name
+        else:
+          /# baselang-specific
+          rec = data['receiver'] or 'self'
+          if sep == '.':
+            /# References a method.
+            namecode = rec + '.' + name + '()'
+          else:
+            /# References a field.
+            /# TODO(wmh): Generalize how rawfields are produced from fields.
+            /# TODO(wmh): Decide whether 'name' encodes rawness or not.
+            namecode = rec + '.' + '_' + name
+
+        prefix = data['prefix']
+        if prefix == '=':
+          parts.append(Lit(name + '='))
+
+        strict = data['strict']
+        align = data['align']
+        if align:
+          /# We need to produce python code to left-align/right-align/center
+          /# the text.
+          /#  - based on the timing experiments in tests/py/interpolate.py,
+          /#    it appears that per-var %-style formatting is fastest.
+          if align == '~':
+            /# Center alignment.
+            thecode = 'metax.root.Object.Center(%s, %s, strict=%s)' % (
+              namecode, data['width'], str(strict == '!'))
+          else:
+            /# We have a left or right alignment with explicit width.
+            /#  - we use % notation to do the formatting
+            /#  - if strict is present, we need to truncate if too large.
+            form = (
+              '%' +
+              ('-' if align == '<' else '') +
+              data['width'] +
+              (data['fraction'] or '') +
+              (data['type'] or 's')
+            )
+            thecode = "('" + form + "' % " + namecode + ')'
+            if strict:
+              thecode = 'metax.root.Object.Trunc(' + thecode + ')'
+        else:
+          /# No alignment means we format as a string.
+          thecode = 'str(' + namecode + ')'
+        parts.append(thecode)
+
+        /# Advance to next match.
+        start = m.end(0)
+      post = strlit[start:]
+      if post:
+        parts.append(post)
+
+      lastlen = len(output[-1])
+      oneline = ' + '.join(parts)
+      if len(oneline) + lastlen < width:
+        /# We can fit the entire interpolated string on the same line.
+        output[-1] += oneline
+      else:
+        /# We use multiple lines, so we start/end with '(' and ')'.
+        indent += 2
+        output[-1] += '('
+        np = len(parts)
+        dent = ' ' * indent
+        output.append(dent + parts[0])
+        w = indent + len(parts[0])
+        for i in range(1, np):
+          part = parts[i]
+          n = len(part)
+          if w + n + 3 < width:
+            /# We can fit this part on same line.
+            output[-1] += ' + ' + part
+            w += n + 3
+          else:
+            /# We cannot fit this part on same line
+            output.append(dent + ' + ' + part)
+            w = indent + 3 + n
+        output[-1] += ')'
+
+      return output
+    test:
+      test.newbasic('python')
+      code = """
+        >|namespace demo.tmp scope:
+        >|  class Person scope:
+        >|    field name : str;
+        >|    field height : float;
+        >|    field weight : float;
+        >|
+        >|    lifecycle Person params:
+        >|      var name -> name;
+        >|      var height -> height;
+        >|      var weight -> weight;
+        >|    scope:
+        >|    end;
+        >|
+        >|    method func : float params:
+        >|      var arg1 : int;
+        >|      var arg2 : str = '';
+        >|    scope<*>:
+        >|      var local1 : int = 1;
+        >|    end;
+        >|  end class;
+        >|end namespace;
+        >|"""
+      test.prepMeta(
+        /# expand needed to populate params in symbol tables, translate needed
+        /# to populate local vars.  TODO(wmh): Should we populate vars in
+        /# expandMeta()?
+        text=code, basel='python', expand=True, imports=False, translate=True)
+      test.method = test.file.child('/demo.tmp/Person/func')
+      test.klass = test.method.parentConstruct()
+      test.namespace = test.klass.parentConstruct()
+
+      output = ['a = ']
+      test.baselang.interpolateString(
+        '${name} is ${.weight}kg and ${!height}m\n'
+          '${=name~20s!} ${=.weight<5.1f} ${=!height>2d}',
+          output, method=test.method, width=70)
+      res = '\n'.join(output)
+      test.iseqtext("""\
+       >|a = (
+       >|  str(name) + ' is ' + str(self.weight()) + 'kg and '
+       >|   + str(self._height) + 'm\\n' + 'name='
+       >|   + metax.root.Object.Center(name, 20, strict=True) + ' '
+       >|   + 'weight=' + ('%-5.1f' % self.weight()) + ' ' + 'height='
+       >|   + ('%2d' % self._height))""",
+       res)
+    end receiver OoplPython;
+
+  end behavior interpolateString;
 
   behavior lazyLines : vec<str> #:
     Define the code to implement a lazy accessor getter.

@@ -2935,7 +2935,9 @@ namespace metax.meta scope:
       set of variables, with baselang-specific values. Used in the code.
 
     field pseudovars : @map #:
-      Maps meta-level pseudovars to baselang equivalents.
+      Maps meta-level pseudovar syntax to equivalent baselang syntax. For
+      example, the Meta-level pseudovar 'true' is 'True' in python, 'true'
+      in C+=, etc.
 
     field metalang : metax.meta.MetaLanguageConstruct #:
       The metalang this baselang belongs to.

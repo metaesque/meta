@@ -217,6 +217,8 @@ scope:
     field moxlist : @vec<any> #:
       The collection of mocking objects created via newMox.
       TODO(wmh): Rename this something non-python-centric.
+    field mocklist : @vec<mock.Mock> #:
+      The collection of mock objects created via newMock.
     field stdout : ostream #:
       The current stream used for stdout.  If null, the default is used.
     field stderr : ostream #:
@@ -815,6 +817,32 @@ scope:
       /# noop, tested in test_captureStderr()
       pass
     end method getStderr;
+
+    new specific
+    method newMock params:
+      multi var stubs : vec;
+    comment:
+      Return a new mox.Mox, optionally stubbing out various entities.
+    scope<py>:
+      /# TODO(wmh): Add support to Meta for performing conditional
+      /# assoc imports.
+      /#   std assoc mock or unittest!mock ... some syntax for this.
+      if sys.version_info.major == 3:
+        import unittest.mock as mock
+      else:
+        import mock
+      m = mock.Mock()
+      self._mocklist.append(m)
+      return m
+    test<py>:
+      tc = self._tc
+      tc.setUp()
+
+      /# Basic mock
+      self.assertEqual(0, len(tc._mocklist))
+      m1 = tc.newMock()
+      self.assertEqual(1, len(tc._mocklist))
+    end method newMock;
 
     new specific
     method newMox params:
@@ -1815,6 +1843,41 @@ scope:
       throw metax::root::Error("TestCase.contains() not yet implemented");
     end method contains;
 
+    method missing : any #:
+      The opposite of contains (ensure specified element does not exist in
+      given container.
+    params:
+      var member : any;
+      var container : any;
+      var msg : str = null;
+    scope<py>:
+      rex = re.compile(r'.')
+      rcls = rex.__class__
+      if isinstance(member, rcls):
+        if isinstance(container, (list, tuple)):
+          found = False
+          for elem in container:
+            if member.search(elem):
+              found = True
+              break
+          self.assertFalse(
+            found, 'Unexpectedly found regexp "%s" in %s' %
+            (member.pattern, container))
+        else:
+          self.assertIsNone(member.search(container))
+      else:
+        self.assertNotIn(member, container, msg=msg);
+    test<py>:
+      tc = self._tc
+      tc.setUp()
+      tc.missing('dez', 'abcdefghi')
+      tc.raises(AssertionError, tc.missing, 'def', 'abcdefghi')
+    scope<js>:
+      throw new metax.root.Error("TestCase.contains() not yet implemented");
+    scope<cc>:
+      throw new metax::root::Error("TestCase.contains() not yet implemented");
+    end method missing;
+
     method raises #:
       Confirm that the given method raises an exception.
 
@@ -2116,10 +2179,12 @@ scope:
       var second : str = MISSING_STR;
       var text : str = null;
     scope<py>:
-      if second is MISSING_PTR:
+      if second is MISSING_STR:
         print(u'iseqtext:')
         for line in first.split('\n'):
-          print('     >|' + line)
+          /# We add a >| prefix to produce output convenient for cut-pasting
+          /# into source test code.
+          print('      >|' + line)
       else:
         self.assertMultiLineEqual(first, second, msg=text)
     test<py>:
