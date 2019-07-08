@@ -574,6 +574,23 @@ config:
   config:
 
     feature
+    Attribute accessors : <<([@+#~!-][rwxi])+>> = +r#w!x #:
+      Specifies which accessors are generated, and at what visibility.
+
+      This is an experimental feature whereby feature values are specified
+      by regexp rather than exhaustive enumeration.
+
+      TODO(wmh): Once the new code is working properly, remove the 'access'
+      attribute below and make the [@+#~!-] optional so that 'rwx' is legal
+      (it will be interpreted as +r+w+x').
+
+      TODO(wmh): Decide whether '<<...>>' is the right way of indication a
+      regexp. What if the regexp contains a comma? What is the default split
+      char for literal lists (I think it is a comma).
+    config:
+    end Attribute accessors;
+
+    feature
     Attribute access : <ro|rw|rwx|raw> = ro #:
       Which accessors are public (the others are protected).
 

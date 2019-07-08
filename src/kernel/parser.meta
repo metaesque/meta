@@ -4632,6 +4632,10 @@ scope:
      - keeps the regexp identifiying a construct kind
      - ensures that constraints related to feature keys, feature values,
        primary keys and secondary keys are abided by.
+        - TODO(wmh): Currently, the ConsGroup instance itself is NOT responsible
+          for enforcing constraints. Instead, this is done in Context.legalInfo
+          because that class has access to a metafile to report errors to.
+          Clean this up ... ConsGroup should capture all constraints.
   scope:
 
     field kinds : vec<str> #:
@@ -4651,11 +4655,40 @@ scope:
          A list of construct kinds (aka primary key) that have this
          feature key or value.
 
+    field featregexprs : vec<tuple<regex,str,vec<str>>> #:
+      Some feature attributes have values defined by regexps rather than by an
+      exhaustive enumeration of values. These regexps must not match against
+      any other feature key or feature values in the ConsGroup. Each element
+      contains:
+        0. regexp : regexp
+          The regexp that matches all legal feature values for the feature key
+          in question.
+        1. key : str
+          The feature key that has a regexp value set.
+        2. kinds : vec<str>
+          The construct kinds (aka primary keys) that have this regexp.
+
     lifecycle params:
       var kinds -> kinds;
       var primaries -> primaries;
       var features -> features;
+      var featregexprs -> featregexprs = null;
     scope:
+      if featregexprs:
+        /# We ensure that no regexp matches any feature key, feature value,
+        /# primary key or primary alias.
+        verboten = list(primaries) + list(features)
+        for info in featregexprs:
+          tre, fkey, kinds = info
+          matches = []
+
+          for v in verboten:
+            if tre.match(v):
+              matches.append(v)
+          if matches:
+            raise ConflictingFeatureValues(
+              'regexp %s for %s matches %s' %
+              (tre.pattern, fkey, ','.join(matches)))
     end;
 
     method show #:
@@ -4678,6 +4711,14 @@ scope:
         fp.write(
           u'    %-20s = %-20s %-20s %s\n' %
           (token, info[0], info[1], ','.join(sorted(info[2]))))
+
+      featregexprs = self.featregexprs()
+      if featregexprs:
+        fp.write(u'  Regexps:\n')
+        for info in featregexprs:
+          fp.write(
+            u'    %-20s = %-20s %-20s %s\n' %
+            (info[0].pattern, 'regexp', info[1], ','.join(sorted(info[2]))))
     test:
       _, _, _, compiler = test.cachedInfo(metal='meta')
       context = compiler.bootstrapContext()
@@ -4969,7 +5010,7 @@ scope:
     end method token;
 
     method show #:
-      Print out this class.
+      Print out this context.
     params:
       var fp : ostream = out #:
         Where to write output.
@@ -4996,24 +5037,25 @@ scope:
     method legalInfo : ConsGroup #:
       Obtain all legal tokens that can appear at/before any of a given set
       of construct kinds.
+    ##:
+      TODO(wmh): Decide how to report errors. The code currently raises
+      exceptions in various situations, but that is not how we want the
+      issues to be surfaced in a production version of metac.
     params:
       var kinds : vec<str> #:
-        The constructs legal in a particular complex block.  May be null,
-        in which case all constructs provided by the meta language are
-        legal.
+        The constructs legal in a particular complex block. May be null (but
+        must be explicitly specified as such) in which case all constructs
+        provided by the meta language are legal.
     scope:
       consmap = self.consmap()
-      if kinds is None:
-        kinds = sorted(consmap.keys())
-      else:
-        kinds = sorted(kinds)
+      kinds = sorted(consmap.keys()) if kinds is None else sorted(kinds)
       kindskey = ','.join(kinds)
-
       legals = self.legals()
       result = legals.get(kindskey, None)
       if result is None:
         primaries = {}
         features = {}
+        featregexprs = []
         for kind in kinds:
           consinfo = consmap.get(kind, None)
           if consinfo is None:
@@ -5063,8 +5105,24 @@ scope:
               else:
                 info[2].append(kind)
             else:
-              features[token] = ('value', fkey, [kind])
-        result = ConsGroup(kinds, primaries, features)
+              isregexp = token[0] == '<' and token[-1] == '>'
+              if isregexp:
+                /# print('**** HERE with %s = %s' % (token, kind))
+                restr = token[1:-1]
+                if restr[0] != '^':
+                  restr = '^' + restr
+                if restr[-1] != '$':
+                  restr += '$'
+                featregexprs.append((re.compile(restr), fkey, [kind]))
+              else:
+                features[token] = ('value', fkey, [kind])
+
+        /# TODO(wmh): This may raise ConflictingFeatureValues. Decide how to
+        /# handle it. For now, allow it to be thrown, since various other
+        /# exceptions are thrown above.
+        result = ConsGroup(
+          kinds, primaries, features, featregexprs=featregexprs)
+
         legals[kindskey] = result
       return result
     test:
@@ -6689,13 +6747,17 @@ scope:
         True if any errors exist, False if no errors exist.
     params:
       var show : bool = false #:
-        If True (default), print out all log entries if errors exist.
+        If True (default), print out all category entries.
       var category : str = 'E';
     scope:
       if self._logmap.get(category):
         result = True
         if show:
-          self.printLog(exclude_kinds=['I'])
+          exclude = []
+          for cat in ('I', 'W', 'E'):
+            if cat != category:
+              exclude.append(cat)
+          self.printLog(exclude_kinds=exclude)
       else:
         result = False
       return result
@@ -7196,7 +7258,6 @@ scope:
         else:
           /# Probably an error. We advance past all lines at indent 'indent'
           self.skipToIndent(indent-1)
-
         return None
 
       /# Check for eof
@@ -7207,7 +7268,8 @@ scope:
       /# postcount each time this method is invoked.
       parent.postcountIs(precount)
 
-      /# Check for a special '@' call construct.
+      /# Check if we have a special '@' call expression. If so, wrap it in
+      /# a CallConstruct and return.
       text = self.text()
       if text[index] == '@':
         print('************** HERE!')
@@ -7220,419 +7282,39 @@ scope:
           secondaries=[('expr', expr)])
         self.lnumIs(eprs.row())
         new_index = self.line().start() + eprs.col() + 1
+        /# TODO(wmh): This isn't quite right ... get tests passing.
         print('INDEx %d to %d' % (index, new_index))
         self.indexIs(new_index)
         construct.write()
         return construct
 
-      /# Consume feature attribute keys and values until we reach a token
-      /# that is in 'consgroup' (a token identifying a construct kind that is
-      /# legal in this context).
-      feature_tuples = []
-      consinfo = None
-      /# the position within text of the start of the primary key
-      lnum = self.lnum()
-      start = index
-      while True:
-        atuple = self.peekFeatureOrPrimaryToken(start, consgroup)
-        token_data = atuple[3]
-        if token_data == 'primary_key':
-          break
-        elif token_data == 'error':
-          /# We have encountered an error ... we were unable to find
-          /# a feature value or primary token.  For now, we skip forward
-          /# to the end of the block containing the construct being parsed.
-          self.error(
-            'Unrecognized feature/primary token %s' % str(atuple),
-            line=line.num()-1)
-          self.skipToIndent(indent-1)
-          return None
-        else:
-          word, attrkey, attrsel, form, index, _, fnum, fcol = atuple
-          self.debug('%s "%s"' % (form, word), line=fnum, col=fcol)
-          feature_tuples.append(atuple)
-          index = atuple[4]
-          if text[index] == '\n':
-            line, index, matches = self.nextLine(indent=indent)
-            if not matches:
-              self.skipToIndent(indent-1)
-              return None
-          start = index
+      /# Consume feature attribute key/value tokens until we reach a primary
+      /# key or alias.
+      primary_tuple, feature_tuples = self.consumeUntilPrimary(
+        consgroup, index, indent)
+      if primary_tuple is None: return None
+      consinfo = primary_tuple[5]
 
-      /# The only way we reach this point is by finding a construct primary
-      /# key.
-      word, pkey, psel, _, index, consinfo, primary_lnum, primary_col = atuple
-      self.debug(
-        'kind "%s"' % consinfo.name(),
-        line=primary_lnum, col=primary_col)
+      /# Create the primary attribute.
+      /#  - we only get to this point if we've found a construct primary key.
+      /#  - if createPrimaryAttribute returns null, it means a syntax error
+      /#    was encountered and we return null.
+      primary_attr, replace_attr = self.createPrimaryAttribute(
+        primary_tuple, line, indent)
+      if primary_attr is None: return None
 
-      /# We have identified a primary.
-      /#  - It is useful to have the construct registered in the parent as
-      /#    soon as possible (e.g. not waiting until all attributes have
-      /#    been parsed).
-      /#  - Since a construct is registered with its parent block by id
-      /#    (aka primary attribute value), it is important that we obtain the
-      /#    id before creating the construct.
-      /#  - Note that some primary attributes have optional (auto-assigned)
-      /#    values, and in some situations it can appear that a primary
-      /#    has an explicit value when in fact that value should be given
-      /#    to a replacer attribute).
-      primary_litkey = word
-      /# Data about the primary key.
-      primary_data = consinfo.primary()[primary_litkey]
-      valopt = primary_data['valopt']
-      replacer = primary_data.get('replacer', None)
-      replacer_attribute = None
-      /# Keys represent all legal secondary key tokens
-      secondaries = consinfo.secondaries()
-      /# The value of an implicit-key secondary
-
-      /#print('HERE with litkey %s valopt %s' % (primary_litkey, valopt))
-
-      /# When this block is finished, we will have:
-      /#  - identified the primary_value
-      /#  - identified the index within text of one char past the end of the
-      /#    primary value.
-      /#  - detected need for autoassigned id.
-      /#  - handled replacer semantics
-      /#  - returned from method on error
-      primary_value_start = index
-      if text[index] == '\n':
-        /# We have a situation where the value associated with the primary
-        /# key is not on the same line as the key. For now at least, we
-        /# require values to start on same line as key, so either this value
-        /# is optional or we have an error.
-        if valopt:
-          primary_value = context.autoId()
-        else:
-          col = index - line.start()
-          self.error('Missing primary id', line=self.lnum(), col=col)
-          /# TODO(wmh): We are skipping the entire collection of lines with
-          /# indent >= indent, which is maybe more aggresive than we need.
-          self.skipToIndent(indent-1)
-          return None
-      else:
-        word, _, next_index = self.peekWord(index)
-        if valopt:
-          if word in secondaries:
-            /# CODETANGLE(baselang_keys)
-            /# word is a secondary key, so we autoassign a primary value
-            /#  - we avoid updating index, so that the secondary attribute
-            /#    code below will properly handle the secondary key we've
-            /#    found.  We could do a bit of optimization on this...
-            /#
-            /# Note that normally we allow attribute values that contain the
-            /# same text as a key (e.g. Construct Construct, var var, etc.)
-            /# but NOT when the value is optional.
-            primary_value = context.autoId()
-
-          elif replacer:
-            /# There are two possibilities here: the attribute key specified
-            /# in 'replacer' is either explicitly specified within this
-            /# construct or not. In the former case, 'word' is the identifier
-            /# as normal. However, in the latter case, 'word' is the value
-            /# (or start of the value) to be assigned with the attribute
-            /# identified in replacer, and we are to:
-            /#  - autoassign an id.
-            /#  - implicitly create a secondary attribute for the implicit
-            /#    replacer.
-            /#
-            /# Since constructs are registered by id, it is important for us
-            /# to know *now* (not later) what the correct id is, so rather than
-            /# parsing all secondaries to verify that the replacer attribute
-            /# isn't explicitly specified, we require that if an explicit
-            /# id is needed for a construct with a replacer, the replacer
-            /# attribute *must* be explicitly specified immediately after
-            /# the primary value. Thus, we can simple peek at the second
-            /# word (the one starting at next_index). If it matches replacer,
-            /# word is an explicit id, else it is part of the replacer value.
-            text = self._text
-            if text[next_index] == '\n':
-              /# When an explicit identifier is needed for a construct with
-              /# replacer semantics, the replacer attribute must not only appear
-              /# after the id, but must (for now at least) also appear on the
-              /# same line. So, a newline means no explicit replacer.
-              found_replacer = False
-            else:
-              /# We peek forward.
-              word2, _, next_index2 = self.peekWord(next_index)
-              if word2 == replacer:
-                /# There *is* an explicit replacer attribute, so 'word' is
-                /# the identifier and we don't need to do anything special.
-                found_replacer = True
-              else:
-                /# There is no explicit replacer, so 'word' is part of the
-                /# implicit replacer value and we auto-assign the id.
-                found_replacer = False
-
-            /# print('Here with word="%s" word2="%s" found=%s' % (word, word2, found_replacer))
-
-            if found_replacer:
-              /# There is an explicit replacer attribute after 'word', so
-              /# 'word' is an explicit primary id.
-              primary_value = word
-              index = next_index
-
-            else:
-              /# We are to auto-assign the primary id and create an implicit
-              /# attribute for the replacer attribute.
-              primary_value = context.autoId()
-
-              /# Parse the value of the implicit replacer attribute. It starts
-              /# at index 'index'.
-              /#  - we create a faux construct instance, which is needed in
-              /#    parseSecondaryAttribute to:
-              /#     - set termcode of context (irrelevant)
-              /#     - obtain context when parsing blocks (irrelevant)
-              /#     - register attribute (intentionally disabled when an
-              /#       explicit_key is provided)
-              /#  - must remember to change the parent!
-              construct_class = consinfo._construct_class
-              dummy_construct = construct_class(primary_value, None, context)
-
-              /# Import to set index before (so that parsing starts at proper
-              /# place), and obtain index after (so that later code sets index
-              /# properly).
-              self.indexIs(index)
-              replacer_attribute, errtok = self.parseSecondaryAttribute(
-                dummy_construct, consinfo, indent, explicit_key=replacer)
-              index = self.index()
-
-          else:
-            /# word is the primary_value
-            primary_value = word
-            index = next_index
-        else:
-          /# word must be the primary value.
-          primary_value = word
-          index = next_index
-          if replacer:
-            /# A replacer attribute should not exist if the primary
-            /# attribute isn't optional.
-            /# TODO(wmh): This check should happen during parsing of the
-            /# metaschema, not here.
-            metafile.error(
-              '%s %s is not optional but has replacer %s' %
-              (primary_litkey, word, replacer))
-
-      self.debug(
-        '  id "%s"' % primary_value,
-        line=self.lnum(), col=primary_value_start - line.start())
-
-      /# Update position ... past primary value and whitespace, all on same line
-      /# as started this method (so we don't need to update the line).
-      self.indexIs(index)
-
-      /# Create the primary construct
-      primary = self.__class__.CreateNewAttribute(
-        None, consinfo, primary_litkey,
-        value=primary_value, line=primary_lnum, col=primary_col, metafile=self)
-
-      /# Establish the class to use to implement this construct instance.
-      /#  - The ConsInfo instances properly identify the class of all
-      /#    constructs except BaseLanguage, which are treated specially
-      /#    (for metalang <X> and baselang <Y>, the class is <X><Y>).
-      /#  - TODO(wmh): It is unfortunate that we need to test if the current
-      /#    construct is BaseLanguage in this (very frequently invoked) method.
-      /#    Can we find a way to avoid having ot make that check?  Maybe we
-      /#    parse all of them into BaseLanguageConstruct instances initially,
-      /#    and then patch up with downcasts later?
-      /#  - TODO(wmh): Merge BaseLanguageConstruct and BaseLanguage into
-      /#    a single class.
-      construct_class = consinfo._construct_class
-      if consinfo.name() == 'BaseLanguage':
-        /# BaseLanguage constructs are special
-        /#  - almost all constructs of a given kind are implemented by a class
-        /#    identified solely by the kind, but this is not true for BaseLanguage
-        /#  - for baselang constructs, each instance is implemented by its
-        /#    own class, based on both kind and id.
-        /#  - for metalang <Y> and baselang <X>, the class is <Y><X>.
-        /#  - if we do not find the more refined class, we use BaseLanguageConstruct,
-        /#    but this should only happen if we are in code like command schema,
-        /#    where we don't expect the classes to be defined yet.
-        parent_construct = parent.parent()
-        /# TODO(wmh): Rather than metalang id capitalize, we should use metalang
-        /# 'name' attribute.
-        metalang_id = parent_construct.id()
-        metal = metalang_id.capitalize()
-        basel = primary.value().capitalize()
-        class_name = metal + basel
-        /# This obtains the module metax.oopl, metax.doc, metax.meta, etc.
-        metax_metalang_module = self.dynamicallyObtainMetaxSymbol(metalang_id)
-        better_construct_class = None
-        if metax_metalang_module is not None:
-          better_construct_class = getattr(metax_metalang_module, class_name, None)
-        if better_construct_class:
-          construct_class = better_construct_class
-        /# print('MetaFile.parseSecondaryAttribute: metalang %s baselang %s = %s [%s]' % (
-        /#   metal, basel, class_name, construct_class))
-      elif consinfo.name() == 'MetaLanguage':
-        /# MetaLanguage constructs are special
-        /#  - almost all constructs of a given kind are implemented by a class
-        /#    identified solely by the kind, but this is not true for
-        /#    MetaLanguage
-        /#  - for metalang constructs, each instance is implemented by its own
-        /#    class, based on both kind and id.
-        /#  - for metalang with id <y>, the class is Metax<Y> where <Y> is the
-        /#    capitalized version of id <y>
-        /#     - Note that we are using 'Metax' as a prefix, not 'Meta'. It is
-        /#       likely we will disallow any class defined in Meta to start
-        /#       with 'Metax' or end with 'Metax' (using 'Metax' instead of
-        /#       'Meta' is safer as far fewer people will be using the former
-        /#       in their day-to-day code, so will rarely encounter the
-        /#       limitation).
-        /#     - IMPORTANT: The MetaLanguage construct has a 'name' secondary
-        /#       attribute that is the sensible item to use when establishing
-        /#       the capitalized version of id, but here at the time we
-        /#       need it, we have not yet parsed it.
-        /#        - for now, we simply capitalized the id
-        /#        - we can consider requiring the name to always be the
-        /#          attribute immediately following the primary attribute,
-        /#          and peek forward to obtain its value.
-        metal = primary_value
-        /# TODO(wmh): The following assumes that meta languages reside in
-        /# module 'metax.<metalang>', but that is only true for the official
-        /# metalangs (metax.meta, metax.oopl, metax.doc, etc.).  For custom
-        /# metalangs, the module is specified in the 'nmsp' attribute of
-        /# the MetaLanguage construct (which is problematic because we are
-        /# currently parsing that construct and have not yet reached the
-        /# 'nmsp' attribute. For now, this means that custom metalangs cannot
-        /# define their own MetaLanguageConstruct subclasses.
-        metax_metalang_module = self.dynamicallyObtainMetaxSymbol(metal)
-        /# TODO(wmh): Use the 'name' attribute (by requiring it to be the next
-        /# attribute after the MetaLanguage primary attribute, and peeking
-        /# forward two tokens.
-        class_name = 'Metax' + metal.capitalize()
-        better_construct_class = getattr(metax_metalang_module, class_name, None)
-        if better_construct_class is None:
-          /# TODO(wmh): We are no longer writing code into schema.meta files,
-          /# but should definitely continue to support the option. This new code
-          /# related to each Meta-language having a subclass of
-          /# MetaLanguageConstruct is NOT yet supported in that paradigm. Remind
-          /# yourself how BaseLanguageConstruct was working in the schema files
-          /# and do something similar for MetaLanguageConstruct subclasses.
-          if metal != 'test':
-            /# TODO(wmh): Rather than special-casing test, define a TestMeta < MetaLanguageConstruct.
-            print(
-              'WARNING: Failed to find metax.%s.%s so using %s.%s' %
-              (metal, class_name, construct_class.__module__,
-               construct_class.__name__))
-        else:
-          construct_class = better_construct_class
-          /# print(
-          /#   'Here with better %s.%s' %
-          /#   (better_construct_class.__module__, better_construct_class.__name__))
-
-      /# Create the construct
-      if construct_class:
-        /# All kind-specific construct_classes use the same signature as
-        /# Construct.
-        construct = construct_class(primary.value(), parent, context)
-      else:
-        /# There is no kind-specific construct class registered for this
-        /# construct, so we use a GenericConstruct, which passes in the
-        /# kind explicitly.
-        construct = metax.meta.GenericConstruct(
-          primary.value(), parent, context, primary.key())
-
-      /# We update the construct
+      /# Create an instance of the appropriate subclass of Construct.
+      construct = self.createConstructInstance(parent, consinfo, primary_attr)
       construct.precountIs(precount)
-      primary.parentIs(construct)
 
-      /# Parse all of the feature keys/values into FeatureAttributes.
-      /#  - the list of feature keys and feature values in feature_tuples are
-      /#    valid for *some* construct in the meta language, but it is
-      /#    entirely possible they will not be valid for the construct that
-      /#    has been identified ... any unrecognized keys/values are reported
-      /#    as errors.
-      featvals = consinfo.featvals()
-      featkeys = consinfo.features()
-      i = 0
-      n = len(feature_tuples)
-      while i < n:
-        token, featkv, fsel, form, index, data, feat_lnum, feat_col = feature_tuples[i]
-        featinfo = {
-          'parent': construct, 'value': None,
-          'line': feat_lnum, 'col': feat_col
-        }
-        if form == 'feature_key':
-          /# We have an explicit feature key ... next index must be a value
-          /# for this feature key.
-          featkey = featkv
-          finfo = featkeys[featkey]
-          featinfo['litkey'] = featkey
-          featinfo['key'] = finfo['cankey']
-          i += 1
-          if i < n:
-            _, featval, featsel, form, index, data, _, _ = feature_tuples[i]
-            if form != 'feature_value':
-              self.error(
-                'Expecting feature value for feature key %s but found unknown %s' %
-                (featkey, featval), line=self.lnum())
-            else:
-              /# We know featval is a legal feature value (or we wouldn't have
-              /# gotten here ... right?), but we don't know for sure that it
-              /# is a feature value for featkey
-              valkey = featvals[featval]
-              assert valkey is not None
-              if valkey != featkey:
-                self.error(
-                  'Expecting feature value for feature key %s but found value %s for key %s' %
-                  (featkey, featval, valkey))
-              else:
-                featinfo['value'] = featval
-
-              /# If there was a selector specified on the feature key, we verify
-              /# that the selector matches current baselang. If not, we ignore
-              /# the feature attribute/key pair entirely.
-              if fsel:
-                baselang = construct.baselang()
-                suffix = baselang.suffix()
-                if '.' + fsel != suffix:
-                  print('***** IGNORING %s = %s for %s (specific to %s)' % (
-                    featkey, featval, suffix, fsel))
-                  featinfo = None
-
-          else:
-            self.error(
-              'Missing feature value for feature key %s' % featkey,
-              line=self.lnum())
-        elif form == 'feature_value':
-          /# We have an implicit feature key dicated by featval
-          featval = featkv
-          if featval not in featvals:
-            self.error(
-              "Invalid feature value '%s' for %s" % (featval, construct.kind()))
-            featinfo = None
-          else:
-            featkey = featvals[featval]
-            featinfo['litkey'] = ''
-            featinfo['key'] = featkey
-            featinfo['value'] = featval
-        elif form == 'error':
-          self.debug('Fix me!')
-          self.error('Invalid token "%s"' % token)
-          featinfo = None
-        else:
-          raise Error('Here with form %s' % form)
-
-        /# Create the FeatureAttribute
-        if featinfo:
-          feature = metax.attr.FeatureAttribute(**featinfo)
-          construct.registerAttribute(feature)
-
-        /# Advance to next feature key/value.
-        i += 1
-
-      /# Register the primary with the construct
-      construct.registerAttribute(primary)
-      construct.termcodeIs(TERM_UNINIT)
-
-      /# If there is an implicit replacer attribute parsed, add it.
-      if replacer_attribute:
-        replacer_attribute.changeParent(construct)
+      /# Add feature attributes, primary attribute and replacer attribute.
+      self.validateFeatureAttributes(construct, consinfo, feature_tuples)
+      construct.registerAttribute(primary_attr)
+      if replace_attr:
+        replace_attr.changeParent(construct)
 
       /# Now parse secondary attributes.
+      construct.termcodeIs(TERM_UNINIT)
       while True:
         line = self.line()
         if line is None or line.indent() < indent:
@@ -7661,53 +7343,15 @@ scope:
           break
 
       /# Handle termination issues
-      termcode = construct.termcode()
-      index = self.index()
-      if termcode != TERM_UNINIT:
-        /# The construct has been successfully parsed.
-        self.debug('  termcode %d' % termcode)
-        /# We expect the construct to be at end-of-line, except when an
-        /# implicit termination was identified.
-        if termcode == 0:
-          /# An implicit termination was identified.
-          /#  - normally, the current index is where we are to start parsing
-          /#    the next entity.
-          /#  - however, if the last attribute was a simple block, and it ended
-          /#    with empty lines, those lines should not be considered part of
-          /#    the simple block, so we back up if they exist.
-          last_attribute = construct.order()[-1]
-          if last_attribute.isSimpleBlock():
-            aval = last_attribute.value()
-            k = len(aval) - 1
-            emptyln = 0
-            while k >= 0 and not aval[k].strip():
-              k -= 1
-              emptyln += 1
-              aval.pop()
-            if emptyln:
-              /# print('Found %d empty lines above %d in %s' % (emptyln, self.lnum(), self.path()))
-
-              self.set(lnum=self.lnum() - emptyln)
-        else:
-          if text[index] == '\n':
-            /# This is what we normally expect at end of construct.
-            self.nextLine()
-          else:
-            /# When does this happen?
-            print(text[index:index+30])
-            raise Error('How to handle this?')
-      else:
-        /# We have an error, and no recovery has yet been performed.
-        self.debug(
-          '  parse error on %s' % errtok,
-          line=self.lnum(), col=index - line.start())
+      if not self.handleConstructTermination(construct):
         construct = None
 
       /# Return the construct
       return construct
     tests:
       testx basics scope:
-        text = (
+        /# Create a MetaFile instance. We'll parse constructs within it.
+        metafile = test.metafileFor(text=(
           'MetaLanguage test config:\n'
           '  Construct A config:\n'
           '    Attribute default : word = <empty> aliases <=>;\n'
@@ -7724,8 +7368,8 @@ scope:
           '    end Attribute type;\n'
           '  end Construct;\n'
           'end;\n'
-        )
-        metafile, context = test.schemaParser(text)
+        ))
+        context = metafile.context()
         scope = metax.attr.ComplexBlock(
           self.construct, 'scope:', [], None, line=0, col=0)
 
@@ -7795,18 +7439,17 @@ scope:
           out)
 
         /# Now an edge-case that was at one point causing an infiite loop
-        text = (
+        metafile = test.metafileFor(text=(
           'MetaLanguage meta\n'
           'comment:\n'
           '  Here with notes\n'
           'config:\n'
           'end MetaLanguage;\n'
-        )
-        metafile, context = test.schemaParser(text)
+        ))
         scope = metax.attr.ComplexBlock(
           test.construct, 'scope:', [], None, line=0, col=0)
         schema = metafile.parseConstruct(
-          scope, 0, context.legalInfo(['MetaLanguage']))
+          scope, 0, metafile.context().legalInfo(['MetaLanguage']))
         fp = test.fp()
         schema.write(fp=fp)
         test.iseqtext(
@@ -7816,22 +7459,23 @@ scope:
           'config:\n'
           'end MetaLanguage;\n',
           fp.getvalue())
+      end testx basics;
 
       testx optionals scope:
         /# Verify that optional primary values work.
-        text = (
+        metafile = test.metafileFor(text=(
           'lifecycle params:\n'
           '  var a : int;\n'
           'scope:\n'
-          'end;\n')
-
-        _, schema, context, compiler = test.cachedInfo()
-        metafile = metax.c.MetaFile('fauxpath', compiler, text)
-        metafile.contextIs(context)
+          'end;\n'
+        ))
         scope = metax.attr.ComplexBlock(None, 'scope:', [], line=0, col=0)
 
+        /# Invoke parseConstruct
         lifecycle = metafile.parseConstruct(
-          scope, 0, context.legalInfo(['lifecycle']))
+          scope, 0, metafile.context().legalInfo(['lifecycle']))
+
+        /# Verify
         test.isfalse(metafile.hasErrors(show=True))
         fp = test.fp()
         lifecycle.write(fp=fp)
@@ -7844,22 +7488,572 @@ scope:
 
       testx replacer scope:
         /# Verify that replacer semantics works.
-        text = (
+        metafile = test.metafileFor(text=(
           'case (i > 10) ::\n'
           '  j += 3\n'
           'end;\n'
-        )
+        ))
+        scope = metax.attr.ComplexBlock(None, 'scope:', [], line=0, col=0)
+        loop = metafile.parseConstruct(
+          scope, 0, metafile.context().legalInfo(['case']))
+        test.isfalse(metafile.hasErrors(show=True))
+        loop.write(fp=test.fp())
+        test.iseqtext("""\
+          >|case Meta__2__ expr (i > 10) ::
+          >|  j += 3
+          >|end;
+          >|""",
+          test.out())
 
-        _, schema, context, compiler = test.cachedInfo()
-        metafile = metax.c.MetaFile('fauxpath', compiler, text)
-        metafile.contextIs(context)
+      testx featregex scope:
+        /# Verify that we can parse regexp-based feature values like the
+        /# 'accessors' feature attribute of the 'field' construct.
+        metafile = test.metafileFor(text=(
+          '+r-w!x field i;\n'
+        ))
+        scope = metax.attr.ComplexBlock(None, 'scope:', [], line=0, col=0)
+        field = metafile.parseConstruct(
+          scope, 0, metafile.context().legalInfo(['field']))
+        field.write()
+      end testx featregex;
+
+      testx callsites scope:
+        /# Verify that call expressions are converted to CallConstruct
+        /# instances.
+        metafile = test.metafileFor(text=(
+          "var s : str = 'Hello';\n"
+          '@s.size;\n'
+        ))
         scope = metax.attr.ComplexBlock(None, 'scope:', [], line=0, col=0)
 
-        loop = metafile.parseConstruct(scope, 0, context.legalInfo(['case']))
+        print('Fix parseConstruct_callsites')
+        return
+
+        loop = metafile.parseConstruct(
+          scope, 0, metafile.context().legalInfo(['case']))
         test.isfalse(metafile.hasErrors(show=True))
         /# loop.write()
 
     end method parseConstruct;
+
+    method consumeUntilPrimary : tuple<tuple,vec<tuple>> #:
+      Find a primary token
+    params:
+      var consgroup : ConsGroup #:
+        Identifies the set of legal tokens.
+      var index : int #:
+        The current index within text.
+      var indent : int #:
+        The indentation at which the construct must occur.
+    scope:
+      feature_tuples = []
+      text = self._text
+      /# the position within text of the start of the primary key
+      lnum = self.lnum()
+      start = index
+      primary_tuple = None
+      while True:
+        atuple = self.peekFeatureOrPrimaryToken(start, consgroup)
+        token_kind = atuple[0]
+        if token_kind == 'primary_key':
+          primary_tuple = atuple
+          break
+        elif token_kind == 'error':
+          /# We have encountered an error ... we were unable to find
+          /# a feature value or primary token.  For now, we skip forward
+          /# to the end of the block containing the construct being parsed.
+          self.error(
+            'Unrecognized feature/primary token %s' % str(atuple),
+            line=line.num()-1)
+          self.skipToIndent(indent-1)
+          return None, None
+        else:
+          /# token_kind is either 'feature_key' or 'feature_value'
+          form, word, attrkey, attrsel, index, _, fnum, fcol = atuple
+          self.debug('%s "%s"' % (form, word), line=fnum, col=fcol)
+          feature_tuples.append(atuple)
+          index = atuple[4]
+          if text[index] == '\n':
+            line, index, matches = self.nextLine(indent=indent)
+            if not matches:
+              self.skipToIndent(indent-1)
+              return None, None
+          start = index
+      return primary_tuple, feature_tuples
+    test:
+    end method consumeUntilPrimary;
+
+    method createPrimaryAttribute : tuple<Attribute,Attribute> #:
+      Create the primary attribute for a new construct.
+       - Also identifies whether replacement semantics applies.
+
+      Returns:
+       0. primary or null on error
+       1. replacement attribute or null if no replacement semantics
+    params:
+      var atuple : tuple #:
+        A tuple returned from peekFeatureOrPrimaryToken().
+      var line : Line #:
+        The line the primary ends on.
+      var indent : int #:
+        The indentation at which the construct must occur.
+    scope:
+      _, word, pkey, psel, index, consinfo, primary_lnum, primary_col = atuple
+      self.debug(
+        'kind "%s"' % consinfo.name(),
+        line=primary_lnum, col=primary_col)
+
+      /# We have identified a primary.
+      /#  - It is useful to have the construct registered in the parent as
+      /#    soon as possible (e.g. not waiting until all attributes have
+      /#    been parsed).
+      /#  - Since a construct is registered with its parent block by id
+      /#    (aka primary attribute value), it is important that we obtain the
+      /#    id before creating the construct.
+      /#  - Note that some primary attributes have optional (auto-assigned)
+      /#    values, and in some situations it can appear that a primary
+      /#    has an explicit value when in fact that value should be given
+      /#    to a replacer attribute).
+      primary_litkey = word
+      /# Data about the primary key.
+      primary_data = consinfo.primary()[primary_litkey]
+      valopt = primary_data['valopt']
+      replacer = primary_data.get('replacer', None)
+      replace_attr = None
+      /# Keys represent all legal secondary key tokens
+      secondaries = consinfo.secondaries()
+      /# The value of an implicit-key secondary
+      context = self.context()
+
+      /#print('HERE with litkey %s valopt %s' % (primary_litkey, valopt))
+
+      /# When this block is finished, we will have:
+      /#  - identified the primary_value
+      /#  - identified the index within text of one char past the end of the
+      /#    primary value.
+      /#  - detected need for autoassigned id.
+      /#  - handled replacer semantics
+      /#  - returned from method on error
+      primary_value_start = index
+      text = self._text
+      if text[index] == '\n':
+        /# We have a situation where the value associated with the primary
+        /# key is not on the same line as the key. For now at least, we
+        /# require values to start on same line as key, so either this value
+        /# is optional or we have an error.
+        if valopt:
+          primary_value = context.autoId()
+        else:
+          col = index - line.start()
+          self.error('Missing primary id', line=self.lnum(), col=col)
+          /# TODO(wmh): We are skipping the entire collection of lines with
+          /# indent >= indent, which is maybe more aggresive than we need.
+          self.skipToIndent(indent-1)
+          return (None, None)
+      else:
+        word, _, next_index = self.peekWord(index)
+        if valopt:
+          if word in secondaries:
+            /# CODETANGLE(baselang_keys)
+            /# word is a secondary key, so we autoassign a primary value
+            /#  - we avoid updating index, so that the secondary attribute
+            /#    code below will properly handle the secondary key we've
+            /#    found.  We could do a bit of optimization on this...
+            /#
+            /# Note that normally we allow attribute values that contain the
+            /# same text as a key (e.g. Construct Construct, var var, etc.)
+            /# but NOT when the value is optional.
+            primary_value = context.autoId()
+
+          elif replacer:
+            /# There are two possibilities here: the attribute key specified
+            /# in 'replacer' is either explicitly specified within this
+            /# construct or not. In the former case, 'word' is the identifier
+            /# as normal. However, in the latter case, 'word' is the value
+            /# (or start of the value) to be assigned with the attribute
+            /# identified in replacer, and we are to:
+            /#  - autoassign an id.
+            /#  - implicitly create a secondary attribute for the implicit
+            /#    replacer.
+            /#
+            /# Since constructs are registered by id, it is important for us
+            /# to know *now* (not later) what the correct id is, so rather than
+            /# parsing all secondaries to verify that the replacer attribute
+            /# isn't explicitly specified, we require that if an explicit
+            /# id is needed for a construct with a replacer, the replacer
+            /# attribute *must* be explicitly specified immediately after
+            /# the primary value. Thus, we can simple peek at the second
+            /# word (the one starting at next_index). If it matches replacer,
+            /# word is an explicit id, else it is part of the replacer value.
+            if text[next_index] == '\n':
+              /# When an explicit identifier is needed for a construct with
+              /# replacer semantics, the replacer attribute must not only appear
+              /# after the id, but must (for now at least) also appear on the
+              /# same line. So, a newline means no explicit replacer.
+              found_replacer = False
+            else:
+              /# We peek forward.
+              word2, _, next_index2 = self.peekWord(next_index)
+              if word2 == replacer:
+                /# There *is* an explicit replacer attribute, so 'word' is
+                /# the identifier and we don't need to do anything special.
+                found_replacer = True
+              else:
+                /# There is no explicit replacer, so 'word' is part of the
+                /# implicit replacer value and we auto-assign the id.
+                found_replacer = False
+
+            /# print('Here with word="%s" word2="%s" found=%s' % (word, word2, found_replacer))
+
+            if found_replacer:
+              /# There is an explicit replacer attribute after 'word', so
+              /# 'word' is an explicit primary id.
+              primary_value = word
+              index = next_index
+
+            else:
+              /# We are to auto-assign the primary id and create an implicit
+              /# attribute for the replacer attribute.
+              primary_value = context.autoId()
+
+              /# Parse the value of the implicit replacer attribute. It starts
+              /# at index 'index'.
+              /#  - we create a faux construct instance, which is needed in
+              /#    parseSecondaryAttribute to:
+              /#     - set termcode of context (irrelevant)
+              /#     - obtain context when parsing blocks (irrelevant)
+              /#     - register attribute (intentionally disabled when an
+              /#       explicit_key is provided)
+              /#  - must remember to change the parent!
+              construct_class = consinfo._construct_class
+              dummy_construct = construct_class(primary_value, None, context)
+
+              /# Import to set index before (so that parsing starts at proper
+              /# place), and obtain index after (so that later code sets index
+              /# properly).
+              self.indexIs(index)
+              replace_attr, errtok = self.parseSecondaryAttribute(
+                dummy_construct, consinfo, indent, explicit_key=replacer)
+              index = self.index()
+
+          else:
+            /# word is the primary_value
+            primary_value = word
+            index = next_index
+        else:
+          /# word must be the primary value.
+          primary_value = word
+          index = next_index
+          if replacer:
+            /# A replacer attribute should not exist if the primary
+            /# attribute isn't optional.
+            /# TODO(wmh): This check should happen during parsing of the
+            /# metaschema, not here.
+            metafile.error(
+              '%s %s is not optional but has replacer %s' %
+              (primary_litkey, word, replacer))
+
+      self.debug(
+        '  id "%s"' % primary_value,
+        line=self.lnum(), col=primary_value_start - line.start())
+
+      /# Update position ... past primary value and whitespace, all on same line
+      /# as started this method (so we don't need to update the line).
+      self.indexIs(index)
+
+      /# Create the primary construct
+      primary = self.__class__.CreateNewAttribute(
+        None, consinfo, primary_litkey,
+        value=primary_value, line=primary_lnum, col=primary_col, metafile=self)
+
+      return primary, replace_attr
+    test:
+    end method createPrimaryAttribute;
+
+    method createConstructInstance : Construct #:
+      Create an instance of some subclass of Construct.
+    params:
+      var parent : ComplexBlock #:
+        The block that the new construct will be inserted into.
+      var consinfo : ConsInfo #:
+        The construct metainfo.
+      var primary : Attribute #:
+        The primary attribute of the to-be-created construct.
+    scope:
+      /# The ConsInfo instances properly identifies the class of all constructs
+      /# except BaseLanguage and MetaLanguage, which are treated specially (for
+      /# metalang <X> and baselang <Y>, the BaseLanguage class is <X><Y> and the
+      /# MetaLanguage class is Metax<X> (although if it doesn't exist, we fall
+      /# back to the default MetaLanguageConstruct.
+      /#
+      /# TODO(wmh): It is unfortunate that we need to test if the current
+      /# construct is one of these special constructs in parseConstruct, a very
+      /# frequently invoked method, when we only need the logic when parsing
+      /# Meta(Meta) syntax. Can we find a way to avoid having to make this
+      /# check? Maybe we parse all of them into BaseLanguageConstruct instances
+      /# initially, and then patch up with downcasts later?
+      /#
+      /# TODO(wmh): Merge BaseLanguageConstruct and BaseLanguage into a single
+      /# class.
+      construct_class = consinfo._construct_class
+      consname = consinfo.name()
+
+      if consname == 'BaseLanguage':
+        /# BaseLanguage constructs are special
+        /#  - almost all constructs of a given kind are implemented by a class
+        /#    identified solely by the kind, but this is not true for BaseLanguage
+        /#  - for baselang constructs, each instance is implemented by its
+        /#    own class, based on both kind and id.
+        /#  - for metalang <Y> and baselang <X>, the class is <Y><X>.
+        /#  - if we do not find the more refined class, we use BaseLanguageConstruct,
+        /#    but this should only happen if we are in code like command schema,
+        /#    where we don't expect the classes to be defined yet.
+        parent_construct = parent.parent()
+        /# TODO(wmh): Rather than metalang id capitalize, we should use metalang
+        /# 'name' attribute.
+        metalang_id = parent_construct.id()
+        metal = metalang_id.capitalize()
+        basel = primary.value().capitalize()
+        class_name = metal + basel
+        /# This obtains the module metax.oopl, metax.doc, metax.meta, etc.
+        metax_metalang_module = self.dynamicallyObtainMetaxSymbol(metalang_id)
+        better_construct_class = None
+        if metax_metalang_module is not None:
+          better_construct_class = getattr(metax_metalang_module, class_name, None)
+        if better_construct_class:
+          construct_class = better_construct_class
+        /# print('MetaFile.parseSecondaryAttribute: metalang %s baselang %s = %s [%s]' % (
+        /#   metal, basel, class_name, construct_class))
+      elif consname == 'MetaLanguage':
+        /# MetaLanguage constructs are special
+        /#  - almost all constructs of a given kind are implemented by a class
+        /#    identified solely by the kind, but this is not true for
+        /#    MetaLanguage
+        /#  - for metalang constructs, each instance is implemented by its own
+        /#    class, based on both kind and id.
+        /#  - for metalang with id <y>, the class is Metax<Y> where <Y> is the
+        /#    capitalized version of id <y>
+        /#     - Note that we are using 'Metax' as a prefix, not 'Meta'. It is
+        /#       likely we will disallow any class defined in Meta to start
+        /#       with 'Metax' or end with 'Metax' (using 'Metax' instead of
+        /#       'Meta' is safer as far fewer people will be using the former
+        /#       in their day-to-day code, so will rarely encounter the
+        /#       limitation).
+        /#     - IMPORTANT: The MetaLanguage construct has a 'name' secondary
+        /#       attribute that is the sensible item to use when establishing
+        /#       the capitalized version of id, but here at the time we
+        /#       need it, we have not yet parsed it.
+        /#        - for now, we simply capitalized the id
+        /#        - we can consider requiring the name to always be the
+        /#          attribute immediately following the primary attribute,
+        /#          and peek forward to obtain its value.
+        metal = primary.value()
+        /# TODO(wmh): The following assumes that meta languages reside in
+        /# module 'metax.<metalang>', but that is only true for the official
+        /# metalangs (metax.meta, metax.oopl, metax.doc, etc.).  For custom
+        /# metalangs, the module is specified in the 'nmsp' attribute of
+        /# the MetaLanguage construct (which is problematic because we are
+        /# currently parsing that construct and have not yet reached the
+        /# 'nmsp' attribute. For now, this means that custom metalangs cannot
+        /# define their own MetaLanguageConstruct subclasses.
+        metax_metalang_module = self.dynamicallyObtainMetaxSymbol(metal)
+        /# TODO(wmh): Use the 'name' attribute (by requiring it to be the next
+        /# attribute after the MetaLanguage primary attribute, and peeking
+        /# forward two tokens.
+        class_name = 'Metax' + metal.capitalize()
+        better_construct_class = getattr(metax_metalang_module, class_name, None)
+        if better_construct_class is None:
+          /# TODO(wmh): We are no longer writing code into schema.meta files,
+          /# but should definitely continue to support the option. This new code
+          /# related to each Meta-language having a subclass of
+          /# MetaLanguageConstruct is NOT yet supported in that paradigm. Remind
+          /# yourself how BaseLanguageConstruct was working in the schema files
+          /# and do something similar for MetaLanguageConstruct subclasses.
+          if metal != 'test':
+            /# TODO(wmh): Rather than special-casing test, define a TestMeta < MetaLanguageConstruct.
+            print(
+              'WARNING: Failed to find metax.%s.%s so using %s.%s' %
+              (metal, class_name, construct_class.__module__,
+               construct_class.__name__))
+        else:
+          construct_class = better_construct_class
+          /# print(
+          /#   'Here with better %s.%s' %
+          /#   (better_construct_class.__module__, better_construct_class.__name__))
+
+      /# Create the construct
+      context = self.context()
+      if construct_class:
+        /# All kind-specific construct_classes use the same signature as
+        /# Construct.
+        construct = construct_class(primary.value(), parent, context)
+      else:
+        /# There is no kind-specific construct class registered for this
+        /# construct, so we use a GenericConstruct, which passes in the
+        /# kind explicitly.
+        construct = metax.meta.GenericConstruct(
+          primary.value(), parent, context, primary.key())
+
+      /# We do NOT register the primary attribute within the construct here,
+      /# as we need to first add the feature attributes. We do, however,
+      /# record the link from primary to construct here.
+      /#  - is this unnecessary relative to the registerAttribute() invocation
+      /#    that happens soon after in parseConstruct()?
+      primary.parentIs(construct)
+
+      return construct
+    test:
+    end method createConstructInstance;
+
+    method validateFeatureAttributes : any #:
+      Validate a collection of feature key/value tokens given a construct
+      and consinfo.
+    params:
+      var construct : Construct #:
+        The construct to which the feature tokens belong.
+      var consinfo : ConsInfo #:
+        The metainfo for the construct.
+      var feature_tuples : vec<tuple> #:
+        The parsed feature tokens to be validated.
+    scope:
+      /# The list of feature keys and feature values in feature_tuples are valid
+      /# for *some* construct in the meta language, but it is entirely possible
+      /# they will not be valid for the construct that has been identified ...
+      /# any unrecognized keys/values are reported as errors.
+      featvals = consinfo.featvals()
+      featkeys = consinfo.features()
+      i = 0
+      n = len(feature_tuples)
+      while i < n:
+        form, token, featkv, fsel, index, data, feat_lnum, feat_col = (
+          feature_tuples[i])
+        featinfo = {
+          'parent': construct, 'value': None,
+          'line': feat_lnum, 'col': feat_col
+        }
+        if form == 'feature_key':
+          /# We have an explicit feature key ... next index must be a value
+          /# for this feature key.
+          featkey = featkv
+          finfo = featkeys[featkey]
+          featinfo['litkey'] = featkey
+          featinfo['key'] = finfo['cankey']
+          i += 1
+          if i < n:
+            form, _, featval, featsel, index, data, _, _ = feature_tuples[i]
+            if form != 'feature_value':
+              self.error(
+                'Expecting feature value for feature key %s but found unknown %s' %
+                (featkey, featval), line=self.lnum())
+            else:
+              /# We know featval is a legal feature value (or we wouldn't have
+              /# gotten here ... right?), but we don't know for sure that it
+              /# is a feature value for featkey
+              valkey = featvals[featval]
+              assert valkey is not None
+              if valkey != featkey:
+                self.error(
+                  'Expecting feature value for feature key %s but found value %s for key %s' %
+                  (featkey, featval, valkey))
+              else:
+                featinfo['value'] = featval
+
+              /# If there was a selector specified on the feature key, we verify
+              /# that the selector matches current baselang. If not, we ignore
+              /# the feature attribute/key pair entirely.
+              if fsel:
+                baselang = construct.baselang()
+                suffix = baselang.suffix()
+                if '.' + fsel != suffix:
+                  print('***** IGNORING %s = %s for %s (specific to %s)' % (
+                    featkey, featval, suffix, fsel))
+                  featinfo = None
+
+          else:
+            self.error(
+              'Missing feature value for feature key %s' % featkey,
+              line=self.lnum())
+        elif form == 'feature_value':
+          /# We have an implicit feature key dicated by featval
+          featval = featkv
+          if featval not in featvals:
+            self.error(
+              "Invalid feature value '%s' for %s" % (featval, construct.kind()))
+            featinfo = None
+          else:
+            featkey = featvals[featval]
+            featinfo['litkey'] = ''
+            featinfo['key'] = featkey
+            featinfo['value'] = featval
+        elif form == 'error':
+          self.debug('Fix me!')
+          self.error('Invalid token "%s"' % token)
+          featinfo = None
+        else:
+          raise Error('Here with form %s' % form)
+
+        /# Create the FeatureAttribute
+        if featinfo:
+          feature = metax.attr.FeatureAttribute(**featinfo)
+          construct.registerAttribute(feature)
+
+        /# Advance to next feature key/value.
+        i += 1
+    test:
+    end method validateFeatureAttributes;
+
+    method handleConstructTermination : bool #:
+      Ensure the construct has a properly initialized termcode() field.
+
+      Returns true on success, false on error.
+    params:
+      var construct : Construct #:
+        The construct being terminated.
+    scope:
+      result = True
+      termcode = construct.termcode()
+      index = self.index()
+      if termcode != TERM_UNINIT:
+        /# The construct has been successfully parsed.
+        self.debug('  termcode %d' % termcode)
+        /# We expect the construct to be at end-of-line, except when an
+        /# implicit termination was identified.
+        if termcode == 0:
+          /# An implicit termination was identified.
+          /#  - normally, the current index is where we are to start parsing
+          /#    the next entity.
+          /#  - however, if the last attribute was a simple block, and it ended
+          /#    with empty lines, those lines should not be considered part of
+          /#    the simple block, so we back up if they exist.
+          last_attribute = construct.order()[-1]
+          if last_attribute.isSimpleBlock():
+            aval = last_attribute.value()
+            k = len(aval) - 1
+            emptyln = 0
+            while k >= 0 and not aval[k].strip():
+              k -= 1
+              emptyln += 1
+              aval.pop()
+            if emptyln:
+              self.set(lnum=self.lnum() - emptyln)
+        else:
+          text = self._text
+          if text[index] == '\n':
+            /# This is what we normally expect at end of construct.
+            self.nextLine()
+          else:
+            /# When does this happen?
+            print(text[index:index+30])
+            raise Error('How to handle this?')
+      else:
+        /# We have an error, and no recovery has yet been performed.
+        self.debug(
+          '  parse error on %s' % errtok,
+          line=self.lnum(), col=index - line.start())
+        result = False
+      return result
+    test:
+    end method handleConstructTermination;
 
     method parseSecondaryAttribute : tuple<metax.attr.Attribute,str> #:
       Parse a secondary attribute, supporting optional keys and values.
@@ -8553,13 +8747,12 @@ scope:
          A feature attribute key or value
        [2] selector : str
          The selector on a key.
-       [3] form : str
+       [3] token_kind : str
          One of 'feature_value', 'feature_key', 'primary_key', or 'error'
        [4] index : int
          The absolute index of the next non-space token within self.text().
-       [5] data : any
-         A form-specific value (ConsInfo for primary_key, ...). If it has
-         the value 'error', an error has arisen.
+       [5] consinfo : ConsInfo or null
+         null unless token_kind == 'primary_key'.
        [6] lnum : int
          The line number the token appears on (from 0)
        [7] col : int
@@ -8589,6 +8782,15 @@ scope:
       token = text[start:index]
 
       /# Extract out selector if present.
+      /#  - Note that selectors are only meaningful if the token is a key
+      /#    (primary or feature), not for feature values. However, it is
+      /#    important to remove the selector before looking for the stripped
+      /#    result in consgroup.primaries() and consgroup.features(), so we
+      /#    perform the stripping here
+      /#  - Enum-based feature values will not contain '<' so we do not need
+      /#    to handle them specially, but regexp-based feature values may
+      /#    include '<', so we reinstate the full token in such cases (see
+      /#    below).
       if langle > -1 and rangle == index - 1:
         selector = text[langle+1:rangle]
         attrkv = text[start:langle]
@@ -8602,71 +8804,130 @@ scope:
       /# Establish if the attrkv is a primary, feature or error.
       consinfo = consgroup._primaries.get(attrkv, None)
       if consinfo:
-        form = 'primary_key'
-        data = consinfo
+        /# We have encountered a primary key (or primary alias).
+        token_kind = 'primary_key'
+
       else:
         finfo = consgroup._features.get(attrkv, None)
         if finfo:
-          /# 0='key' or 'value', 1=canfeatkey, 2=kinds
-          form = 'feature_key' if finfo[0] == 'key' else 'feature_value'
-          data = finfo
+          /# finfo is a tuple with 0='key' or 'value', 1=canfeatkey, 2=kinds
+          token_kind = 'feature_key' if finfo[0] == 'key' else 'feature_value'
+
         else:
-          form = 'error'
-          data = None
+          /# Check whether attrkv matches a feature value regexp.
+          relist = consgroup._featregexprs
+
+          /# The token is an error *unless* we find a featregexp match.
+          token_kind = 'error'
+
+          if relist:
+            /# Feature values do not have selectors, so we reinstate the
+            /# entire token.
+            attrkv = token
+            selector = None
+            for reinfo in relist:
+              m = reinfo[0].match(attrkv)
+              if m:
+                /# The only caller of this method is MetaFile.parseConstruct(),
+                /# which does NOT use result[5] if 'token_kind' is not
+                /# 'primary_key'
+                token_kind = 'feature_value'
+                break
 
       lnum = self._lnum
       line = self._lines[lnum]
-      return (token, attrkv, selector, form, index, data, lnum, start - line.start())
-    test:
-      text = (
-        'MetaLanguage test config:\n'
-        '  Construct Cons config:\n'
-        '    kind secondary Attribute Attr : word;\n'
-        '    kind<py> secondary Attribute Attr2 : word;\n'
-        'end MetaLanguage;\n'
-      )
-      metafile, context = test.schemaParser(text)
+      /# TODO(wmh): The token_kind (index 3) should really be index 0,
+      /# with token, attrkv, and selector being shifted one index up.
+      /# However, changing this will require some careful verification and
+      /# modification of various
+      return (token_kind, token, attrkv, selector, index, consinfo, lnum, start - line.start())
+    tests:
 
-      /# Parse the MetaLanguage primary token
-      test.iseq(
-        ('MetaLanguage', 'MetaLanguage', None, 'primary_key', 13, context.consmap()['MetaLanguage'], 0, 0),
-        metafile.peekFeatureOrPrimaryToken(0, context.legalInfo(['MetaLanguage'])))
+      testx basics scope:
+        text = (
+          'MetaLanguage test config:\n'
+          '  Construct Cons config:\n'
+          '    kind secondary Attribute Attr : word;\n'
+          '    kind<py> secondary Attribute Attr2 : word;\n'
+          'end MetaLanguage;\n'
+        )
+        metafile, context = test.schemaParser(text)
 
-      /# Parse the Construct primary token
-      metafile.lnumIs(1)
-      test.iseq(
-        ('Construct', 'Construct', None, 'primary_key', 38, context.consmap()['Construct'], 1, 2),
-        metafile.peekFeatureOrPrimaryToken(28, context.legalInfo(['Construct'])))
+        /# Parse the MetaLanguage primary token
+        test.iseq(
+          ('primary_key', 'MetaLanguage', 'MetaLanguage', None, 13,
+           context.consmap()['MetaLanguage'], 0, 0),
+          metafile.peekFeatureOrPrimaryToken(
+            0, context.legalInfo(['MetaLanguage'])))
 
-      /# Parse the Attribute 'kind' feature key
-      metafile.lnumIs(2)
-      test.iseq(
-        ('kind', 'kind', None, 'feature_key', 60, ('key', 'kind', ['Attribute']), 2, 4),
-        metafile.peekFeatureOrPrimaryToken(55, context.legalInfo(['Attribute'])))
+        /# Parse the Construct primary token
+        metafile.lnumIs(1)
+        test.iseq(
+          ('primary_key', 'Construct', 'Construct', None, 38,
+           context.consmap()['Construct'], 1, 2),
+          metafile.peekFeatureOrPrimaryToken(
+            28, context.legalInfo(['Construct'])))
 
-      /# Parse the Attribute 'kind<py>' feature key.
-      metafile.lnumIs(3)
-      test.iseq(
-        ('kind<py>', 'kind', 'py', 'feature_key', 106, ('key', 'kind', ['Attribute']), 3, 4),
-        metafile.peekFeatureOrPrimaryToken(97, context.legalInfo(['Attribute'])))
+        /# Parse the Attribute 'kind' feature key
+        metafile.lnumIs(2)
+        test.iseq(
+          ('feature_key', 'kind', 'kind', None, 60, None, 2, 4),
+          metafile.peekFeatureOrPrimaryToken(
+            55, context.legalInfo(['Attribute'])))
 
-      /# Parse the Attribute 'secondary' feature value of feature 'kind'
-      metafile.lnumIs(2)
-      test.iseq(
-        ('secondary', 'secondary', None, 'feature_value', 70, ('value', 'kind', ['Attribute']), 2, 9),
-        metafile.peekFeatureOrPrimaryToken(60, context.legalInfo(['Attribute'])))
+        /# Parse the Attribute 'kind<py>' feature key.
+        metafile.lnumIs(3)
+        test.iseq(
+          ('feature_key', 'kind<py>', 'kind', 'py', 106, None, 3, 4),
+          metafile.peekFeatureOrPrimaryToken(
+            97, context.legalInfo(['Attribute'])))
 
-      /# Parse the Attribute primary token
-      metafile.lnumIs(2)
-      test.iseq(
-        ('Attribute', 'Attribute', None, 'primary_key', 80, context.consmap()['Attribute'], 2, 19),
-        metafile.peekFeatureOrPrimaryToken(70, context.legalInfo(['Attribute'])))
+        /# Parse the Attribute 'secondary' feature value of feature 'kind'
+        metafile.lnumIs(2)
+        test.iseq(
+          ('feature_value', 'secondary', 'secondary', None, 70, None, 2, 9),
+          metafile.peekFeatureOrPrimaryToken(
+            60, context.legalInfo(['Attribute'])))
 
-      /# Parse a feature/primary token when one does not exist.
-      metafile.lnumIs(0)
-      test.iseq(
-        ('test', 'test', None, 'error', 18, None, 0, 13),
-        metafile.peekFeatureOrPrimaryToken(13, context.legalInfo(['MetaLanguage'])))
+        /# Parse the Attribute primary token
+        metafile.lnumIs(2)
+        test.iseq(
+          ('primary_key', 'Attribute', 'Attribute', None, 80,
+           context.consmap()['Attribute'], 2, 19),
+          metafile.peekFeatureOrPrimaryToken(
+            70, context.legalInfo(['Attribute'])))
+
+        /# Parse a feature/primary token when one does not exist.
+        metafile.lnumIs(0)
+        test.iseq(
+          ('error', 'test', 'test', None, 18, None, 0, 13),
+          metafile.peekFeatureOrPrimaryToken(
+            13, context.legalInfo(['MetaLanguage'])))
+      end testx basics;
+
+      testx fields scope:
+        text = (
+          '+r#w!x +r#w!z field test : int;\n'
+        )
+        metafile = test.metafileFor(text, metal='oopl', basel='python')
+        context = metafile.context()
+        consgroup = context.legalInfo(['field', 'method'])
+
+        /# The token starting at index 0 represents a valid match against the
+        /# accessors feature attribute of the 'field' construct, which is
+        /# regexp-based.
+        test.iseq(
+          ('feature_value', '+r#w!x', '+r#w!x', None, 7, None, 0, 0),
+          metafile.peekFeatureOrPrimaryToken(0, consgroup))
+
+        /# The token starting at index 7 does NOT represent a valid match
+        /# against that regexp (or any other feature key/value or primary
+        /# key/alias), so status is error.
+        test.iseq(
+          ('error', '+r#w!z', '+r#w!z', None, 14, None, 0, 7),
+          metafile.peekFeatureOrPrimaryToken(7, consgroup))
+      end testx fields;
+
     end method peekFeatureOrPrimaryToken;
 
     method peekSecondaryToken : tuple<str,str,str,map,int> #:
@@ -14079,8 +14340,9 @@ scope:
         res2, width=160)
 
       path3 = fs.join(root, 'oopl', 'python', 'metax')
-      res3 = metaoopl.parseRepositoryNamespace('metax', path3)
+      res3 = metaoopl.parseRepositoryNamespace('metax', path3, fp=test.fp())
       test.isfalse('errors' in res3)
+      out = test.out()
     end method parseRepositoryNamespace;
 
     method parseRepositoryFile : bool #:
@@ -16552,6 +16814,8 @@ scope:
       command shold #:
         A shell for exploring a MetaFile.
       scope:
+        /# TODO(wmh): Can this be removed? If so, I believe MetaNode can be
+        /# deleted as well.
         cli = self.cli()
         argmap = self._parseArgs(cli.rest, implicit=True)
         metafiles = argmap['metafiles']
@@ -17639,7 +17903,7 @@ scope:
     test:
     end method newbasic;
 
-    method prepMeta : any #:
+    method prepMeta #:
       Parse meta source code (either explicit text or named in test.samples).
 
       Sets following test fields:
@@ -18023,9 +18287,11 @@ scope:
       Create a parser for provided schema text.
     params:
       var text : str #:
-        A multi-line string representing a Meta(Meta) file.
+        A multi-line string representing a Meta(<metal>) file.
+      var metal : str = 'meta';
+      var basel : str = null;
     scope:
-      test.basics()
+      test.basics(metal=metal, basel=basel)
       compiler = self.compiler
       context = self.context
       metafile = metax.c.MetaFile('fauxpath', compiler, text, debuglevel=0)

@@ -12,13 +12,13 @@ namespace metax.lib.markdown #:
        https://en.support.wordpress.com/markdown/
        https://en.support.wordpress.com/markdown-quick-reference/
     Doxygen: GFM and PHP Markdown Extra
-       https://www.stack.nl/~dimitri/doxygen/manual/markdown.html 
+       https://www.stack.nl/~dimitri/doxygen/manual/markdown.html
 
   Planned extensions
    - The syntax {text} is an indication that 'text' should be surrounded
      with HTML markup (usually <span> or <code>, etc.) with some set of
      classes.
-   - At the bottom of the markdown file, one can specify mappings for 
+   - At the bottom of the markdown file, one can specify mappings for
      text block with the syntax:
       {regexp}: <code class=\"...\">
       {regexp}: <span class=\"...\">
@@ -231,7 +231,7 @@ scope:
       return j
     test:
       p = test.md
-      test.iseq(3, 
+      test.iseq(3,
         p._advancePosition(
           ['here', '  abc', '  def', 'hgi'], 1, re.compile(r'^  ')))
     end method _advancePosition;
@@ -375,7 +375,7 @@ scope:
       /# How many empty lines were seen before the current list of
       /# contiguous lines.
       /#  - reset to 0 at end of loop below unless current line is empty
-      prelines = 0   
+      prelines = 0
 
       /# Which line we are currently processing.
       i = 0
@@ -406,7 +406,7 @@ scope:
               /# This is a special case for the 'list' category, allowing us
               /# to conditionally determine whether an empty line is needed
               /# before the list or not depending on context.
-              /#  - the original markdown spec 
+              /#  - the original markdown spec
               /#      https://daringfireball.net/projects/markdown/syntax#list
               /#    does not clarify whether the start of a list must be
               /#    preceeded by an empty line or not, and whether this also
@@ -449,7 +449,7 @@ scope:
             para_prelines = prelines
           current_lines.append(line)
           i += 1
-        
+
         elif kind == 'empty':
           /# We have an empty line:
           /#  - if we are currently parsing a text block, this ends the block
@@ -522,7 +522,7 @@ scope:
             raise Error('How to handle sections within list items?')
 
           i += 1
-          assert not current_lines 
+          assert not current_lines
 
         elif kind == 'label':
           /# A mapping from conceptual name to url.
@@ -639,7 +639,7 @@ scope:
           list_block = List(
             current_group, ordered=ordered, mark=lchar, prelines=prelines)
           current_group.addBlock(list_block)
-          
+
           /# Advance to end of list, accumulating indices of list item starts.
           item_starts = [(i, m)]
           list_start = i
@@ -690,7 +690,7 @@ scope:
                 /# we do not tromp on the prelines calculated above.
                 keep_prelines = True
                 break
-         
+
               elif newnlws > nlws:
                 /# The new list item is indented more than the current line,
                 /# so it is part of the current list. It may be a typo, but
@@ -752,7 +752,7 @@ scope:
             item_end, next_prelines = FindEnd(lines, item_end-1)
             item_pre = m.start('text')  # continuation lines are usually indented this much
             /#print '*** %4d %4d %d = %s [%s %d]' % (item_start+1, item_end+1, item_prelines, line, m.groupdict(), item_pre)
-            
+
             item_lines = []
             item_lines.append(m.group('text'))
             for ii in range(item_start+1, item_end):
@@ -778,7 +778,7 @@ scope:
               item_lines, parent=listitem, debug=debug, illegals=('section',))
 
             /# Setup for next listitem.
-            item_prelines = next_prelines                                
+            item_prelines = next_prelines
 
         elif kind == 'hr':
           /# We have an HR line
@@ -791,7 +791,7 @@ scope:
           /# We have a comment.
           Record(i, 'comment')
           i += 1
-          
+
         elif kind == 'page':
           /# We have an explicit page break.
           Record(i, 'page break')
@@ -854,7 +854,7 @@ scope:
         >|This is a __first__ paragraph
         >|short and sweet.
         >|
-        >|Another **paragraph** but with explict  
+        >|Another **paragraph** but with explict  |<
         >|line break here.
         >|
         >|* * *
@@ -1077,7 +1077,7 @@ scope:
         section)
       fp = test.fp()
       result.show(fp=fp, aspect='html')
-      
+
       test.iseqtext(
         >|"""<ul>
         >|  <li>
@@ -1296,7 +1296,7 @@ scope:
 
   end class Object;
 
-  abstract 
+  abstract
   class Block < Object #:
     Abstract superclass of all Markdown classes representing text.
     This includes:
@@ -1331,7 +1331,7 @@ scope:
     lifecycle params:
       var parent -> parent;
       var prelines : int = 0 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
       var uid -> uid = null;
     super (prelines=prelines)
     scope:
@@ -1385,7 +1385,7 @@ scope:
       var parent : Object #:
         The parent of this block object.
       var prelines : int = 0 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
       var uid : str = null #:
         A unique identifier for this BlockGroup
     super (parent, prelines=prelines, uid=uid)
@@ -1474,7 +1474,7 @@ scope:
       var text -> text;
       var implicit -> implicit = false;
       var prelines : int = 0 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
     super (parent, prelines=prelines)
     scope:
       if text[-1] == '\n':
@@ -1587,10 +1587,10 @@ scope:
             The actual height of the image.
           display_width: int (optional)
             The width with which to display (not necessarily the actual width
-            of the image)                                           
+            of the image)
           display_height: int (optional)
             The height with which to display (not necessarily the actual height
-            of the image)                                           
+            of the image)
           header: str = null
             Text to add above the image
           headercls : str = 'fixedwidth'
@@ -1613,7 +1613,7 @@ scope:
           'Not yet implementing edit semantics in Paragraph.Image2Html')
 
       indent = data.get('indent', '')
-      
+
       /# Form the attributes of the <img> tag.
       imgattrs = {'src': data['url']}
       tooltip = data.get('tooltip', '')
@@ -1663,7 +1663,7 @@ scope:
 
       /# End the outer div.
       lines.append('%s</div>' % indent)
-      
+
       /# Return
       return '\n'.join(lines) + '\n'
     end method Image2Html;
@@ -1723,12 +1723,12 @@ scope:
           'header': text,
           'tooltip': title,
         }
-          
+
         for k in ('width', 'height'):
           for prefix in ('', 'x'):
             if d[prefix + k]:
               data['display_' + k] = d[prefix + k]
-          
+
         if error:
           result = 'ERROR{%s}' % error
         elif d['img']:
@@ -1862,7 +1862,7 @@ scope:
               elif n == c and text[i+2] == ' ':
                 special = False
                 reason = 'double is surrounded by spaces'
-              
+
           if special:
             if n == c:
               istwo = True
@@ -1911,7 +1911,7 @@ scope:
         parts.append(repl)
         i = end
       parts.append(text[i:len(text)])
-        
+
       text = ''.join(parts)
       return text[2:-2]
     test:
@@ -1986,7 +1986,7 @@ scope:
           entry = {
             'd': d,
             's': m.start(0),
-            'e': m.end(0), 
+            'e': m.end(0),
             'v': m.group('text').replace(special, ''),
           }
           result.append(entry)
@@ -2030,14 +2030,14 @@ scope:
         The section this code block belongs to.
       var lines -> lines;
       var prelines : int = 0 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
     super (parent, prelines=prelines)
     scope:
       /# TODO(wmh): Either strip the '> ' from each line here, or require
       /# the caller to do so.
       self.linesIs(lines)
     end lifecycle;
- 
+
   end class Quote;
 
   class List < Block #:
@@ -2053,7 +2053,7 @@ scope:
       One of '*', '+' or '-' if unordered, or an integer if ordered.
       Note that currently we do NOT store the integers of every list item
       in the list, just of the first one (for unordered lists this is
-      unnecessary because all list items must use the same mark for 
+      unnecessary because all list items must use the same mark for
       unordered lists).
 
     field items : @vec<ListItem> #:
@@ -2067,7 +2067,7 @@ scope:
       var ordered -> ordered = false;
       var mark -> mark = null;
       var prelines : int = 0 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
     super (parent, prelines=prelines)
     scope:
     end;
@@ -2146,7 +2146,7 @@ scope:
   class ListItem < BlockGroup #:
     An item within a list. Contains zero or more Block instances.
 
-    The parent field contains a List instance.  
+    The parent field contains a List instance.
   scope:
 
     method isListItem : bool scope:
@@ -2194,7 +2194,7 @@ scope:
       var lines : vec<str> #:
         The lines making up the code block. No newlines in elements.
       var prelines : int = 0 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
       var language -> language = null;
     super (parent, prelines=prelines)
     scope:
@@ -2224,7 +2224,7 @@ scope:
         The section this hr belongs to.
       var text -> text;
       var prelines : int = 0 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
     super (prelines=prelines)
     scope:
     end lifecycle;
@@ -2241,7 +2241,7 @@ scope:
   scope:
 
     field lines : vec<str> #:
-      The lines in the html block.      
+      The lines in the html block.
 
     lifecycle params:
       var parent : Section #:
@@ -2249,7 +2249,7 @@ scope:
       var lines : vec<str> #:
         The lines in the html block.
       var prelines : int = 0 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
     super (parent, prelines=prelines)
     scope:
       self.linesIs(lines)
@@ -2306,7 +2306,7 @@ scope:
       var rawrows : vec<vec<str>> #:
         See the 'rows' field.
       var prelines : int = 0 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
       var title -> title = null;
       var csscls -> csscls = null;
       var uid : str = null #:
@@ -2320,7 +2320,7 @@ scope:
           indices[header] = i
 
       rows = [metax.lib.markdown.Row(self, rowdata) for rowdata in rawrows]
-      
+
       self.rowsIs(rows)
       self.indicesIs(indices)
     end lifecycle;
@@ -2360,7 +2360,7 @@ scope:
       var parent : *Section = null #:
         The section this table belongs to.
       var prelines : int = 0 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
     scope:
       if errors is None:
         errors = []
@@ -2390,7 +2390,7 @@ scope:
         /# spec allows both:
         /#    | Column1 | Column2 |
         /# and
-        /#      Column1 | Column2 
+        /#      Column1 | Column2
         /# as legal table specifiers.
         /#
         /# If we require tables to have left and right borders, we can just
@@ -2428,7 +2428,7 @@ scope:
           headers = delim_re.split(lines[i-1].strip())[1:-1]
           if len(headers) != numcols:
             errors.append(
-              'Found %d headers but %d columns: %s' % 
+              'Found %d headers but %d columns: %s' %
               (len(headers), numcols, lines[i-1]))
           else:
             for j in range(0, numcols):
@@ -2542,7 +2542,7 @@ scope:
       var table : &Table;
       var columns : &vec<str>;
       var prelines : int = 0 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
     super (table, prelines=prelines)
     scope:
       self.dataIs(columns)
@@ -2646,7 +2646,7 @@ scope:
       var abbrev -> abbrev = null;
       var parser -> parser = null;
       var prelines : int = 1 #:
-        The number of empty lines found before this block started.        
+        The number of empty lines found before this block started.
     super (parent, prelines=prelines)
     scope:
       self.uidIs(abbrev)   # TODO(wmh): Replace abbrev with uid in params and use super to initialize
@@ -2682,7 +2682,7 @@ scope:
          and as of yet, no text objects have abbrevs).
        - a canonical representation of title, lowercase, with all non-alpha
          characters (whitespace, punctuation, etc.) deleted (only added if
-         no abbrev was specified).                                                             
+         no abbrev was specified).
     params:
       var obj : Object;
     scope:
@@ -2746,7 +2746,7 @@ scope:
       section.addBlock(test.p1)
       test.issame(test.p1, section.lastBlock())
     end method lastBlock;
-   
+
     method addBlock : Block #:
       Add a text object to myself.
     params:
@@ -2976,7 +2976,7 @@ scope:
           fp.write(rawtext + u'\n')
       elif aspect == 'html':
         if parser is None:
-          parser = self.parent().parser()          
+          parser = self.parent().parser()
         text = self.__class__.TextToHtml(rawtext, parser=parser, indent=indent)
         sep = '\n' + indent
         if prelines:
@@ -3115,7 +3115,7 @@ scope:
         >|""",
         fp.getvalue())
     end receiver List;
-  
+
     receiver ListItem ::
       mark = kwds.get('mark', None)
       parent = self.parent()
@@ -3135,7 +3135,7 @@ scope:
         prelines = self.prelines()
 
         if prelines:
-          fp.write(u'\n' * prelines)          
+          fp.write(u'\n' * prelines)
         for i, block in enumerate(self.blocks()):
           if i == 0:
             /# This is the first block in the listitem, so we add the listitem
@@ -3160,7 +3160,7 @@ scope:
           if block.prelines() == 0:
             block.implicitIs(True)
           kwds = {'fp': fp, 'indent': indent, 'aspect': aspect}
-          block.show(**kwds)          
+          block.show(**kwds)
         else:
           for block in blocks:
             block.show(fp=fp, indent=indent, aspect=aspect)
@@ -3347,8 +3347,8 @@ scope:
 
         /# Print the header.
         fp.write(
-          u'%s| %s |\n' % 
-          (indent, 
+          u'%s| %s |\n' %
+          (indent,
            FormatRow(header, aligns, widths)))
 
         /# Compute and print the separator
@@ -3403,7 +3403,7 @@ scope:
             elif W:
               alignspec = '%s{%dex}' % (alignspec.upper(), W)
               h = '\\textbf{' + h + '}'
-            else:    
+            else:
               h = '\\textbf{' + h + '}'
           headers.append(h)
           aligns.append(alignspec)
@@ -3426,7 +3426,7 @@ scope:
           fp.write(u'  \\caption{%s}\n' % title)
         /# fp.write('\\label{tab:table1}\n')
         fp.write(u'  \\begin{tabular}{%s}\n' % colspec)
-        
+
         /# Print the header (if one exists)
         if numh:
           fp.write(u'    \\hline\n')
@@ -3436,7 +3436,7 @@ scope:
 
         for row in self.rows():
           line = ' & '.join([
-            metax.lib.markdown.Paragraph.TextToTex(cell, parser=parser) 
+            metax.lib.markdown.Paragraph.TextToTex(cell, parser=parser)
             for cell in row.data()])
           fp.write(u'    %s\\\\\n' % line)
           /# fp.write('    \\hline\n')
@@ -3454,7 +3454,7 @@ scope:
           fp.write(u'  <caption>%s</caption>\n' % title)
         for row in self.rows():
           line = u'<tr>%s</tr>\n' % ''.join(
-            ['<td>%s</td>' % 
+            ['<td>%s</td>' %
              (metax.lib.markdown.Paragraph.TextToHtml(cell, parser=parser).strip() or '&nbsp;')
              for cell in row.data()])
           fp.write(line)
@@ -3515,7 +3515,7 @@ scope:
       style = kwds.get('style', None)
       preamble = kwds.get('preamble', None)
       postamble = kwds.get('postamble', None)
-      
+
 
       d = self.depth()
       prelines = self.prelines()
@@ -3546,7 +3546,7 @@ scope:
           if prelines:
             fp.write(u'\n' * prelines)
           fp.write(
-            u'%s%s %s\n' % 
+            u'%s%s %s\n' %
             (indent, '#' * d, self.title().decode('utf8', 'replace')))
         for block in self.blocks():
           block.show(fp=fp, indent=indent, aspect=aspect, parser=parser)
@@ -3672,7 +3672,7 @@ scope:
             4: {'tag': 'subsubsection'},
             5: {
               /# https://www.sharelatex.com/learn/Line_breaks_and_blank_spaces
-              'tag': 'paragraph', 
+              'tag': 'paragraph',
               'suffix': '\\hfill \\break'
            },
           }[d]
@@ -3806,7 +3806,7 @@ scope:
     resource raw_txt_golden path "testdata/markdown/raw.txt.golden";
     resource raw_html_golden path "testdata/markdown/raw.html.golden";
   scope:
-  
+
     lifecycle setup:
       self.md = metax.lib.markdown.Parser()
       self.root = metax.lib.markdown.Section(

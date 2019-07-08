@@ -1,0 +1,175 @@
+namespace metax.table #:
+  Classes associated with rendering tables (cells in 2D layout).
+preports<py>:
+  /# http://python-future.org/compatible_idioms.html#basestring
+  from past.builtins import basestring
+  /# https://python-future.org/compatible_idioms.html#unicode
+  from builtins import str
+scope:
+
+  class Cell #:
+    An entry within a table.
+
+    Use-cases:
+      - format in ascii (supporting formatting, alignment, line wrapping,
+        various formats, etc.)
+  scope:
+
+    field value : any #:
+      TODO(wmh): What are the legal types of a value?
+       - Definitely need to support all primitive types (int, uint, real, bool,
+         etc.) and str. Do we want to support arbitrary types though? Anything
+         that responds to asStr()?
+      TODO(wmh): In Meta, ensure that ALL objects support asStr() ... that means
+      that 'asStr' must be a method defined on all native types. There may be
+      a number of optional keyword params associated with asStr(), like width,
+      indent, etc. (to be decided).
+
+    field style : map<str,str> #:
+      CSS styling support for this cell. Keys are CSS properties that apply to
+      <td> (or <span>?) elements, and values are CSS property values. These
+      properties and values are interpreted specially when formatting tables
+      into non-HTML formats, so some limitations are placed on the values.
+
+    lifecycle params:
+      var value -> value;
+    scope:
+    end lifecycle;
+
+  end class Cell;
+
+  class Column #:
+    Represents information about a specific column within a table.
+  scope:
+
+    field name : str #:
+      The unique name of the Column. Used ubiquitously in the code to
+      identify a specific column (when adding rows, etc.)
+
+    field label : str #:
+      What to show as the column title (at top of table). Defaults to
+      capitalized self.name().
+
+    field width : int #:
+      The width of this column.
+        0 means auto-compute
+        >0 means always use specified width.
+        See also 'maxwidth')
+
+    field maxwidth : int #:
+      If the width computed for 'width' is greater than this value,
+      make it this value. A value of 0 means no max width.
+
+    field ldelim : str #:
+      What appears on the left side of the cell (in text representations).
+      TODO(wmh): Do we want to distinguish ldelim for header vs data vs
+      separator vs raw rows?
+      TODO(wmh): Should this be changed to a boolean indicator of whether a
+      border is to be drawn, and the associated padding/margin? That would scale
+      better to HTML, latex, gviz, etc.
+
+    field rdelim : str #:
+      What appears on the right side of the cell (in text representations).
+      TODO(wmh): Do we want to distinguish ldelim for header vs data vs
+      separator vs raw rows?
+      TODO(wmh): Should this be changed to a boolean indicator of whether a
+      border is to be drawn, and the associated padding/margin? That would scale
+      better to HTML, latex, gviz, etc.
+
+    field align : str #:
+      The desired alignment of values within the cell. Legal values are
+      'left', 'right' and 'center'.
+      TODO(wmh): Use an enum instead!
+
+    field format : str #:
+      The format to apply to values in this column. Default is '%s'.
+
+    lifecycle params:
+      var name -> name;
+      var label -> label = null;
+      var width -> width = 0;
+      var maxwidth -> maxwidth = 0;
+      var ldelim -> ldelim = ' ';
+      var rdelim -> rdelim = ' |';
+      var align -> align = 'left';
+      var format -> format = '%s';
+    scope:
+    end lifecycle;
+
+  end class Column;
+
+  class Row #:
+    Represents a single data row within a table.
+
+    Use-cases:
+     - normal row of data
+     - separator
+     - special line
+     - wrapping values within cells.
+  scope:
+
+    field data : @map<str,u*Cell> #:
+      Maps column uids to Cell instances.
+
+    lifecycle params:
+      var data : *#map<str,Cell> = null ##:
+        In Meta, do we want to provide some support for implicitly mapping
+        syntax like:
+           var data : *#map<str,Cell> data -> data = null;
+        where the type of the var (a const pointer to a map) does NOT match
+        the type of the 'data' field (-> data). We could implement implicit
+        copy semantics in such situations.
+    scope<py>:
+      if data:
+        self.dataIs(copy.copy(data))
+    scope<cc>:
+      if (data != nullptr) {
+      }
+    end lifecycle;
+
+  end class Row;
+
+  class Table #:
+    Represents the 2D data to be rendered as a table.
+  scope:
+
+    field defaults : map<str,str> #:
+      Provides default values for various named concepts:
+        left:
+          What appears as the left margin of the table. Default is '|'.
+        right:
+          What appears as the right margin of the table. Default is ''
+          because rdelim is usually ' |' so the last cell in a row provides
+          an implicit right border.
+        ldelim:
+          The default left delimiter of each cell.
+        rdelim:
+          The default right delimiter of each cell.
+
+    field order : vec #:
+      The column names, in the order provided in the initializer.
+
+    field columns : map<str,Column> #:
+      Maps column names to Column instances.
+
+    field title : str #:
+      The title of the table (what appears above the table proper).
+
+    field rows : @vec<Row> #:
+      The data rows in the table.
+
+    field rowconfigs : @vec<map> #:
+      Provide per-row per-cell configuration support.  Each eement is a mapping
+      from conceptual key (something in self.order()) to a map containing:
+        style: str
+          CSS to apply to the <td> representing the cell in question.
+        ... TODO(wmh): Add more here ...
+
+      TODO(wmh): The code would be much cleaner and safer if each row was an
+      instance of a Row class, rather than just being a dict. Then we could
+      add a 'configs' field to the Row instance, instead of maintaining two
+      parallel lists that must be kept in sync.
+
+  end class Table;
+
+end namespace metax.table;

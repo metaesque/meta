@@ -1581,21 +1581,30 @@ namespace metax.oopl scope:
           pass
 
         elif location == 'test':
-          /# Move this construct to the test class
-          testclass = myclass.testclass()
-          moved = True
-          if autogen['test']:
-            assert testclass is not None
-            testscope = testclass.attr('scope:')
-            self.changeParent(testscope)
-            myclass = self.myclass()
-            assert myclass is testclass
-          else:
-            assert testclass is None
+          if variant == 'testuser':
+            /# The construct has been marked as location 'test' when it resides
+            /# within a test class. For now, we treat this as an error, although
+            /# we may reduce it to a warning in the future.
             metafile.error(
-              'Cannot specify test %s when test class is disabled' %
-              self.kindfqn(),
-              line=self.primary().line())
+              'Test classes cannot have test %ss' % self.kind(),
+              attr=self.primary())
+            /# print('**** HERE with %s %s in %s' % (location, self.kindfqn(), myclass.kindfqn()))
+          else:
+            /# Move this construct to the test class
+            testclass = myclass.testclass()
+            moved = True
+            if autogen['test']:
+              assert testclass is not None
+              testscope = testclass.attr('scope:')
+              self.changeParent(testscope)
+              myclass = self.myclass()
+              assert myclass is testclass
+            else:
+              assert testclass is None
+              metafile.error(
+                'Cannot specify test %s when test class is disabled' %
+                self.kindfqn(),
+                line=self.primary().line())
 
         elif location == 'meta':
           /# Move this field to the meta class
@@ -5636,6 +5645,8 @@ namespace metax.oopl scope:
         tmpvis = self.attrval('visibility')
         typeattr, type = self.attrpair('type', default=metax.c.LOOKUP)
         access = self.attrval('access')
+        if access.startswith('+'):
+          print('HERE with %s for %s' % (access, self.kindfqn()))
         if type is None:
           metafile.error('Must provide a type', line=self.primary().line())
           return
@@ -9704,7 +9715,8 @@ namespace metax.oopl scope:
         parts = []
         metatype = []
         for argexpr in expr.value():
-          argcode, argtype = self.compileExpr(argexpr, metafile, executable=executable)
+          argcode, argtype = self.compileExpr(
+            argexpr, metafile, executable=executable)
           parts.append(argcode)
           metatype.append(argtype)
         lines[-1] += '(' + ', '.join(parts) + ')'
@@ -9741,8 +9753,10 @@ namespace metax.oopl scope:
       /# A call site. The value() dict is:
       /#   rec: receiver of call
       /#   subcalls: list of dict
-      /#     name: name of method or field to invoke on current receiver.
-      /#     field: boolean true means field access (if not present, method call)
+      /#     name: str
+      /#       name of method or field to invoke on current receiver.
+      /#     field: bool
+      /#       true means field access (if not present, method call)
       /#     args: list of dict
       /#       same structure as 'data' itself
       val = expr.value()
@@ -9755,7 +9769,9 @@ namespace metax.oopl scope:
       recstr, metatype = self.analyzeVariable(rec, executable=executable)
 
       if False:
-        print('HERE with recstr=%s executable=%s metatype=%s' % (recstr, executable.kindfqn(), metatype))
+        print(
+          'HERE with recstr=%s executable=%s metatype=%s' %
+          (recstr, executable.kindfqn(), metatype))
         print('#' * 70)
         print(metafile.path())
         print(expr)
@@ -9818,7 +9834,9 @@ namespace metax.oopl scope:
           DC += 1
           if DC > 10:
             raise metax.c.Error('here')
-          /# print('Here with %s and %s' % (executable.kindfqn() if executable else executable, rec))
+          /# print(
+          /#   'Here with %s and %s' %
+          /#   (executable.kindfqn() if executable else executable, rec))
           if executable:
             executable.showSymbols()
 
@@ -9870,8 +9888,8 @@ namespace metax.oopl scope:
             /#    baselangs we can assign and proceed in the same statement?
             /#    Also, are we sure that we have to return a single statement?
             /#    Maybe that is too limiting (oh ... but this will often be the
-            /#    rhs or an arg to a method invocation, so yeah, almost certainly
-            /#    needs to be a single statement).
+            /#    rhs or an arg to a method invocation, so yeah, almost
+            /#    certainly needs to be a single statement).
             valcode, valtype = self.compileExpr(
               argsdata[0], metafile, executable=executable)
             callcode = name + ' = ' + valcode
@@ -9927,7 +9945,9 @@ namespace metax.oopl scope:
             /# method invocation ... maybe.
             rec, metatype = self.compileMethodInvocation(
               metafile, rec, metatype, name, args)
-            /# print('FOUND return type "%s" [%s]' % (str(metatype), metatype.raw() if metatype else None))
+            /# print(
+            /#   'FOUND return type "%s" [%s]' %
+            /#   (str(metatype), metatype.raw() if metatype else None))
           else:
             /# Without typechecking (or without a receiver type), we cannot
             /# handle native-type method renaming, so the following code is
@@ -10063,7 +10083,8 @@ namespace metax.oopl scope:
       Generate baselang syntax of an invocation of method 'name' on rectype.
 
       Returns:
-       0. the baselang method invocation syntax (including receiver, method and args)
+       0. the baselang method invocation syntax (including receiver, method
+          and args)
        1. the meta Type the callsite returns.
     params:
       var metafile : MetaFile #:
@@ -10086,7 +10107,8 @@ namespace metax.oopl scope:
       metatype = None
 
       if rectype is None:
-        /#  The receiver type is unknown ... this code is likely to be incorrect.
+        /#  The receiver type is unknown ... this code is likely to be
+        /#  incorrect.
         code = receiver + '.' + name + '(' + ', '.join(args) + ')'
 
       elif rectype.isNative():
@@ -10109,8 +10131,8 @@ namespace metax.oopl scope:
         code = receiver + sep + name + (
           '(' + ', '.join([p[0] for p in args]) + ')')
 
-        /#  We establish the return type by finding the method named 'name' within
-        /#  the class identified by rectype.
+        /#  We establish the return type by finding the method named 'name'
+        /#  within the class identified by rectype.
         fqcn = rectype.base()
         classy = metafile.compiler().getClass(fqcn, default=None)
         if classy:
@@ -10171,7 +10193,9 @@ namespace metax.oopl scope:
       iscc = self.id() == 'cc'
       sep = '->' if iscc and rectype.isPtr() else '.'
 
-      /#  print 'Here with receiver=%s rectype=%s name=%s args=%s' % (receiver, rectype, name, args)
+      /#  print(
+      /#    'Here with receiver=%s rectype=%s name=%s args=%s' %
+      /#    (receiver, rectype, name, args))
 
       /#  Verify that 'name' is defined on the native type in question.
       native_type = rectype.base()
@@ -10192,7 +10216,6 @@ namespace metax.oopl scope:
           recparams = rectype.params() or []
           codetmpl = codeinfo.get(self.suffix(), None)
           if codetmpl:
-
             /#  We have a baselang code template for the method.
 
             /#  We typecheck the args against argsinfo.
@@ -10305,7 +10328,8 @@ namespace metax.oopl scope:
         Chk(maptype, 'abbrevs', 'values', [], 'abbrevs.values()', 'vec<any>')
         Chk(maptype, 'abbrevs', 'get', [("'apple'", T('str'))],
             "abbrevs['apple']", 'any')
-        /# Tests on 'map<int>' (for now defaults to map<int,any> but should be map<str,int>)
+        /# Tests on 'map<int>' (for now defaults to map<int,any> but should be
+        /# map<str,int>)
         maptype = T('map<int>')
         Chk(maptype, 'abbrevs', 'size', [], 'len(abbrevs)', 'int')
         Chk(maptype, 'abbrevs', 'keys', [], 'abbrevs.keys()', 'vec<int>')
@@ -10324,7 +10348,8 @@ namespace metax.oopl scope:
 
       Returns: tuple<str,Type>
        0. the baselang representation of the variable
-       1. the meta-level Type instance of the variable. None means unable to type.
+       1. the meta-level Type instance of the variable. None means unable to
+          type.
     params:
       var varname : str;
       var executable : metax.oopl.ExecutableConstruct = null;
@@ -10333,8 +10358,6 @@ namespace metax.oopl scope:
 
       cls = self.__class__
       pseudo_metatype = cls.PseudoVars().get(varname, None)
-
-      /# print('HERE in analyzeVariable with %s and %s and %s and %s' % (varname, executable.kindfqn(), pseudo_metatype, metax.c.SELF))
 
       if pseudo_metatype is not None:
         /# We have a pseudovar.
@@ -10388,8 +10411,12 @@ namespace metax.oopl scope:
 
       Chk('True', 'bool', ooplpy.analyzeVariable('true', executable=method))
       Chk('False', 'bool', ooplpy.analyzeVariable('false', executable=method))
-      Chk('None', 'meta.Null', ooplpy.analyzeVariable('null', executable=method))
-      Chk('self', '&nm.sp.Card', ooplpy.analyzeVariable('self', executable=method))
+      Chk(
+        'None', 'meta.Null',
+        ooplpy.analyzeVariable('null', executable=method))
+      Chk(
+        'self', '&nm.sp.Card',
+        ooplpy.analyzeVariable('self', executable=method))
     end method analyzeVariable;
 
     method initCode #:
@@ -10439,12 +10466,12 @@ namespace metax.oopl scope:
           /# There is an explicit initialization of this field in the
           /# user-provided code, so we do NOT provide a default initialization.
           fval = initmap[fid]
-          /# print('HERE with %s and %s = %s = %s' % (method.fqn(), fid, fval, defval))
           if fval == defval:
             metafile.warning(
               'Explicit initalization of %s to %s not necessary (is default)' %
               (fid, defval), attr=scope_attr)
-        elif basel == 'cpp' and metatype.isValue() and not metatype.isPrimitive():
+        elif (basel == 'cpp' and
+              metatype.isValue() and not metatype.isPrimitive()):
           /# There is no need to initialize the field, because C++ has already
           /# invoked a constructor on the field class to initialize the field
           /# before this method was entered.
@@ -10480,7 +10507,8 @@ namespace metax.oopl scope:
     end method initCode;
 
     method analyzeExecutableForFields : map #:
-      Analyze an executable (simple) block looking for explicit field references.
+      Analyze an executable (simple) block looking for explicit field
+      references.
 
       Returns:
         Mapping from fieldname to value.
@@ -10587,11 +10615,13 @@ namespace metax.oopl scope:
 
       Chk('py', 'user', {'pyjscc': '21', 'py_js_cc': '1'})
       Chk('js', 'user', {'pyjscc': '21', 'py_js_cc': '1'})
-      Chk('cc', 'user', {'cc': '7', 'cc2': '8', 'pyjscc': '21', 'py_js_cc': '1'})
+      Chk(
+        'cc', 'user', {'cc': '7', 'cc2': '8', 'pyjscc': '21', 'py_js_cc': '1'})
 
       Chk('py', 'meta', {'pyjscc': '21', 'py_js_cc': '1'})
       Chk('js', 'meta', {'pyjscc': '21', 'py_js_cc': '1'})
-      Chk('cc', 'meta', {'cc': '7', 'cc2': '8', 'pyjscc': '21', 'py_js_cc': '1'})
+      Chk(
+        'cc', 'meta', {'cc': '7', 'cc2': '8', 'pyjscc': '21', 'py_js_cc': '1'})
 
     end method analyzeExecutableForFields;
 
@@ -11183,7 +11213,10 @@ namespace metax.oopl scope:
         'ymd': {'base': 'datetime.date', 'default': 'None'},
         'hms': {'base': 'datetime.time', 'default': 'None'},
 
-        'rv': {'base': 'scipy.stats._distn_infrastructure.rv_generic', 'default': 'None'},
+        'rv': {
+          'base': 'scipy.stats._distn_infrastructure.rv_generic',
+          'default': 'None',
+        },
 
         'nulltype': {'base': 'types.NoneType', 'default': 'None'},
         'class': {'base': 'type', 'default': 'None'},
@@ -11216,7 +11249,8 @@ namespace metax.oopl scope:
         'staticsep': '.',
         'stmtend': '',
 
-        'setup': {'name': 'setUp'},  # https://docs.python.org/2/library/unittest.html#test-cases
+        /# https://docs.python.org/2/library/unittest.html#test-cases
+        'setup': {'name': 'setUp'},
         'teardown': {'name': 'tearDown'},
         'clsetup': {'name': 'setUpClass', 'level': 'meta'},
         'clteardown': {'name': 'tearDownClass', 'level': 'meta'},
@@ -11263,17 +11297,24 @@ namespace metax.oopl scope:
 
     References:
       https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes
-      https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects
-      https://www.nczonline.net/blog/2014/01/21/private-instance-members-with-weakmaps-in-javascript/
-      https://developer.mozilla.org/en-US/docs/Web/JavaScript/Introduction_to_Object-Oriented_JavaScript
+      https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/\
+        Global_Objects
+      https://www.nczonline.net/blog/2014/01/21/\
+        private-instance-members-with-weakmaps-in-javascript/
+      https://developer.mozilla.org/en-US/docs/Web/JavaScript/\
+        Introduction_to_Object-Oriented_JavaScript
       http://javascriptissexy.com/oop-in-javascript-what-you-need-to-know/
-      http://davidbcalhoun.com/2011/different-ways-of-defining-functions-in-javascript-this-is-madness/
-      https://philipwalton.com/articles/implementing-private-and-protected-members-in-javascript/
-      https://javascriptweblog.wordpress.com/2011/02/07/truth-equality-and-javascript/
+      http://davidbcalhoun.com/2011/\
+        different-ways-of-defining-functions-in-javascript-this-is-madness/
+      https://philipwalton.com/articles/\
+        implementing-private-and-protected-members-in-javascript/
+      https://javascriptweblog.wordpress.com/2011/02/07/\
+        truth-equality-and-javascript/
 
     Important:
       - When generating javascript code for method scope, keep the commentary
-        from https://www.sitepoint.com/google-closure-how-not-to-write-javascript/
+        from
+          https://www.sitepoint.com/google-closure-how-not-to-write-javascript/
         in mind.
   assocs:
     std assoc subprocess;
@@ -11297,8 +11338,10 @@ namespace metax.oopl scope:
       /# the mapping becomes quite important.
       /#
       /# See
-      /#   https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects
-      /#   https://github.com/google/closure-compiler/wiki/Types-in-the-Closure-Type-System
+      /#   https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/\
+      /#     Global_Objects
+      /#   https://github.com/google/closure-compiler/wiki/\
+      /#     Types-in-the-Closure-Type-System
       /#   https://developers.google.com/closure/compiler/docs/js-for-compiler
       strptr = {'base': 'string',  'default': 'null' }
       self.metatypesIs({
@@ -11350,7 +11393,8 @@ namespace metax.oopl scope:
         'tuple':   {'base': 'Array.<?*>', 'default': '[]'},
       })
 
-      /# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Reserved_Words
+      /# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/\
+      /#   Reserved_Words
       self.keywordsIs(
         [
           'break', 'case', 'catch', 'continue', 'debugger', 'default', 'delete',
@@ -11374,7 +11418,8 @@ namespace metax.oopl scope:
         'staticsep': '.',
         'stmtend': ';',
 
-        'setup': {'name': 'setUp', 'level': 'instance'},  # $CLOSURE_ROOT/library/closure/goog-orig/testing/testcase.js
+        /# $CLOSURE_ROOT/library/closure/goog-orig/testing/testcase.js
+        'setup': {'name': 'setUp', 'level': 'instance'},
         'clsetup': {'name': 'setUpPage', 'level': 'instance'},
         'teardown': {'name': 'tearDown', 'level': 'instance'},
         'clteardown': {'name': 'tearDownPage', 'level': 'instance'},
@@ -11382,7 +11427,8 @@ namespace metax.oopl scope:
         /# specific to this baselang.
         'use_es2015': True,
 
-        /# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/switch
+        /# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/\
+        /#   Statements/switch
         'switch_level': 2,
       })
 
@@ -11429,14 +11475,19 @@ namespace metax.oopl scope:
        the C++ compiler and associated programs used to interact with
        the C++ code.
      - One can provide a custom toolchain, but it is currently non-trivial:
-       - About the CROSSTOOL: https://github.com/bazelbuild/bazel/wiki/About-the-CROSSTOOL
-       - Building with a custom toolchain: https://github.com/bazelbuild/bazel/wiki/Building-with-a-custom-toolchain
-       - Generating C++ crosstool with a Skylark Remote Repository: https://bazel.build/designs/2016/02/16/cpp-autoconf.html
-       - Using Skylark remote repositories to auto-detect the C++ toolchain: https://blog.bazel.build/2016/03/31/autoconfiguration.html
-       - Yet Another CROSSTOOL Writing Tutorial: https://github.com/bazelbuild/bazel/wiki/Yet-Another-CROSSTOOL-Writing-Tutorial
-
+       - About the CROSSTOOL:
+           https://github.com/bazelbuild/bazel/wiki/About-the-CROSSTOOL
+       - Building with a custom toolchain:
+           https://github.com/bazelbuild/bazel/wiki/\
+             Building-with-a-custom-toolchain
+       - Generating C++ crosstool with a Skylark Remote Repository:
+           https://bazel.build/designs/2016/02/16/cpp-autoconf.html
+       - Using Skylark remote repositories to auto-detect the C++ toolchain:
+           https://blog.bazel.build/2016/03/31/autoconfiguration.html
+       - Yet Another CROSSTOOL Writing Tutorial:
+           https://github.com/bazelbuild/bazel/wiki/\
+             Yet-Another-CROSSTOOL-Writing-Tutorial
     Documentation on CROSSTOOL:
-
   assocs:
     std usertest assoc collections;
     std usertest assoc pprint;
@@ -11528,15 +11579,16 @@ namespace metax.oopl scope:
 
         'ostream': {'base': 'std::ostream', 'default': 'std::cout'},
         'istream': {'base': 'std::istream', 'default': 'std::cin'},
-        'strstream': {'base': 'std::stringstream', 'default': 'std::stringstream()'},
+        'strstream': {
+          'base': 'std::stringstream', 'default': 'std::stringstream()'},
 
         'regexp': {},
 
         'nulltype': {'base': 'std::nullptr_t', 'default': 'nullptr'},
         /# TODO(wmh): Change to metax.root.ObjectMetaRoot when we have support
         /# for including required implicit targets implemented.
-        /# TODO(wmh): Change 'long long' to 'std::any' when c++17 support available
-        /# in bazel.
+        /# TODO(wmh): Change 'long long' to 'std::any' when c++17 support
+        /# available in bazel.
         'class': {'base': 'metax.root.ObjectMetaRoot', 'default': 'nullptr'},
         /# TODO(wmh): Can we use std::function? Sometimes (e.g.
         /# TestCase.raises()) we do not know the signature ... can std::function
@@ -11547,15 +11599,20 @@ namespace metax.oopl scope:
         /# How to handle 'void' is still being worked out.
         'void': {'base': 'void', 'default': None},
 
-        'pair': {'base': 'std::pair<%(T1)s,%(T2)s>', 'default': 'std::pair<%(T1)s,%(T2)s>()'},
+        'pair': {
+          'base': 'std::pair<%(T1)s,%(T2)s>',
+          'default': 'std::pair<%(T1)s,%(T2)s>()',
+        },
         'tuple': {'base': 'types.TupleType', 'default': 'tuple()'},
         'map': {'base': 'std::map<%(TK)s,%(TV)s>', 'default': None},
       })
 
       self.keywordsIs(
         /# http://en.cppreference.com/w/cpp/keyword
-        ['alignas', 'alignof', 'and', 'and_eq', 'asm', 'auto', 'bitand', 'bitor',
-         'bool', 'break', 'case', 'catch', 'char', 'char16_t', 'char32_t', 'class',
+        ['alignas', 'alignof', 'and', 'and_eq', 'asm', 'auto', 'bitand',
+         'bitor',
+         'bool', 'break', 'case', 'catch', 'char', 'char16_t', 'char32_t',
+         'class',
          'compl', 'const', 'constexpr', 'const_cast', 'continue', 'decltype',
          'default', 'delete', 'do', 'double', 'dynamic_cast', 'else', 'enum',
          'explicit', 'export', 'extern', 'false', 'float', 'for', 'friend',
@@ -11578,7 +11635,8 @@ namespace metax.oopl scope:
         'staticsep': '::',
         'stmtend': ';',
 
-        /# https://github.com/google/googletest/blob/master/googletest/docs/Primer.md
+        /# https://github.com/google/googletest/blob/master/googletest/docs/\
+        /#   Primer.md
         'setup': {'name': 'SetUp', 'dispatch': 'virtual'},
         'clsetup': {'name': 'SetUpTestCase', 'level': 'static'},
         'teardown': {'name': 'TearDown', 'dispatch': 'virtual'},
@@ -11855,13 +11913,16 @@ namespace metax.oopl scope:
       packinfo = (3, 5, False)
       test.iseq(
         ['return (this._val >> 3) & 0x1f;'],
-        test.baselang.accessorCode('get', metatype, 'this._val', packinfo=packinfo))
+        test.baselang.accessorCode(
+          'get', metatype, 'this._val', packinfo=packinfo))
       test.iseq(
         ['this._val = (this._val & ~0xf8) | ( value << 3 );'],
-        test.baselang.accessorCode('set', metatype, 'this._val', packinfo=packinfo))
+        test.baselang.accessorCode(
+          'set', metatype, 'this._val', packinfo=packinfo))
       test.iseq(
         ['throw "cannot ref packed field";'],
-        test.baselang.accessorCode('ref', metatype, 'this._val', packinfo=packinfo))
+        test.baselang.accessorCode(
+          'ref', metatype, 'this._val', packinfo=packinfo))
     end receiver OoplJavascript;
 
     receiver OoplPython ::
@@ -11960,13 +12021,16 @@ namespace metax.oopl scope:
       packinfo = (3, 5, False)
       test.iseq(
         ['return (self._val >> 3) & 0x1f'],
-        test.baselang.accessorCode('get', metatype, 'self._val', packinfo=packinfo))
+        test.baselang.accessorCode(
+          'get', metatype, 'self._val', packinfo=packinfo))
       test.iseq(
         ['self._val = (self._val & ~0xf8) | ( value << 3 )'],
-        test.baselang.accessorCode('set', metatype, 'self._val', packinfo=packinfo))
+        test.baselang.accessorCode(
+          'set', metatype, 'self._val', packinfo=packinfo))
       test.iseq(
         ['raise Error("cannot ref packed field")'],
-        test.baselang.accessorCode('ref', metatype, 'self._val', packinfo=packinfo))
+        test.baselang.accessorCode(
+          'ref', metatype, 'self._val', packinfo=packinfo))
     end receiver OoplPython;
 
   end behavior accessorCode;
@@ -11994,8 +12058,10 @@ namespace metax.oopl scope:
     receiver OoplCpp scope:
       base = ftype.base() + ftype.paramStr()
       prefix = ftype.prefix()
-      strview = metax.c.Type.Instance('@' + OoplCpp.CC_STRVIEW.replace('::', '.'))
-      strref = metax.c.Type.Instance('&' + OoplCpp.CC_STRVIEW.replace('::', '.'))
+      strview = metax.c.Type.Instance(
+        '@' + OoplCpp.CC_STRVIEW.replace('::', '.'))
+      strref = metax.c.Type.Instance(
+        '&' + OoplCpp.CC_STRVIEW.replace('::', '.'))
       result = None
 
       res = ''
@@ -12011,8 +12077,10 @@ namespace metax.oopl scope:
           if ftype.isStr():
             /# We have the 'str' type. Note that 'str' is inherently const so
             /# we do NOT need to prefix the type with '#'.
-            /#  get *str returns metax::str (there is a special metax::str instance that represents null)
-            /#  get &str returns metax::str (how do we ensure non-null not allowed?)
+            /#  get *str returns metax::str (there is a special metax::str
+            /#    instance that represents null)
+            /#  get &str returns metax::str (how do we ensure non-null not
+            /#    allowed?)
             /#  get @str returns metax::str copy
             result = strview
           elif ftype.isValue():
@@ -12029,9 +12097,11 @@ namespace metax.oopl scope:
           elif ftype.isPtr():
             /# For '*T' the getter is '*#T'
             /# For '**T', the getter is '*#*#T;
-            /# For 'u*T', the getter is '*#T'  (we do not pass unique_ptr ... ownership stays with receiver)
-            /# For 's*T', the getter is '*#T'  (is this correct?)
-            /# For 'w*T', the getter is '*#T'  (is this correct, or do we pass the weakness?)
+            /# For 'u*T', the getter is '*#T'
+            /#   (we do not pass unique_ptr ... ownership stays with receiver)
+            /# For 's*T', the getter is '*#T' (is this correct?)
+            /# For 'w*T', the getter is '*#T'
+            /#   (is this correct, or do we pass the weakness?)
             numast = prefix.count('*')
             res = '*' + ('#*' * (numast-1)) + '#'
           else:
@@ -12064,7 +12134,9 @@ namespace metax.oopl scope:
           /#       should the same type as the field because we want by-value
           /#       semantics as we are intending to take ownership of the
           /#       passed-in arg. See
-          /#         https://stackoverflow.com/questions/8114276/how-do-i-pass-a-unique-ptr-argument-to-a-constructor-or-a-function/8114913#8114913
+          /#         https://stackoverflow.com/questions/8114276/\
+          /#           how-do-i-pass-a-unique-ptr-argument-to-a-constructor-\
+          /#             or-a-function/8114913#8114913
       elif acc == 'ref':
         /# If field is base const (#T, *#T, &#T, etc.), it is an error to
         /# generate a reffer for it.
@@ -12075,7 +12147,8 @@ namespace metax.oopl scope:
         if ftype.isStr():
           result = strref
         elif ftype.isBaseConst():
-          raise metax.c.Error('Cannot generate reffer for type "%s"' % ftype.raw())
+          raise metax.c.Error(
+            'Cannot generate reffer for type "%s"' % ftype.raw())
         elif ftype.isValue():
           /# The only possible prefix is '@' (since '@#' is not allowed).
           res = '&'
@@ -12095,8 +12168,6 @@ namespace metax.oopl scope:
             res + base, namespace_function=namespace_function)
       else:
         raise metax.c.Error('Unhandled acc "%s"' % acc)
-
-      /# print('*** FTYPE %-6s %-20s %-20s %s' % (acc, ftype, result, self.typeToBase(result)))
 
       return result
     test:
@@ -12206,7 +12277,8 @@ namespace metax.oopl scope:
       /#   &map is dict
       /#   *map is dict
       /#
-      /#   @str is not allowed (interned does not support copy semantics ... but we could use move semantics?)
+      /#   @str is not allowed (interned does not support copy semantics ...
+      /#      but we could use move semantics?)
       /#   &str is str
       /#   *str is str (implicitly const)
       return basetype
@@ -12230,7 +12302,8 @@ namespace metax.oopl scope:
     end receiver OoplPython;
 
     receiver OoplJavascript scope:
-      /# https://developers.google.com/closure/compiler/docs/js-for-compiler#types
+      /# https://developers.google.com/closure/compiler/docs/\
+      /#   js-for-compiler#types
       base = metatype.base()
       if metatype.isTemplate():
         result = basetype[1:]
@@ -12293,7 +12366,8 @@ namespace metax.oopl scope:
       /#       &map is std::hashmap<K,V>&
       /#       *map is std::hashmap<K,V>*
       /#
-      /#       @str is not allowed (interned does not support copy semantics ... but we could use move semantics?)
+      /#       @str is not allowed (interned does not support copy semantics ...
+      /#         but we could use move semantics?)
       /#       &str is const metax.lib.IStr&
       /#       *str is const metax.lib.IStr*
       /#
@@ -12364,7 +12438,9 @@ namespace metax.oopl scope:
           result += '*'
         elif metatype.isRef():
           result += '&'
-        if metatype.isBaseConst() and not result.startswith('const ') and not metatype.isStr():
+        if (metatype.isBaseConst() and
+            not result.startswith('const ') and
+            not metatype.isStr()):
           result = 'const ' + result
       return result
     test:
@@ -12461,7 +12537,8 @@ namespace metax.oopl scope:
             /# TODO(wmh): Should MetaFoo be a method returning the singleton
             /# instance, rather than a variable? Matches better with Meta's
             /# "everything should be a function" philosophy.
-            metaclass_instname = metax.oopl.ClassConstruct.MetaInstifyName(underclass.id())
+            metaclass_instname = metax.oopl.ClassConstruct.MetaInstifyName(
+              underclass.id())
 
             if decl:
               /# Declare the meta-class singleton instance.
@@ -12563,7 +12640,8 @@ namespace metax.oopl scope:
       test.iseqmap(
         {
           'end_namespace': [['}  // tmp', '}  // demo'], None, None, -1],
-          'namespace_spec': ['namespace demo {\nnamespace tmp {', None, None, -1],
+          'namespace_spec': [
+            'namespace demo {\nnamespace tmp {', None, None, -1],
           'namespace_under': ['demo_tmp', None, None, -1],
           'header': ['demo/tmp/Person.h', None, None, -1],
           'postclass': [[], None, None, -1],
@@ -12682,7 +12760,8 @@ namespace metax.oopl scope:
           /#    the test-harness infrastructure.
           if construct.isMeta():
             if underclass:
-              metaclass_instname = metax.oopl.ClassConstruct.MetaInstifyName(underclass.id())
+              metaclass_instname = metax.oopl.ClassConstruct.MetaInstifyName(
+                underclass.id())
               /# Create the singleton instance of the metaclass.
               postclass.append(
                 "const %s = new %s('%s', [], {});" %
@@ -12694,10 +12773,10 @@ namespace metax.oopl scope:
             else:
               postclass.append('exports = %s;' % clsname)
           else:
-            /# For both user and test classes we add a simple one-value 'export'.
-            /# TODO(wmh): Is it necessary to make a module for the test class?
-            /# Only if we want to allow other test classes to import this test
-            /# class, which may indeed be useful.
+            /# For both user and test classes we add a simple one-value
+            /# 'export'. TODO(wmh): Is it necessary to make a module for the
+            /# test class? Only if we want to allow other test classes to import
+            /# this test class, which may indeed be useful.
             postclass.append('exports = %s;' % clsname)
 
             /# For test classes, we invoke the test machinery.
@@ -12734,13 +12813,13 @@ namespace metax.oopl scope:
               'goog.inherits(%s, %s);' % (myclass.fqn(), parentinfo['fqn']))
 
           /# TODO(wmh): Use @name <class>#<method> per
-          /#   https://stackoverflow.com/questions/10490713/how-to-document-the-properties-of-the-object-in-the-jsdoc-3-tag-this
+          /#   https://stackoverflow.com/questions/10490713/\
+          /#     how-to-document-the-properties-of-the-object-in-the-jsdoc-3-\
+          /#       tag-this
           preamble = varset.getValue('preamble')
           baselang = construct.baselang()
           for field in myclass.fields():
             ftype = field.attrval('type', default=metax.c.LOOKUP)
-            /# print('HERE with %s = %s' % (str(ftype), baselang.typeToBase(ftype)))
-
             /# TODO(wmh): See the comment within the scope of
             /# OoplJavascript.formatMethodComment() discussing defqn. We need
             /# to do the same thing here.
@@ -12809,8 +12888,8 @@ namespace metax.oopl scope:
           /# a user class (if autogen=nometa).
           variant = construct.variant()
           if variant in ('user', 'test'):
-            /# Meta guarantees that for every user-level class nm.sp.Foo, there is
-            /# a metaclass nm.sp.FooMeta and a singleton instance of that
+            /# Meta guarantees that for every user-level class nm.sp.Foo, there
+            /# is a metaclass nm.sp.FooMeta and a singleton instance of that
             /# metaclass named nm.sp.MetaFoo. In python, since we've defined
             /# Foo.__metaclass__ to be FooMeta, MetaFoo is just Foo.
             postclass = varset.getValue('postclass')
@@ -12834,7 +12913,8 @@ namespace metax.oopl scope:
             if variant == 'user':
               /# CODETANGLE(metainst_for_testclass)
               postclass.append(
-                '%s = %s' % (metax.oopl.ClassConstruct.MetaInstifyName(name), name))
+                '%s = %s' %
+                (metax.oopl.ClassConstruct.MetaInstifyName(name), name))
 
         /# If this class has a clinit method, invoke it after the class
         /# definition (note that this invocation is actually moved to the
@@ -13538,7 +13618,8 @@ namespace metax.oopl scope:
           /# CODETANGLE(resource_dir)
           /# TODO(wmh): Rename to something else that won't conflict
           /# with a sub-namespace named 'resources'.
-          metac.repositoryPath(), metac.basePath(construct.fqn()), metax.c.RESOURCES_SUBDIR)
+          metac.repositoryPath(),
+          metac.basePath(construct.fqn()), metax.c.RESOURCES_SUBDIR)
         if fs.exists(resource_dir):
           build['data'] = [
             metax.c.RESOURCES_SUBDIR + '/' + f
@@ -13642,10 +13723,10 @@ namespace metax.oopl scope:
           /# For user-provided class C, the auto-generated test class CTest
           /# implicitly includes class C (because tests for C must rely on C,
           /# and it is cumbersome for the user to specify something that is
-          /# almost always the case).  HOWEVER, if the initialization of
+          /# almost always the case). HOWEVER, if the initialization of
           /# instances of C occurs within a namespace-specific TestCase class
-          /# that CTest inherits from, there is actually no need to include C
-          /# in CTest. Closure produces the following error when a goog.require()
+          /# that CTest inherits from, there is actually no need to include C in
+          /# CTest. Closure produces the following error when a goog.require()
           /# is specified that is not actually used:
           /#    ERROR - extra require: 'wmh.games.catan.Hex'
           /#      goog.require('wmh.games.catan.Hex');
@@ -13685,9 +13766,9 @@ namespace metax.oopl scope:
         elif variant == 'meta':
           /# A auto-generated meta class.
           /#  - preferably, the definition of the class itself should appear
-          /#    first in the goog.provide() list, but this is always alphabetically
-          /#    after the instance-of-metaclass variable also provided by this
-          /#    file, so we disable JSC_PROVIDES_NOT_SORTED.
+          /#    first in the goog.provide() list, but this is always
+          /#    alphabetically after the instance-of-metaclass variable also
+          /#    provided by this file, so we disable JSC_PROVIDES_NOT_SORTED.
 
           /# TODO(wmh): Verify these are still needed.
           /# suppress_set.add('JSC_NULLABLE_RETURN_WITH_NAME')
@@ -13712,7 +13793,8 @@ namespace metax.oopl scope:
           if False:
             /# Disabled because it causes 'CR_SUPERFLUOUS_SUPPRESS' which
             /# cannot be disabled (see below).
-            suppress_set.add('JSC_REFERENCE_TO_SHORT_IMPORT_BY_LONG_NAME_INCLUDING_SHORT_NAME')
+            suppress_set.add(
+              'JSC_REFERENCE_TO_SHORT_IMPORT_BY_LONG_NAME_INCLUDING_SHORT_NAME')
 
           /# The previous suppress, when inserted unilaterally, is sometimes
           /# superfluous if the class does not use the long form of a class
@@ -13739,10 +13821,10 @@ namespace metax.oopl scope:
           /#      ERROR - The return type of the function "<somefunc>" is
           /#      nullable, but it always returns a non-null value. Consider
           /#      making the return type non-nullable.
-          /#  - We cannot, in general, make the return type '!string' because some
-          /#    other method that returns a meta 'str' might return null. For
-          /#    the time being, we suppress this error within all closure_js_library
-          /#    class build targets.
+          /#  - We cannot, in general, make the return type '!string' because
+          /#    some other method that returns a meta 'str' might return null.
+          /#    For the time being, we suppress this error within all
+          /#    closure_js_library class build targets.
           /#### suppress_set.add('JSC_NULLABLE_RETURN_WITH_NAME')
           pass
 
@@ -13769,7 +13851,8 @@ namespace metax.oopl scope:
           /# To break this circularity, one must specify a target of "" in one
           /# of the assocs (e.g. 'cls assoc A target ""' in class B), but if
           /# this is done, bazel will complain with:
-          /#   file.meta:1 (B.js:10) ERROR - Namespace not provided by any srcs or direct deps of //nm/sp:B.
+          /#   file.meta:1 (B.js:10) ERROR - Namespace not provided by any
+          /#      srcs or direct deps of //nm/sp:B.
           /# This error is disabled by CR_NOT_PROVIDED.
           /#
           /# IMPORTANT: We should NOT be inserting this always ... we should
@@ -13851,7 +13934,8 @@ namespace metax.oopl scope:
         /# The -Wnounused-variable is temporary until we get the code for
         /# inserting 'self'/'test'/'meta' properly conditionalized so that
         /# it isn't inserted of the variable isn't used.
-        /# TODO(wmh): Consider using [[maybe_unused]]: https://en.cppreference.com/w/cpp/language/attributes
+        /# TODO(wmh): Consider using [[maybe_unused]]:
+        /#   https://en.cppreference.com/w/cpp/language/attributes
         copts.append('-Wno-unused-variable')
 
       else:
@@ -13979,7 +14063,9 @@ namespace metax.oopl scope:
         /# code in BehaviorConstruct.expandMeta() for ReceiverConstruct
         /# instances, which do not define a 'returns' but do define 'presence'.
         /# TODO(wmh): Consider cleaning this up.
-        returns = executable.attrval('returns', default=None) if executable else None
+        returns = (
+          executable.attrval('returns', default=None) if executable
+          else None)
         presence = executable.attrval('presence')
 
         if presence == 'abstract':
@@ -14017,9 +14103,9 @@ namespace metax.oopl scope:
           result.append(
             "throw new Error('NotImplemented: %s');" % executable.fqn())
         elif returns and not returns.isVoid():
-          /# Closure will complain if we don't return something from methods with
-          /# return types, so we return the default value associated with the
-          /# return type.
+          /# Closure will complain if we don't return something from methods
+          /# with return types, so we return the default value associated with
+          /# the return type.
           defval = self.defaultValue(returns)
           result.append('return %s;' % defval)
       return result
@@ -14061,9 +14147,9 @@ namespace metax.oopl scope:
           /# unittests to have a mechanism for creating dummy instances of each
           /# class, so consider adding syntax for such instances and using it
           /# to generate code here.
-          /# TODO(wmh): Some class types will need even more specialized handling.
-          /# For example, metatype '&ostream' should return std::cout or std::cerr,
-          /# rather than creating a new instance.
+          /# TODO(wmh): Some class types will need even more specialized
+          /# handling. For example, metatype '&ostream' should return std::cout
+          /# or std::cerr, rather than creating a new instance.
           metabase = metax.c.Type.Instance('@' + returns.base())
           result.append('static %s dummy;' % self.typeToBase(metabase))
           result.append('return dummy;')
@@ -14091,8 +14177,8 @@ namespace metax.oopl scope:
         return_attr.valueIs(metatype)
         res = test.baselang.emptyBlockCode(method)
         test.iseq(
-          expected, res, 'For "%s" expecting emptyBlockCode\n  %s\nnot\n  %s' % (
-            metatype_str, expected, res))
+          expected, res, 'For "%s" expecting emptyBlockCode\n  %s\nnot\n  %s'
+          % (metatype_str, expected, res))
     end receiver OoplCpp;
 
   end behavior emptyBlockCode;
@@ -14193,7 +14279,8 @@ namespace metax.oopl scope:
 
     receiver OoplJavascript scope:
       /# According to
-      /#   https://stackoverflow.com/questions/20266610/finalizers-for-javascript-objects
+      /#   https://stackoverflow.com/questions/20266610/\
+      /#     finalizers-for-javascript-objects
       /# There is no support for finalizers in Javascript.
       result = None
       return result
@@ -14277,10 +14364,12 @@ namespace metax.oopl scope:
           suppress_list = re.split('\s*,\s*', suppress_str.strip())
           if suppress is not None:
             for supvar in suppress_list:
-              suppress[supvar] = 'Explicit suppression by user in %s' % construct.kindfqn()
+              suppress[supvar] = (
+                'Explicit suppression by user in %s' % construct.kindfqn())
           /# This is the wrong place to add @suppress ... must be in a
           /# @fileoverview at the top of the file.
-          /# comment.append(' * @suppress {%s}' % ','.join(sorted(suppress_list)))
+          /# comment.append(
+          /#   ' * @suppress {%s}' % ','.join(sorted(suppress_list)))
 
         comment.append(' */')
       else:
@@ -14343,7 +14432,8 @@ namespace metax.oopl scope:
     abstract receiver BaseLanguageOopl;
 
     receiver OoplPython scope:
-      metafqn = metax.oopl.ClassConstruct.CanonicalizeClassName(cstr, namespace=namespace)
+      metafqn = metax.oopl.ClassConstruct.CanonicalizeClassName(
+        cstr, namespace=namespace)
       if not metafqn:
         raise metax.c.Error('Should always have a class in python')
       basefqn = metafqn
@@ -14364,7 +14454,8 @@ namespace metax.oopl scope:
     end receiver OoplPython;
 
     receiver OoplJavascript scope:
-      metafqn = metax.oopl.ClassConstruct.CanonicalizeClassName(cstr, namespace=namespace)
+      metafqn = metax.oopl.ClassConstruct.CanonicalizeClassName(
+        cstr, namespace=namespace)
       if not metafqn:
         raise metax.c.Error('Should always have a class in python')
       basefqn = metafqn
@@ -14390,7 +14481,8 @@ namespace metax.oopl scope:
     end receiver OoplJavascript;
 
     receiver OoplCpp scope:
-      metafqn = metax.oopl.ClassConstruct.CanonicalizeClassName(cstr, namespace=namespace)
+      metafqn = metax.oopl.ClassConstruct.CanonicalizeClassName(
+        cstr, namespace=namespace)
       if metafqn:
         basefqn = metafqn.replace('.', '::')
       else:
@@ -14591,8 +14683,8 @@ namespace metax.oopl scope:
 
       elif kind == 'lib':
         /# TODO(wmh): In Python, this means "make all symbols within a namespace
-        /# visible in the importing context, prefixed by the basename of the lib.
-        /# What do we do in C++?
+        /# visible in the importing context, prefixed by the basename of the
+        /# lib. What do we do in C++?
         import_str = '#include "%s.h"' % fqn_path
 
       elif kind == 'std':
@@ -14692,7 +14784,8 @@ namespace metax.oopl scope:
       test.tjs(expand=True)
       klass = test.klass
       test.iseq(
-        /# TODO(wmh): Fix 'demo.tmp.MetaPerson' (should be 'demo.tmp.PersonMeta')
+        /# TODO(wmh): Fix 'demo.tmp.MetaPerson'
+        /#  (should be 'demo.tmp.PersonMeta')
         ['demo.tmp.MetaPerson', 'metax.root.Object', 'metax.root.ObjectMeta',
          /# TODO(wmh): os should not be in the javascript list
          'os',
@@ -14766,7 +14859,9 @@ namespace metax.oopl scope:
         ('import sys', None),
         test.baselang.formatDependency(test.klass, 'sys'))
       test.iseq(
-        ('import demo.tmp  # target=//demo/tmp:tmp reason=implicit import in ClassConstruct.translateMeta()',
+        ('import demo.tmp  '
+         '# target=//demo/tmp:tmp reason=implicit import in '
+         'ClassConstruct.translateMeta()',
          '//demo/tmp:tmp'),
         test.baselang.formatDependency(test.klass, 'demo.tmp.PersonMeta'))
     end receiver OoplPython;
@@ -14822,7 +14917,8 @@ namespace metax.oopl scope:
           if not value:
             value = self.defaultValue(metatype)
           result.append('')
-          result.append('// static field %s : %s' % (field.id(), metatype.raw()))
+          result.append(
+            '// static field %s : %s' % (field.id(), metatype.raw()))
           if value is None:
             code = '%s %s::%s;' % (basetype, myclass.id(), rawfield)
           else:
@@ -14855,7 +14951,8 @@ namespace metax.oopl scope:
       if kind == 'static':
         default = field.attrval('default', default=None)
         mtype = field.attrval('type', default=metax.c.LOOKUP)
-        basedef, mtype2 = self.compileExpr(default, self.metafile(), metatype=mtype)
+        basedef, mtype2 = self.compileExpr(
+          default, self.metafile(), metatype=mtype)
         if mtype is not mtype2:
           /# Sanity check.
           print(
@@ -14956,7 +15053,9 @@ namespace metax.oopl scope:
         default = param.get('default', None)
         /# TODO(wmh): As of 2017-12-22, when providing the fully-qualified
         /# name of a type, closure produces the error:
-        /#    metax/test/TestCase.js:445: ERROR - Reference to fully qualified import name 'goog.testing.PropertyReplacer' in JSDoc. Please use the short name 'PropertyReplacer' instead.
+        /#    metax/test/TestCase.js:445: ERROR - Reference to fully qualified
+        /#      import name 'goog.testing.PropertyReplacer' in JSDoc.
+        /#      Please use the short name 'PropertyReplacer' instead.
         /#       * @return {?goog.testing.PropertyReplacer}
         /#                   ^
         /#      ProTip: "JSC_JSDOC_REFERENCE_TO_SHORT_IMPORT_BY_LONG_NAME_INCLUDING_SHORT_NAME" or "lintChecks" or "strictModuleChecks" can be added to the `suppress` attribute of:
@@ -14979,7 +15078,6 @@ namespace metax.oopl scope:
         /#  param['type'], class_construct=myclass, defqn=False)
         basetype = self.typeToBase(
           param['type'], class_construct=myclass, defqn=True)
-        /#print('%-30s = %-30s = %s' % (param['type'].raw(), basetype2, basetype))
 
         if default is None:
           lines.append(' * @param {%s} %s' % (basetype, param['name']))
@@ -15028,14 +15126,15 @@ namespace metax.oopl scope:
         if myclass.isTestCase():
           /# Meta<Javascript> generates javascript tests within subclasses of
           /# goog.testing.TestCase. However, the test-harness running code
-          /# currently relies on some implicit behavior provided by goog.requiring
-          /# goog.testing.jsunit.  This implicit behavior breaks if we add a
+          /# currently relies on some implicit behavior provided by
+          /# goog.requiring goog.testing.jsunit. This implicit behavior breaks
+          /# if we add a
           /#   goog.provide('<the_test_class>')
           /# but google closure complains about
           /#   "JSC_MISSING_PROVIDE" or "missingProvide"
-          /# if such a provide is not given.  For now, we suppress the warning in this
-          /# situation, but finding a way to allow test classes to be defined normally
-          /# would be best.
+          /# if such a provide is not given. For now, we suppress the warning in
+          /# this situation, but finding a way to allow test classes to be
+          /# defined normally would be best.
           /#
           /# TODO(wmh): Determine if this is still necessary
           /# suppress.add('missingProvide')
@@ -15134,7 +15233,11 @@ namespace metax.oopl scope:
             metatype = param['type']
             defval, metatype2 = self.compileExpr(
               defexpr, metafile, executable=executable, metatype=metatype)
-            if False and metatype is not metatype2 and metatype2 is not nulltype:
+            if (
+              False and
+              metatype is not metatype2 and
+              metatype2 is not nulltype
+            ):
               /# TODO(wmh): The discrepancies reported by this when not disabled
               /# are a bit concerning. Things like:
               /#   str vs &str
@@ -15173,19 +15276,19 @@ namespace metax.oopl scope:
                   /# TODO(wmh): We should be looking in self.metatypes()['rv']
                   /# or self.metatypes()['rv.uniform'] for the namespace to
                   /# import.
-                  'scipy.stats', 'std', 'implicit import for type rv', target=None)
+                  'scipy.stats', 'std', 'implicit import for type rv',
+                  target=None)
                 defval = 'scipy.stats.uniform(%s, 0.0)' % defval
               elif ekind == 'call':
                 /# TODO(wmh): Fix this!  Allow expressions of the form
                 /#   @rv.uniform(10,2), @rv.norm(5,2), etc.
                 /# The code is currently failing to properly parse the expr
                 /# representations of the above ... clean that up!
-                raise metax.c.Error('Not yet supporting explicit call exprs in rvs')
+                raise metax.c.Error(
+                  'Not yet supporting explicit call exprs in rvs')
               else:
                 raise metax.c.Error(
                   'Not supporting %s expr for type %s' % (ekind, rawtype))
-
-            /# print('%s : %s = %s [%s]' % (param['name'], param['type'].raw(), param['default'], defval))
             part += '=' + defval
           result.append(part)
       if 'varvec' in params:
@@ -15220,7 +15323,8 @@ namespace metax.oopl scope:
               param['default'], metafile,
               executable=executable, metatype=metatype)
             /# As of ES2015, default parameters exist in javascript.
-            /#   https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Default_parameters
+            /#   https://developer.mozilla.org/en-US/docs/Web/JavaScript/\
+            /#     Reference/Functions/Default_parameters
             part += '=' + defval
           result.append(part)
       if 'varvec' in params:
@@ -15229,7 +15333,8 @@ namespace metax.oopl scope:
         variadics.append(params['varmap'])
       if variadics:
         result.append('varargs')
-        /# http://usejsdoc.org/tags-param.html#multiple-types-and-repeatable-parameters
+        /# http://usejsdoc.org/\
+        /#   tags-param.html#multiple-types-and-repeatable-parameters
       return '(%s)' % ', '.join(result)
     test:
       test.tjs(expand=True)
@@ -15490,8 +15595,8 @@ namespace metax.oopl scope:
         if verbose:
           print('  namespace is %s' % result['namespace'])
 
-        /# NOTE: We can determine whether the namespace is terminal (has classes)
-        /# based on whether the _test version of the namespace exists.
+        /# NOTE: We can determine whether the namespace is terminal (has
+        /# classes) based on whether the _test version of the namespace exists.
         namespace_path = ndir
         namespace_test_path = metax.oopl.NamespaceConstruct.TestifyName(ndir)
 
@@ -15514,13 +15619,16 @@ namespace metax.oopl scope:
           map_suffix = '.h' if self.id() == 'cpp' else suffix
           mapbase = '.%s%s.map' % (class_candidate, map_suffix)
           clsbase = '__init__.py' if ispy else class_candidate + suffix
-          tstbase = '__init__.py' if ispy else metax.oopl.ClassConstruct.TestifyName(class_candidate) + suffix
+          tstbase = (
+            '__init__.py' if ispy
+            else metax.oopl.ClassConstruct.TestifyName(class_candidate)+suffix)
           tbase = nmsps[-1] if ispy else class_candidate
           tfile = fs.join(ndir, mapbase)
           if fs.exists(tfile):
             /# We've verified a class name.
             result['target'] = (
-              namespace_target if ispy else '//%s:%s' % ('/'.join(nmsps), tbase))
+              namespace_target if ispy else '//%s:%s' %
+              ('/'.join(nmsps), tbase))
             result['test_target'] = (
               namespace_test_target if ispy
               else '//%s:%s' % (
@@ -15566,7 +15674,8 @@ namespace metax.oopl scope:
                     metax.oopl.ClassConstruct.TestifyName(class_candidate),
                     metax.oopl.ExecutableConstruct.TestifyName(method_name))
                 else:
-                  result['test_arg'] = metax.oopl.ExecutableConstruct.TestifyName(method_name)
+                  result['test_arg'] = (
+                    metax.oopl.ExecutableConstruct.TestifyName(method_name))
               else:
                 if verbose:
                   print('  failed to find %s in %s' % (test_fqn, ttfile))
@@ -15576,7 +15685,8 @@ namespace metax.oopl scope:
               /# The fqn is a class.
               result['kind'] = 'class'
               if ispy:
-                result['test_arg'] = metax.oopl.ClassConstruct.TestifyName(class_candidate)
+                result['test_arg'] = metax.oopl.ClassConstruct.TestifyName(
+                  class_candidate)
           else:
             /# Invalid class name.
             result['error'] = (
@@ -15597,7 +15707,8 @@ namespace metax.oopl scope:
 
       return result
     test:
-      /# TODO(wmh): Add in additional class-based baselangs as they are supported.
+      /# TODO(wmh): Add in additional class-based baselangs as they are
+      /# supported.
       for bl in ('cc',):
         test.defineClassAndMethods('cc')
         test.iseqmap(
@@ -15754,7 +15865,8 @@ namespace metax.oopl scope:
       if self.config('use_es2015'):
         /# In javascript using ES2015 class definitions, the initializer is
         /# always 'constructor.  See
-        /# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes
+        /# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/\
+        /#   Classes
         result = 'constructor'
       else:
         /# Old-style javascript is different than most other languages, in that
@@ -16053,8 +16165,8 @@ namespace metax.oopl scope:
       lazyend = lazylines[-1][:3]
       if lazyend != '-> ':
         metafile.error(
-          'Expecting lazy: block of accessor to end with line starting "-> " not "%s"' %
-          (lazyend), line=lazy.line())
+          'Expecting lazy: block of accessor to end with line '
+          'starting "-> " not "%s"' % (lazyend), line=lazy.line())
 
       resval = lazylines[-1][3:]
       if mtype.isPtr():
@@ -16082,7 +16194,8 @@ namespace metax.oopl scope:
       getter.myclassIs(test.klass)
 
       /# Invoke lazylines and confirm output
-      lines = baselang.lazyLines(test.metafile, getter, lazy, ftype, '_somegetter')
+      lines = baselang.lazyLines(
+        test.metafile, getter, lazy, ftype, '_somegetter')
       test.isfalse(test.metafile.hasErrors(show=True))
       test.iseqvec(
         [
@@ -16123,8 +16236,8 @@ namespace metax.oopl scope:
       lazyend = lazylines[-1][:3]
       if lazyend != '-> ':
         metafile.error(
-          'Expecting lazy: block of accessor to end with line starting "-> " not "%s"' %
-          (lazyend), line=lazy.line())
+          'Expecting lazy: block of accessor to end with line '
+          'starting "-> " not "%s"' % (lazyend), line=lazy.line())
 
       resval = lazylines[-1][3:]
       newlines.append('  %s = %s' % (resvar, resval))
@@ -16149,7 +16262,8 @@ namespace metax.oopl scope:
       getter.myclassIs(test.klass)
 
       /# Invoke lazylines and confirm output
-      lines = baselang.lazyLines(test.metafile, getter, lazy, ftype, '_somegetter')
+      lines = baselang.lazyLines(
+        test.metafile, getter, lazy, ftype, '_somegetter')
       test.isfalse(test.metafile.hasErrors(show=True))
       test.iseqvec(
         [
@@ -16288,7 +16402,8 @@ namespace metax.oopl scope:
         /#   assert issubclass(result, Meta<class>)
         /# Look into whether this needs further cleanup/removal/reversion.
 
-        meta_body.append('assert issubclass(result, %s)' % metaclass.underclass().id())
+        meta_body.append(
+          'assert issubclass(result, %s)' % metaclass.underclass().id())
         underclass = metaclass.underclass()
         if not underclass.isTestCase():
           /# CODETANGLE(metainst_for_testclass): We do not currently generate
@@ -16358,7 +16473,7 @@ namespace metax.oopl scope:
       /#
       /# Contains following structure
       /#   exec ${PAGER:-/usr/bin/less} "$0" || exit 1
-      /#   -----------------------------------------------------------------------------
+      /#   ---------------------------------------------------------------
       /#   <env_initializer_output>
       /#   [==========] Running <M> tests from <N> test case.
       /#   [----------] Global test environment set-up.
@@ -16485,7 +16600,9 @@ namespace metax.oopl scope:
             /# line that doesn't match against the next regexp is added to
             /# outputs[index-1] (with index 7 being special).
             if debug:
-              print('Found index %d: %s for %s' % (index, str(m.groupdict()), line))
+              print(
+                'Found index %d: %s for %s' %
+                (index, str(m.groupdict()), line))
             matches[index] = m.groupdict()
             index += 1
           else:
@@ -16580,7 +16697,7 @@ namespace metax.oopl scope:
     test:
       logdata = (
         >|"""exec ${PAGER:-/usr/bin/less} "$0" || exit 1
-        >|-----------------------------------------------------------------------------
+        >|-------------------------------------------------------------------
         >|[==========] Running 3 tests from 1 test case.
         >|[----------] Global test environment set-up.
         >|[----------] 3 tests from FrenchDeckTest
@@ -16607,7 +16724,6 @@ namespace metax.oopl scope:
         >|""")
       tdata = {
         'methods': {},
-        /# 'log': logdata, 'logpath': '?', 'dir': '?', 'namespace': '?', 'class': '?'
       }
       baselang, _, _, _ = test.cachedInfo('cc')
       baselang.parseBazelLog(logdata, tdata, debug=False)
@@ -16624,7 +16740,11 @@ namespace metax.oopl scope:
            },
            'FrenchDeck.asStr': {
              'ok': False,
-             'stderr': 'unknown file: Failure\nC++ exception with description "TestCase.iseq() not yet implemented" thrown in the test body.\nFix C++ teardown',
+             'stderr': (
+               'unknown file: Failure\nC++ exception with description '
+               '"TestCase.iseq() not yet implemented" thrown in the test '
+               'body.\nFix C++ teardown'
+             ),
              'us': 1000,
            },
            'FrenchDeck.meta': {
@@ -16651,14 +16771,16 @@ namespace metax.oopl scope:
         /# Convert a string in form HH:MM:SS.mmm into milliseconds.
         m = msre.match(val)
         if not m: raise metax.c.Error('Invalid ms "%s"' % val)
-        seconds = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+        seconds = (
+          int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3)))
         ms = seconds * 1000 + int(m.group(4))
         return ms
 
       class_start_re = re.compile(
         r'\n-> (?P<time>\S+) : Starting tests: (?P<fqn>\S+)\n')
       class_end_re = re.compile(
-        '\n-> (?P<time>\S+) : (?P<runcount>\d+) of (?P<count>\d+) tests run in (?P<duration>\S+)\.\n')
+        '\n-> (?P<time>\S+) : (?P<runcount>\d+) of (?P<count>\d+) tests run in '
+        '(?P<duration>\S+)\.\n')
       method_start_re = re.compile(
         r'^-> (?P<time>\S+) : Running test: (?P<method>\S+)')
 
@@ -16989,7 +17111,10 @@ namespace metax.oopl scope:
           while n > 0 and not data[n-1].strip():
             n -= 1
         for j in range(i, n):
-          fp.write(u'' + prefix + data[j] + '\n')
+          dstr = data[j]
+          if isinstance(dstr, str):
+            dstr = dstr.decode('utf8')
+          fp.write(u'' + prefix + dstr + '\n')
 
       /# We'll add one dict per test to data, merging stdout and stderr.
       /#   name: str
