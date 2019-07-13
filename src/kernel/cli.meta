@@ -1397,6 +1397,8 @@ scope:
 
   class Arg < SubPart #:
     A positional argument.
+  assocs:
+    std assoc textwrap
   scope:
 
     method instantiate : int #:
@@ -1507,6 +1509,7 @@ scope:
     receiver Command scope<py>:
       indent = u'' + indent
       subindent = indent + '  '
+      full = 'ful' in mode
 
       if mode == 'summary':
         /# One line summary (no flags, no args, no long-winded description)
@@ -1520,7 +1523,12 @@ scope:
         summary = self.summary()
         if summary:
           fp.write(u'%s  %s\n' % (indent, summary))
-        parts = self.allParts() if 'ful' in mode else self.parts()
+        if full:
+          desc = self.desc()
+          for line in desc.split('\n'):
+            fp.write(u'%s  %s\n' % (indent, line))
+
+        parts = self.allParts() if full else self.parts()
 
         for flagname in sorted(parts):
           part = parts[flagname]
@@ -1534,12 +1542,12 @@ scope:
         /# the order is important (user can order them alphabetically if
         /# order isn't important).
         for command in self.order():
-          if 'full' in mode:
+          if full:
             fp.write(u'\n')
           command.show(fp=fp, indent=subindent, mode=mode)
 
         for arg in self.args():
-          if 'help' not in mode or not arg.ismulti or 'full' in mode:
+          if 'help' not in mode or not arg.ismulti or full:
             arg.show(fp=fp, indent=subindent, mode=mode)
     test<py>:
       fp = test.fp()

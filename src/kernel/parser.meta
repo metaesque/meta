@@ -5109,10 +5109,6 @@ scope:
               if isregexp:
                 /# print('**** HERE with %s = %s' % (token, kind))
                 restr = token[1:-1]
-                if restr[0] != '^':
-                  restr = '^' + restr
-                if restr[-1] != '$':
-                  restr += '$'
                 featregexprs.append((re.compile(restr), fkey, [kind]))
               else:
                 features[token] = ('value', fkey, [kind])
@@ -7291,7 +7287,7 @@ scope:
       /# Consume feature attribute key/value tokens until we reach a primary
       /# key or alias.
       primary_tuple, feature_tuples = self.consumeUntilPrimary(
-        consgroup, index, indent)
+        consgroup, index, indent, line)
       if primary_tuple is None: return None
       consinfo = primary_tuple[5]
 
@@ -7314,6 +7310,7 @@ scope:
         replace_attr.changeParent(construct)
 
       /# Now parse secondary attributes.
+      errtok = None
       construct.termcodeIs(TERM_UNINIT)
       while True:
         line = self.line()
@@ -7343,7 +7340,7 @@ scope:
           break
 
       /# Handle termination issues
-      if not self.handleConstructTermination(construct):
+      if not self.handleConstructTermination(construct, line, errtok):
         construct = None
 
       /# Return the construct
@@ -7514,7 +7511,9 @@ scope:
         scope = metax.attr.ComplexBlock(None, 'scope:', [], line=0, col=0)
         field = metafile.parseConstruct(
           scope, 0, metafile.context().legalInfo(['field']))
-        field.write()
+        test.isfalse(metafile.hasErrors(show=True))
+        field.write(fp=test.fp())
+        test.iseq('+r-w!x field i;\n', test.out())
       end testx featregex;
 
       testx callsites scope:
@@ -7545,6 +7544,8 @@ scope:
         The current index within text.
       var indent : int #:
         The indentation at which the construct must occur.
+      var line : Line #:
+        Line that initial token is on.
     scope:
       feature_tuples = []
       text = self._text
@@ -7925,7 +7926,7 @@ scope:
       i = 0
       n = len(feature_tuples)
       while i < n:
-        form, token, featkv, fsel, index, data, feat_lnum, feat_col = (
+        form, token, featkv, fsel, index, token_data, feat_lnum, feat_col = (
           feature_tuples[i])
         featinfo = {
           'parent': construct, 'value': None,
@@ -7940,7 +7941,7 @@ scope:
           featinfo['key'] = finfo['cankey']
           i += 1
           if i < n:
-            form, _, featval, featsel, index, data, _, _ = feature_tuples[i]
+            form, _, featval, featsel, index, token_data, _, _ = feature_tuples[i]
             if form != 'feature_value':
               self.error(
                 'Expecting feature value for feature key %s but found unknown %s' %
@@ -7974,17 +7975,37 @@ scope:
               'Missing feature value for feature key %s' % featkey,
               line=self.lnum())
         elif form == 'feature_value':
-          /# We have an implicit feature key dicated by featval
+          /# We have an implicit feature key dicated by featval.
           featval = featkv
-          if featval not in featvals:
-            self.error(
-              "Invalid feature value '%s' for %s" % (featval, construct.kind()))
-            featinfo = None
-          else:
+          if token_data is not None:
+            /# If token_data is non-null, it means the featval matches the
+            /# regexp provided in token_data.
+            /# TODO(wmh): This is not sufficient to validate that the regexp
+            /# token belongs to THIS construct (as opposed to some other
+            /# construct in the ConsGroup). Need to pass the construct kinds
+            /# associated with the regexp in token_data (instead of the regexp?)
+            featre, featkey, kinds = token_data
+            if construct.kind() in kinds:
+              /# The regexp-based feature value belongs to this construct.
+              featinfo['litkey'] = ''
+              featinfo['key'] = featkey
+              featinfo['value'] = featval
+              /# featinfo['re'] = featre
+            else:
+              /# The regexp-based feature value does NOT belong to this
+              /# construct.
+              featinfo = None
+          elif featval in featvals:
+            /# The featval is an explicit token recognized by this construct.
             featkey = featvals[featval]
             featinfo['litkey'] = ''
             featinfo['key'] = featkey
             featinfo['value'] = featval
+          else:
+            /# The featval is NOT legal for the identified construct.
+            self.error(
+              "Invalid feature value '%s' for %s" % (featval, construct.kind()))
+            featinfo = None
         elif form == 'error':
           self.debug('Fix me!')
           self.error('Invalid token "%s"' % token)
@@ -8009,6 +8030,10 @@ scope:
     params:
       var construct : Construct #:
         The construct being terminated.
+      var line : Line #:
+        The line.
+      var errtok : str #:
+        The error token, in situations where an error occurred.
     scope:
       result = True
       termcode = construct.termcode()
@@ -8751,8 +8776,16 @@ scope:
          One of 'feature_value', 'feature_key', 'primary_key', or 'error'
        [4] index : int
          The absolute index of the next non-space token within self.text().
-       [5] consinfo : ConsInfo or null
-         null unless token_kind == 'primary_key'.
+       [5] token_data : ConsInfo or regexp or null
+         if token_kind == 'primary_key', this is the ConsInfo instance
+           associated with the primary key.
+         if token_kind == 'feature_value'
+           if the token comes from a regexp, token_data is a tuple containing
+             0. the matching regexp
+             1. the feature key
+             2. the kinds defining the regexp feature.
+           else (when token is explicit feature value) token_data is null
+         if token_kind == 'feature_key', this is null.
        [6] lnum : int
          The line number the token appears on (from 0)
        [7] col : int
@@ -8802,10 +8835,12 @@ scope:
       while text[index] == ' ': index += 1
 
       /# Establish if the attrkv is a primary, feature or error.
+      token_data = None
       consinfo = consgroup._primaries.get(attrkv, None)
       if consinfo:
         /# We have encountered a primary key (or primary alias).
         token_kind = 'primary_key'
+        token_data = consinfo
 
       else:
         finfo = consgroup._features.get(attrkv, None)
@@ -8828,19 +8863,20 @@ scope:
             for reinfo in relist:
               m = reinfo[0].match(attrkv)
               if m:
-                /# The only caller of this method is MetaFile.parseConstruct(),
-                /# which does NOT use result[5] if 'token_kind' is not
-                /# 'primary_key'
+                /# We set token_data to the regexp so we can use it in
+                /# validateFeatureAttributes(), which parses the tuples returned
+                /# from this section of this method.
                 token_kind = 'feature_value'
+                token_data = reinfo
                 break
 
+      /# Return the tuple of data.
       lnum = self._lnum
       line = self._lines[lnum]
-      /# TODO(wmh): The token_kind (index 3) should really be index 0,
-      /# with token, attrkv, and selector being shifted one index up.
-      /# However, changing this will require some careful verification and
-      /# modification of various
-      return (token_kind, token, attrkv, selector, index, consinfo, lnum, start - line.start())
+      return (
+        token_kind, token, attrkv, selector, index, token_data,
+        lnum, start - line.start(),
+      )
     tests:
 
       testx basics scope:
@@ -8916,8 +8952,10 @@ scope:
         /# The token starting at index 0 represents a valid match against the
         /# accessors feature attribute of the 'field' construct, which is
         /# regexp-based.
-        test.iseq(
-          ('feature_value', '+r#w!x', '+r#w!x', None, 7, None, 0, 0),
+        fre = consgroup.featregexprs()[0][0]
+        test.iseqvec(
+          ('feature_value', '+r#w!x', '+r#w!x', None, 7,
+           (fre, 'accessors', ['field']), 0, 0),
           metafile.peekFeatureOrPrimaryToken(0, consgroup))
 
         /# The token starting at index 7 does NOT represent a valid match
@@ -15375,11 +15413,11 @@ scope:
                 print('#' * 70)
                 print(text)
                 print('=' * 70)
-              ifp = io.StringIO(text)
+              ifp = io.StringIO(unicode(text))
               /# Note that the baselang being compiled is NOT what is important
               /# when performing baseling-to-metaline conversions ... it is the
-              /# baselang being used to compile the code that is important!
-              /# This parser.meta code is currently assuming a python implementation,
+              /# baselang being used to compile the code that is important! This
+              /# parser.meta code is currently assuming a python implementation,
               /# so that is the baselang we use.
               baselang = self.metalang().baselangNamed('python')
               self.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)

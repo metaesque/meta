@@ -3301,6 +3301,93 @@ namespace metax.oopl scope:
       the map() field of the scope: block of the field.  It is null if there
       is no explicit scope:
 
+    lifecycle clinit:
+      /# TODO(wmh): Find a way to allow the regexps defined in schema files
+      /# to be visible in the source code (or to reference within schema files
+      /# the regexps defined in source code). This regexp needs to be exactly
+      /# the same as the one definedd for the 'accessors' feature attribute
+      /# of the 'field' construct.
+      cls.AccessorSpecRE = re.compile('^([!+#~-][rwxa@])+$')
+      cls.AccessorOneRE = re.compile('([!+#~-][rwxa@])')
+      cls.AccessorMap = {
+        'r': 'get',
+        'w': 'set',
+        'x': 'ref',
+        'a': 'adj',
+        '@': 'field',
+      }
+      cls.AccessorVis = {
+        '+': 'public',
+        '#': 'protected',
+        '-': 'private',
+        /# CODETANGLE(visnmsp): If we change the 'package' value in the
+        /# 'visibility' attribute to 'nsmp' or something else, this will need
+        /# changing.
+        '~': 'package',
+        '!': None,
+      }
+    end lifecycle;
+
+    method establishAccessors : map #:
+      Determine which accessors to generate, and at what visibility.
+    params:
+      var type : metax.c.Type #:
+        The type of the field.
+    scope:
+      /# The 'accessors' feature attribute has a regexp-based value that
+      /#  matches FieldConstruct.AccessorSpecRE and consists of 1 or more
+      /#  matches against FieldConstruct.AccessorOneRE.
+      /#
+      /# The 'access' feature attribute is legacy, and will be phased out
+      /# when 'accessors' is working properly.
+      access = self.attrval('access')
+      accessors = self.attrval('accessors')
+      genacc = {}
+      if access == 'raw':
+        /# By definition of 'raw', there are no accessors for raw fields.
+        genacc['get'] = None
+        genacc['set'] = None
+        genacc['ref'] = None
+      elif accessors != '+r#w!x-@':
+        /# We have a non-default accessors specification, so we use it.
+        print('%s = %s' % (self.kindfqn(), accessors))
+        accre = FieldConstruct.AccessorOneRE
+        accmap = FieldConstruct.AccessorMap
+        accvis = FieldConstruct.AccessorVis
+        for spec in accre.findall(accessors):
+          vis = accvis.get(spec[0], False)
+          if vis is False:
+            /# No visibility was provided, which is the same as '+'
+            vis = accvis['+']
+            adex = 0
+          else:
+            adex = 1
+          acc = accmap[spec[adex]]
+          genacc[acc] = vis
+      else:
+        /# We generate accessors. However, if the field has const type,
+        /# we don't generate a setter or reffer.
+        isconst = type.isBaseConst()
+        genacc['get'] = 'public'
+        genacc['set'] = None if isconst else 'protected'
+        genacc['ref'] = 'protected' if 'w' in access else None
+      return genacc
+    test:
+      _, _, context, compiler = test.cachedInfo(basel='python', metal='oopl')
+      field = metax.oopl.FieldConstruct.NewFromData(
+        'height', context, parent=None,
+        features=[('accessors', '+r#w!x+a-@')],
+        secondaries=[('type', metax.c.Type.Instance('float'))])
+      type = field.attrval('type')
+      res = field.establishAccessors(type)
+      test.iseqmap(
+        {
+          'get': 'public', 'set': 'protected', 'ref': None, 'adj': 'public',
+          'field': 'private',
+        },
+        res)
+    end method establishAccessors;
+
   end class FieldConstruct;
 
   class AccessorConstruct < OoplConstruct #:
@@ -5644,13 +5731,9 @@ namespace metax.oopl scope:
         pack = self.attrval('pack')
         tmpvis = self.attrval('visibility')
         typeattr, type = self.attrpair('type', default=metax.c.LOOKUP)
-        access = self.attrval('access')
-        if access.startswith('+'):
-          print('HERE with %s for %s' % (access, self.kindfqn()))
         if type is None:
           metafile.error('Must provide a type', line=self.primary().line())
           return
-        isconst = type.isBaseConst()
 
         /# We establish the receiver to use for accessors
         /#  - use the receiver dictated by the baselang so that we don't
@@ -5783,20 +5866,7 @@ namespace metax.oopl scope:
                 unittest.myclassIs(testclass)
 
         /# Establish which accessors to generate
-        /#  - TODO(wmh): Improve on this by making the 'access' attribute
-        /#    a multi-valued field.
-        genacc = {}
-        if access == 'raw':
-          /# By definition of 'raw', there are no accessors for raw fields.
-          genacc['get'] = False
-          genacc['set'] = False
-          genacc['ref'] = False
-        else:
-          /# We generate accessors. However, if the field has const type,
-          /# we don't generate a setter or reffer.
-          genacc['get'] = True
-          genacc['set'] = not isconst
-          genacc['ref'] = 'w' in access
+        genacc = self.establishAccessors(type)
 
         /# The line number in the metafile at which the field is defined. It
         /# is used for:
@@ -5806,10 +5876,13 @@ namespace metax.oopl scope:
         dest_scope = self.parent()
 
         /# Getter
-        if genacc['get']:
-          features = [('optimization', 'inline')]
-          if kind != 'instance':
-            features.append(('kind', kind))
+        getvis = genacc['get']
+        if getvis:
+          features = [
+            ('optimization', 'inline'),
+            ('visibility', getvis),
+            ('kind', None if kind == 'instance' else kind),
+          ]
           getname = name + ':get'
           getter_return = baselang.accessorType(
             type, 'get', namespace_function=nmspfunc)
@@ -5843,13 +5916,20 @@ namespace metax.oopl scope:
         /#  - See ../../README.md section 'Accessors' for a discussion about
         /#    setter return types. Setters return void.
         /#  - We don't define a setter if the field is const.
-        if genacc['set']:
+        setvis = genacc['set']
+        if setvis:
+          features = [
+            ('optimization', 'inline'),
+            ('visibility', setvis),
+            ('kind', None if kind == 'instance' else kind),
+          ]
           setret = 'void'
           setname = name + 'Is:set'
           scode = xmap.get(
             'set',
             baselang.accessorCode(
               'set', type, field_code, packinfo=packinfo))
+          /# print('%s = %s' % (self.kindfqn(), features))
           setter = metax.oopl.MethodConstruct.NewFromData(
             setname, context,
             features=features,
@@ -5873,7 +5953,13 @@ namespace metax.oopl scope:
 
         /# Define the reffer
         /#  - we don't define a reffer if the field is const.
-        if genacc['ref']:
+        refvis = genacc['ref']
+        if refvis:
+          features = [
+            ('optimization', 'inline'),
+            ('visibility', refvis),
+            ('kind', None if kind == 'instance' else kind),
+          ]
           refname = name + 'Ref:ref'
           rcode = xmap.get(
             'ref',
@@ -7286,9 +7372,10 @@ namespace metax.oopl scope:
           context)
         entry_method = metax.oopl.MethodConstruct.NewFromData(
           method_name, context, parent=entry_pscope,
-          /# We do not bother setting location because we are creating the method
-          /# within the metaclass (location is only relevant during expansion and
-          /# we are skipping that step by defining in metaclass directly).
+          /# We do not bother setting location because we are creating the
+          /# method within the metaclass (location is only relevant during
+          /# expansion and we are skipping that step by defining in metaclass
+          /# directly).
           features=features,
           secondaries=[
             (':', metax.c.Type.Instance('int')),
@@ -8242,8 +8329,6 @@ namespace metax.oopl scope:
               pass
 
         template_name = baselang.establishTemplateName(self, defn=True)
-        /# print('Here with %s = %s' % (self.kindfqn(), template_name))
-
         consinfo = self.context().consinfo(self.kind())
 
         /# Add a return line if one has been identified.

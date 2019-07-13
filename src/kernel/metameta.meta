@@ -343,6 +343,7 @@ namespace metax.meta scope:
         for ftup in features:
           fkey = ftup[0]
           fval = ftup[1]
+          if fval is None: continue
           line = ftup[2] if len(ftup) > 2 else -1
           /# TODO(wmh): Validate that fkey and fval are legal!
           /# TODO(wmh): Need to set line and col correctly for each attribute!
@@ -371,6 +372,7 @@ namespace metax.meta scope:
         for stup in secondaries:
           skey = stup[0]
           sval = stup[1]
+          if sval is None: continue
           line = stup[2] if len(stup) > 2 else -1
           if skey == 'params:' and isinstance(sval, list):
             sval = metax.oopl.ExecutableConstruct.CreateParams(sval, context)

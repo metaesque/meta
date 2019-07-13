@@ -574,7 +574,7 @@ config:
   config:
 
     feature
-    Attribute accessors : <<([@+#~!-][rwxi])+>> = +r#w!x #:
+    Attribute accessors : <<^([!+#~-][rwxa@])+$>> = +r#w!x-@ #:
       Specifies which accessors are generated, and at what visibility.
 
       This is an experimental feature whereby feature values are specified
@@ -604,7 +604,7 @@ config:
         x = reffer
         i = adj
         @ = the field itself
-        $ = element-of
+        * = element-of
 
       We could specify a particular accessor with:
         +r = getter is public
@@ -850,6 +850,7 @@ config:
         The method is only visible within this class itself.
       FeatureValue package #:
         The method is only visible within classes in the same namespace.
+        CODETANGLE(visnmsp): Rename to nmsp? (cannot use 'namespace')
     end Attribute visibility;
 
     feature

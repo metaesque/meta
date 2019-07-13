@@ -15,7 +15,7 @@ scope:
         various formats, etc.)
   scope:
 
-    field value : any #:
+    +r+w field value : any #:
       TODO(wmh): What are the legal types of a value?
        - Definitely need to support all primitive types (int, uint, real, bool,
          etc.) and str. Do we want to support arbitrary types though? Anything
