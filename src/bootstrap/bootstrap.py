@@ -347,8 +347,8 @@ def main():
     print(' % git clone https://github.com/metaesque/meta.git meta')
     sys.exit(1)
 
-  BuildMeta(src_root)
-  return
+  #BuildMeta(src_root)
+  #return
 
   # Ensure we can compile meta code using --meta_version=current
   ExtractCode(src_root)

@@ -5876,7 +5876,7 @@ namespace metax.oopl scope:
         dest_scope = self.parent()
 
         /# Getter
-        getvis = genacc['get']
+        getvis = genacc.get('get', None)
         if getvis:
           features = [
             ('optimization', 'inline'),
@@ -5916,7 +5916,7 @@ namespace metax.oopl scope:
         /#  - See ../../README.md section 'Accessors' for a discussion about
         /#    setter return types. Setters return void.
         /#  - We don't define a setter if the field is const.
-        setvis = genacc['set']
+        setvis = genacc.get('set', None)
         if setvis:
           features = [
             ('optimization', 'inline'),
@@ -5953,7 +5953,7 @@ namespace metax.oopl scope:
 
         /# Define the reffer
         /#  - we don't define a reffer if the field is const.
-        refvis = genacc['ref']
+        refvis = genacc.get('ref', None)
         if refvis:
           features = [
             ('optimization', 'inline'),
