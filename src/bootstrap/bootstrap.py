@@ -317,7 +317,8 @@ def BuildMeta(src_root):
 
   # Execute metac a first time (lots of warnings/errors are printed as various
   # dependencies are not present, so we do not show the output.
-  command = 'python ../bootstrap/metac.py --meta_version=current *.meta ../lib/*.meta'
+  command = (
+    'python ../bootstrap/metac.py --meta_version=current *.meta ../lib/*.meta')
   print('COMMAND: cd %s; %s' % (kdir, command))
   out, err = subprocess.Popen(
     command, cwd=kdir, shell=True,
@@ -331,7 +332,7 @@ def BuildMeta(src_root):
     stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
   print(out)
   print(err)
-  
+
 
 def main():
   default_src_root = os.path.expandvars('$HOME/src/meta')
@@ -347,30 +348,23 @@ def main():
     print(' % git clone https://github.com/metaesque/meta.git meta')
     sys.exit(1)
 
-  BuildMeta(src_root)
-  return
-
   # Ensure we can compile meta code using --meta_version=current
   ExtractCode(src_root)
 
   # Ensure that, for each baselang, the Meta bootstrapping functionality is
   # discoverable.
-  if True:
-    SetupBootstrap(src_root)
+  SetupBootstrap(src_root)
 
   # Install bazel.
   #  - https://docs.bazel.build/versions/master/install.html
-  if True:
-    bazel_path = InstallBazel()
-  
+  bazel_path = InstallBazel()
+
   # Create the $HOME/.config/metaxy/config.meta file
-  if True:
-    config = CreateConfig(src_root, bazel_path)
-    # pprint.pprint(config)
+  config = CreateConfig(src_root, bazel_path)
+  # pprint.pprint(config)
 
   # Build Meta
-  if True:
-    BuildMeta(src_root)
+  BuildMeta(src_root)
 
 
 if __name__ == '__main__':
