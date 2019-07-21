@@ -853,7 +853,9 @@ scope:
       errors = []
 
       if debug:
-        print('DEBUG: Starting instantiate with names=%s argv=%s start=%s' % (self.names(), argv, start))
+        print(
+          'DEBUG: Starting instantiate with names=%s argv=%s start=%s' %
+          (self.names(), argv, start))
         self.show()
 
       if parent is None:
@@ -941,8 +943,7 @@ scope:
             if flag:
               /# The flag is legal. Obtain the value and typecheck.
               flagtype = flag.mytype()
-              res = flag.instantiate(
-                flagname, flagval, nextitem)
+              res = flag.instantiate(flagname, flagval, nextitem)
               if res is None:
                 /# We failed to set the flag.
                 errors.append(

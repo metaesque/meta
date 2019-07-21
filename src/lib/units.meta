@@ -88,6 +88,48 @@ scope:
     std assoc re;
   scope:
 
+    static
+    field Re : regexp #:
+      A unit representation is a collection of unit specs separated by
+      separators.
+       - unit specs are [<value>]<base_unit>[unit_power] and uniquely
+         identify the associated dimension.
+       - legal separators are '*', '', and '/' (spaces allowed before/after)
+
+    static
+    field Str : map<int,str> #:
+      Maps integer powers to ascii string representations.
+      TODO(wmh): Convert the keys to strings (also contains 'times': '*', which
+      won't fly in C++).
+
+    static
+    field Unicode : map<int,str> #:
+      Maps integer powers to unicode string representations.
+      TODO(wmh): Convert the keys to strings (also contains 'times': '*', which
+      won't fly in C++).
+
+    meta
+    field PowerBits : int = 4 #:
+      The number of bits reserved for each base unit to express powers.
+        2 --> -2 to 1       can fit 32 in 64bit
+        3 --> -4 to 3       can fit 21
+        4 --> -8 to 7       can fit 16
+        5 --> -16 to 15     can fit 12
+        6 --> -32 to 31     can fit 10
+        7 --> -64 to 63     can fit  9
+
+    meta
+    field UnitBits : int = 4 #:
+      The number of bits reserved for each base dimension to express unit
+      kind (e.g. kg or pound or stone, meter or foot, etc.)
+
+    meta
+    field Dimensions : map #:
+      Base dimensions: https://en.wikipedia.org/wiki/International_System_of_Units
+      https://en.wikipedia.org/wiki/International_System_of_Quantities
+      See the unix command 'units' and in particular the data file
+      /usr/share/misc/units.lib
+
     field value : double #:
       The value of the unit.
 
@@ -171,9 +213,9 @@ scope:
             {'name': 'microsecond', 'suffix': 'us', 'scale': 0.000001},
             {'name': 'nanosecond', 'suffix': 'ns', 'scale': 0.000000001},
             {'name': 'minute', 'suffix': 'min', 'scale': 60.0},
-            {'name': 'hour', 'suffix': 'hr', 'scale': 3600.0},
-            {'name': 'day', 'suffix': 'dy', 'scale': 86400.0},
-            {'name': 'week', 'suffix': 'wk', 'scale': 604800.0},
+            {'name': 'hour', 'suffix': 'h', 'scale': 3600.0},
+            {'name': 'day', 'suffix': 'd', 'scale': 86400.0},
+            {'name': 'week', 'suffix': 'w', 'scale': 604800.0},
           ],
         ),
         'current': Dimension(
@@ -215,6 +257,8 @@ scope:
           ],
         ),
       }
+
+      /# cls.Dimensions3Is(dimensions)
 
       cls.DimensionsIs({
         'length': {
@@ -265,9 +309,9 @@ scope:
             'microsecond': {'suffix': 'us', 'scale': 0.000001, 'num': 2},
             'nanosecond':  {'suffix': 'ns', 'scale': 0.000000001, 'num': 3},
             'minute': {'suffix': 'min', 'scale': 60.0, 'num': 4},
-            'hour': {'suffix': 'hr', 'scale': 3600.0, 'num': 5},
-            'day': {'suffix': 'dy', 'scale': 86400.0, 'num': 6},
-            'week': {'suffix': 'wk', 'scale': 604800.0, 'num': 7},
+            'hour': {'suffix': 'h', 'scale': 3600.0, 'num': 5},
+            'day': {'suffix': 'd', 'scale': 86400.0, 'num': 6},
+            'week': {'suffix': 'w', 'scale': 604800.0, 'num': 7},
           },
         },
         'current': {
@@ -452,7 +496,8 @@ scope:
             kdata['powers'] = powers
           suffix = kdata['suffix']
           suffix2 = kdata.get('suffix2', None)
-          keys = [unit, suffix]
+          plural = unit + 's'
+          keys = [unit, plural, suffix]
           if suffix2:
             keys.append(suffix2)
           aliases = kdata.get('aliases', None)
@@ -485,7 +530,7 @@ scope:
 
       cls.ReIs(re.compile(
         /# The numeric part (significant notation allowed, and can be empty).
-        r'([0-9]*(?:\.\d+)?(?:e[+-]?\d+)?)'
+        r'([-+]?[0-9]*(?:\.\d+)?(?:e[+-]?\d+)?)'
         /# The base unit part (optional)
         /#  - We could improve this by enumerating all the legal units, but that
         /#    would produce a more inefficient regexp
@@ -700,6 +745,12 @@ scope:
       test.iseq(q2.value(), q3.value())
       q4 = New('30 degs')
       test.isapprox(0.523599, q4.value())
+      q5 = New('2days')
+      test.isapprox(172800.0, q5.value())
+      q6 = New('-0.1d')
+      test.isapprox(-8640.0, q6.value())
+      q7 = New('5h')
+      test.isapprox(18000.0, q7.value())
     end method New;
 
     static
@@ -912,158 +963,6 @@ scope:
       /# test.iseq(Q.AddDimensionEncodings(1, 5))
     end method AddDimensionEncodings;
 
-    static
-    field Re : regexp #:
-      A unit representation is a collection of unit specs separated by
-      separators.
-       - unit specs are [<value>]<base_unit>[unit_power] and uniquely
-         identify the associated dimension.
-       - legal separators are '*', '', and '/' (spaces allowed before/after)
-
-    static
-    field Str : map<int,str> #:
-      Maps integer powers to ascii string representations.
-      TODO(wmh): Convert the keys to strings (also contains 'times': '*', which
-      won't fly in C++).
-
-    static
-    field Unicode : map<int,str> #:
-      Maps integer powers to unicode string representations.
-      TODO(wmh): Convert the keys to strings (also contains 'times': '*', which
-      won't fly in C++).
-
-    meta
-    field PowerBits : int = 4 #:
-      The number of bits reserved for each base unit to express powers.
-        2 --> -2 to 1       can fit 32 in 64bit
-        3 --> -4 to 3       can fit 21
-        4 --> -8 to 7       can fit 16
-        5 --> -16 to 15     can fit 12
-        6 --> -32 to 31     can fit 10
-        7 --> -64 to 63     can fit  9
-
-    meta
-    field UnitBits : int = 4 #:
-      The number of bits reserved for each base dimension to express unit
-      kind (e.g. kg or pound or stone, meter or foot, etc.)
-
-    meta
-    field Dimensions : map #:
-      Base dimensions: https://en.wikipedia.org/wiki/International_System_of_Units
-      https://en.wikipedia.org/wiki/International_System_of_Quantities
-      See the unix command 'units' and in particular the data file
-      /usr/share/misc/units.lib
-
-    field testit : map = {
-      'length': {
-        'index': 0,
-        'si': 'meter',
-        'quantity': 'l',
-        'dim': 'L',
-        'units': {
-          'meter': {'suffix': 'm', 'scale': 1.0, 'num': 0},
-          'kilometer':  {'suffix': 'km', 'scale': 1000.0, 'num': 1},
-          'centimeter': {'suffix': 'cm', 'scale': 0.01, 'num': 2},
-          'millimeter': {'suffix': 'mm', 'scale': 0.001, 'num': 3},
-          'micrometer': {'suffix': 'um', 'scale': 0.000001, 'num': 4},
-          'nanometer':  {'suffix': 'nm', 'scale': 0.000000001, 'num': 5},
-          'inch': {'suffix': 'in', 'scale': 0.0254, 'num': 6},
-          'foot': {'suffix': 'ft', 'scale': 0.3048, 'num': 7},
-          'yard': {'suffix': 'yd', 'scale': 0.9144, 'num': 8},
-          'mile': {'suffix': 'mi', 'scale': 1609.34, 'num': 9},
-          'nautical_mile': {'suffix': 'M', 'suffix2': 'NM', 'scale': 1852, 'num': 10},
-        },
-      },
-      'mass': {
-        'index': 1,
-        'si': 'kilogram',
-        'quantity': 'm',
-        'dim': 'M',
-        'units': {
-          'kilogram': {'suffix': 'kg', 'scale': 1.0, 'num': 0},
-          'gram': {'suffix': 'g', 'scale': 0.001, 'num': 1},
-          'milligram': {'suffix': 'mg', 'scale': 0.000001, 'num': 2},
-          'microgram': {'suffix': 'ug', 'scale': 0.000000001, 'num': 3},
-          'tonne': {'aliases': ['metric_ton'], 'suffix': 't', 'scale': 1000.0, 'num': 4},
-          'long_ton': {'aliases': ['imperial_ton'], 'suffix': 'longton', 'scale': 1016.05, 'num': 5},
-          'ton': {'aliases': ['us_ton'], 'suffix': 'ton', 'scale': 907.185, 'num': 6},
-          'pound': {'suffix': 'lb', 'scale': 0.453592, 'num': 7},
-          'ounce': {'suffix': 'oz', 'scale': 0.0283495, 'num': 8},
-          'stone': {'suffix': 'st', 'scale': 6.35029, 'num': 9},
-        },
-      },
-      'time': {
-        'index': 2,
-        'si': 'second',
-        'quantity': 't',
-        'dim': 'T',
-        'units': {
-          'second': {'suffix': 's', 'scale': 1.0, 'num': 0},
-          'millisecond': {'suffix': 'ms', 'scale': 0.001, 'num': 1},
-          'microsecond': {'suffix': 'us', 'scale': 0.000001, 'num': 2},
-          'nanosecond':  {'suffix': 'ns', 'scale': 0.000000001, 'num': 3},
-          'minute': {'suffix': 'min', 'scale': 60.0, 'num': 4},
-          'hour': {'suffix': 'hr', 'scale': 3600.0, 'num': 5},
-          'day': {'suffix': 'dy', 'scale': 86400.0, 'num': 6},
-          'week': {'suffix': 'wk', 'scale': 604800.0, 'num': 7},
-        },
-      },
-      'current': {
-        'index': 3,
-        'si': 'ampere',
-        'quantity': 'I',
-        'dim': 'I',
-        'units': {
-          'ampere': {'suffix': 'A', 'scale': 1.0, 'num': 0},
-        },
-      },
-      'temperature': {
-        'index': 4,
-        'si': 'kelvin',
-        'quantity': 'T',
-        'dim': 'O',
-        'units': {
-          'kelvin': {'suffix': 'K', 'scale': 0.0, 'num': 0},
-          'celsius': {
-            'suffix': 'C',
-            'num': 1,
-          },
-          'fahrenheit': {
-            'suffix': 'F',
-            'num': 2,
-          },
-        },
-      },
-      'amount': {
-        'index': 5,
-        'si': 'mole',
-        'quantity': 'n',
-        'dim': 'N',
-        'units': {
-          'mole': {'suffix': 'mol', 'scale': 1.0, 'num': 0},
-        },
-      },
-      'intensity': {
-        'index': 6,
-        'si': 'candela',
-        'quantity': 'Iv',
-        'dim': 'J',
-        'units': {
-          'candela': {'suffix': 'cd', 'scale': 1.0, 'num': 0},
-        },
-      },
-      'bit': {
-        'index': 7,
-        'si': 'bit',
-        'quantity': '',
-        'dim': 'B',
-        'units': {
-          'bit': {'suffix': 'bits', 'scale': 1.0, 'num': 0},
-          'byte': {'suffix': 'B', 'scale': 8.0, 'num': 1},
-        },
-      },
-    };
-
     method clone : Quantity #:
       Create a new instance of this quantity.
     scope<cc>:
@@ -1124,7 +1023,7 @@ scope:
       test.iseq(' 7.50000 m', str(test.q1))
     end method __str__;
 
-    method asStr : any #:
+    method asStr : str #:
       docstr
     params:
       var units : map = null #:
