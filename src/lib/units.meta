@@ -1057,7 +1057,7 @@ scope:
       test.iseq(' 0.33333 s^-1', test.q6.asStr())
     end method asStr;
 
-    method units : basestring #:
+    method units : str #:
       Return back the units (as a str or unicode) for this quantity.
     params:
       var units : map = null #:

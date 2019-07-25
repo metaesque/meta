@@ -676,7 +676,8 @@ scope:
         if mapfile:
           mappath = self.realpath(self.join(mroot, mapfile.path()))
           mapdir = self.dirname(mappath)
-          if mapdir != dirpath:
+          realdirpath = self.realpath(dirpath)
+          if mapdir != realdirpath:
             raise Error('ERROR: %s not in same dir as %s' % (mappath, fullpath))
           with self.open(mappath, 'w') as fp:
             mapfile.serialize(fp)
