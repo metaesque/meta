@@ -627,7 +627,34 @@
 ;; ---------------------------------------------------------------
 ;; These are intentionally metaoopl-specific
 
-;; Construct class
+;*****************************************
+;* Construct namespace
+;*****************************************
+
+(defun metaoopl-narrow-to-current-namespace ()
+  (interactive)
+  (metaoopl-narrow-to-current-construct "namespace"))
+(defun metaoopl-next-namespace ()
+  (interactive)
+  (metaoopl-next-construct "namespace"))
+(defun metaoopl-prev-namespace ()
+  (interactive)
+  (metaoopl-next-construct "namespace" 'backward))
+
+(defun metaoopl-insert-namespace-template (namespace_name)
+  (interactive "sNamespace Name: ")
+  (insert (format "
+namespace %s #:
+  Some docstr.
+scope:
+
+end namespace %s;
+" namespace_name namespace_name)))
+
+;*****************************************
+;* Construct class
+;*****************************************
+
 (defun metaoopl-narrow-to-current-class ()
   (interactive)
   (metaoopl-narrow-to-current-construct "class"))
@@ -637,6 +664,27 @@
 (defun metaoopl-prev-class ()
   (interactive)
   (metaoopl-next-construct "class" 'backward))
+
+(defun metaoopl-insert-class-template (class_name)
+  (interactive "sClass Name: ")
+  (insert (format "
+  class %s #:
+    Some docstr.
+  scope:
+
+    field f : int #:
+      Some description.
+
+    lifecycle params:
+      var f -> f;
+    scope:
+    clinit:
+    setup:
+    test:
+    end;
+
+  end class %s;
+" class_name class_name)))
 
 (setq metaoopl-var-current-class nil)
 (defun metaoopl-current-class ()
@@ -649,18 +697,10 @@
     (setq metaoopl-var-current-class clsname)
     (message (format "%s %s" (assoc-default 'kind data) clsname))))
 
-;; Construct method
-;;  - it would be nice to have these methods work for both
-;;    method and initializer, but some work needs to be done to
-;;    allow that to happen, as various methods are currently
-;;    limited to a single construct at a time.
-;;  - two options:
-;;     - In <CONS-RES-HERE>, add puthash entries for metaoopl-methinit-*
-;;       that merge metaoopl-method-* and metaoopl-initializer-*, then
-;;       we can used methinit as an argument to metaoopl-next-construct
-;;       and metaoopl-narrow-to-current-construct, etc.
-;;     - Modify the above meta-related functions to handle lists of
-;;       construct kinds instead of just a single kind.
+;*****************************************
+;* Construct method
+;*****************************************
+
 (defun metaoopl-narrow-to-current-method ()
   (interactive)
   (metaoopl-narrow-to-current-construct "method"))
@@ -670,19 +710,23 @@
 (defun metaoopl-prev-method ()
   (interactive)
   (metaoopl-next-construct "method" 'backward))
+(defun metaoopl-insert-method-template (method_name method_type)
+  (interactive "sMethod Name: \nsMethod Type: ")
+  (insert (format "
+    method %s : %s #:
+      docstr
+    params:
+      var a : int #:
+        docstr
+    scope:
+    test:
+    end method %s;
+" method_name method_type method_name)))
 
-;; Construct initializer
-(defun metaoopl-narrow-to-current-initializer ()
-  (interactive)
-  (metaoopl-narrow-to-current-construct "initializer"))
-(defun metaoopl-next-initializer ()
-  (interactive)
-  (metaoopl-next-construct "initializer"))
-(defun metaoopl-prev-initializer ()
-  (interactive)
-  (metaoopl-next-construct "initializer" 'backward))
+;*****************************************
+;* Construct field
+;*****************************************
 
-;; Construct field
 (defun metaoopl-narrow-to-current-field ()
   (interactive)
   (metaoopl-narrow-to-current-construct "field"))
@@ -692,6 +736,55 @@
 (defun metaoopl-prev-field ()
   (interactive)
   (metaoopl-next-construct "field" 'backward))
+
+(defun metaoopl-insert-field-template (field_name field_type)
+  (interactive "sField Name: \nsField Type: ")
+  (insert (format "
+    field %s : %s #:
+      docstr
+    scope:
+      accessor get lazy:
+        res = 1
+        -> res
+    end field %s;
+" field_name field_type field_name)))
+
+;*****************************************
+;* Construct behavior
+;*****************************************
+
+(defun metaoopl-narrow-to-current-behavior ()
+  (interactive)
+  (metaoopl-narrow-to-current-construct "behavior"))
+(defun metaoopl-next-behavior ()
+  (interactive)
+  (metaoopl-next-construct "behavior"))
+(defun metaoopl-prev-behavior ()
+  (interactive)
+  (metaoopl-next-construct "behavior" 'backward))
+(defun metaoopl-insert-behavior-template (behavior_name behavior_type)
+  (interactive "sBehavior Name: \nsBehavior Type: ")
+  (insert (format "
+  behavior %s : %s #:
+    docstr
+  params:
+    var a : int #:
+      docstr
+  scope:
+
+    receive A ::
+    end receiver A;
+
+    receive B ::
+    end receiver B;
+
+  test:
+  end behavior %s;
+" behavior_name behavior_name behavior_type)))
+
+;*****************************************
+;* Not construct-kind-specific
+;*****************************************
 
 (defun metaoopl-python-only ()
   (interactive)
@@ -717,41 +810,6 @@
 (defun metaoopl-hide-assocs ()
   (interactive)
   (metaoopl-hide-blocks "assocs\\|associations"))
-
-(defun metaoopl-insert-method-template (method_name)
-  (interactive "sMethod Name: ")
-  (insert (format "
-    method %s : any #:
-      docstr
-    params:
-      var a : int #:
-        docstr
-    scope:
-    test:
-    end method %s;
-   " method_name method_name)))
-
-(defun metaoopl-insert-class-template (class_name)
-  (interactive "sClass Name: ")
-  (insert (format "
-  class %s #:
-    Some docstr.
-  scope:
-
-    field f : int #:
-      Some description.
-
-    lifecycle params:
-      var f -> f;
-      var g : int;
-      var h : str = null;
-    scope:
-    end;
-  tests:
-    lifecycle setup:
-    end;
-  end class %s;
-   " class_name class_name)))
 
 ;;; **************************************************************
 ;; Service routines

@@ -160,8 +160,8 @@
 (defconst metaoopl-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
 (defconst metaoopl-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "accessor" "arg" "assoc" "behavior" "block" "call" "case" "category" "class" "command" "field" "flag" "if" "lifecycle" "loop" "method" "namespace" "native" "receiver" "remark" "resource" "switch" "testx" "var"))
-(defconst metaoopl-attribute-keys '("#" "##" "##<*>" "#<*>" "->" "->" "-><*>" "-><*>" ":<*>" "<" "<*>" "<<" "<<*>" "<<<" "<<<*>" "<<<<*>" "=" "=<*>" "@" "@<*>" "access" "alias" "alias<*>" "aliases" "aliases<*>" "associations" "associations<*>" "assocs" "assocs<*>" "autogen" "autokey" "autokey<*>" "binary" "binary<*>" "by" "by<*>" "children" "children<*>" "clinit" "clinit<*>" "clsetup" "clsetup<*>" "clsname" "clsname<*>" "clteardown" "clteardown<*>" "color" "color<*>" "comment" "comment<*>" "compilation" "compile" "compile<*>" "config" "config<*>" "decl" "decl<*>" "default" "default<*>" "defn" "defn<*>" "delim" "delim<*>" "dispatch" "else" "else<*>" "expand" "expand<*>" "expr" "expr<*>" "extensibility" "finalize" "finalize<*>" "flags" "flags<*>" "from" "from<*>" "icomment" "icomment<*>" "import" "import<*>" "inheritance" "init" "init<*>" "interface" "interface<*>" "is" "is<*>" "key" "kind" "lazy" "lazy<*>" "level" "location" "metafinalize" "metafinalize<*>" "metainit" "metainit<*>" "metaparent" "metaparent<*>" "multiplicity" "mutability" "name" "name<*>" "nmsp" "nmsp<*>" "on" "on<*>" "optimization" "over" "over<*>" "ownership" "pack" "pack<*>" "params" "params<*>" "parent" "parent<*>" "path" "path<*>" "pclsname" "pclsname<*>" "position" "postamble" "postamble<*>" "posts" "posts<*>" "preamble" "preamble<*>" "preports" "preports<*>" "pres" "pres<*>" "presence" "provides" "provides<*>" "replacer" "replacer<*>" "returns" "returns" "returns<*>" "returns<*>" "role" "role<*>" "scope" "scope<*>" "setup" "setup<*>" "span" "status" "suffixes" "suffixes<*>" "super" "super<*>" "target" "target<*>" "teardown" "teardown<*>" "test" "test<*>" "testparent" "testparent<*>" "testpreports" "testpreports<*>" "tests" "tests<*>" "testsuite" "testsuite<*>" "to" "to<*>" "toplevel" "toplevel<*>" "translate" "translate<*>" "type" "type<*>" "until" "until<*>" "value" "visibility" "while" "while<*>"))
-(defconst metaoopl-feature-values '("<concrete" "abstract" "aliaskey" "autodispatch" "child" "closure" "cls" "concrete" "const" "decl" "def" "explicit" "extendable" "feature" "final" "finalizer" "general" "immutable" "implicit" "initializer" "inline" "instance" "lib" "meta" "multi" "mutable" "named" "new" "nmsp" "nokey" "nometa" "nometanotest" "nonvirtual" "normal" "notest" "noval" "optional" "outline" "override" "owned" "package" "post" "postx" "pre" "prex" "primary" "private" "protected" "public" "raw" "required" "ro" "rw" "rwx" "scoped" "secondary" "showkey" "showval" "specific" "static" "std" "superx" "test" "tmpprivate" "tmppublic" "undef" "unowned" "user" "usertest" "userval" "virtual"))
+(defconst metaoopl-attribute-keys '("#" "##" "##<*>" "#<*>" "->" "->" "-><*>" "-><*>" ":<*>" "<" "<*>" "<<" "<<*>" "<<<" "<<<*>" "<<<<*>" "=" "=<*>" "@" "@<*>" "access" "accessors" "alias" "alias<*>" "aliases" "aliases<*>" "associations" "associations<*>" "assocs" "assocs<*>" "autogen" "autokey" "autokey<*>" "binary" "binary<*>" "by" "by<*>" "children" "children<*>" "clinit" "clinit<*>" "clsetup" "clsetup<*>" "clsname" "clsname<*>" "clteardown" "clteardown<*>" "color" "color<*>" "comment" "comment<*>" "compilation" "compile" "compile<*>" "config" "config<*>" "decl" "decl<*>" "default" "default<*>" "defn" "defn<*>" "delim" "delim<*>" "dispatch" "else" "else<*>" "expand" "expand<*>" "expr" "expr<*>" "extensibility" "finalize" "finalize<*>" "flags" "flags<*>" "from" "from<*>" "icomment" "icomment<*>" "import" "import<*>" "inheritance" "init" "init<*>" "interface" "interface<*>" "is" "is<*>" "key" "kind" "lazy" "lazy<*>" "level" "location" "metafinalize" "metafinalize<*>" "metainit" "metainit<*>" "metaparent" "metaparent<*>" "multiplicity" "mutability" "name" "name<*>" "nmsp" "nmsp<*>" "on" "on<*>" "optimization" "over" "over<*>" "ownership" "pack" "pack<*>" "params" "params<*>" "parent" "parent<*>" "path" "path<*>" "pclsname" "pclsname<*>" "position" "postamble" "postamble<*>" "posts" "posts<*>" "preamble" "preamble<*>" "preports" "preports<*>" "pres" "pres<*>" "presence" "provides" "provides<*>" "replacer" "replacer<*>" "returns" "returns" "returns<*>" "returns<*>" "role" "role<*>" "scope" "scope<*>" "setup" "setup<*>" "span" "status" "suffixes" "suffixes<*>" "super" "super<*>" "target" "target<*>" "teardown" "teardown<*>" "test" "test<*>" "testparent" "testparent<*>" "testpreports" "testpreports<*>" "tests" "tests<*>" "testsuite" "testsuite<*>" "to" "to<*>" "toplevel" "toplevel<*>" "translate" "translate<*>" "type" "type<*>" "until" "until<*>" "value" "visibility" "while" "while<*>"))
+(defconst metaoopl-feature-values '("<^([!+#~-][rwxa@])+$>" "<concrete" "abstract" "aliaskey" "autodispatch" "child" "closure" "cls" "concrete" "const" "decl" "def" "explicit" "extendable" "feature" "final" "finalizer" "general" "immutable" "implicit" "initializer" "inline" "instance" "lib" "meta" "multi" "mutable" "named" "new" "nmsp" "nokey" "nometa" "nometanotest" "nonvirtual" "normal" "notest" "noval" "optional" "outline" "override" "owned" "package" "post" "postx" "pre" "prex" "primary" "private" "protected" "public" "raw" "required" "ro" "rw" "rwx" "scoped" "secondary" "showkey" "showval" "specific" "static" "std" "superx" "test" "tmpprivate" "tmppublic" "undef" "unowned" "user" "usertest" "userval" "virtual"))
 (defconst metaoopl-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
 (defconst metaoopl-basewords      '("alignas" "alignof" "and" "and_eq" "as" "asm" "assert" "auto" "bitand" "bitor" "bool" "break" "case" "catch" "char" "char16_t" "char32_t" "class" "compl" "const" "const_cast" "constexpr" "continue" "debugger" "decltype" "def" "default" "del" "delete" "do" "double" "dynamic_cast" "elif" "else" "enum" "except" "exec" "explicit" "export" "extends" "extern" "false" "finally" "float" "for" "friend" "from" "function" "global" "goto" "if" "implements" "import" "in" "inline" "instanceof" "int" "interface" "is" "lambda" "let" "long" "mutable" "namespace" "new" "noexcept" "not" "not_eq" "nullptr" "operator" "or" "or_eq" "package" "pass" "print" "private" "protected" "public" "raise" "register" "reinterpret_cast" "return" "short" "signed" "sizeof" "static" "static_assert" "static_cast" "struct" "super" "switch" "template" "this" "thread_local" "throw" "true" "try" "typedef" "typeid" "typename" "typeof" "union" "unsigned" "using" "var" "virtual" "void" "volatile" "wchar_t" "while" "with" "xor" "xor_eq" "yield"))
 
@@ -204,7 +204,7 @@
 (puthash 'metaoopl-class-line (concat (gethash 'metaoopl-class-kv RE) "\\(class\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-command-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("compilation" "explicit" "implicit" "inline" "kind" "named")) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-command-line (concat (gethash 'metaoopl-command-kv RE) "\\(command\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl-field-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("access" "child" "inheritance" "instance" "kind" "location" "meta" "new" "optional" "override" "owned" "ownership" "position" "post" "pre" "raw" "required" "ro" "rw" "rwx" "static" "status" "test" "tmpprivate" "tmppublic" "unowned" "user" "usertest" "visibility")) "\[ \t\]\\)*") RE)
+(puthash 'metaoopl-field-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("<^([!+#~-][rwxa@])+$>" "access" "accessors" "child" "inheritance" "instance" "kind" "location" "meta" "new" "optional" "override" "owned" "ownership" "position" "post" "pre" "raw" "required" "ro" "rw" "rwx" "static" "status" "test" "tmpprivate" "tmppublic" "unowned" "user" "usertest" "visibility")) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-field-line (concat (gethash 'metaoopl-field-kv RE) "\\(field\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-flag-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("optional" "required" "status")) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-flag-line (concat (gethash 'metaoopl-flag-kv RE) "\\(flag\\)[ \t]+\\([^ \t]+\\)") RE)
@@ -230,7 +230,7 @@
 (puthash 'metaoopl-testx-line (concat (gethash 'metaoopl-testx-kv RE) "\\(testx\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-var-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("multi" "multiplicity" "normal")) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-var-line (concat (gethash 'metaoopl-var-kv RE) "\\(var\\)[ \t]+\\([^ \t]+\\)") RE)
-(puthash 'metaoopl-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("<concrete" "abstract" "access" "aliaskey" "autodispatch" "autogen" "child" "closure" "cls" "compilation" "concrete" "const" "decl" "def" "dispatch" "explicit" "extendable" "extensibility" "feature" "final" "finalizer" "general" "immutable" "implicit" "inheritance" "initializer" "inline" "instance" "key" "kind" "level" "lib" "location" "meta" "multi" "multiplicity" "mutability" "mutable" "named" "new" "nmsp" "nokey" "nometa" "nometanotest" "nonvirtual" "normal" "notest" "noval" "optimization" "optional" "outline" "override" "owned" "ownership" "package" "position" "post" "postx" "pre" "presence" "prex" "primary" "private" "protected" "public" "raw" "required" "ro" "rw" "rwx" "scoped" "secondary" "showkey" "showval" "span" "specific" "static" "status" "std" "superx" "test" "tmpprivate" "tmppublic" "undef" "unowned" "user" "usertest" "userval" "value" "virtual" "visibility")) "\[ \t\]\\)*") RE)
+(puthash 'metaoopl-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("<^([!+#~-][rwxa@])+$>" "<concrete" "abstract" "access" "accessors" "aliaskey" "autodispatch" "autogen" "child" "closure" "cls" "compilation" "concrete" "const" "decl" "def" "dispatch" "explicit" "extendable" "extensibility" "feature" "final" "finalizer" "general" "immutable" "implicit" "inheritance" "initializer" "inline" "instance" "key" "kind" "level" "lib" "location" "meta" "multi" "multiplicity" "mutability" "mutable" "named" "new" "nmsp" "nokey" "nometa" "nometanotest" "nonvirtual" "normal" "notest" "noval" "optimization" "optional" "outline" "override" "owned" "ownership" "package" "position" "post" "postx" "pre" "presence" "prex" "primary" "private" "protected" "public" "raw" "required" "ro" "rw" "rwx" "scoped" "secondary" "showkey" "showval" "span" "specific" "static" "status" "std" "superx" "test" "tmpprivate" "tmppublic" "undef" "unowned" "user" "usertest" "userval" "value" "virtual" "visibility")) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-construct-line (concat (gethash 'metaoopl-all-kv RE) "\\(" metaoopl-constructs-re "\\)[ \t]+\\([^ \t]+\\)") RE)
 
 (defconst metaoopl-comment-start-re "\\(?:comment\\|#\\):\n")
@@ -687,7 +687,34 @@
 ;; ---------------------------------------------------------------
 ;; These are intentionally metaoopl-specific
 
-;; Construct class
+;*****************************************
+;* Construct namespace
+;*****************************************
+
+(defun metaoopl-narrow-to-current-namespace ()
+  (interactive)
+  (metaoopl-narrow-to-current-construct "namespace"))
+(defun metaoopl-next-namespace ()
+  (interactive)
+  (metaoopl-next-construct "namespace"))
+(defun metaoopl-prev-namespace ()
+  (interactive)
+  (metaoopl-next-construct "namespace" 'backward))
+
+(defun metaoopl-insert-namespace-template (namespace_name)
+  (interactive "sNamespace Name: ")
+  (insert (format "
+namespace %s #:
+  Some docstr.
+scope:
+
+end namespace %s;
+" namespace_name namespace_name)))
+
+;*****************************************
+;* Construct class
+;*****************************************
+
 (defun metaoopl-narrow-to-current-class ()
   (interactive)
   (metaoopl-narrow-to-current-construct "class"))
@@ -697,6 +724,27 @@
 (defun metaoopl-prev-class ()
   (interactive)
   (metaoopl-next-construct "class" 'backward))
+
+(defun metaoopl-insert-class-template (class_name)
+  (interactive "sClass Name: ")
+  (insert (format "
+  class %s #:
+    Some docstr.
+  scope:
+
+    field f : int #:
+      Some description.
+
+    lifecycle params:
+      var f -> f;
+    scope:
+    clinit:
+    setup:
+    test:
+    end;
+
+  end class %s;
+" class_name class_name)))
 
 (setq metaoopl-var-current-class nil)
 (defun metaoopl-current-class ()
@@ -709,18 +757,10 @@
     (setq metaoopl-var-current-class clsname)
     (message (format "%s %s" (assoc-default 'kind data) clsname))))
 
-;; Construct method
-;;  - it would be nice to have these methods work for both
-;;    method and initializer, but some work needs to be done to
-;;    allow that to happen, as various methods are currently
-;;    limited to a single construct at a time.
-;;  - two options:
-;;     - In <CONS-RES-HERE>, add puthash entries for metaoopl-methinit-*
-;;       that merge metaoopl-method-* and metaoopl-initializer-*, then
-;;       we can used methinit as an argument to metaoopl-next-construct
-;;       and metaoopl-narrow-to-current-construct, etc.
-;;     - Modify the above meta-related functions to handle lists of
-;;       construct kinds instead of just a single kind.
+;*****************************************
+;* Construct method
+;*****************************************
+
 (defun metaoopl-narrow-to-current-method ()
   (interactive)
   (metaoopl-narrow-to-current-construct "method"))
@@ -730,19 +770,23 @@
 (defun metaoopl-prev-method ()
   (interactive)
   (metaoopl-next-construct "method" 'backward))
+(defun metaoopl-insert-method-template (method_name method_type)
+  (interactive "sMethod Name: \nsMethod Type: ")
+  (insert (format "
+    method %s : %s #:
+      docstr
+    params:
+      var a : int #:
+        docstr
+    scope:
+    test:
+    end method %s;
+" method_name method_type method_name)))
 
-;; Construct initializer
-(defun metaoopl-narrow-to-current-initializer ()
-  (interactive)
-  (metaoopl-narrow-to-current-construct "initializer"))
-(defun metaoopl-next-initializer ()
-  (interactive)
-  (metaoopl-next-construct "initializer"))
-(defun metaoopl-prev-initializer ()
-  (interactive)
-  (metaoopl-next-construct "initializer" 'backward))
+;*****************************************
+;* Construct field
+;*****************************************
 
-;; Construct field
 (defun metaoopl-narrow-to-current-field ()
   (interactive)
   (metaoopl-narrow-to-current-construct "field"))
@@ -752,6 +796,55 @@
 (defun metaoopl-prev-field ()
   (interactive)
   (metaoopl-next-construct "field" 'backward))
+
+(defun metaoopl-insert-field-template (field_name field_type)
+  (interactive "sField Name: \nsField Type: ")
+  (insert (format "
+    field %s : %s #:
+      docstr
+    scope:
+      accessor get lazy:
+        res = 1
+        -> rest
+    end field %s;
+" field_name field_type field_name)))
+
+;*****************************************
+;* Construct behavior
+;*****************************************
+
+(defun metaoopl-narrow-to-current-behavior ()
+  (interactive)
+  (metaoopl-narrow-to-current-construct "behavior"))
+(defun metaoopl-next-behavior ()
+  (interactive)
+  (metaoopl-next-construct "behavior"))
+(defun metaoopl-prev-behavior ()
+  (interactive)
+  (metaoopl-next-construct "behavior" 'backward))
+(defun metaoopl-insert-behavior-template (behavior_name behavior_type)
+  (interactive "sBehavior Name: \nsBehavior Type: ")
+  (insert (format "
+  behavior %s : %s #:
+    docstr
+  params:
+    var a : int #:
+      docstr
+  scope:
+
+    receive A ::
+    end receiver A;
+
+    receive B ::
+    end receiver B;
+
+  test:
+  end behavior %s;
+" behavior_name behavior_name behavior_type)))
+
+;*****************************************
+;* Not construct-kind-specific
+;*****************************************
 
 (defun metaoopl-python-only ()
   (interactive)
@@ -777,41 +870,6 @@
 (defun metaoopl-hide-assocs ()
   (interactive)
   (metaoopl-hide-blocks "assocs\\|associations"))
-
-(defun metaoopl-insert-method-template (method_name)
-  (interactive "sMethod Name: ")
-  (insert (format "
-    method %s : any #:
-      docstr
-    params:
-      var a : int #:
-        docstr
-    scope:
-    test:
-    end method %s;
-   " method_name method_name)))
-
-(defun metaoopl-insert-class-template (class_name)
-  (interactive "sClass Name: ")
-  (insert (format "
-  class %s #:
-    Some docstr.
-  scope:
-
-    field f : int #:
-      Some description.
-
-    lifecycle params:
-      var f -> f;
-      var g : int;
-      var h : str = null;
-    scope:
-    end;
-  tests:
-    lifecycle setup:
-    end;
-  end class %s;
-   " class_name class_name)))
 
 ;;; **************************************************************
 ;; Service routines

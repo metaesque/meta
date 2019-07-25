@@ -1,0 +1,145 @@
+namespace metax.io #:
+  I/O in Meta.
+
+  TODO(wmh): Decide whether metax.fs should be moved into metax.io.
+scope:
+
+  class Sink #:
+    Experiment in wrapping fp/indent. This will be moved into metax.io.
+  assocs:
+    std usertest assoc io;
+  scope:
+
+    field fp : ostream #:
+      Where to write.
+
+    field prefixes : @vec<str> #:
+      prefixes[-1] is the indentation that should be added to every line
+      written.
+
+    field lastc : char #:
+      The last character written the last time anything was written to the
+      stream. Will not be updated if someone writes to self.fp() directly.
+
+    lifecycle params:
+      var fp -> fp = out;
+      var indent : str = '' #:
+        The top-level indentation.
+    scope:
+      self.prefixes().append(indent)
+      self.lastcIs(' ')
+    setup:
+      sink = metax.io.Sink(io.StringIO(), indent=u'..')
+      test.sinkIs(sink)
+    end;
+
+    test field sink : wmh.google.hotels.Sink;
+
+    method prefix : str #:
+      Returns current indentation prefix.
+    scope:
+      return self._prefixes[-1]
+    test:
+      test.iseq('..', test.sink().prefix())
+    end method prefix;
+
+    method indent : str #:
+      Add more indentation to the current value.
+    params:
+      var value : str #:
+        The additional indentation.
+        NOTE: Although it would be convenient to provide a default value, we
+        intentionally do not do so, to ensure that the similarities between
+        indent() and undent() do not pose problems.  indent() requires an
+        arg and undent does not have an arg, which avoids subtle bugs related
+        to typos.
+    scope:
+      /# if we want to support newlines in indent, write() will need updating.
+      assert '\n' not in value
+      newdent = self.prefix() + value
+      self.prefixes().append(newdent)
+      return newdent
+    test:
+      sink = test.sink()
+      sink.indent('__')
+      test.iseq('..__', sink.prefix())
+    end method indent;
+
+    method undent : str #:
+      Return to previous indentation.
+
+      Returns the new indentation.
+    scope:
+      prefixes = self.prefixes()
+      if len(prefixes) > 1:
+        prefixes.pop()
+      return prefixes[-1]
+    test:
+      sink = test.sink()
+      test.iseq('..  ', sink.indent('  '))
+      test.iseq('..', sink.undent())
+      test.iseq('..', sink.undent())
+    end method undent;
+
+    method write : void #:
+      Write text to the sink, honoring indent.
+    params:
+      var text : str #:
+        The text to write.  All newlines are replaces with indentation.
+    scope:
+      fp = self.fp()
+      prefix = self.prefix()
+
+      /# Handle pre-indentation for the new text.
+      /#  - if the previous write ended with a newline, we need to add
+      /#    'prefix' before we write the text
+      /#  - if the previous write did NOT end with a newline, we do NOT
+      /#    add 'prefix' before writing text
+      if self.lastc() == '\n':
+        fp.write(prefix)
+
+      /# Modify text according to prefix.
+      if text:
+        lastc = text[-1]
+        if lastc == '\n':
+          /# We do not want to insert indentation after the last newline.
+          newtext = text[:-1].replace('\n', '\n' + prefix) + '\n'
+        else:
+          newtext = text.replace('\n', '\n' + prefix)
+      else:
+        lastc = prefix[-1] if prefix else ''
+        newtext = prefix
+      self.lastcIs(lastc)
+      fp.write(newtext)
+    test:
+      sink = test.sink()
+
+      sink.write(u'hello.')
+      test.iseq('.', sink.lastc())
+      test.iseqtext(u'hello.', sink.fp().getvalue())
+
+      sink.write(u' This is\na test ')
+      test.iseq(' ', sink.lastc())
+      test.iseqtext(u'hello. This is\n..a test ', sink.fp().getvalue())
+
+      sink.write(u'and now\nanother\n')
+      test.iseq('\n', sink.lastc())
+      test.iseqtext(
+        u'hello. This is\n'
+        u'..a test and now\n'
+        u'..another\n',
+        sink.fp().getvalue())
+
+      sink.write(u'to verify newlines\n')
+      test.iseq('\n', sink.lastc())
+      test.iseqtext(
+        u'hello. This is\n'
+        u'..a test and now\n'
+        u'..another\n'
+        u'..to verify newlines\n',
+        sink.fp().getvalue())
+    end method write;
+
+  end class Sink;
+
+end namespace metax.io;
