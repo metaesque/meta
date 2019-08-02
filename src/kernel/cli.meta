@@ -440,6 +440,7 @@ scope:
         >|    A value of .metac is treated specially, being symlinked to repo
         >|  --metalang|L : str = "oopl"
         >|    The metalang the code is defined in.
+        >|
         >|  canonical:
         >|    Canonicalize the specified meta files and report diffs.
         >|    --baselang|b : str = "<special>"
@@ -1120,6 +1121,7 @@ scope:
           >|    The name of the person
           >|  --version|r : regexp = |<
           >|    Version to use.
+          >|  files: The image files.
           >|""",
           test.out())
 
@@ -1526,8 +1528,9 @@ scope:
           fp.write(u'%s  %s\n' % (indent, summary))
         if full:
           desc = self.desc()
-          for line in desc.split('\n'):
-            fp.write(u'%s  %s\n' % (indent, line))
+          if desc:
+            for line in desc.split('\n'):
+              fp.write(u'%s  %s\n' % (indent, line))
 
         parts = self.allParts() if full else self.parts()
 
@@ -1584,7 +1587,9 @@ scope:
         return val if w < width else val[:width-1] + '$'
 
       if mode == 'summary':
-        sval = 'none' if start is None else ('=' if str(start) == valstr else Trunc(str(start), 10))
+        sval = (
+          'none' if start is None
+          else ('=' if str(start) == valstr else Trunc(str(start), 10)))
         dval = '=' if str(default) == valstr else Trunc(str(default), 10)
 
         fp.write(
