@@ -1152,7 +1152,7 @@ scope:
         The paths to create. Each element is either a string (path) or
         a two-tuple, with the first element being the path, and the second
         element being a dict of keyword args to send to
-        fake_filesystem.CreateFile().
+        fake_filesystem.create_file().
       var from_module : any = null #:
         If specified, the faux filesystem objects are obtained from
         the given module, rather than being created anew.  This means
@@ -1160,7 +1160,7 @@ scope:
         modules (arguably the most sensible way to test things).
     scope<py>:
       /# TODO(wmh): Get this working in bazel!
-      import fake_filesystem
+      from pyfakefs import fake_filesystem
 
       mname = module.__name__
       fsinfo = self._fsinfo
@@ -1241,7 +1241,7 @@ scope:
 
     new specific
     method populateFilesystem params:
-      var fs : fake_filesystem.FakeFilesystem #:
+      var fs : pyfakefs.fake_filesystem.FakeFilesystem #:
         The filesystem to populate.
       var path_specs : vec #:
         The paths to create.  If any element is a two-tuple, the
@@ -1303,7 +1303,7 @@ scope:
         kwds = {}
         if type_ == 'file':
           /# Build up a kwds dict suitable for passing to
-          /# fake_filesystem.FakeFilesystem.CreateFile()
+          /# pyfakefs.fake_filesystem.FakeFilesystem.create_file()
           if 'perms' in in_kwds:
             kwds['st_mode'] = stat.S_IFREG | in_kwds['perms']
           if 'contents_path' in in_kwds:
@@ -1315,24 +1315,24 @@ scope:
           if 'apply_umask' in in_kwds:
             kwds['apply_umask'] = in_kwds['apply_umask']
           kwds['create_missing_dirs'] = True
-          fs.CreateFile(path, **kwds)
+          fs.create_file(path, **kwds)
 
         elif type_ == 'dir':
           /# Build up a kwds dict suitable for passing to
-          /# fake_filesystem.FakeFilesystem.CreateDir()
+          /# pyfakefs.fake_filesystem.FakeFilesystem.create_dir()
           if 'perms' in in_kwds:
             kwds['perm_bits'] = in_kwds['perms']
           if 'inode' in in_kwds:
             kwds['inode'] = in_kwds
-          fs.CreateDirectory(path, **kwds)
+          fs.create_dir(path, **kwds)
 
         elif type_ == 'link':
           /# Build up a kwds dict suitable for passing to
-          /# fake_filesystem.FakeFilesystem.CreateLink()
+          /# pyfakefs.fake_filesystem.FakeFilesystem.create_symlink()
           if 'srcpath' not in in_kwds:
             raise metax.root.Error('Request to create a symlink without a src file')
           link_target = in_kwds['srcpath']
-          fs.CreateLink(path, link_target)
+          fs.create_symlink(path, link_target)
         else:
           raise metax.root.Error("Invalid file type '%s'" % type_)
     test<py>:
@@ -1438,16 +1438,16 @@ scope:
       Raises:
         Error: If one invokes this method without first invoking
                SetupSharedFilesystem().
-      Returns fake_filesystem.FakeFile
+      Returns pyfakefs.fake_filesystem.FakeFile
     scope<py>:
       if not self._fs:
         raise metax.root.Error(
             'Attempt to invoke FakeFile() without first invoking '
             'SetupSharedFilesystem()')
-      return self._fs.GetObject(path)
+      return self._fs.get_object(path)
     test<py>:
       /# TODO(wmh): Get this working in bazel
-      import fake_filesystem
+      from pyfakefs import fake_filesystem
 
       tc = self._tc
       tc.setUp()

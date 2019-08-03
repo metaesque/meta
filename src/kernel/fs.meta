@@ -1301,7 +1301,12 @@ scope:
       else:
         return os.listdir(thedir)
     test:
-      expected = ['scratch.txt', 'link.txt', '.gitignore', 'frozen.txt']
+      expected = [
+        '.gitignore',
+        'frozen.txt',
+        'link.txt',
+        'scratch.txt',
+      ]
       test.iseqvec(expected, test.diskfs.listdir(test.dirpath))
     end method listdir;
 
