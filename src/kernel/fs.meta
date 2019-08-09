@@ -1307,7 +1307,8 @@ scope:
         'link.txt',
         'scratch.txt',
       ]
-      test.iseqvec(expected, test.diskfs.listdir(test.dirpath))
+      /# Note that macos os.listdir() does not alphabetize but ubuntu does.
+      test.iseqvec(expected, sorted(test.diskfs.listdir(test.dirpath)))
     end method listdir;
 
     method filesWithinMatching : vec<str> #:
