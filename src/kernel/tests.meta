@@ -233,6 +233,11 @@ scope:
       Records environment variables modified during a test (so they
       can be reinstated).
 
+    field options : @map<str,bool> #:
+      A collection of key/boolean pairs representing options that can be
+      turned on/off. Individual tests can be guarded by a check against
+      one or more of these options (see the enabled() method).
+
     field fs #:
       Only initialized if SetupSharedFilesystem() is invoked.
     type<py> fake_filesystem.FakeFilesystem
@@ -516,6 +521,43 @@ scope:
       testrunner.setStrict(false);
     test:
     end method runSelfTests;
+
+    new
+    method enable #:
+      Enable all given options.
+    params:
+      multi var options : vec<str>;
+    scope:
+      for option in options:
+        self.options()[option] = True
+    test:
+    end method enable;
+
+    new
+    method enabled : bool #:
+      Establish if one or more options are enabled.
+    params:
+      multi var options : vec<str> #:
+        The list of options (keys within options()) to check. Method returns
+        true if all of them are true.
+      multi var kwds : map #:
+        quiet : bool
+          If true, do NOT print out an indicator of how to enable the test
+          if false is returned.
+    scope:
+      quiet = kwds.get('quiet', False)
+      notset = []
+      result = True
+      for option in options:
+        if not self.options().get(option, False):
+          notset.append(option)
+          result = False
+          /# We intentionally do NOT break, so that notset is a complete list.
+      if not result and not quiet:
+        print('Enable %s to test' % ' and '.join(notset))
+      return result
+    test:
+    end method enabled;
 
     method status : &str #:
       The status of an individual test.

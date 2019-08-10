@@ -8,7 +8,13 @@ scope:
     Experiment in wrapping fp/indent. This will be moved into metax.io.
   assocs:
     std usertest assoc io;
+    std assoc os #:
+      TODO(wmh): Does this need to use metax.fs???
   scope:
+
+    static
+    field Null : Sink #:
+      A special instance of Sink that writes to /dev/null.
 
     field fp : ostream #:
       Where to write.
@@ -28,6 +34,9 @@ scope:
     scope:
       self.prefixes().append(indent)
       self.lastcIs(' ')
+    clinit:
+      dfp = open(os.devnull, 'w')
+      cls.NullIs(Sink(fp=dfp))
     setup:
       sink = metax.io.Sink(io.StringIO(), indent=u'..')
       test.sinkIs(sink)
