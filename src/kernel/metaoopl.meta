@@ -3130,10 +3130,11 @@ namespace metax.oopl scope:
           if fs.islink(dest_path):
             curr_src_path = fs.readlink(dest_path)
             if curr_src_path != src_path:
-              /# It does not point where it should. For now, we report an error and tell
-              /# the user how to fix the problem (by removing the incorrect symlink). We
-              /# may want to automatically do this in the future (but we want to avoid
-              /# deleting an important file while doing
+              /# It does not point where it should. For now, we report an error
+              /# and tell the user how to fix the problem (by removing the
+              /# incorrect symlink). We may want to automatically do this in the
+              /# future (but we want to avoid deleting an important file while
+              /# doing
               metafile.error(
                 'Resource %s is stored in\n'
                 '  %s\nwhich currently links to\n'
@@ -3143,6 +3144,8 @@ namespace metax.oopl scope:
                 'and reinvoke metac to proceed.' %
                 (resname, dest_path, curr_src_path, src_path, dest_path),
                 line=resource.primary().line())
+              print('WARNING: Deleted %s' % dest_path)
+              fs.unlink(dest_path)
           else:
             metafile.warning(
               'Resource %s is stored in\n'
