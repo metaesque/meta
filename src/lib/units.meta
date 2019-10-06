@@ -8,6 +8,10 @@ scope:
   class Error < metax.root.Error #:
     The exception class for this module.
 
+  class InvalidQuantity < Error #:
+    When one attempts to create a subclass of FixedDimensionQuantity with
+    a string value
+
   class Dimension #:
     Describes a dimension of measurement.
   scope:
@@ -159,7 +163,7 @@ scope:
       exponents, we are limiting ourselves to integral powers. However, there
       are times where we need to express rational powers. This could be done by
       adding an additional bitstream to represent power denominators to
-      complement the existing power numerators. The number of bits uses for
+      complement the existing power numerators. The number of bits used for
       denominator can be independent of the number used for numerator.
       Furthermore, the demoniator would not need to maintain negative values.
       For example, if we use 5 bits for numerator (-16 to +15) and 4 bits for
@@ -604,11 +608,16 @@ scope:
     method New : Quantity #:
       Create a new Quantity instance given a string representation.
     params:
-      var repr : str #:
+      var spec : str #:
         A string representation of the quantity, which can be a combination
         of powers of arbitrary units for zero or more of the seven physical
         unit dimensions (length, mass, time, temperature, current, amount, and
         intensity).
+      var subcls : class = null #:
+        The class to use to create the instance. If null, cls is used.
+        This exists in order to allow FixedDimensionQuantity.New to be
+        defined (overriding this method) while still having Quantity.New
+        create an instance of some subclass of FixedDimensionQuantity.
       var debug : bool = false #:
         If true, enable debugging.
     scope<py>:
@@ -626,7 +635,7 @@ scope:
       /#      2. power indicator (may be None)
       /#      3. operator ('*', '' or '/'  with spaces removed)
       nre = cls.Re()
-      parts = nre.split(repr)
+      parts = nre.split(spec)
       if debug: print(parts)
       n = len(parts)
       assert (n - 1) % 4 == 0
@@ -655,7 +664,7 @@ scope:
         /# Establish the unit data.
         udata = unitmap.get(unit, None)
         if not udata:
-          raise Error('Invalid unit "%s" in "%s"' % (unit, repr))
+          raise Error('Invalid unit "%s" in "%s"' % (unit, spec))
 
         /# Establish the power.
         /#  - if no power is provided, one is assumed except for the special
@@ -723,17 +732,21 @@ scope:
         elif sep == '*' or sep == '':
           pass
         else:
-          raise Error('Invalid separator "%s" within "%s"' % (sep, repr))
+          raise Error('Invalid separator "%s" within "%s"' % (sep, spec))
 
         /# Advance to next unit spec.
         i += 4
 
       /# The last sep should always be empty.
       if sep:
-        raise Error('Invalid final sep "%s" in "%s"' % (sep, repr))
+        raise Error('Invalid final sep "%s" in "%s"' % (sep, spec))
 
       /# Create and return the Quantity instance.
-      result = Quantity(value, powers)
+      if subcls is None:
+        /# TODO(wmh): The code above uses 'cls' to access static/meta variables.
+        /# Should we be using subcls instead?
+        subcls = cls
+      result = subcls(value, powers)
       return result
     test<py>:
       New = metax.units.Quantity.New
@@ -1264,6 +1277,34 @@ scope:
       test.iseq(' 2.50000 m*s^-1', test.q1.asStr())
     end method __imul__;
 
+    method __truediv__ : Quantity #:
+      Return a new Quantity produced by multiplying self and other.
+    params:
+      var other : any #:
+        Either Quantity or scalar.
+    scope<cc>:
+    scope<py>:
+      cls = self.__class__
+      if isinstance(other, (int, float)):
+        result = self.clone()
+        result._value /= other
+      else:
+        powers = cls.AddDimensionEncodings(
+          self.powers(), other.powers(), negate=True)
+        result = Quantity(self.value() / other.value(), powers)
+      return result
+    test<py>:
+      q = metax.units.Quantity.New('3s')
+      res = test.q1 / q
+      test.iseq(' 2.50000 m*s^-1', res.asStr())
+
+      /# Divide by int/float scalars.
+      res2 = test.q1 / 2
+      test.iseq(' 3.75000 m', res2.asStr())
+      res3 = res2 / 0.5
+      test.iseq(' 7.50000 m', res3.asStr())
+    end method __truediv__;
+
     method __div__ : Quantity #:
       Return a new Quantity produced by multiplying self and other.
     params:
@@ -1271,6 +1312,9 @@ scope:
         Either Quantity or scalar.
     scope<cc>:
     scope<py>:
+      /# TODO(wmh): This should call __truediv__. It is provided to support
+      /# python2 (in python2, / is defined by __div__ while in python3 / is
+      /# defined by __truediv). Note that in python3, __floordiv__ defines //.
       cls = self.__class__
       if isinstance(other, (int, float)):
         result = self.clone()
@@ -1371,16 +1415,44 @@ scope:
     superx
     lifecycle params:
       var value : double;
+      var powers : int = 0;
     scope<py>:
-      super(FixedDimensionQuantity, self).__init__(value, self.__class__.Powers())
+      if powers == 0:
+        powers = self.__class__.Powers()
+      super(FixedDimensionQuantity, self).__init__(value, powers)
     scope<cc>:
     end lifecycle;
+
+    meta
+    method New : FixedDimensionQuantity #:
+      Obtain a new subclass of FixedDimensionQuantity
+    params:
+      var spec : str #:
+        A string representation of the quantity, which can be a combination
+        of powers of arbitrary units for zero or more of the seven physical
+        unit dimensions (length, mass, time, temperature, current, amount, and
+        intensity).
+    scope:
+      if cls is FixedDimensionQuantity:
+        raise Error(
+          'Must invoke Instance on subclass of FixedDimensionQuantity')
+      result = Quantity.New(spec, subcls=cls)
+      if result.powers() != cls.Powers():
+        raise InvalidQuantity(
+          'Specification "%s" is invalid for dimension %s' %
+          (spec, cls.__name__))
+      return result
+    test:
+      test.isapprox(7.0, metax.units.Time.New('7s').seconds())
+      test.raises(metax.units.InvalidQuantity, metax.units.Time.New, '7m')
+    end method New;
 
   end class FixedDimensionQuantity;
 
   class Length < FixedDimensionQuantity ::
 
-    lifecycle _ clinit<py>:
+    lifecycle
+    clinit<py>:
       cls.PowersIs(Quantity.DimensionEncoding({'length': 1}))
     setup<py>:
       test.l1 = metax.units.Length(7.5)
@@ -1396,7 +1468,8 @@ scope:
 
   class Mass < FixedDimensionQuantity ::
 
-    lifecycle _ clinit<py>:
+    lifecycle
+    clinit<py>:
       cls.PowersIs(Quantity.DimensionEncoding({'mass': 1}))
     setup<py>:
       test.l1 = metax.units.Mass(7.5)
@@ -1410,6 +1483,108 @@ scope:
     end method testx_basics;
 
   end class Mass;
+
+  class Time < FixedDimensionQuantity ::
+
+    lifecycle
+    clinit<py>:
+      cls.PowersIs(Quantity.DimensionEncoding({'time': 1}))
+    setup<py>:
+      test.l1 = metax.units.Time(6.1)
+    end;
+
+    method milliseconds : double #:
+      Return this time in milliseconds
+    scope:
+      return self.value() * 1000.0
+    test:
+      expected = 6100.0
+      test.isapprox(expected, test.l1.milliseconds())
+      /# This ensures that the hard-coded constant matches value in Dimensions.
+      scale = metax.units.Quantity.Dimensions()['time']['units']['millisecond']['scale']
+      test.isapprox(expected, test.l1.value() / scale)
+    end method milliseconds;
+
+    method microseconds : double #:
+      Return this time in microseconds
+    scope:
+      return self.value() * 1000000.0
+    test:
+      expected = 6100000.0
+      test.isapprox(expected, test.l1.microseconds())
+      /# This ensures that the hard-coded constant matches value in Dimensions.
+      scale = metax.units.Quantity.Dimensions()['time']['units']['microsecond']['scale']
+      test.isapprox(expected, test.l1.value() / scale)
+    end method microseconds;
+
+    method nanoseconds : double #:
+      Return this time in nanoseconds
+    scope:
+      return self.value() * 1000000000.0
+    test:
+      expected = 6100000000.0
+      test.isapprox(expected, test.l1.nanoseconds())
+      /# This ensures that the hard-coded constant matches value in Dimensions.
+      scale = metax.units.Quantity.Dimensions()['time']['units']['nanosecond']['scale']
+      test.isapprox(expected, test.l1.value() / scale)
+    end method nanoseconds;
+
+    method seconds : double #:
+      Return this Time in seconds.
+    scope:
+      return self.value()
+    test:
+      expected = 6.1
+      test.isapprox(expected, test.l1.seconds())
+      /# This ensures that the hard-coded constant matches value in Dimensions.
+      scale = metax.units.Quantity.Dimensions()['time']['units']['second']['scale']
+      test.isapprox(expected, test.l1.value() / scale)
+    end method seconds;
+
+    method minutes : double #:
+      Return this time in minutes
+    scope:
+      return self.value() / 60.0
+    test:
+      expected = 0.1016666666
+      test.isapprox(expected, test.l1.minutes())
+      /# This ensures that the hard-coded constant matches value in Dimensions.
+      scale = metax.units.Quantity.Dimensions()['time']['units']['minute']['scale']
+      test.isapprox(expected, test.l1.value() / scale)
+    end method minutes;
+
+    method hours : double #:
+      Return this time in hours
+    scope:
+      return self.value() / 3600.0
+    test:
+      expected = 0.00169444
+      test.isapprox(expected, test.l1.hours())
+      /# This ensures that the hard-coded constant matches value in Dimensions.
+      scale = metax.units.Quantity.Dimensions()['time']['units']['hour']['scale']
+      test.isapprox(expected, test.l1.value() / scale)
+    end method hours;
+
+    method days : double #:
+      Return this time in days
+    scope:
+      return self.value() / 86400.0
+    test:
+      expected = 0.000071
+      test.isapprox(expected, test.l1.days())
+      /# This ensures that the hard-coded constant matches value in Dimensions.
+      scale = metax.units.Quantity.Dimensions()['time']['units']['day']['scale']
+      test.isapprox(expected, test.l1.value() / scale)
+    end method days;
+
+    test
+    method testx_basics
+    scope<py>:
+      test.iseq(' 6.10000 s', test.l1.asStr())
+    scope<cc>:
+    end method testx_basics;
+
+  end class Time;
 
   class NonSIQuantity #:
     A unit in non-SI terms.

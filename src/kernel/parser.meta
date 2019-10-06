@@ -12771,7 +12771,8 @@ scope:
         /# If a id does not exist, it means that baselang does not support
         /# raw testing.
         'python': {
-          'default': 'python',
+          /# 'default': 'python',
+          'default': 'python3',
           'old': 'python2',
           'new': 'python3',
         }

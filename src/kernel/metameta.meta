@@ -116,9 +116,8 @@ namespace metax.meta scope:
       /# Absurd that it has taken so long for python to add a properly accesible
       /# class for regexps. Available in 3.6+.
       vinfo = sys.version_info
-      cls.RegexpClass = (
-        re.Pattern if vinfo.major > 2 and vinfo.minor > 5 else
-        re._pattern_type)
+      dummy = re.compile('.')
+      cls.RegexpClass = dummy.__class__
     end;
 
     method kind : str scope:
