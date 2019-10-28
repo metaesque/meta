@@ -1523,7 +1523,7 @@ namespace metax.meta scope:
           continue
         /# Write the attribute
         preattr = construct.preAttrStr(attribute, prev, numc, indent)
-        fp.write(unicode(preattr))
+        fp.write(preattr)
         numc = attribute.write(fp=fp, indent=indent, mode=mode)
         /# Prepare for next iteration
         prev = attribute
@@ -1749,7 +1749,6 @@ namespace metax.meta scope:
         html = form == 'html'
       else:
         html = False
-      indent = unicode(indent)
 
       result = u''
       termcode = self.termcode()

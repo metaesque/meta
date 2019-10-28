@@ -59,7 +59,7 @@ slowtest: fullmeta-py
 #   Compile all code needed in order to compile and execute a Meta program in
 #   the specified baselang.
 #   - required:
-#     - root.meta: everything inherits from metax.root.Object and relies on 
+#     - root.meta: everything inherits from metax.root.Object and relies on
 #       metax.root.MetaObject for resources, etc.
 #     - tests.meta: all unit tests inherit from metax.test.TestCase
 #   - pseudo-optional:
@@ -99,7 +99,7 @@ fullmeta-py: ../schema/meta/metameta.meta ../schema/oopl/metaoopl.meta ../schema
 # target oopl:
 #   Ensure that ${METAREP}${NEWSUFFIX}/oopl is bazel-ready by overlaying
 #   ../templates${NEWSUFFIX}/oopl.tgz on ${METAREP}${NEWSUFFIX}/oopl.
-oopl: 
+oopl:
 	@cd ../templates; make update
 
 # target shell:

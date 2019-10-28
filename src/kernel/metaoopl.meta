@@ -2161,7 +2161,7 @@ namespace metax.oopl scope:
       /# TODO(wmh): Decide whether this should be true or not.
       if False:
         testcase = test.namespace.testspace().attr('scope:').cons('TestCase')
-        print testcase.underclass()
+        print(testcase.underclass())
         test.istrue(testcase.isTestCase())
     end method isTestCase;
 
@@ -3353,7 +3353,8 @@ namespace metax.oopl scope:
         genacc['ref'] = None
       elif accessors != '+r#w!x-@':
         /# We have a non-default accessors specification, so we use it.
-        print('%s = %s' % (self.kindfqn(), accessors))
+
+        print('NOTE: Found non-default accessor: %s = %s' % (self.kindfqn(), accessors))
         accre = FieldConstruct.AccessorOneRE
         accmap = FieldConstruct.AccessorMap
         accvis = FieldConstruct.AccessorVis
@@ -4192,7 +4193,7 @@ namespace metax.oopl scope:
       /# Establish the binary to use.
       binaryexpr = self.attrval('binary')
       python_binary = binaryexpr.asStr(unquote=True) or metac.Config()['python']
-      /# print '%s = %s' % (self.kindfqn(), python_binary)
+      /# print('%s = %s' % (self.kindfqn(), python_binary))
 
       /# Create the content of the binary file.
       cmdlines = [
@@ -4212,7 +4213,7 @@ namespace metax.oopl scope:
       ]
       if False:
         cmdlines.extend([
-          '  import cStringIO',
+          '  import io',
           '  import traceback',
           '  compiler_class, command, cli = metastrap.ImportMeta()',
           '  import metax.c',
@@ -4220,7 +4221,7 @@ namespace metax.oopl scope:
           "  metac = metax.c.Compiler(metal='oopl', basel='python')",
           '  metax.c.Compiler.CurrentIs(metac)',
           '  text = traceback.format_exc()',
-          '  ifp = cStringIO.StringIO(text)',
+          '  ifp = io.StringIO(text)',
           "  baselang = metac.metalang().baselangNamed('python')",
           '  metac.filterMetaOutput(baselang=baselang, ifp=ifp, debug=False)',
         ])
@@ -6794,7 +6795,7 @@ namespace metax.oopl scope:
           if presence != 'abstract':
             receiver_test_class = receiver_class.testclass()
             if receiver_test_class is None:
-              print (
+              print(
                 'WARN: Compiler.BehaviorConstruct.expandMeta: Failed to find '
                 '%s in %s test block' %
                 (self.kindfqn(),
@@ -7446,7 +7447,7 @@ namespace metax.oopl scope:
     receiver NamespaceConstruct ::
       metax.c.D.imports.sinfo(self.id())
 
-      /# print '**** HERE importing %s' % self.kindfqn()
+      /# print('**** HERE importing %s' % self.kindfqn())
 
       /# For namespaces, importMeta is primarily a means to invoke
       /# ClassConstruct.importMeta(), which does more heavy lifting. However,
@@ -7545,12 +7546,12 @@ namespace metax.oopl scope:
       if False:
         test.tpy(expand=True)
         parent = test.klass.parentclasses()[0]
-        print parent
+        print(parent)
         test.isnull(parent['class'])
         /# test.iseq(parent.childclasses())
-        print test.metafile._logmap
+        print(test.metafile._logmap)
         test.namespace.importMeta()
-        print test.metafile._logmap
+        print(test.metafile._logmap)
         test.iseq(parent['class'])
     end receiver ClassConstruct;
 
@@ -7732,7 +7733,7 @@ namespace metax.oopl scope:
     test:
       test.tpy(expand=True, imports=True)
       fs = test.compiler.fs()
-      test.iseq([], fs.filemap().keys())
+      test.iseq([], list(fs.filemap().keys()))
       res = test.namespace.translateMeta()
       test.iseq([None, None], res)
       test.iseq(
@@ -9747,7 +9748,7 @@ namespace metax.oopl scope:
             edata[0], metafile, executable=executable)
           while i < n:
             op = edata[i]
-            if not isinstance(op, basestring):
+            if not isinstance(op, str):
               metafile.error('Expecting arg %d of %s to be op' % (i, edata))
               break
             e2 = edata[i+1]
@@ -15799,6 +15800,11 @@ namespace metax.oopl scope:
       /# supported.
       for bl in ('cc',):
         test.defineClassAndMethods('cc')
+
+        print(test.baselang.fqnToTarget('metax'))
+        print('FIX this for C++')
+        break
+
         test.iseqmap(
           {
             'namespace': 'metax',
@@ -16758,7 +16764,8 @@ namespace metax.oopl scope:
 
       /# Establish overall status2
       if 11 in matches:
-        assert matches[11]['failed'] > 0
+        print('HERE with %s' % matches[11])
+        assert matches[11]['failed'] != '0'
         status = 'FAILED'
       else:
         status = 'OK'
@@ -17164,16 +17171,18 @@ namespace metax.oopl scope:
         if stdout or stderr:
           dsep(end=True)
         return
-      import cStringIO
-      ifp = cStringIO.StringIO(stderr or '')
-      efp = cStringIO.StringIO()
+      import io
+      vv = metax.root.SafeStr(stderr or '')
+      /# print('*** HERE with %s' % repr(vv))
+      ifp = io.StringIO(vv)
+      efp = io.StringIO()
       metac = self.compiler()
       metac.filterMetaOutput(cwd=cwd, ifp=ifp, ofp=efp)
       filterr = efp.getvalue()
 
       /# Perform base-to-meta line mapping on stderr
-      outlines = stdout.split('\n')
-      errlines = filterr.split('\n')
+      outlines = metax.root.SafeStr(stdout).split('\n')
+      errlines = metax.root.SafeStr(filterr).split('\n')
 
       /# Establish some vars.
       outre = re.compile(
@@ -17199,9 +17208,7 @@ namespace metax.oopl scope:
           while n > 0 and not data[n-1].strip():
             n -= 1
         for j in range(i, n):
-          dstr = data[j]
-          if isinstance(dstr, str):
-            dstr = dstr.decode('utf8')
+          dstr = metax.root.SafeStr(data[j])
           fp.write(u'' + prefix + dstr + '\n')
 
       /# We'll add one dict per test to data, merging stdout and stderr.
@@ -17396,7 +17403,7 @@ namespace metax.oopl scope:
         nofilt=False, fp=test.fp())
       /# TODO(wmh): Use cleaner output than the above, that showcases everything
       /# that is parsed.
-      /# print test.out()
+      /# print(test.out())
     end receiver OoplPython;
 
   end behavior processTestOutput;

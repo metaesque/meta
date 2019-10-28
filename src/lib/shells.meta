@@ -323,7 +323,7 @@ scope:
       multi var args : vec #:
         Used to replace printf sequences in msg.
     scope:
-      fullmsg = unicode(msg % args)
+      fullmsg = msg % args
       self._fp.write(fullmsg)
     test:
       sh = test.shell
@@ -782,7 +782,7 @@ scope:
         start = size - int(args[0])
       else:
         start = 0
-      for index in xrange(start, size):
+      for index in range(start, size):
         cmd, args = self._history[index]
         line = self.unsplit(cmd, args)
         self.log('%5d  %s\n', index, line)
@@ -1697,7 +1697,7 @@ scope:
       if True:
         numrows = 0
         while start != end:
-          numrows = start + (end - start) / 2
+          numrows = start + (end - start) // 2
 
           result = cls.FormatListingUsing(
               numrows, files, width=width, maxword=maxword)
@@ -1795,7 +1795,7 @@ scope:
         /# if so, we add some additional space between each column.
         if numcols > 1:
           diff = width - total
-          extra_spaces = diff / (numcols-1)
+          extra_spaces = diff // (numcols-1)
           if extra_spaces:
             widths = [width + extra_spaces for width in widths]
 
@@ -2068,8 +2068,8 @@ scope:
       /# responsible for the initial (and all subsequent) refreshes.
     test:
       test.iseqvec(
-        ['hier', 'file', 'dir'],
-        test.root.children().keys())
+        ['dir', 'file', 'hier'],
+        sorted(test.root.children().keys()))
     setup:
       test.defineFiles(generator=True)
     end lifecycle;

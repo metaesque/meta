@@ -159,20 +159,58 @@ scope:
           result = float(value)
 
       elif mytype == 'date':
-        val = re.sub(r'[-/@: ]', '', value)
-        n = len(val)
-        if n == 8:
-          result = datetime.datetime.strptime(val, '%Y%m%d')
-        elif n == 10:
-          result = datetime.datetime.strptime(val, '%Y%m%d%H')
-        elif n == 12:
-          result = datetime.datetime.strptime(val, '%Y%m%d%H%M')
-        elif n == 14:
-          result = datetime.datetime.strptime(val, '%Y%m%d%H%M%S')
-        elif val == 'now':
-          result = datetime.datetime.now()
+        m = re.match(
+          '^(?P<kind>minute|hour|day|week|month|year)'
+          '(?:(?P<sign>[-+])(?P<adj>\d+))?', value)
+        if m:
+          now = datetime.datetime.now()
+          onesec = datetime.timedelta(seconds=1)
+          kind = m.group('kind')
+          sign = m.group('sign') or ''
+          adj = int(m.group('adj') or 0)
+          if sign == '-':
+            adj = -adj
+          if kind == 'minute':
+            result = now.replace(second=0, microsecond=0)
+            result += onesec * adj * 60
+          elif kind == 'hour':
+            result = now.replace(minute=0, second=0, microsecond=0)
+            result += onesec * adj * 60 * 60
+          elif kind == 'day':
+            result = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            result += onesec * adj * 60 * 60 * 24
+          elif kind == 'month':
+            result = now.replace(
+              day=1, hour=0, minute=0, second=0, microsecond=0)
+            oneday = datetime.timedelta(days=1)
+            if sign == '-': oneday = oneday * -1
+            /# TODO(wmh): Fix me!
+            result += onesec * adj * 60 * 60 * 24 * 30
+          elif kind == 'year':
+            result = now.replace(
+              month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            /# TODO(wmh): Fix this ... this does not properly return the
+            /# first of a year!
+            result += onesec * adj * 60 * 60 * 24 * 365
+          else:
+            raise Error('Invalid kind "%s"' % kind)
         else:
-          raise Error('Unrecognized date "%s"' % value)
+          val = re.sub(r'[-/@:T ]', '', value)
+          n = len(val)
+          if n == 0:
+            result = None
+          elif n == 8:
+            result = datetime.datetime.strptime(val, '%Y%m%d')
+          elif n == 10:
+            result = datetime.datetime.strptime(val, '%Y%m%d%H')
+          elif n == 12:
+            result = datetime.datetime.strptime(val, '%Y%m%d%H%M')
+          elif n == 14:
+            result = datetime.datetime.strptime(val, '%Y%m%d%H%M%S')
+          elif val == 'now':
+            result = datetime.datetime.now()
+          else:
+            raise Error('Unrecognized date "%s"' % value)
 
       elif mytype == 'regexp':
         if value == '':

@@ -2,7 +2,7 @@ namespace metax.root #:
   The top-level classes that Meta provides.
 scope:
 
-  meta  
+  meta
   class ObjectMetaRoot #:
     The root of the metaclass hierarchy in Meta.
 
@@ -87,6 +87,14 @@ scope:
     /# NaN: float
     /#   The not-a-number value.
     NaN = float('nan')
+
+    /# Returns a unicode string from either bytes or unicode, in py2/py3.
+    def SafeStr(val):
+      if sys.version_info.major == 2:
+        result = val if isinstance(val, unicode) else val.decode('utf8')
+      else:
+        result = val.decode('utf8') if isinstance(val, bytes) else val
+      return result
   end;
 
   class Object #:
@@ -341,7 +349,7 @@ scope:
 
       raw test field obj : metax.root.Object;
 
-      test 
+      test
       lifecycle #:
         A test lifecycle that creates an Object instance.
       setup<py>:

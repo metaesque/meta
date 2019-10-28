@@ -226,7 +226,7 @@ scope:
         if category:
           /# CODETANGLE(debug_parseLines)
           ln = line[:49] + '$' if len(line) > 50 else line
-          print '%4d:%-50s  %1s %s' % (j+1, ln, ' ', category)
+          print('%4d:%-50s  %1s %s' % (j+1, ln, ' ', category))
         j += 1
       return j
     test:
@@ -319,13 +319,13 @@ scope:
       cls = self.__class__
       categories = cls.CATEGORIES
       if parent is None:
-        /# print 'WARNING: Making implicit parent section'
+        /# print('WARNING: Making implicit parent section')
         parent = metax.lib.markdown.Section(
           None, title='', parser=self, prelines=0)
       start_blocks = len(parent.blocks())
       if debug:
-        print '-' * 70
-        print 'Parser.parseLines(): %d lines under %s' % (len(lines), parent)
+        print('-' * 70)
+        print('Parser.parseLines(): %d lines under %s' % (len(lines), parent))
 
       /# Maps index within 'lines' to string describing an error.
       errors = {}
@@ -343,10 +343,9 @@ scope:
           /# CODETANGLE(debug_parseLines)
           cline = lines[pos]
           ln = cline[:49] + '$' if len(cline) > 50 else cline
-          print '%4d:%-50s  %1s %s' % (
-            pos+1, ln,
-            ' ',  # prelines or ' ',
-            msg)
+          print(
+            '%4d:%-50s  %1s %s' %
+            (pos+1, ln, ' ', msg))
 
       def FindEnd(lines, pos):
         """Backup past empty lines.
@@ -423,11 +422,11 @@ scope:
               needs_new_block = False
 
             if needs_new_block and current_lines:
-              print (
+              print(
                 'Line %4d: Ignoring special "%s" semantics because it is not '
                 'preceeded by blank line: %s' % (i+1, nm, line))
             elif illegals and nm in illegals:
-              print (
+              print(
                 'Line %4d: %s is not legal in this context '
                 '(ignoring special semantics): %s' % (i+1, nm, line))
             else:
@@ -766,10 +765,10 @@ scope:
               item_lines.append(line[jj:])
 
             if False:
-              print '#' * 40
+              print('#' * 40)
               for l in item_lines:
-                print l
-              print '-' * 40
+                print(l)
+              print('-' * 40)
             listitem = ListItem(list_block, prelines=item_prelines)
             list_block.addItem(listitem)
             /# Add final empty line so last block gets processed properly.
@@ -800,9 +799,9 @@ scope:
           i += 1
 
         else:
-          print '#' * 70
-          print line
-          print '#' * 70
+          print('#' * 70)
+          print(line)
+          print('#' * 70)
           raise Error('How did we get here?')
 
         if kind != 'empty' and not keep_prelines:
@@ -810,7 +809,7 @@ scope:
           prelines = 0
 
       if debug:
-        print 'Parsed %d blocks' % (len(parent.blocks()) - start_blocks)
+        print('Parsed %d blocks' % (len(parent.blocks()) - start_blocks))
       return parent
 
     test:
@@ -824,10 +823,10 @@ scope:
 
       lines = content.split('\n')
       if False:
-        print '#' * 80
+        print('#' * 80)
         for i, line in enumerate(lines, start=1):
-          print '%4d: %s' % (i, line)
-        print '#' * 80
+          print('%4d: %s' % (i, line))
+        print('#' * 80)
       root = md.parseLines(lines, debug=False)
 
       section = root.find('A Simple Document/Blocks/Lists')
@@ -1106,7 +1105,7 @@ scope:
         if os.path.exists(path):
           section = self.parseFile(path, book)
         else:
-          print 'WARNING: Path %s does not exist' % path
+          print('WARNING: Path %s does not exist' % path)
       return book
     test:
       /# NOTE: test.parseBook() invokes test.md.loadBook()
@@ -1144,7 +1143,7 @@ scope:
               mds.append({
                 'path': path, 'dir': dirmd, 'base': base, 'suffix': suffix[1:]})
             else:
-              print 'WARNING: Ignoring non-markdown file %s' % path
+              print('WARNING: Ignoring non-markdown file %s' % path)
               others.append(path)
           return mds, others
 
@@ -1161,7 +1160,7 @@ scope:
           outpath = os.path.join(mddir, spec['base'] + suffix)
           with open(outpath, 'w') as fp:
             mdfile.show(aspect=aspect, fp=fp)
-            print 'Wrote ' + outpath
+            print('Wrote ' + outpath)
       end;
 
     end command;
@@ -1282,7 +1281,7 @@ scope:
         if part in keys:
           obj = keys[part]
         else:
-          print 'Failed to find child "%s" of "%s"' % (part, obj.title())
+          print('Failed to find child "%s" of "%s"' % (part, obj.title()))
           obj = None
           break
       return obj
@@ -1478,7 +1477,7 @@ scope:
     super (parent, prelines=prelines)
     scope:
       if text[-1] == '\n':
-        print (
+        print(
           'WARNING: Paragraphs should not pass in a trailing newline (%s)' %
           parent.fulltitle())
         text = text.rstrip()
@@ -1830,7 +1829,7 @@ scope:
       i = 2
       while i < N:
         c = text[i]
-        /# print '%4d: %s' % (i, c)
+        /# print('%4d: %s' % (i, c))
 
         if c == '*' or c == '_' or c == '`':
           /# Determine if this c represents a valid start/end of emphasis.
@@ -1871,7 +1870,7 @@ scope:
               /# We have found the start of an emphasis region.
               start = i
               if debug > 1:
-                print 'Marking %d as start: "%s"' % (i, text[i-2:i+3])
+                print('Marking %d as start: "%s"' % (i, text[i-2:i+3]))
               if istwo:
                 i += 1
             else:
@@ -1881,7 +1880,7 @@ scope:
                 end += 1
 
               if debug:
-                print 'Found %d-%d: "%s"' % (start, end, text[start:end])
+                print('Found %d-%d: "%s"' % (start, end, text[start:end]))
 
               /# Obtain the conversion data.
               tag = 'code' if c == '`' else ('b' if istwo else 'em')
@@ -1896,8 +1895,9 @@ scope:
 
           else:
             if debug:
-              print 'Position %d is not special: "%s" [%s]' % (
-                i, text[i-2:i+3], reason)
+              print(
+                'Position %d is not special: "%s" [%s]' %
+                (i, text[i-2:i+3], reason))
             if n == c:
               i += 1
 
@@ -2253,7 +2253,7 @@ scope:
     super (parent, prelines=prelines)
     scope:
       self.linesIs(lines)
-      /# print 'Have HTML block with %d lines starting: %s' % (len(lines), lines[0])
+      /# print('Have HTML block with %d lines starting: %s' % (len(lines), lines[0]))
     end lifecycle;
 
     test
@@ -2466,7 +2466,7 @@ scope:
             row[0] = row[0].lstrip()
             row[-1] = row[-1].rstrip()
           if len(row) != numcols:
-            /# print row
+            /# print(row)
             errors.append(
               'For row %d, found %d columns when expecting %d: %s' %
               (r - i, len(row), numcols, lines[r].rstrip()))
@@ -2694,10 +2694,10 @@ scope:
 
       if abbrev:
         keys[abbrev] = obj
-        /# print 'title=%s abbrev=%s' % (title, abbrev)
+        /# print('title=%s abbrev=%s' % (title, abbrev))
       elif title:
         canonical = re.sub(self.__class__.AbbrevRe(), '', title.lower())
-        /# print 'title=%s canonical=%s' % (title, canonical)
+        /# print('title=%s canonical=%s' % (title, canonical))
         keys[canonical] = obj
     test:
       section = test.subsection
@@ -2756,7 +2756,7 @@ scope:
         self.blocks().append(block)
         self.register(block)
       else:
-        print '**** PROBLEM: %s' % self.fulltitle()
+        print('**** PROBLEM: %s' % self.fulltitle())
         /# raise Error('A section with empty title cannot have any blocks.')
       return block
     test:
@@ -2867,8 +2867,9 @@ scope:
         target = cb
 
       if debug:
-        print 'Line %4d: section start (target=%s abbrev=%s title=%s)' % (
-          lnum, target, abbrev, title)
+        print(
+          'Line %4d: section start (target=%s abbrev=%s title=%s)' %
+          (lnum, target, abbrev, title))
 
       current_section = target.newChild(title, abbrev=abbrev, prelines=prelines)
       assert current_section.depth() == depth
@@ -2962,8 +2963,7 @@ scope:
       nofirst = kwds.get('nofirst', False)
       implicit = self.implicit()
       prelines = self.prelines()
-      indent = unicode(indent)
-      rawtext = self.text().decode('utf8', 'replace')
+      rawtext = self.text()
       if aspect == 'ascii':
         if prelines:
           fp.write(u'\n' * prelines)
@@ -2989,7 +2989,7 @@ scope:
         text = self.__class__.TextToTex(rawtext)
         fp.write(text + u'\n')
       else:
-        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+        print('ERROR: Unknown aspect %s for Table.show()' % aspect)
     test:
       fp = test.fp()
       test.p2.show(fp=fp, aspect='ascii')
@@ -3009,7 +3009,6 @@ scope:
     end receiver Paragraph;
 
     receiver Quote ::
-      indent = unicode(indent)
       prelines = self.prelines()
       if aspect == 'ascii':
         if prelines:
@@ -3024,7 +3023,7 @@ scope:
       elif aspect == 'tex':
         fp.write(u'Not yet handling blockquotes in tex\n')
       else:
-        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+        print('ERROR: Unknown aspect %s for Table.show()' % aspect)
     test:
       quote = metax.lib.markdown.Quote(test.section, ['> quote', '> more quote'])
       fp = test.fp()
@@ -3094,7 +3093,7 @@ scope:
       elif aspect == 'markdown':
         fp.write(u'List.show() not implemented for aspect=%s\n' % aspect)
       else:
-        print 'ERROR: Unknown aspect %s for List.show()' % aspect
+        print('ERROR: Unknown aspect %s for List.show()' % aspect)
     test:
       test.makeLists()
 
@@ -3119,7 +3118,6 @@ scope:
     receiver ListItem ::
       mark = kwds.get('mark', None)
       parent = self.parent()
-      indent = unicode(indent)
 
       if aspect == 'ascii':
         /# Things are complicated here by the fact that we need to print out
@@ -3184,7 +3182,6 @@ scope:
     end receiver ListItem;
 
     receiver Code ::
-      indent = unicode(indent)
       prelines = self.prelines()
       lines = self.lines()
       if aspect == 'html':
@@ -3303,7 +3300,7 @@ scope:
           fp.write(u'%s%s\n' % (indent, line))
         fp.write(u'%s\\end{comment}\n' % indent)
       else:
-        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+        print('ERROR: Unknown aspect %s for Table.show()' % aspect)
     test:
       fp = test.fp()
       test.html.show(fp=fp)
@@ -3342,8 +3339,8 @@ scope:
           widths.append(max([len(val) for val in clist]))
           align = columns[i]['align'] or 'left'
           aligns.append(
-            string.ljust if align == 'left' else
-            (string.rjust if align == 'right' else string.center))
+            str.ljust if align == 'left' else
+            (str.rjust if align == 'right' else str.center))
 
         /# Print the header.
         fp.write(
@@ -3461,7 +3458,7 @@ scope:
         fp.write(u'</table>\n')
 
       else:
-        print 'ERROR: Unknown aspect %s for Table.show()' % aspect
+        print('ERROR: Unknown aspect %s for Table.show()' % aspect)
     test:
       table, errors = self.newTable()
       fp = test.fp()
@@ -3547,7 +3544,7 @@ scope:
             fp.write(u'\n' * prelines)
           fp.write(
             u'%s%s %s\n' %
-            (indent, '#' * d, self.title().decode('utf8', 'replace')))
+            (indent, '#' * d, self.title()))
         for block in self.blocks():
           block.show(fp=fp, indent=indent, aspect=aspect, parser=parser)
         /# Now handle children
@@ -3628,40 +3625,40 @@ scope:
           /#   http://tex.stackexchange.com/questions/12703/\
           /#      how-to-create-fixed-width-table-columns-with-text-raggedright-centered-raggedlef
           fp.write(
-           >|"""\documentclass[twocolumn]{report}
-           >|\\usepackage[margin=1cm,footskip=0.5cm]{geometry}
-           >|\\setlength{\\columnsep}{0.75cm}
-           >|\\usepackage[table]{xcolor}
-           >|\\usepackage{titlesec}
-           >|\\usepackage{color}
-           >|\\usepackage{comment}
+           >|r"""\documentclass[twocolumn]{report}
+           >|\usepackage[margin=1cm,footskip=0.5cm]{geometry}
+           >|\setlength{\columnsep}{0.75cm}
+           >|\usepackage[table]{xcolor}
+           >|\usepackage{titlesec}
+           >|\usepackage{color}
+           >|\usepackage{comment}
            >|\usepackage{array}
-           >|\\newcolumntype{L}[1]{>{\\raggedright\\let\\newline\\\\\\arraybackslash\\hspace{0pt}}m{#1}}
-           >|\\newcolumntype{C}[1]{>{\\centering\\let\\newline\\\\\\arraybackslash\\hspace{0pt}}m{#1}}
-           >|\\newcolumntype{R}[1]{>{\\raggedleft\\let\\newline\\\\\\arraybackslash\\hspace{0pt}}m{#1}}
+           >|\newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+           >|\newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+           >|\newcolumntype{R}[1]{>{\raggedleft\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
            >|
-           >|%%\\titleformat{\\chapter}[display]{\\normalfont\\huge\\bfseries}{\\chaptertitlename\\ \\thechapter}{20pt}{\\Huge}
-           >|\\titleformat{\\chapter}[hang]{\\color{red}\\normalfont\\Huge\\bfseries}{}{0em}{\\Huge}
+           >|%%\titleformat{\chapter}[display]{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+           >|\titleformat{\chapter}[hang]{\color{red}\normalfont\Huge\bfseries}{}{0em}{\Huge}
            >|
-           >|%% \\titleformat{\\section}{\\normalfont\\Large\\bfseries}{\\thesection}{1em}{}
-           >|\\titleformat{\\section}{\\color{green}\\normalfont\\Large\\bfseries}{}{0em}{}
+           >|%% \titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{1em}{}
+           >|\titleformat{\section}{\color{green}\normalfont\Large\bfseries}{}{0em}{}
            >|
-           >|%% \\titleformat{\\subsection}{\\normalfont\\large\\bfseries}{\\thesubsection}{1em}{}
-           >|\\titleformat{\\subsection}{\\color{blue}\\normalfont\\large\\bfseries}{}{0em}{}
+           >|%% \titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{1em}{}
+           >|\titleformat{\subsection}{\color{blue}\normalfont\large\bfseries}{}{0em}{}
            >|
-           >|%% \\titleformat{\\subsubsection}{\\normalfont\\normalsize\\bfseries}{\\thesubsubsection}{1em}{}
-           >|\\titleformat{\\subsubsection}{\\color{cyan}\\normalfont\\normalsize\\bfseries}{}{0em}{}
-           >|\\titlespacing*{\\section}{0pt}{1ex}{1ex}
+           >|%% \titleformat{\subsubsection}{\normalfont\normalsize\bfseries}{\thesubsubsection}{1em}{}
+           >|\titleformat{\subsubsection}{\color{cyan}\normalfont\normalsize\bfseries}{}{0em}{}
+           >|\titlespacing*{\section}{0pt}{1ex}{1ex}
            >|
-           >|%% \\titleformat{\\paragraph}[runin]{\\normalfont\\normalsize\\bfseries}{\\theparagraph}{1em}{}
-           >|\\titleformat{\\paragraph}[runin]{\\color{orange}\\normalfont\\normalsize\\bfseries}{\\theparagraph}{0em}{}
+           >|%% \titleformat{\paragraph}[runin]{\normalfont\normalsize\bfseries}{\theparagraph}{1em}{}
+           >|\titleformat{\paragraph}[runin]{\color{orange}\normalfont\normalsize\bfseries}{\theparagraph}{0em}{}
            >|
-           >|%% \\titleformat{\\subparagraph}[runin]{\\normalfont\\normalsize\\bfseries}{\\thesubparagraph}{1em}{}
-           >|\\titleformat{\\subparagraph}[runin]{\\normalfont\\normalsize\\bfseries}{\\thesubparagraph}{0em}{}
+           >|%% \titleformat{\subparagraph}[runin]{\normalfont\normalsize\bfseries}{\thesubparagraph}{1em}{}
+           >|\titleformat{\subparagraph}[runin]{\normalfont\normalsize\bfseries}{\thesubparagraph}{0em}{}
            >|
-           >|\\title{%s}
+           >|\title{%s}
            >|
-           >|\\begin{document}
+           >|\begin{document}
            >|
            >|""" % (title))
         else:
@@ -3673,7 +3670,7 @@ scope:
             5: {
               /# https://www.sharelatex.com/learn/Line_breaks_and_blank_spaces
               'tag': 'paragraph',
-              'suffix': '\\hfill \\break'
+              'suffix': r'\hfill \break'
            },
           }[d]
           tag = kdata['tag']
@@ -3853,11 +3850,11 @@ scope:
           paths.append(spec)
         else:
           path = metax.root.Object.Resource(spec)
-          /# print 'HERE with %s and %s' % (spec, path)
+          /# print('HERE with %s and %s' % (spec, path))
           if os.path.exists(path):
             paths.append(path)
           else:
-            print 'ERROR: Ignoring unknown resource %s' % spec
+            print('ERROR: Ignoring unknown resource %s' % spec)
       book = self.md.loadBook(paths, bookname=bookname)
       return book
     end method parseBook;

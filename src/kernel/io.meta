@@ -27,13 +27,20 @@ scope:
       The last character written the last time anything was written to the
       stream. Will not be updated if someone writes to self.fp() directly.
 
+    field pathmap : map #:
+      Maps path prefixes to shorthand (usually an environment variable,
+      including the '$ explicitly if appropriate).  Used by Sink.truncate()
+      to shorten paths, etc.
+
     lifecycle params:
       var fp -> fp = out;
       var indent : str = '' #:
         The top-level indentation.
     scope:
       self.prefixes().append(indent)
-      self.lastcIs(' ')
+      /# Important to set this to newline so that first line printed uses same
+      /# logic as all other lines.
+      self.lastcIs('\n')
     clinit:
       dfp = open(os.devnull, 'w')
       cls.NullIs(Sink(fp=dfp))
@@ -90,6 +97,37 @@ scope:
       test.iseq('..', sink.undent())
     end method undent;
 
+    method dent : str #:
+      The current indentation level
+    scope:
+      return self.prefixes()[-1]
+    test:
+      test.iseq('..', test.sink().dent())
+    end method dent;
+
+    method newline #:
+      Write a newline.
+
+      This differs from self.write('\n') in not inserting indentation
+      (useful to avoid blank lines at the end of a line)
+    scope:
+      self.lastcIs('\n')
+      self.fp().write('\n')
+    test:
+      sink = test.sink()
+      sink.writeln('hello')
+      sink.writeln('')
+      sink.newline()
+      sink.writeln('goodbye')
+      test.iseqtext("""\
+        >|..hello
+        >|..
+        >|
+        >|..goodbye
+        >|""",
+        sink.fp().getvalue())
+    end method newline;
+
     method write : void #:
       Write text to the sink, honoring indent.
     params:
@@ -107,17 +145,20 @@ scope:
       if self.lastc() == '\n':
         fp.write(prefix)
 
-      /# Modify text according to prefix.
+      /# Adjust the specified text slightly, according to prefix.
       if text:
+        /# We need to insert the prefix at the beginning of each line in text
         lastc = text[-1]
         if lastc == '\n':
           /# We do not want to insert indentation after the last newline.
           newtext = text[:-1].replace('\n', '\n' + prefix) + '\n'
         else:
+          /# We can perform a simple replace
           newtext = text.replace('\n', '\n' + prefix)
       else:
+        /# Text is empty, so we need only write a newline.
+        newtext = ''
         lastc = prefix[-1] if prefix else ''
-        newtext = prefix
       self.lastcIs(lastc)
       fp.write(newtext)
     test:
@@ -125,16 +166,16 @@ scope:
 
       sink.write(u'hello.')
       test.iseq('.', sink.lastc())
-      test.iseqtext(u'hello.', sink.fp().getvalue())
+      test.iseqtext(u'..hello.', sink.fp().getvalue())
 
       sink.write(u' This is\na test ')
       test.iseq(' ', sink.lastc())
-      test.iseqtext(u'hello. This is\n..a test ', sink.fp().getvalue())
+      test.iseqtext(u'..hello. This is\n..a test ', sink.fp().getvalue())
 
       sink.write(u'and now\nanother\n')
       test.iseq('\n', sink.lastc())
       test.iseqtext(
-        u'hello. This is\n'
+        u'..hello. This is\n'
         u'..a test and now\n'
         u'..another\n',
         sink.fp().getvalue())
@@ -142,12 +183,97 @@ scope:
       sink.write(u'to verify newlines\n')
       test.iseq('\n', sink.lastc())
       test.iseqtext(
-        u'hello. This is\n'
+        u'..hello. This is\n'
         u'..a test and now\n'
         u'..another\n'
         u'..to verify newlines\n',
         sink.fp().getvalue())
     end method write;
+
+    method writeln : any #:
+      Write text to the sink, honoring indent.
+    params:
+      var text : str #:
+        The text to write.  All newlines are replaces with indentation.
+    scope:
+      self.write(text)
+      if not text or text[-1] != '\n':
+        fp = self.fp()
+        self.newline()
+    test:
+      sink = test.sink()
+      sink.writeln('hello')
+      sink.write('goodbye')
+      sink.writeln(' fun world')
+      test.iseqtext("""\
+        >|..hello
+        >|..goodbye fun world
+        >|""",
+        sink.fp().getvalue())
+    end method writeln;
+
+    method flush #:
+      Flush the output stream.
+    scope:
+      self.fp().flush()
+    test:
+      sink = test.sink()
+      sink.write('a test')
+      sink.flush()
+    end method flush;
+
+    method truncate : str #:
+      Truncate a path by using a prefix from prefixes.
+
+      NOTE: This is an experiment. May be moved elsewhere.
+    params:
+      var path : str #:
+        The path to truncate.
+      var paths : map = null #:
+        The paths to search in addition to self.pathmap
+    scope:
+      result = path
+
+      pathmap = {}
+      if self.pathmap():
+        pathmap.update(self.pathmap())
+      if paths:
+        pathmap.update(paths)
+
+      for prefix in sorted(pathmap, reverse=True):
+        if path.startswith(prefix):
+          result = pathmap[prefix] + path[len(prefix):]
+          break
+      return result
+    test:
+      sink = test.sink()
+      test.iseq('/a/b/c/d', sink.truncate('/a/b/c/d'))
+
+      sink.pathmapIs({'/a/b': '$TEST', '/a/b/c': '$TEST2'})
+      test.iseq('$TEST2/d', sink.truncate('/a/b/c/d'))
+    end method truncate;
+
+    method updatePaths #:
+      Update the prefix/abbrev pathmap
+    params:
+      var pathmap : map #:
+        The new prefix/abbrev pairs to add. Overwrites existing prefixes.
+    scope:
+      if self.pathmap() is None:
+        self.pathmapIs({})
+      existing = self.pathmap()
+      existing.update(pathmap)
+    test:
+      sink = test.sink()
+      test.iseq('/a/b/c/d', sink.truncate('/a/b/c/d'))
+
+      sink.updatePaths({'/a/b': '$TEST'})
+      test.iseq('$TEST/c/d', sink.truncate('/a/b/c/d'))
+      sink.updatePaths({'/a/b': '$TEST', '/a/b/c': '$TEST2'})
+      test.iseq('$TEST2/d', sink.truncate('/a/b/c/d'))
+      sink.updatePaths({'/a/b/c': '$TEST3'})
+      test.iseq('$TEST3/d', sink.truncate('/a/b/c/d'))
+    end method updatePaths;
 
   end class Sink;
 

@@ -15,6 +15,9 @@ scope:
     MISSING_FLOAT = float('nan')
     MISSING_PTR = MISSING
     MISSING_VEC = MISSING
+
+    import re
+    RegexpClass = re.compile(r'.').__class__
   decl<cc>:
     extern void* MISSING;
     extern std::string MISSING_STR;
@@ -237,6 +240,15 @@ scope:
       turned on/off. Individual tests can be guarded by a check against
       one or more of these options (see the enabled() method).
 
+    field conditional : vec<str> #:
+      This is set in TestCase.enabled(), and used/cleared in TestCase.teardown()
+      to indicate when a method has been disabled without having to waste
+      vertical space in output using stdout (the timing line is used instead).
+
+    field scratch : @map #:
+      A scratch pad for various key/value pairs. One use is in the noop()
+      method, for indicating that a test is a noop.
+
     field fs #:
       Only initialized if SetupSharedFilesystem() is invoked.
     type<py> fake_filesystem.FakeFilesystem
@@ -409,6 +421,14 @@ scope:
       self.deblog('Invoking %s tearDown for %s' % (self.name(), self.methname()))
       status = self.status()
       if not self.silent():
+        conditional = self.conditional()
+        /# We could display all the conditions causing the test not to be run,
+        /# but that uses more horizontal space and risks going past 80 columns.
+        /# For now we just use the status section of the timing line.
+        if conditional:
+          /# If a test is disabled, status should always be null, but just in
+          /# case, we distinguish.
+          status = '???' if status else 'DISABLED'
         sys.stdout.write('%8d us  %s\n' % (seconds * 1000000, status or '.'))
 
       /# Clean up moxes
@@ -552,8 +572,13 @@ scope:
           notset.append(option)
           result = False
           /# We intentionally do NOT break, so that notset is a complete list.
-      if not result and not quiet:
-        print('Enable %s to test' % ' and '.join(notset))
+      self.conditionalIs(notset)
+
+      if False:
+        /# We no longer print out disabled notifications on stdout. Instead,
+        /# we incorporate this into the timing line in teardown.
+        if not result and not quiet:
+          print('Enable %s to test' % ' and '.join(notset))
       return result
     test:
     end method enabled;
@@ -562,7 +587,7 @@ scope:
       The status of an individual test.
 
       Returns:
-        One of '', 'FAIL' or 'ERROR'.
+        One of '', 'FAIL', 'ERROR' or 'NOOP'
     scope<py>:
       /# TODO(wmh): This relies on a private method in unittest.TestCase, and
       /# is thus inherently fragile. Can we do better?  Also, in python 3.[1-3]
@@ -595,12 +620,15 @@ scope:
         if exc_list and exc_list[-1][0] is rec:
             return exc_list[-1][1]
 
-      if hasattr(self, '_outcome'):  # Python 3.4+
-        result = self.defaultTestResult()  # these 2 methods have no side effects
-        self._feedErrorsToResult(result, self._outcome.errors)
+      if hasattr(self, '_outcome'):
+        /# Python 3.4+
+        result = self.defaultTestResult()
+        if self._outcome:
+          self._feedErrorsToResult(result, self._outcome.errors)
       else:
         /# Python 3.2 - 3.3 or 3.0 - 3.1 and 2.7
-        result = getattr(self, '_outcomeForDoCleanups', self._resultForDoCleanups)
+        result = getattr(
+          self, '_outcomeForDoCleanups', self._resultForDoCleanups)
       if result is None:
         result = '???'
       else:
@@ -613,25 +641,10 @@ scope:
             result = 'ERROR'
           else:
             result = ''
-      return result
+      if not result and self.scratch().get('noop', False):
+        result = 'NOOP'
 
-      if False:
-        /# THis is old code ... remove it.
-        text_test_result = getattr(self, '_outcome', None)
-        if hasattr(self, '_outcome'):
-          text_test_result = self._outcome
-        elif hasattr(self, '_outcomeForDoCleanups'):
-          text_test_result = self._outcomeForDoCleanups
-        else:
-          text_test_result = self._resultForDoCleanups
-          if text_test_result:
-            for tst, err in text_test_result.failures:
-              if self is tst:
-                return 'FAIL'
-            for tst, err in text_test_result.errors:
-              if self is tst:
-                return 'ERROR'
-        return ''
+      return result
     test<py>:
       tc = self._tc
       tc.setUp()
@@ -769,6 +782,13 @@ scope:
       path = tc.metaTestPath(__metafile__, 'some/sub/file.txt')
       tc.endswith('src/kernel/some/sub/file.txt', path)
     end method metaTestPath;
+
+    method noop #:
+      Invoked within a test method to indicate the test is a noop.
+    scope:
+      self.scratch()['noop'] = True
+    test:
+    end method noop;
 
     new specific
     method captureStdout #:
@@ -1257,9 +1277,9 @@ scope:
           path_specs=[
               '/home/bob/file1',
               ('/home/bob/file2',
-               {'contents': 'hello world\n', 'perms': 0640}),
+               {'contents': 'hello world\n', 'perms': 0o640}),
               ('/home/bob/dir1', 'dir'),
-              ('/home/bob/dir2', {'type': 'dir', 'perms': 0755}),
+              ('/home/bob/dir2', {'type': 'dir', 'perms': 0o755}),
               ('/home/bob/link1',
                {'type': 'link', 'srcpath': '/home/bob/file1'}),
           ])
@@ -1267,7 +1287,7 @@ scope:
       /# Verify that tc._fsinfo has been augmented.
       self.assertEqual(
           ['metax.test'],
-          tc._fsinfo.keys())
+          list(tc._fsinfo.keys()))
 
       /# Basic test (more thorough testing in testPopulateFilesystem()).
       self.assertEqual(
@@ -1414,9 +1434,9 @@ scope:
             path_specs=[
                 '/home/bob/file1',
                 ('/home/bob/file2',
-                 {'contents': 'hello world\n', 'perms': 0640}),
+                 {'contents': 'hello world\n', 'perms': 0o640}),
                 ('/home/bob/dir1', 'dir'),
-                ('/home/bob/dir2', {'type': 'dir', 'perms': 0755}),
+                ('/home/bob/dir2', {'type': 'dir', 'perms': 0o755}),
                 ('/home/bob/link1',
                  {'type': 'link', 'srcpath': '/home/bob/file1'}),
                 ('/home/bob/file3',
@@ -1855,9 +1875,7 @@ scope:
       var container : any;
       var msg : str = null;
     scope<py>:
-      rex = re.compile(r'.')
-      rcls = rex.__class__
-      if isinstance(member, rcls):
+      if isinstance(member, RegexpClass):
         if isinstance(container, (list, tuple)):
           found = False
           for elem in container:
@@ -1868,9 +1886,15 @@ scope:
             found, 'Failed to find regexp "%s" in %s' %
             (member.pattern, container))
         else:
-          self.assertIsNotNone(member.search(container))
+          if not member.search(container):
+            self.fail(
+              'Failed to find regexp\n%s\nin\n%s' %
+              (member.pattern, container))
       else:
-        self.assertIn(member, container, msg=msg);
+        if not member in container:
+          self.fail(
+            'Failed to find\n  "%s"\nin\n  %s\n%s' %
+            (member, container.replace('\n', '\n  '), msg or ''))
     test<py>:
       tc = self._tc
       tc.setUp()

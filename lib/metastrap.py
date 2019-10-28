@@ -7,7 +7,6 @@
 #    namespaces properly
 #  - provides conditional support for auto-compilation of code.
 
-# up python paths to find meta source code.
 import logging
 import os
 import re
@@ -97,7 +96,7 @@ def Config(verbose=Verbose):
   result['metalangs'] = metalangs
   #import pprint
   # pprint.pprint(result)
-      
+
   # logging.info('metastrap.Config() returns %s' % result)
   return result
 
@@ -180,7 +179,7 @@ def Setup(verbose=Verbose, auto=False):
 
   global Version
   Version = version
-        
+
   if version != 'beta':
     # CODETANGLE(version_path): in meta2
     path = VersionPath(version)
@@ -193,7 +192,7 @@ def Setup(verbose=Verbose, auto=False):
 
   if auto:
     AutoCompile()
-        
+
   return version, metaxpath
 
 
@@ -217,7 +216,7 @@ def VersionPath(version):
     version: str
       A subdir of <<src_root>>/lib/versions.
   """
-  config = Config()  
+  config = Config()
   result = os.path.join(config['src_root'], 'lib', 'versions', version, 'lib')
   if not os.path.exists(result):
     raise Exception(
@@ -244,7 +243,7 @@ def RegisterPath(path, verbose=False):
   if path not in pylist:
     pypath = '%s:%s' % (path, pypath) if pypath else path
     env['PYTHONPATH'] = pypath
-  
+
 
 def ImportMeta(argv=None):
   """Configure sys.path to import the proper version of Meta, and import.
@@ -337,132 +336,6 @@ def DynamicCompiler(metal, basel):
   sys.argv = orig_argv
   return result
 
-def ParseArgv(argv, cli_module, root_module=None):
-  """Parse low-level command-line args into a metax.cli.Command instance.
-
-  Args:
-    argv: vec<str>
-      The command-line args to parse. Index 0 is the executable.
-    cli_module: module (required)
-      The metax.cli module to use.
-    root_module: module (optional)
-      The metax.root module to use. If not null, root_module.Initialize(cli)
-      is invoked to set the global CLI instance.
-
-  Returns: tuple<metax.cli.Command,metax.cli.Values>
-   1. The top-level Command instance. Never null.
-   2. The Values wrapper around the instantiated Command instance. Null on error.
-  """
-  # TODO(wmh): Delete this method after 2018-11-15.
-  raise Error(
-    'metastrap.ParseArgv() is deprecated in favor of '
-    'metax.c.Compiler.MetaxCLI()')
-  
-  # Define the metax.cli.Command instance that describes top-level Meta compiler
-  # flags. These are the only flags that general Metax compiler code will rely
-  # on.
-  command = cli_module.Command('meta2')
-  command.newFlag(
-    'baselang', 'str', default='python', aliases='b',
-    summary='The baselang to compile into.',
-    desc='If this is <special>, a metalang-specific default is used')
-  command.newFlag(
-    'metalang', 'str', default='oopl', aliases='L',
-    summary='The metalang the code is defined in.')
-  command.newFlag(
-    'optimize_level', 'enum<off|low|avg|high|max>', default='high', aliases='O',
-    summary='The amount of optimization to enable compiled files.',
-    desc='')
-  command.newFlag(
-    'metadir', 'str', default='.meta2',
-    summary='The subdir to write code to.',
-    desc="A value of .meta2 is treated specially (is symlinked to repo)")
-  command.newFlag(
-    'inmemory', 'bool', default='false',
-    summary='If true, use memory filesystem instead of disk filesystem.')
-  command.newFlag(
-    'metasrcfile', 'str', default='',
-    summary=(
-      'A specially formatted file specifying meta source files to compile. '
-      'Each line contains <title>: <metafile>...'))
-  command.newFlag(
-    'debug', 'int', default=0, aliases='A',
-    summary='Controls meta parsing debug level.')
-  command.newFlag(
-    'disable_imports', 'bool', default='false', 
-    summary='If true, do not invoke importMeta during compilation.')
-  command.newFlag(
-    'summary_counts', 'bool', default='false',
-    summary='If true, show construct counts in compilation summaries.')
-  command.newFlag(
-    'summary_times', 'bool', default='false',
-    summary='If true, show timing results in compilation summaries.')
-  command.newFlag(
-    'summary_files', 'bool', default='true',
-    summary='If true, show file counts in compilation summaries.')
-  command.newFlag(
-    'summary_autogen', 'bool', default='false',
-    summary='If true, show autogened constructs when counting constructs in compilation summaries.')
-  command.newFlag(
-    'summary_nofiles', 'bool', default='false',
-    summary='If true, only show group and total, not per-file counts.')
-  command.newFlag(
-    'test', 'bool', default='false', aliases='t',
-    summary='If true, invoke unit tests on all namespaces in all metafiles processed.')
-  command.newFlag(
-    'showfs', 'bool', default='false',
-    summary='If true, print out filesystem after compilation.')
-
-  
-  command.newFlag(
-    'implicit_scopes', 'bool', default='false',
-    summary='If true, methods without scopes are given a default body.',
-    desc='By default, methods without scopes produce an error.')
-  command.newFlag(
-    'raw', 'bool', default='false',
-    summary=(
-      'If True, do not convert file references to meta '
-      '(keep baselang paths).'))
-  command.newFlag(
-    'rawtests', 'bool', default='false', aliases='r',
-    summary='If true, do not use bazel to run tests.',
-    desc=(
-      'Some baselangs can invoke the test harness without bazel, and for such\n'
-      'baselangs this flag disables bazel.'))
-  command.newFlag(
-    'verbose', 'bool', default='false', aliases='v',
-    summary='If true, print out additional diagnostics.')
-  command.newFlag(
-    'verbosity', 'int', default='0', aliases='V',
-    summary='Levels of verbosity. Tied to --verbose.')
-  command.newFlag(
-    'write_goldens', 'bool', default='false', aliases='W',
-    summary='If true, tests involving goldens write instead of compare.')
-  command.newFlag(
-    'hack', 'bool', default='false', 
-    summary='If true, enable some special code (used during prototyping)')
-  command.newArg(
-    'args', multi=True, summary='All other args')
-
-  # Instantiate the command line args against the above Command, putting all
-  # unknown args/flags into 'args'.
-  instantiated = command.instantiate(argv, start=True)
-  if instantiated:
-    cli = instantiated.asValues()
-    if cli.verbose and cli.verbosity == 0:
-      cli.verbosity = 1
-    elif cli.verbosity > 0 and not cli.verbose:
-      cli.verbose = True
-    # Initialize metax.root.MetaObject
-    if root_module:
-      #print root_module
-      #root_module.Object.Initialize2(cli=cli)
-      root_module.Object.Init(cli=cli)
-  else:
-    cli = None
-
-  return command, cli
-
 
 # http://dangerontheranger.blogspot.com/2012/07/how-to-use-sysmetapath-with-python.html
 class MetaImporter(object if sys.version_info.major < 3 else importlib.abc.MetaPathFinder):
@@ -517,7 +390,7 @@ class MetaImporter(object if sys.version_info.major < 3 else importlib.abc.MetaP
     #   The Meta compiler.
     self._metac = metac
     self._cli = cli
-    
+
     # field cache: dict
     #   Maintains information on process paths so that we do not need to
     #   continually recheck the same paths.  Keys are fullnames and values
@@ -529,7 +402,7 @@ class MetaImporter(object if sys.version_info.major < 3 else importlib.abc.MetaP
     # field baselang: OoplPython
     #   The OoplPython singleton instance
     self._baselang = metac.metalang().baselangNamed('python')
-    
+
   def cache(self):
     return self._cache
 
@@ -541,15 +414,15 @@ class MetaImporter(object if sys.version_info.major < 3 else importlib.abc.MetaP
       #fp.write('%s: %s\n' % (key, cache[key]))
 
   def find_spec(self, fullname, path, target=None):
-    """This method is supposed called by Python3 if this class is on
+    """This method is supposedly called by Python3 if this class is on
     sys.meta_path, but it is not currently work.
-    
+
     https://docs.python.org/3/library/importlib.html#importlib.abc.MetaPathFinder.find_spec
-    
+
     I've experimented with making this class a subclass of
     importlib.abc.MetaPathFinder in python3, but that doesn't fix the issue.
     """
-    return self.maybeRecompileMeta(fullname, path, target=target)    
+    return self.maybeRecompileMeta(fullname, path, target=target)
 
   def find_module(self, fullname, path=None):
     """This method is called by Python if this class is on sys.path.
@@ -589,7 +462,7 @@ class MetaImporter(object if sys.version_info.major < 3 else importlib.abc.MetaP
     """
     # print('Checking if %s involves a Meta recompile' % fullname)
     cache = self._cache
-    
+
     # TODO(wmh): Determine if we can rely on path (which is usually a list of
     # one path, or None).  I initially assumed it was the first directory in
     # sys.path matching fullname, but that doesn't explain:
@@ -619,7 +492,7 @@ class MetaImporter(object if sys.version_info.major < 3 else importlib.abc.MetaP
         if res is False:
           # If errors were found, we exit.
           raise Exception('Exiting due to errors')
-        
+
         ismeta = True
       else:
         ismeta = False

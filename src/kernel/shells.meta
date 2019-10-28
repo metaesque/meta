@@ -327,7 +327,8 @@ scope:
           /# reimplemented to use metax.cli.Command, things would be cleaner
           /# and more flexible, but for now we hack it up.
           method = info['method']
-          docstr = method.im_func.func_doc
+          /# docstr = method.im_func.func_doc
+          docstr = method.__doc__
           lines = docstr.strip().split('\n')
 
           if not verbose:

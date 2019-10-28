@@ -234,7 +234,7 @@ scope:
       /# be unicode. Figure out a better way of handling this.
       /# if sys.version_info[0] == 2 and isinstance(key, str):
       /#   key = unicode(key)
-      fp.write(unicode(key))
+      fp.write(key)
       count = len(key)
 
       /# Determine how to format the attribute value.
@@ -1470,7 +1470,7 @@ scope:
         if not val:
           print('*********** HERE with %s' % self.__class__)
 
-        fp.write(unicode(val))
+        fp.write(val)
       return len(val)
     test:
       test.defineAttributes()
@@ -1492,7 +1492,7 @@ scope:
       /# be unicode. Figure out a better way of handling this.
       /# if sys.version_info[0] == 2 and isinstance(val, str):
       /#   val = unicode(val)
-      fp.write(unicode(val))
+      fp.write(val)
       return len(val)
     test:
       test.defineAttributes()
@@ -1512,7 +1512,7 @@ scope:
       val = str(self.value())
       if mode and mode.get('form', 'code') == 'html':
         val = Attribute.HtmlSafe(val)
-      fp.write(unicode(val))
+      fp.write(val)
       return len(val)
     test:
       test.defineAttributes()
@@ -1529,7 +1529,7 @@ scope:
 
     receiver ExprAttribute scope:
       val = self.value().text()
-      fp.write(unicode(val))
+      fp.write(val)
       return len(val)
     test:
       test.defineAttributes()
@@ -1539,7 +1539,7 @@ scope:
 
     receiver EnumAttribute scope:
       val = '<%s>' % '|'.join(self.value())
-      fp.write(unicode(val))
+      fp.write(val)
       return len(val)
     test:
       test.defineAttributes()
@@ -1551,7 +1551,7 @@ scope:
       val = self.value().raw()
       if mode and mode.get('form', 'code') == 'html':
         val = Attribute.HtmlSafe(val)
-      fp.write(unicode(val))
+      fp.write(val)
       return len(val)
     test:
       test.defineAttributes()
@@ -1560,7 +1560,6 @@ scope:
       test.iseq('vec<str>', fp.getvalue())
 
     receiver SimpleBlock scope:
-      indent = unicode(indent)
       form = mode.get('form', 'code') if mode else 'code'
       ishtml = form == 'html'
       construct = self.parent()
