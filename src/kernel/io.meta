@@ -133,6 +133,8 @@ scope:
     params:
       var text : str #:
         The text to write.  All newlines are replaces with indentation.
+      multi var args : vec<any> #:
+        A collection of args to apply to the printf template specified by text.
     scope:
       fp = self.fp()
       prefix = self.prefix()
@@ -147,11 +149,20 @@ scope:
 
       /# Adjust the specified text slightly, according to prefix.
       if text:
+        if args:
+          text = text % args
+
         /# We need to insert the prefix at the beginning of each line in text
         lastc = text[-1]
         if lastc == '\n':
           /# We do not want to insert indentation after the last newline.
-          newtext = text[:-1].replace('\n', '\n' + prefix) + '\n'
+          try:
+            newtext = text[:-1].replace('\n', '\n' + prefix) + '\n'
+          except UnicodeDecodeError as e:
+            print(
+              '**** IN metax.io.Sink.write, found text (%s) and prefix (%s) producing %s (%s)' %
+              (type(text), type(prefix), e, sys.version_info))
+            newtext = text
         else:
           /# We can perform a simple replace
           newtext = text.replace('\n', '\n' + prefix)
@@ -193,10 +204,13 @@ scope:
     method writeln : any #:
       Write text to the sink, honoring indent.
     params:
-      var text : str #:
+      var text : str = '' #:
         The text to write.  All newlines are replaces with indentation.
+      multi var args : vec<any> #:
+        A collection of args to apply to the printf template specified by text.
     scope:
-      self.write(text)
+      if text:
+        self.write(text, *args)
       if not text or text[-1] != '\n':
         fp = self.fp()
         self.newline()

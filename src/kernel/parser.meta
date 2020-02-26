@@ -15412,7 +15412,7 @@ scope:
                 print('#' * 70)
                 print(text)
                 print('=' * 70)
-              ifp = io.StringIO(unicode(text))
+              ifp = io.StringIO(text)
               /# Note that the baselang being compiled is NOT what is important
               /# when performing baseling-to-metaline conversions ... it is the
               /# baselang being used to compile the code that is important! This
@@ -15479,7 +15479,7 @@ scope:
         print('#' * 70)
         print(text)
         print('=' * 70)
-      ifp = io.StringIO(unicode(text))
+      ifp = io.StringIO(text)
       /# Note that the baselang being compiled is NOT what is important
       /# when performing baseling-to-metaline conversions ... it is the
       /# baselang being used to compile the code that is important!

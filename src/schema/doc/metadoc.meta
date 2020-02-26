@@ -1,8 +1,49 @@
 namespace metax.doc scope:
 
+  class MetaxDoc < metax.meta.MetaLanguageConstruct #:
+    A subclass of MetaLanguageConstruct representing Meta(Doc)
+
+    NOTE(wmh): Until we support multiple inheritance, this class is NOT a
+    subclass of Doconstruct, because it needs to be a subclass of
+    metax.meta.MetaLanguageConstruct
+  scope:
+
+    lifecycle clinit:
+    end;
+
+  end class MetaxDoc;
+
   abstract
   class DocConstruct < metax.meta.Construct #:
     Abstract construct from which all Meta(Doc) constructs inherit.
+
+    TODO(wmh): This code is broken as of 2019-10-27 (caused much earlier)
+    because of the re-write of streams (removing metafile.streams() and
+    instead relying on SymbolConstruct to define fields and methods. This
+    is problematic for Meta(Doc) because SymbolConstruct is a subclass of
+    OoplConstruct.  Nor can we just define it in Meta(Meta), because
+    Meta(Oopl) relies on some classes by symbol constructs and others not
+    being symbol constructs.
+
+    Part of the problem is that SymbolConstruct has two distinct purposes:
+     1. Provide symbol table functionality
+     2. Provide stream functionality.
+
+    We should move the stream functionality out into a parent StreamConstruct.
+    This is easily done if StreamConstruct inherits from OoplConstruct and
+    SymbolConstruct inherits from StreamConstruct. It is more problematic if
+    we want to define StreamConstruct in Meta(Meta), in which case we either
+    have OoplConstruct inherit from it (which means ALL constructs have stream
+    fields, which is wasteful) or we have SymbolConstruct inherit from
+    StreamConstruct *instead* of inheriting from OoplConstruct (which will
+    definitely be problematic since SymbolConstruct subclasses (class, namespace,
+    method) are the most fundamental Oopl constructs.  So we will need to define
+    SymbolConstruct as SymbolMixin instead, and add support to Meta for mixins.
+
+    Alternatively, we can define a SymbolConstruct class as a subclass of
+    DocConstruct (repeating the code from SymbolConstruct in Meta(Oopl). But
+    most metalangs will need stream semantics, so this kind of repeated code is
+    highly undesirable.
 
     All constructs in Meta(Doc) inherit from this abstract construct,
     so the Attribute definitions here are available in subconstructs.
@@ -18,6 +59,11 @@ namespace metax.doc scope:
     resource testdoc1 path "../../kernel/testdata/metadoc/test1.metadoc";
   scope:
 
+    field streams : @map<str,vec> #:
+      See documentation in metax.oopl.SymbolConstruct (or StreamConstruct
+      once the code has been pulled out) for the 'streams' field and
+      streamNamed() method.
+
     static
     field Compiler : metax.c.Compiler #:
       Obtain a compiler for Meta(Doc).
@@ -32,6 +78,37 @@ namespace metax.doc scope:
 
     abstract method kind : str;
 
+    method streamNamed : vec<any> #:
+      Obtain a construct-specific stream of the given name. Implciitly create if
+      not present.
+
+      TODO(wmh): This is a repeat of metax.oopl.SymbolConstruct.streamNamed().
+      Find a way to avoid the redundancy here.
+    params:
+      var name : str #:
+        The stream name. Should be cls-post-[decl|defn] for now. Will be
+        extended to include cls-pre-[decl|defn] (and [pre|post]-cls-[decl|defn])
+        if we decide to perform all namespace-level native/field/method code
+        generation (for constructs associated with a class) within expandMeta()
+        instead of translateMeta()). See the streams() comment for details on
+        the subtleties here.
+      var clear : bool = false #:
+        If true, clear the stream (returns the new empty list)
+    scope:
+      streams = self.streams()
+      result = streams.get(name, None)
+      if result is None or clear:
+        result = []
+        streams[name] = result
+      return result
+    test:
+      test.tpy()
+      segments = test.klass.streamNamed('cls-post-defn')
+      test.iseqvec([], segments)
+      segments2 = test.klass.streamNamed('cls-post-defn')
+      test.issame(segments, segments2)
+    end method streamNamed;
+
     method streamLine #:
       Add a single line to a stream, handling indenting.
     params:
@@ -42,11 +119,11 @@ namespace metax.doc scope:
       var indent : str = '' #:
         What to add before each line.
     scope:
-      streams = self.metafile().streams()
+      data = self.streamNamed(stream)
       if line:
-        streams.addLine(stream, indent + line)
+        data.append(indent + line)
       else:
-        streams.addLine(stream, '')
+        data.append('')
     test:
     end method streamLine;
 
@@ -81,7 +158,7 @@ namespace metax.doc scope:
 
       prefix_re = metax.c.SPECIAL_PREFIX_RE2
       interpolation_re = metax.c.INTERPOLATION_RE
-      streams = self.metafile().streams()
+      sdata = self.streamNamed(stream)
       for line in lines:
         m = prefix_re.match(line)
         if m:
@@ -89,7 +166,7 @@ namespace metax.doc scope:
         elif line:
           line = indent + line
         line = interpolation_re.sub(Interpolate, line)
-        streams.addLine(stream, line)
+        sdata.append(line)
     test:
     end method streamLines;
 
@@ -110,7 +187,7 @@ namespace metax.doc scope:
 
       font = self.attrval('font', default=None)
       if font is not None:
-        if style and style[-1] != ';': 
+        if style and style[-1] != ';':
           style += '; '
         style += 'font-size: %s%%;' % font
 
@@ -141,8 +218,9 @@ namespace metax.doc scope:
     scope:
       /# TODO(wmh): Switch this to be abstract to force children to
       /# define the method.
-      print '%s: %sConstruct.expandMeta() should be defined' % (
-        self.kindid(), self.kind().capitalize())
+      print(
+        '%s: %sConstruct.expandMeta() should be defined' %
+        (self.kindid(), self.kind().capitalize()))
     end method expandMeta;
 
     override
@@ -150,8 +228,9 @@ namespace metax.doc scope:
     scope:
       /# TODO(wmh): Switch this to be abstract to force children to
       /# define the method.
-      print '%s: %sConstruct.translateMeta() should be defined' % (
-        self.kindid(), self.kind().capitalize())
+      print(
+        '%s: %sConstruct.translateMeta() should be defined' %
+        (self.kindid(), self.kind().capitalize()))
     end method translateMeta;
 
   end class DocConstruct;
@@ -245,12 +324,11 @@ namespace metax.doc scope:
     scope:
       /# TODO(wmh): This must be changed to use templates!!
       rawmode = os.getenv('METADOC_RAW', '') == 'true'
-      /# print 'NOTE: Here with rawmode %s' % rawmode    
+      /# print('NOTE: Here with rawmode %s' % rawmode)
       metadoc_js_path = 'metadoc.js' if rawmode else '/static/js/metadocs.js'
 
       metafile = self.metafile()
-      streams = metafile.streams()
-      streams.initStreams(
+      for sname in (
         /# A <style> to add CSS to.
         'style',
         /# A collection of javascript code (not including tag).
@@ -259,7 +337,8 @@ namespace metax.doc scope:
         'jslibs',
         /# The normal stream of content for the presentation.
         'body'
-      )
+      ):
+        self.streamNamed(sname)
 
       /# NOTE: We do NOT process scope, and instead do slides(), so that
       /# we don't have to process tags again.  If we introduce constructs
@@ -286,7 +365,7 @@ namespace metax.doc scope:
         /# Now the CSS from style constructs.
         fp.write('\n')
         fp.write('  <style>\n' if rawmode else '{% block css %}\n')
-        for line in streams.stream('style'):
+        for line in self.streamNamed('style'):
           fp.write('    ' + line + '\n')
         fp.write('  </style>\n' if rawmode else '{% endblock %}\n')
 
@@ -297,7 +376,7 @@ namespace metax.doc scope:
         fp.write(
           '  <script type="text/javascript" src="%s"></script>\n' % metadoc_js_path)
         /# All script constructs inserted first
-        for line in streams.stream('jslibs'):
+        for line in self.streamNamed('jslibs'):
           fp.write(line + '\n')
         /# The google visualization libraries.
         charts = self.charts()
@@ -317,7 +396,7 @@ namespace metax.doc scope:
           fp.write('    }\n')
           fp.write('  </script>\n')
         /# The implicit script next
-        script_lines = streams.stream('script')
+        script_lines = self.streamNamed('script')
         if script_lines:
           fp.write('  <script type="text/javascript">\n')
           for line in script_lines:
@@ -355,15 +434,14 @@ namespace metax.doc scope:
         /# Now the slide content
         fp.write('\n')
         fp.write('  <body>\n' if rawmode else '{% block content %}\n')
-        for line in streams.stream('body'):
+        for line in self.streamNamed('body'):
           fp.write(line + '\n')
-
 
         /# We start with the desired slide.
         fp.write('<script>showSlide(targetSlide);</script>\n')
 
         fp.write('  </body>\n<html>\n' if rawmode else '{% endblock %}\n')
-      print 'Wrote %s' % path
+      print('Wrote %s' % path)
 
       return (None, None)
     end method translateMeta;
@@ -524,7 +602,7 @@ namespace metax.doc scope:
         '</tr></table>' % (csize, width, cleft, ccenter, cright),
         '</div>',
       ]
-      self.streamLines(clines, indent='  ') 
+      self.streamLines(clines, indent='  ')
 
       self.streamLine('</div>')
 
@@ -575,7 +653,6 @@ namespace metax.doc scope:
       /# A panel provides the core formatting mechanism. It is a <div> with
       /# support for sizing, etc.
       metafile = self.metafile()
-      streams = metafile.streams()
       slide = self.ancestor('slide')
       preso = self.ancestor('presentation')
       padding = preso.padding()
@@ -597,6 +674,8 @@ namespace metax.doc scope:
       style_str = self.attrval('style', default=metax.c.LOOKUP)
       top_margin_adj = int(self.attrval('top'))
       notes = self.attrval('notes:', default=None) or []
+
+      body_lines = self.streamNamed('body')
 
       style_data = {}
       if bgcolor:
@@ -691,17 +770,16 @@ namespace metax.doc scope:
         /#  - note that top left corner of slide isn't appropriate for all
         /#    panels (really only for the title panel). Need to find a better
         /#    way of indicating per-panel notes.
-        streams.addLine(
-          'body',
+        body_lines.append(
           '<img class="panel" src="/static/demo/turquoise.png" style="top: 0px; left: 0px;"/>')
 
       divstr = '  <div class="panel" style="%s"%s>' % (style, titlestr)
-      streams.addLine('body', divstr)
+      body_lines.append(divstr)
 
       scope_attr, scope = self.attrpair('scope:', default=None)
       if scope_attr:
         if scope_attr.isComplexBlock():
-          /# The scope is a complex block ... subconstructs write into 
+          /# The scope is a complex block ... subconstructs write into
           /# appropriate streams.
           for child in scope:
             child.translateMeta()
@@ -709,7 +787,7 @@ namespace metax.doc scope:
           /# The scope is a simple block ... we write it verbatim.
           self.streamLines(scope, indent='    ')
 
-      streams.addLine('body', '  </div>')
+      body_lines.append('  </div>')
 
       return (None, None)
     end method translateMeta;
@@ -805,7 +883,7 @@ namespace metax.doc scope:
       /#     r'^\s*(?P<name>[a-zA-Z_][a-zA-Z_0-9]*)(?::(?P<type>%s))?\s*$'
       /#     % '|'.join(jstypemap.keys()))
       result = []
-      metafile = self.metafile()      
+      metafile = self.metafile()
       columns_attr, columns = self.attrpair('columns:', default=None)
       if columns_attr is None:
         metafile.error(
@@ -873,7 +951,7 @@ namespace metax.doc scope:
             fromparts = fromstr.split('.')
             if len(fromparts) == 1:
               /# No column within the table was specified, so we assume the user
-              /# wants the column within the table that matches the name of 
+              /# wants the column within the table that matches the name of
               /# this column.
               dataname = fromparts[0]
               datacol = column.id()
@@ -891,7 +969,7 @@ namespace metax.doc scope:
               else:
                 columninfo = data.columns()[datacol]
 
-            /# print 'fromstr="%s" dataname=%s datacol=%s data=%s' % (fromstr, dataname, datacol, data)
+            /# print('fromstr="%s" dataname=%s datacol=%s data=%s' % (fromstr, dataname, datacol, data))
 
         type_attr, rawtype = column.attrpair('type', default=None)
         if type_attr is None:
@@ -1083,7 +1161,7 @@ namespace metax.doc scope:
       Maintains the order in which rows appeared in source. Each element is
       a row data dict (see rowmap above).
 
-    lifecycle 
+    lifecycle
     clinit:
       /# Each cell in a data is separated by '|' and whitespace.
       cls.SEP_RE = re.compile(r'\s*\|\s*')
@@ -1141,7 +1219,6 @@ namespace metax.doc scope:
     method translateMeta scope:
       cls = self.__class__
       metafile = self.metafile()
-      streams = metafile.streams()
       presentation = self.ancestor('presentation')
 
       boolmap = AbstractDataConstruct.BOOL_MAP
@@ -1167,7 +1244,7 @@ namespace metax.doc scope:
       columns = self.columnInfo()
 
       /# Create an initial column-based mapping.
-      /#  - maps column name to dict containing key 'meta', which is a map 
+      /#  - maps column name to dict containing key 'meta', which is a map
       /#    of the generic column info
       /#  - later in this method, we will add a 'data' key to each dict which
       /#    maps unique row key values to column cell values.
@@ -1212,7 +1289,7 @@ namespace metax.doc scope:
           k = len(cells)
           if k-2 != num_columns:
             /# This line has an invalid number of cells.
-            /# print '**** HERE with scope line %d' % scope_attr.line()
+            /# print('**** HERE with scope line %d' % scope_attr.line())
             metafile.error(
               'Expecting %d cells, found %d' % (num_columns, k-2),
               line=line_offset + ln)
@@ -1419,7 +1496,6 @@ namespace metax.doc scope:
 
     method translateMeta scope:
       metafile = self.metafile()
-      streams = metafile.streams()
       presentation = self.ancestor('presentation')
       chart_type = self.attrval('type')
       presentation.charts()[self.id()] = chart_type
@@ -1503,7 +1579,7 @@ namespace metax.doc scope:
         "var chart = new google.visualization.%s(document.getElementById('%s'));" %
         (chart_class, self.id()))
       jslines.append(
-        /# TODO(wmh): Provide some means of establishing which GV classes 
+        /# TODO(wmh): Provide some means of establishing which GV classes
         /# recognize convertOptions, and which do not.
         'chart.draw(data, options);'
         /# 'chart.draw(data, google.charts.%s.convertOptions(options));' % chart_class
@@ -1511,32 +1587,32 @@ namespace metax.doc scope:
 
       /# Write to the script stream
       func_name = 'draw_%s' % self.id()
-      streams.addLine('script', 'function %s() {' % func_name)
+      script_lines = self.streamNamed('script')
+      script_lines.append('function %s() {' % func_name)
       for line in jslines:
-        streams.addLine('script', '  ' + line)
-      streams.addLine('script', '}')
+        script_lines.append('script', '  ' + line)
+      script_lines.append('script', '}')
 
       /# Write a <div> to the body stream.
-      streams.addLine('body', '    <div id="%s"></div>' % self.id())
+      self.streamNamed('body').append('    <div id="%s"></div>' % self.id())
     test:
-      streams = test.metafile.streams()
-      streams.initStreams('script')
+      script_lines = self.streamNamed('script')
       test.chart1.translateMeta()
 
       test.iseqtext(
         >|"""function draw_table1() {
         >|  var data = new google.visualization.DataTable();
-        >|  
+        >|
         >|  data.addColumn('timeofday', 'time');
         >|  data.addColumn('string', 'fruit');
         >|  data.addColumn('number', 'count');
-        >|  
+        >|
         >|  data.addRows([
         >|    [[13, 30, 0, 0], 'apples', 0.6],
         >|    [[13, 35, 0, 0], 'bananas', 1.0],
         >|    [[13, 45, 0, 0], 'cantelopes', 0.8],
         >|  ]);
-        >|  
+        >|
         >|  var options = {
         >|    chart: {
         >|      title: 'Test Title',
@@ -1545,11 +1621,11 @@ namespace metax.doc scope:
         >|    width: 900,
         >|    height: 500
         >|  };
-        >|  
+        >|
         >|  var chart = new google.charts.Table(document.getElementById('table1'));
         >|  chart.draw(data, google.charts.Table.convertOptions(options));
         >|}""",
-        '\n'.join(streams.stream('script')))
+        '\n'.join(test.chart1.streamNamed('script')))
 
     end method translateMeta;
 
@@ -1650,7 +1726,7 @@ namespace metax.doc scope:
 
       metafile = self.metafile()
       preso = self.ancestor('presentation')
-      streams = metafile.streams()
+      script_lines = self.streamNamed('script')
       scope = self.attrval('scope:', default=None) or []
       vre = re.compile(r'\${([a-zA-Z0-9]+)}')
       vmap = {
@@ -1680,7 +1756,7 @@ namespace metax.doc scope:
        >|   * relative position is crucial to allowing panels to specify themselves
        >|   * absolutely within this parent div.
        >|   */
-       >|  position: relative; 
+       >|  position: relative;
        >|}
        >|
        >|.panel {
@@ -1690,11 +1766,11 @@ namespace metax.doc scope:
        >|}
        >|"""
       style_code = vre.sub(Repl, style_code)
-      streams.addLines('style', style_code.split('\n'))
+      script_lines.append(style_code.split('\n'))
 
       for line in scope:
         line = vre.sub(Repl, line)
-        streams.addLine('style', line)
+        script_lines.append(line)
 
       return (None, None)
     end method translateMeta;
@@ -1720,21 +1796,21 @@ namespace metax.doc scope:
     method translateMeta
     scope:
       metafile = self.metafile()
-      streams = metafile.streams()
+      jslib_lines = self.streamNamed('jslibs')
       scope = self.attrval('scope:', default=None)
       if scope:
-        streams.addLine('jslibs', '<script type="text/javascript">')
-        streams.addLines('jslibs', scope)
-        streams.addLine('jslibs', '</script>')
+        jslib_lines.append('<script type="text/javascript">')
+        jslib_lines.extend(scope)
+        jslib_lines.append('</script>')
       else:
         path_expr = self.attrval('path', default=None)
         if path_expr:
           path = path_expr.asStr(unquote=True)
-          streams.addLine(
+          jslib_lines.append(
             /# IMPORTANT: Side note about javascript ... must use <script></script>
             /# not <script/> ... the latter doesn't get processed properly in
             /# Chrome as of 2018-11-30.
-            'jslibs', '<script type="text/javascript" src="%s"></script>' % path)
+            '<script type="text/javascript" src="%s"></script>' % path)
 
       return (None, None)
     end method translateMeta;
@@ -1848,7 +1924,6 @@ namespace metax.doc scope:
     method translateMeta
     scope:
       metafile = self.metafile()
-      streams = metafile.streams()
       scope = self.attrval('scope:', default=None) or []
       parent = self.parentConstruct()
       indent = '  ' if parent.kind() == 'slide' else ''
@@ -1884,7 +1959,7 @@ namespace metax.doc scope:
   end class DocHtml;
 
   class DocMarkdown < BaseLanguageDoc #:
-    Functionality for compiling Meta(Doc) code in markdown.    
+    Functionality for compiling Meta(Doc) code in markdown.
   scope:
 
     lifecycle  params:

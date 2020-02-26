@@ -3,9 +3,9 @@ namespace metax.oopl scope:
   class MetaxOopl < metax.meta.MetaLanguageConstruct #:
     A subclass of MetaLanguageConstruct representing Meta(Oopl)
 
-    NOTE(wmh): Until we support multiple inheritance, note that this class
-    is NOT a subclass of OoplConstruct, because it needs to be a subclass
-    of metax.meta.MetaLanguageConstruct
+    NOTE(wmh): Until we support multiple inheritance, this class is NOT a
+    subclass of OoplConstruct, because it needs to be a subclass of
+    metax.meta.MetaLanguageConstruct
   scope:
 
     lifecycle clinit:
@@ -462,6 +462,13 @@ namespace metax.oopl scope:
       details on the streams used within that construct.
 
       TODO(wmh): Remove metax.c.BaseStreams as unnecessary.
+
+      TODO(wmh): Separate out the streams functionality into a StreamConstruct
+      superclass. Would be nice if it was defined in Meta(Meta), but it is also
+      useful for it to be a subclass of OoplConstruct or a mixin, since
+      SymbolConstruct really needs to be a subclass of OoplConstruct. Note that
+      stream functionlaity is also needed in Meta(Doc) and will be needed in
+      most other metalangs as well.
 
       TODO(wmh): Decide whether to commit to namespace-level streams for
       namespace-level field/method/native constructs. Currently such

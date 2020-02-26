@@ -160,7 +160,7 @@ scope:
 
       elif mytype == 'date':
         m = re.match(
-          '^(?P<kind>minute|hour|day|week|month|year)'
+          '^(?:to)?(?P<kind>minute|hour|day|week|month|year)'
           '(?:(?P<sign>[-+])(?P<adj>\d+))?', value)
         if m:
           now = datetime.datetime.now()
@@ -170,7 +170,10 @@ scope:
           adj = int(m.group('adj') or 0)
           if sign == '-':
             adj = -adj
-          if kind == 'minute':
+          if kind == 'sec':
+            result = now.replace(microsecond=0)
+            result += onesec * adj
+          elif kind == 'min':
             result = now.replace(second=0, microsecond=0)
             result += onesec * adj * 60
           elif kind == 'hour':

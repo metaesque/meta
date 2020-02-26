@@ -552,6 +552,23 @@ scope:
     test:
     end method enable;
 
+    new method enableEnv #:
+      Enable an option by testing the environment.
+    params:
+      var option : str #:
+        The name of the option being enabled.
+      var env : str = null #:
+        The name of the environment variable to test. If null, the env.var
+        'META:<option>' is used.
+      var value : str = 'true' #:
+        The value the environment variable must have in order to enable the option.
+    scope:
+      if env is None:
+        env = 'META_' + option
+      if os.getenv(env, 'false') == value:
+        self.enable(option)
+    end method enableEnv;
+
     new
     method enabled : bool #:
       Establish if one or more options are enabled.
@@ -2026,7 +2043,7 @@ scope:
             aval = sitem.replace('\n', '\\n')
             eval = str(expected).replace('\n', '\\n')
             message = u'"%s" != "%s"' % (eval, aval)
-        self.assertEqual(expected, item, message)
+        self.assertEqual(item, expected, message)
     test<py>:
       tc = self._tc
       tc.setUp()
@@ -2224,6 +2241,8 @@ scope:
       elif expected != data:
         /# Don't use BytesIO, as one cannot write unicode to such.
         fp = io.StringIO()
+        pprint.pprint(data)
+        pprint.pprint(expected)
         self.recursiveCompare('', expected, data, 0, fp=fp, valwidth=width)
         self.fail(fp.getvalue())
     test<py>:

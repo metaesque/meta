@@ -77,17 +77,23 @@ scope:
   class Parser #:
     A parser for wmh-flavored markdown.
   assocs:
+    std assoc io;
     std assoc os;
-    std assoc pprint;
+    std usertest assoc pprint;
     usertest std assoc re;
     std assoc sys #:
       TODO(wmh): When one uses ostream or out (for example), there
       is an implicit dependency on 'sys' in python. How do we automatically
       include these assocs when needed, but not otherwise?
+    cls usertest assoc metax.io.Sink;
   scope:
 
     meta
     field ListRe : regexp;
+
+    field book : Book #:
+      A Book instance to register info with.
+      May be null, in which case info not registered.
 
     field labels : @map #:
       A mapping from label name to maps containing:
@@ -117,7 +123,7 @@ scope:
           r'^\s*\[(?P<label>[^ \t\]]+)\]:\s*(?P<url>\S+)'
           r'(?:\s*\"(?P<title>[^\"]*)\")?'), False),
         ('list', cls.ListRe(), None),
-        ('page', re.compile(r'^(?:p(?P<page>\d+))?'), False),
+        ('page', re.compile(r'^\{(?P<page>\d+)\}'), False),
         ('comment', re.compile('^\s*/\#\s*(?P<comment>.*)'), False),
       ]
       cls.CATMAP = {trip[0]: trip[1] for trip in cls.CATEGORIES}
@@ -180,7 +186,7 @@ scope:
     scope:
       with open(path, 'r') as fp:
         lines = fp.read().replace('\t', '    ').split('\n')
-      return self.parseLines(lines, parent=parent, debug=debug)
+      return self.parseLines(lines, parent=parent, path=path, debug=debug)
     test:
       simple = test.parseMarkdown('simple_md')
       fp = test.fp()
@@ -250,6 +256,8 @@ scope:
         BlockGroup can be passed in for situations where this file is just one
         section among many within a multi-file book, or when recursively
         parsing a list item within a list.  This value is returned.
+      var path : str = null #:
+        The path of the file.
       var debug : bool = false #:
         Enable debugging if true.
         TODO(wmh): Delete this param.
@@ -316,6 +324,10 @@ scope:
       /#      whitespace.  Same for '__'
       /#    - convert `...` to <code>...</code>
       /#    - convert <$url> to <a href="$url">$url</a>
+      /#
+      /# - meta-info
+      /#     {<num>} indicates a new page
+      /#             indicates a new column
       cls = self.__class__
       categories = cls.CATEGORIES
       if parent is None:
@@ -382,6 +394,7 @@ scope:
       /# We are done when i reaches this value.
       N = len(lines)
 
+      pagenum = 0
       iters = 0
       while i < N:
         /# Important:
@@ -497,11 +510,15 @@ scope:
           table = metax.lib.markdown.Table.New(
             lines[table_start:i], terrors, parent=current_group,
             prelines=prelines)
+          current_group.addTable(table)
           if terrors:
             for err in terrors:
               sys.stderr.write('  ' + err + '\n')
           else:
             current_group.addBlock(table)
+            book = self.book()
+            if book:
+              book.registerTable(table, location=(path, table_start))
 
         elif kind == 'section':
           /# We have a new section.
@@ -513,7 +530,8 @@ scope:
 
           if current_group.isSection():
             current_group = current_group.newNextSection(
-              len(mdata['hash']), mdata['title'], prelines=prelines)
+              len(mdata['hash']), mdata['title'], prelines=prelines,
+              pagenum=pagenum)
           else:
             /# TODO(wmh): We should never get here, because we specify
             /# illegals=['section'] in the recursive call to parseLines()
@@ -774,7 +792,8 @@ scope:
             /# Add final empty line so last block gets processed properly.
             item_lines.append('')
             self.parseLines(
-              item_lines, parent=listitem, debug=debug, illegals=('section',))
+              item_lines, parent=listitem, path=path, debug=debug,
+              illegals=('section',))
 
             /# Setup for next listitem.
             item_prelines = next_prelines
@@ -794,8 +813,7 @@ scope:
         elif kind == 'page':
           /# We have an explicit page break.
           Record(i, 'page break')
-          /# TODO(wmh): Add some processing here to support page numbers.
-          /# m = pre.match(line)
+          pagenum = int(mdata['page'])
           i += 1
 
         else:
@@ -1094,16 +1112,18 @@ scope:
 
     end method parseList;
 
-    method loadBook params:
+    method loadBook : Book params:
       var paths : vec #:
         The files to load up as sections in the book.
       var bookname : str = 'Book' #:
         The name of the book containing all the paths.
     scope:
-      book = metax.lib.markdown.Section(None, title=bookname, parser=self)
+      book = Book(bookname, self)
+      root = book.root()
+      /# metax.lib.markdown.Section(None, title=bookname, parser=self)
       for path in paths:
         if os.path.exists(path):
-          section = self.parseFile(path, book)
+          section = self.parseFile(path, root)
         else:
           print('WARNING: Path %s does not exist' % path)
       return book
@@ -1209,6 +1229,13 @@ scope:
       test.istrue(test.p1.isPara())
     end method isPara;
 
+    method isTable : bool scope:
+      return False
+    test:
+      test.isfalse(test.section.isTable())
+      test.istrue(test.p1.isTable())
+    end method isTable;
+
     method isList : bool scope:
       return False
     test:
@@ -1292,6 +1319,40 @@ scope:
       subsection = root.find('Section 1/SubSection A')
       test.issame(test.subsection, subsection)
     end method find;
+
+    method searchInText : vec<str> #:
+      Given a multi-line text string, search for a regexp within it.
+    params:
+      var pattern : regexp #:
+        The pattern to search for.
+      var results : vec<str> #:
+        Where to add results.
+      var text : str #:
+        The text to search.
+      var sink : metax.io.Sink = null #:
+        Where to print results. If null, nothing printed.
+    scope:
+      result = None
+      line = text.replace('\n', ' ')
+      /# print(line)
+      ms = list(pattern.finditer(line))
+      if ms:
+        if sink:
+          sep = '-' * 80
+          /# sink.writeln('PATTERN: %s' % pattern.pattern)
+          sink.writeln(sep)
+          sink.write('%s\n' % self.parent().fulltitle())
+          sink.indent('  ')
+          sink.writeln(text.strip())
+          sink.undent()
+        for m in ms:
+          mval = m.group(0)
+          if sink:
+            sink.write('Found: %s\n' % mval)
+          /# print('  Found: %s\n' % mval)
+          results.append(m)
+    test:
+    end method searchInText;
 
   end class Object;
 
@@ -1389,6 +1450,20 @@ scope:
         A unique identifier for this BlockGroup
     super (parent, prelines=prelines, uid=uid)
     scope:
+    setup:
+      group = metax.lib.markdown.BlockGroup(test.subsection)
+      p1 = metax.lib.markdown.Paragraph(
+        group,
+        'This is an example paragraph containing a few lines\n'
+        'of text including a **bold** word and _italize phrase_.')
+      p2 = metax.lib.markdown.Paragraph(
+        group,
+        '**Some Title**. This is an example paragraph with a\n'
+        'title (the first one is not titled)')
+      test.iseq(0, len(group.blocks()))
+      group.addBlock(p1)
+      group.addBlock(p2)
+      test.group = group
     end;
 
     method block : Block #:
@@ -1421,23 +1496,6 @@ scope:
       group = test.group
       test.iseq(2, len(group.blocks()))
     end method addBlock;
-
-    test
-    lifecycle setup:
-      group = metax.lib.markdown.BlockGroup(test.subsection)
-      p1 = metax.lib.markdown.Paragraph(
-        group,
-        'This is an example paragraph containing a few lines\n'
-        'of text including a **bold** word and _italize phrase_.')
-      p2 = metax.lib.markdown.Paragraph(
-        group,
-        '**Some Title**. This is an example paragraph with a\n'
-        'title (the first one is not titled)')
-      test.iseq(0, len(group.blocks()))
-      group.addBlock(p1)
-      group.addBlock(p2)
-      test.group = group
-    end lifecycle;
 
   end class BlockGroup;
 
@@ -2333,9 +2391,10 @@ scope:
 
     meta
     lifecycle scope:
-      cls.TableReIs(re.compile(r'^[-<|: ]{5,}$'))
+      cls.TableReIs(re.compile(r'^[-<|:+ ]{5,}$'))
       cls.ColReIs(re.compile(
         r'^\s*(?P<all>(?P<left>:)?-+(?P<right>:)?(?P<maxw><)?)\s*$'))
+    end lifecycle;
 
     meta
     method New : Table #:
@@ -2377,7 +2436,8 @@ scope:
 
       if m:
         columns = []
-        delim_re = re.compile(r'\s*\|\s*')
+        /# Column delimiters are either '|' or '-+'
+        delim_re = re.compile(r'\s*(?:\||-\+)\s*')
         /# TODO(wmh): The ignore string is used to specify which chars to
         /# remove from the front and back of each table row. Having '|'
         /# in this list makes it convenient when splitting so that we don't
@@ -2430,6 +2490,8 @@ scope:
             errors.append(
               'Found %d headers but %d columns: %s' %
               (len(headers), numcols, lines[i-1]))
+            for line in lines:
+              errors.append('  ' + line)
           else:
             for j in range(0, numcols):
               columns[j]['header'] = headers[j].strip()
@@ -2468,11 +2530,15 @@ scope:
           if len(row) != numcols:
             /# print(row)
             errors.append(
-              'For row %d, found %d columns when expecting %d: %s' %
-              (r - i, len(row), numcols, lines[r].rstrip()))
+              'For row %d, found %d columns when expecting %d: %s (%s)' %
+              (r - i, len(row), numcols, lines[r].rstrip(), row))
+            for line in lines:
+              errors.append('  ' + line)
           rows.append(row)
       else:
         errors.append('Not a table')
+        for line in lines:
+          errors.append('  ' + line)
 
       /# Return a Table instance if no errors, or None if errors.
       result = (
@@ -2498,14 +2564,32 @@ scope:
       table2, errors2 = self.newTable(
         lines=['blahdk dkd s', 'dk skdks ks', 'skkdd s s skd', 'ds kdk s dk'])
       test.isnull(table2)
-      test.iseq(['Not a table'], errors2)
+      test.iseq(
+        [
+          'Not a table',
+          '  blahdk dkd s',
+          '  dk skdks ks',
+          '  skkdd s s skd',
+          '  ds kdk s dk',
+        ],
+        errors2)
 
       table3, errors3 = self.newTable(
         ['| Name | Age | ', '| --- | ---| ', '| Bob | 23 | extra |', 'Alice'])
       test.isnull(table3)
       test.iseq(
-        ['For row 1, found 3 columns when expecting 2: | Bob | 23 | extra |',
-         'For row 2, found 0 columns when expecting 2: Alice'],
+        [
+          'For row 1, found 3 columns when expecting 2: | Bob | 23 | extra |',
+          '  | Name | Age | ',
+          '  | --- | ---| ',
+          '  | Bob | 23 | extra |',
+          '  Alice',
+          'For row 2, found 0 columns when expecting 2: Alice',
+          '  | Name | Age | ',
+          '  | --- | ---| ',
+          '  | Bob | 23 | extra |',
+          '  Alice',
+        ],
         errors3)
 
       table4, errors4 = self.newTable(
@@ -2525,6 +2609,10 @@ scope:
       table, errors = self.newTable()
       test.iseq(['Alice', 'Bob'], sorted(table.keys()))
     end method keys;
+
+    method isTable : bool scope:
+      return True
+    end method isTable;
 
   end class Table;
 
@@ -2606,7 +2694,8 @@ scope:
 
     A Section instance with empty title is treated specially (it is not
     allowed to have any block elements, but can have child sections).
-
+  assocs:
+    std assoc collections;
   scope:
 
     meta
@@ -2638,6 +2727,12 @@ scope:
     field keys : @map<str,*Object> #:
       Maps section or text titles to Section or Text instances. Used by find().
 
+    field pagenum : int #:
+      The page number that this section starts on
+
+    field tables : map #:
+      Maps table titles to Table instances.
+
     lifecycle params:
       var parent : Section #:
         The parent section.  Since only the top-most section has a null parent,
@@ -2647,6 +2742,7 @@ scope:
       var parser -> parser = null;
       var prelines : int = 1 #:
         The number of empty lines found before this block started.
+      var pagenum -> pagenum = 0;
     super (parent, prelines=prelines)
     scope:
       self.uidIs(abbrev)   # TODO(wmh): Replace abbrev with uid in params and use super to initialize
@@ -2656,6 +2752,19 @@ scope:
     clinit:
       cls.AbbrevReIs(re.compile(r'[^a-z]'))
     end lifecycle;
+
+    method addTable #:
+      Add a table to myself.
+    params:
+      var table : Table;
+    scope:
+      tables = self.tables()
+      if tables is None:
+        tables = collections.OrderedDict()
+        self.tablesIs(tables)
+      tables[table.title()] = table
+    test:
+    end method addTable;
 
     method xtitle : str #:
       Return title annotated with uid if present.
@@ -2802,10 +2911,12 @@ scope:
       var abbrev : str = null;
       var prelines : int = 1 #:
         The number of prelines before the to-be-created section.
+      var pagenum : int = 0 #:
+        Page number of the start of the child
     scope:
       child = metax.lib.markdown.Section(
         self, title=title, abbrev=abbrev, parser=self.parser(),
-        prelines=prelines)
+        prelines=prelines, pagenum=pagenum)
       self.addChild(child)
       return child
     test:
@@ -2828,6 +2939,8 @@ scope:
         TODO(wmh): Delete this param.
       var prelines : int = 0 #:
         The number of prelines before the to-be-created section.
+      var pagenum : int = 0 #:
+        The page number of the start of the new section.
     scope:
       current_depth = self.depth()
       current_section = self
@@ -2871,7 +2984,8 @@ scope:
           'Line %4d: section start (target=%s abbrev=%s title=%s)' %
           (lnum, target, abbrev, title))
 
-      current_section = target.newChild(title, abbrev=abbrev, prelines=prelines)
+      current_section = target.newChild(
+        title, abbrev=abbrev, prelines=prelines, pagenum=pagenum)
       assert current_section.depth() == depth
       return current_section
 
@@ -2901,6 +3015,98 @@ scope:
 
   end class Section;
 
+  class Book #:
+    A repository for multiple top-level files.
+  scope:
+
+    field root : Section;
+
+    field name : str #:
+      The name of the book.
+
+    field parser : Parser;
+
+    field tables : @map #:
+      Mapping from table title to Table instance.
+
+    lifecycle params:
+      var name -> name;
+      var parser -> parser;
+    scope:
+      root = Section(None, title=name, parser=parser)
+      self.rootIs(root)
+      parser.bookIs(self)
+    end;
+
+    method showToc #:
+      Print out the table of contents
+    params:
+      var sink : metax.io.Sink #:
+        Where to write output.
+    scope:
+      root = self.root()
+
+    test:
+    end method showToc;
+
+    method registerTable #:
+      Add a table to the book.
+    params:
+      var table : Table;
+      var location : tuple<str,int> #:
+        Path and line number of start of table.
+    scope:
+      tables = self.tables()
+      title = table.title()
+      if title in tables:
+        print(
+          'Found repeated table "%s" at line %d of %s' %
+          (title, location[1], location[0]))
+      else:
+        tables[title] = table
+    test:
+    end method registerTable;
+
+    method tablesMatching : vec<Table> #:
+      Find a table by title.
+    params:
+      var title : str #:
+        A regexp to apply to table titles.
+    scope:
+      tables = []
+      title_re = re.compile(title, re.I)
+      for title, table in self.tables().items():
+        if title_re.search(title):
+          tables.append(table)
+      return tables
+    test:
+    end method tablesMatching;
+
+    method tableNamed : Table #:
+      Return unique table from regexp.
+    params:
+      var title : str #:
+        A regexp to apply to table titles.
+      var default : any = False #:
+        What to return if the table doesn't exist. If this is False, it is a
+        request to raise an exception.
+    scope:
+      tables = self.tablesMatching(title)
+      if len(tables) > 1:
+        raise Error('Found %d tables for "%s"' % (len(tables), title))
+      elif not tables:
+        if default is False:
+          raise Error('Failed to find table matching "%s"' % title)
+        else:
+          result = None
+      else:
+        result = tables[0]
+      return result
+    test:
+    end method tableNamed;
+
+  end class Book;
+
   behavior show #:
     Write an object.
   params:
@@ -2910,6 +3116,9 @@ scope:
       Indentation before each line.
     var aspect : str = 'ascii' #:
       What to show. Valid values are:
+        ascii: show text representation
+        html: render into HTML
+        tex: render into latex
         titles: show only titles (indented by level)
         markdown: recreate the markdown text
     var parser : Parser = null #:
@@ -3513,8 +3722,8 @@ scope:
       preamble = kwds.get('preamble', None)
       postamble = kwds.get('postamble', None)
 
-
       d = self.depth()
+
       prelines = self.prelines()
       if aspect.startswith('title'):
         abbrev = self.abbrev()
@@ -3531,12 +3740,12 @@ scope:
               title = '*' + title
               /# Write the augmented text title.
               fp.write(u'%s%s%s\n' % (indent, '  ' * (d+1), title))
-          /# Now handle children
-          if depth != 0:
-            for child in self.children():
-              child.show(
-                fp=fp, indent=indent, aspect=aspect, depth=depth-1,
-                parser=parser)
+        /# Now handle children
+        if depth != 0:
+          for child in self.children():
+            child.show(
+              fp=fp, indent=indent, aspect=aspect, depth=depth-1,
+              parser=parser)
 
       elif aspect == 'ascii':
         if d:
@@ -3721,7 +3930,168 @@ scope:
         fp.getvalue())
     end receiver Section;
 
+    receiver Book #:
+      Top-level print.
+    scope:
+      /# First, print out the contents.
+      self.root().show(
+        fp=fp, indent=indent, aspect=aspect, parser=parser, **kwds)
+
+      /# Now print out the meta-level info.
+      /# ...
+    end receiver Book;
+
   end behavior show;
+
+  behavior search #:
+    Write an object.
+  params:
+    var pattern : regexp #:
+      The regexp to match against.
+    var results : vec<str> #:
+      Where to add results.
+    var sink : metax.io.Sink = null #:
+      Where to write the object
+    var parser : Parser = null #:
+      The parser instance to use.
+  scope:
+
+    abstract receiver Block;
+
+    receiver BlockGroup ::
+      /# TODO(wmh): We may need to provide some support for a prefix before
+      /# the first block.
+      for block in self.blocks():
+        block.search(pattern, results, sink=sink, parser=parser)
+    test:
+      results = []
+      pattern = re.compile('test')
+      sink = metax.io.Sink(fp=test.fp())
+      test.group.search(pattern, results, sink=sink, parser=test.md)
+    end;
+
+    receiver Paragraph ::
+      fp = io.StringIO()
+      self.show(fp=fp, parser=parser)
+      text = fp.getvalue()
+      self.searchInText(pattern, results, text, sink=sink)
+    test:
+      results = []
+      sink = metax.io.Sink(fp=test.fp())
+      pattern = re.compile(r'example')
+      test.p2.search(pattern, results, sink=sink, parser=test.md)
+      test.iseq(
+        ['example'],
+        results)
+    end receiver Paragraph;
+
+    receiver Quote ::
+      fp = io.StringIO()
+      self.show(fp=fp, parser=parser)
+      self.searchInText(pattern, results, fp.getvalue(), sink=sink)
+    test:
+      results = []
+      quote = metax.lib.markdown.Quote(
+        test.section, ['> quote', '> more quote'])
+      sink = metax.io.Sink(fp=test.fp())
+      pattern = re.compile('more')
+      quote.search(pattern, results, sink=sink, parser=test.md)
+      test.iseq(1, len(results))
+    end receiver Quote;
+
+    receiver List ::
+      result = None
+      fp = io.StringIO()
+      self.show(fp=fp, parser=parser)
+      return self.searchInText(pattern, results, fp.getvalue(), sink=sink)
+    test:
+      results = []
+      test.makeLists()
+      pattern = re.compile(r'Apple')
+      sink = metax.io.Sink(fp=test.fp())
+      test.ul.search(pattern, results, sink=sink, parser=test.md)
+      test.iseq(1, len(results))
+    end receiver List;
+
+    receiver ListItem ::
+      return None
+    test:
+      print('fixme')
+    end receiver ListItem;
+
+    receiver Code ::
+      fp = io.StringIO()
+      self.show(fp=fp, parser=parser)
+      self.searchInText(pattern, results, fp.getvalue(), sink=sink)
+    test:
+      results = []
+      sink = metax.io.Sink(fp=test.fp())
+      pattern = re.compile(r'return')
+      res = test.code.search(pattern, results, sink=sink, parser=test.md)
+      test.iseq(2, len(results))
+    end receiver Code;
+
+    receiver HR ::
+      return None
+    test:
+      results = []
+      sink = metax.io.Sink(fp=test.fp())
+      pattern = re.compile('----')
+      test.hr.search(pattern, results, sink=sink, parser=test.md)
+      test.iseq(0, len(results))
+    end receiver HR;
+
+    receiver HTML ::
+      result = None
+      fp = io.StringIO()
+      self.show(fp=fp, parser=parser)
+      return self.searchInText(pattern, results, fp.getvalue(), sink=sink)
+    test:
+      results = []
+      sink = metax.io.Sink(fp=test.fp())
+      pattern = re.compile('blah')
+      test.html.search(pattern, results, sink=sink, parser=test.md)
+      test.html.search(pattern, results, sink=sink, parser=test.md)
+      test.iseq(2, len(results))
+    end receiver HTML;
+
+    receiver Table ::
+      result = None
+      fp = io.StringIO()
+      self.show(fp=fp, parser=parser)
+      return self.searchInText(pattern, results, fp.getvalue(), sink=sink)
+    test:
+      results = []
+      table, errors = self.newTable()
+      sink = metax.io.Sink(fp=test.fp())
+      pattern = re.compile('Alice')
+      table.search(pattern, results, sink=sink, parser=test.md)
+      test.iseq(1, len(results))
+    end receiver Table;
+
+    receiver Section ::
+      for block in self.blocks():
+        block.search(pattern, results, sink=sink, parser=parser)
+      for child in self.children():
+        child.search(pattern, results, sink=sink, parser=parser)
+    test:
+      results = []
+      section = test.subsection
+      block1 = section.addBlock(metax.lib.markdown.Paragraph(
+        section, 'A first paragraph\nwith two lines', prelines=1))
+      block2 = section.addBlock(metax.lib.markdown.Paragraph(
+        section, 'A second paragraph\nwith three\nlines', prelines=2))
+      test.iseq(1, section.prelines())
+      test.iseq(1, block1.prelines())
+      test.iseq(2, block2.prelines())
+
+      pattern = re.compile(r'paragraph')
+      sink = metax.io.Sink(fp=test.fp())
+      section.search(pattern, results, sink=sink, parser=test.md)
+      test.iseq(2, len(results))
+    end receiver Section;
+
+  end behavior search;
 
   behavior title #:
     The title of this Object.  Every subclass must provide this method.
@@ -3805,18 +4175,18 @@ scope:
   scope:
 
     lifecycle setup:
-      self.md = metax.lib.markdown.Parser()
-      self.root = metax.lib.markdown.Section(
-        None, title='', prelines=1, parser=self.md)
-      self.section = self.root.newChild(title='Section 1')
-      self.subsection = self.section.newChild(
+      test.md = metax.lib.markdown.Parser()
+      test.root = metax.lib.markdown.Section(
+        None, title='', prelines=1, parser=test.md)
+      test.section = test.root.newChild(title='Section 1')
+      test.subsection = test.section.newChild(
         abbrev='suba', title='SubSection A')
-      self.p1 = metax.lib.markdown.Paragraph(
-        self.subsection,
+      test.p1 = metax.lib.markdown.Paragraph(
+        test.subsection,
         'This is an example paragraph containing a few lines\n'
         'of text including a **bold** word and _italize phrase_.')
-      self.p2 = metax.lib.markdown.Paragraph(
-        self.subsection,
+      test.p2 = metax.lib.markdown.Paragraph(
+        test.subsection,
         '**Some Title**. This is an example paragraph with a\n'
         'title (the first one is not titled)')
       /# NOTE: Intentionally have NOT added p1 and p2 to subsection yet,
