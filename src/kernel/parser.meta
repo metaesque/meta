@@ -979,11 +979,11 @@ scope:
         If true, print out all source lines, otherwise print out the 5 lines
         before and after the current line.
     scope:
-      start = self.start()
+      srow, scol = self.start()
       crow, ccol, _ = self.pos()
       fp.write(
         'ExprParser starts at R%dC%d, currrently at R%dC%d seeing "%s"\n' %
-        (start[0], start[1], self.row(), self.col(),
+        (srow, scol, self.row(), self.col(),
         self.peek().replace(u'\n', u'\\n')))
 
       nrows = self.numrows()
@@ -1158,6 +1158,28 @@ scope:
       test.iseqtext(
         'lad had a fall\nin the hall\nwith a ke', eprs.text(0, 2, 2, 8))
     end method text;
+
+    method numc : int #:
+      How many characters have been consumed by this parser so far.
+    scope:
+      /# Soooo inefficient! Consider having ExprParser maintain this count
+      /# during parse() and all other methods that affect row/col.
+      lines = self.source().lines()
+      srow, scol = self.start()
+      result = (lines[self.row()].start() + self.col()) - (lines[srow].start() + scol)
+      return result
+    test:
+      eprs = metax.c.ExprParser(metax.c.MetaFile(None, None, 'avar'))
+      eprs.parse()
+      test.iseq(4, eprs.numc())
+
+      eprs = metax.c.ExprParser(
+        metax.c.MetaFile(
+          None, None,
+          "{'a': 1,\n 'b': 3.14,\n 'c': 'val',\n 'd': [1,2]}"))
+      eprs.parse()
+      test.iseq(46, eprs.numc())
+    end method numc;
 
     method parse : Expr #:
       Parse this expression.
@@ -1369,12 +1391,15 @@ scope:
 
       self.iseq('a', eprs._parseVar())
       self.iseq(' ', eprs.getc())
+      self.iseq(2, eprs.numc())
 
       self.iseq('val', eprs._parseVar())
       self.iseq(' ', eprs.getc())
+      self.iseq(6, eprs.numc())
 
       self.iseq('true', eprs._parseVar())
       self.iseq(' ', eprs.getc())
+      self.iseq(11, eprs.numc())
 
       self.iseq('meta!out', eprs._parseVar())
       self.iseq(' ', eprs.getc())
@@ -4656,12 +4681,12 @@ scope:
          A list of construct kinds (aka primary key) that have this
          feature key or value.
 
-    field featregexprs : vec<tuple<regex,str,vec<str>>> #:
+    field featregexprs : vec<tuple<re,str,vec<str>>> #:
       Some feature attributes have values defined by regexps rather than by an
       exhaustive enumeration of values. These regexps must not match against
       any other feature key or feature values in the ConsGroup. Each element
       contains:
-        0. regexp : regexp
+        0. regexp : re
           The regexp that matches all legal feature values for the feature key
           in question.
         1. key : str
@@ -5662,7 +5687,9 @@ scope:
         /#  - could support rv.norm(), rv.norm(5,1), rv.uniform(5,8), etc.
         'rv': {},    # random variable
 
+        /# Regexp
         'regexp': {},
+        're': {},
 
         'nulltype': {},
         'class': {},
@@ -5670,6 +5697,21 @@ scope:
         'function': {},
 
         'void': {},
+
+        /# An iterator type
+        /#  - for now, what we really need this for is arrays
+        /#     - much more efficient to return iterators over vectors than
+        /#       to return @vec and force all baselangs to use copy semantics
+        /#       when some have more efficient ways to pass back a list.
+        /#  - we may need to evolve the syntax to create a more generic iterator
+        /#    type.
+        /#  - To make an iterator for a vector named 'avec':
+        /#     - py: 'it = iter(avec)'
+        /#     - cc: 'it = avec.begin()'
+        /#     - js: 'it = avec[Symbol.iterator]()'
+        /#        - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/@@iterator
+        /#        - 'Making objects iterable' in https://codeburst.io/a-simple-guide-to-es6-iterators-in-javascript-with-examples-189d052c3d8e
+        'iter': {},
       })
 
       /# We create Type instances for various ubiquitous types and aliases
@@ -7236,7 +7278,7 @@ scope:
     scope:
       result = None
       context = self.context()
-      /#consgroup = context.legalInfo(legals)
+      term = context.token('term')
       primaries = consgroup.primaries()
 
       /# Skip past empty lines
@@ -7264,20 +7306,52 @@ scope:
       /# a CallConstruct and return.
       text = self.text()
       if text[index] == '@':
-        print('************** HERE!')
+        /# Parse the callsite expression
         col = index - line.start()
         eprs = ExprParser(self, row=self.lnum(), col=col)
         expr = eprs.parse()
+
+        /# Create an implicit CallConstruct wrapper for the expr.
         cid = context.autoId()
         construct = metax.oopl.CallConstruct.NewFromData(
           cid, context, termcode=1,
           secondaries=[('expr', expr)])
-        self.lnumIs(eprs.row())
-        new_index = self.line().start() + eprs.col() + 1
-        /# TODO(wmh): This isn't quite right ... get tests passing.
-        print('INDEx %d to %d' % (index, new_index))
-        self.indexIs(new_index)
-        construct.write()
+
+        /# Update current index and line-number based on what was parsed by
+        /# the expr parser.
+        /#  - numc is the number of characters consumed by the ExprParser
+        /#    starting at 'index'.
+        /#  - text[index+numc] should always be viewing a short-hand termcode,
+        /#    yes?
+        lnum = self.lnum()
+        numc = eprs.numc()
+        c = text[index + numc]
+        if c != term:
+          metax.root.Error('TODO: Handle bad callsites!')
+        construct.termcodeIs(1)
+        /# Advance past the term char and any spaces.
+        new_index = index + numc + 1
+        while text[new_index] == ' ':
+          new_index += 1
+        /# update position
+        /#  - index += numc + 1 because we are advancing past the term too
+        /#  - lnum += difference between eprs end row and start row
+        self.set(index=new_index, lnum=lnum + (eprs.row() - eprs.start()[0]))
+
+        if False:
+          print(
+            'Here with c=%s index=%d lnum=%d srow=%d scol=%d row=%d col=%d numc=%d etext=%s' %
+            (c, self.index(), self.lnum(), eprs.start()[0], eprs.start()[1], eprs.row(), eprs.col(), numc, etext))
+
+        /# TODO(wmh): Do we allow multiple condensed form constructs to appear
+        /# on the same line?  We are not currently allowing multiple full
+        /# constructs on the same line, so for now we disallow short-forms
+        /# as well.
+        /#  - handleConstructTermination() verifies termcode is set and
+        /#    expects text[new_index] to be a newline (else exception).
+        line = self.line()
+        if not self.handleConstructTermination(construct, line, '?'):
+          construct = None
         return construct
 
       /# Consume feature attribute key/value tokens until we reach a primary
@@ -7492,7 +7566,7 @@ scope:
         test.isfalse(metafile.hasErrors(show=True))
         loop.write(fp=test.fp())
         test.iseqtext("""\
-          >|case Meta__2__ expr (i > 10) ::
+          >|case Meta__4__ expr (i > 10) ::
           >|  j += 3
           >|end;
           >|""",
@@ -7518,17 +7592,35 @@ scope:
         metafile = test.metafileFor(text=(
           "var s : str = 'Hello';\n"
           '@s.size;\n'
+          '@s.doSomething(\n'
+          '  1,\n'
+          '  3.14,\n'
+          '  "hello",\n'
+          '  s\n'
+          ');\n'
+          '@s.simple(1);\n'
         ))
         scope = metax.attr.ComplexBlock(None, 'scope:', [], line=0, col=0)
+        var1 = metafile.parseConstruct(
+          scope, 0, metafile.context().legalInfo(['var']))
+        test.iseq("var s : str = 'Hello';\n", var1.asStr())
+        test.iseq(23, metafile.line().start())
+        test.iseq(2, metafile.line().num())
 
-        print('Fix parseConstruct_callsites')
-        return
+        call1 = metafile.parseConstruct(
+          scope, 0, metafile.context().legalInfo([]))
+        test.iseq('@s.size;\n', call1.asStr())
+        test.iseq(32, metafile.line().start())
+        test.iseq(3, metafile.line().num())
 
-        loop = metafile.parseConstruct(
-          scope, 0, metafile.context().legalInfo(['case']))
+        call2 = metafile.parseConstruct(
+          scope, 0, metafile.context().legalInfo([]))
+        test.iseq(
+          '@s.doSomething(\n  1,\n  3.14,\n  "hello",\n  s\n);\n', call2.asStr())
+        test.iseq(79, metafile.line().start())
+        test.iseq(9, metafile.line().num())
+
         test.isfalse(metafile.hasErrors(show=True))
-        /# loop.write()
-
     end method parseConstruct;
 
     method consumeUntilPrimary : tuple<tuple,vec<tuple>> #:
@@ -8027,7 +8119,9 @@ scope:
       var construct : Construct #:
         The construct being terminated.
       var line : Line #:
-        The line.
+        The line on which construct termination was established.
+        Normally the line that an explicit terminator was found, but can
+        be something else if an implicit termination was assessed.a
       var errtok : str #:
         The error token, in situations where an error occurred.
     scope:
@@ -8081,9 +8175,42 @@ scope:
 
       The caller is responsible for ensuring this method is only invoked in
       situations where a secondary attribute or explicit/implicit
-      end-of-construct is expected.  This method should not be invoked with
-      the current position on whitespace (caller responsibility to advance
-      past newlines, etc.)
+      end-of-construct is expected (or special case). This method should not be
+      invoked with the current position on whitespace (caller responsibility to
+      advance past newlines, etc.)
+
+      SpecialCase:
+       - Consider the 'switch' construct, which as a complex-valued scope:
+         that contains 'case' subconstructs. The syntax:
+
+             switch var ::
+               case 1 ::
+                 ...
+               case 2 ::
+                 ...
+             end;
+
+         is more indent-happy than is preferred. It would be nice if we could
+         instead say:
+
+             switch var
+             case 1 ::
+               ...
+             case 2 ::
+               ...
+             end;
+
+         and have it be semantically equivalent to the above. This would entail:
+          - introducing syntax on Attribute constructs to indicate that some
+            child construct legal within it can appear implicitly at same level
+            as the attribute (undentable).
+          - here in parseSecondaryAttribute, when expecting a secondary
+            attribute (or implicit/explicit end-of-construct), we also support
+            seeing tokens representing undentable construct kinds.
+          - if we see a undentable construct token, we parse a complete
+            construct, then return to parsing secondary attributes.
+
+         MORE DETAILS NEEDED HERE!
 
       SideEffects:
        - self.index() is set to the position after the value (after skipping
@@ -12729,6 +12856,9 @@ scope:
       var basebinary : str = 'default' #:
         The binary to use for the baselang. Can be either an executable path,
         or one of 'default', 'old' or 'new' (semantics is baselang-dependent).
+      var dump : bool = false #:
+        If true, dump output to stdout/stderr rather than capturing it.
+        Useful for debugging which tests are hanging.
     scope:
       /# TODO(wmh): This needs to be implemented on a per-baselang basis as
       /# a behavior (or at least parts of it).
@@ -12840,9 +12970,10 @@ scope:
             env['WRITE_GOLDENS'] = 'true'
 
         /# Execute the command
+        stdpipe = None if dump else subprocess.PIPE
         p = subprocess.Popen(
           command, cwd=cwd, env=env,
-          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          stdout=stdpipe, stderr=stdpipe)
 
         /# Process the result
         if rawtests:
@@ -12859,9 +12990,16 @@ scope:
             print('namespace = %s' % newdata['namespace'])
             print('nofilt = %s' % flags.raw)
             print('#' * 80)
-          baselang.processTestOutput(
-            stdout, stderr, cwd, newdata['namespace'],
-            nofilt=flags.raw, verbosity=1 if verbose else 0)
+
+          if dump:
+            print(
+              'Test output processing disabled because --dumptests was '
+              'specified')
+          else:
+            baselang.processTestOutput(
+              stdout, stderr, cwd, newdata['namespace'],
+              nofilt=flags.raw, verbosity=1 if verbose else 0)
+
         else:
           try:
             tests = self.parseBazelOutput(
@@ -16044,6 +16182,9 @@ scope:
         Some baselangs can invoke the test harness without bazel, and for such
         baselangs this flag disables bazel.
         TODO(wmh): This is conflciting with metacold if 'rawtest' is used.
+      flag dumptests @ D : bool = false #:
+        If true, dump test results to stdout/stderr rather than capturing
+        them. Useful for identifying which tests are hanging.
 
       named
       command canonical #:
@@ -16192,7 +16333,8 @@ scope:
           flags.rawtests = True
           if targets:
             self.runUnitTests(
-              targets, verbose=flags.verbose, basebinary=flags.basebinary)
+              targets, verbose=flags.verbose, basebinary=flags.basebinary,
+              dump=flags.dumptests)
         return errors == 0
       end command compile;
 
@@ -17041,7 +17183,7 @@ scope:
           if targets:
             self.runUnitTests(
               targets.keys(), verbose=flags.verbose,
-              basebinary=flags.basebinary)
+              basebinary=flags.basebinary, dump=flags.dumptests)
           else:
             print('No targets given to command "test"')
         else:
@@ -17635,7 +17777,7 @@ scope:
         'call', 'case', 'category', 'class', 'command',
         'field', 'flag',
         'lifecycle', 'loop', 'method', 'namespace', 'native',
-        'receiver', 'remark', 'resource', 'switch', 'testx', 'var',
+        'receiver', 'remark', 'resource', 'set', 'switch', 'testx', 'var',
       ]
       self.metaoopl_consids2 = [
         'Attribute', 'BaseLanguage', 'Construct', 'FeatureValue', 'File',
@@ -17644,7 +17786,7 @@ scope:
         'call', 'case', 'category', 'class', 'command',
         'field', 'flag',
         'lifecycle', 'loop', 'method', 'namespace', 'native', 'receiver',
-        'remark', 'resource', 'switch', 'testx', 'var',
+        'remark', 'resource', 'set', 'switch', 'testx', 'var',
       ]
 
       self._invoked_fixenv = False
@@ -17794,6 +17936,7 @@ scope:
           >|      var f : int;
           >|      var g : int = 17;
           >|      var v : vec<int>;
+          >|      set s1 varname f = 101;
           >|
           >|      loop l1 on i over v ::
           >|        print(i)
@@ -17801,7 +17944,7 @@ scope:
           >|      loop j over v ::
           >|        print(j)
           >|
-          >|      switch s1 on f scope:
+          >|      switch sw1 on f scope:
           >|        case expr 1 ::
           >|          f = 1
           >|        case expr 2 ::
@@ -17814,6 +17957,19 @@ scope:
           >|        case expr 2 ::
           >|          f = 7
           >|      end;
+          >|
+          >|      block b1 scope<py>:
+          >|        print('hello')
+          >|      scope<js>:
+          >|        console.log('hello')
+          >|      end;
+          >|
+          >|      scoped block b2 scope<py>:
+          >|        print('hello')
+          >|      scope<js>:
+          >|        console.log('hello')
+          >|      end;
+          >|
           >|    end method test;
           >|  end class Test;
           >|end namespace demo.tmp;

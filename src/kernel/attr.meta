@@ -11,7 +11,7 @@ scope:
 
     Attribute
       SimpleAttribute         --> value is a string
-        FeatureAttribute      --> value comes from a pre-defined 
+        FeatureAttribute      --> value comes from a pre-defined
                                   construct-specific list
         IdAttribute           --> value is an identifier
         WordAttribute         --> value is a string containing no whitespace
@@ -112,7 +112,7 @@ scope:
       construct.registerAttribute(test.id)
       construct.registerAttribute(test.word)
       test.iseqvec(
-        ['default', 'gender', 'person'], 
+        ['default', 'gender', 'person'],
         sorted(construct.attributes()))
 
       construct2 = metax.meta.AttributeConstruct(
@@ -1210,7 +1210,7 @@ scope:
       scope.registerConstruct(cons2, position='-')
       test.iseqvec(
         [
-          'field afield', 
+          'field afield',
           'field name', 'field height', 'field weight', 'lifecycle Person',
           'method bmi', 'method show',
           'method ClassMethod', 'method StaticMethod', 'method amethod',
@@ -1222,7 +1222,7 @@ scope:
       scope.registerConstruct(cons3, position='+weight')
       test.iseqvec(
         [
-          'field afield', 
+          'field afield',
           'field name', 'field height', 'field weight',
           'hack hack1',
           'lifecycle Person',
@@ -1236,7 +1236,7 @@ scope:
       scope.registerConstruct(cons4, position='-height')
       test.iseqvec(
         [
-          'field afield', 
+          'field afield',
           'field name',
           'hack hack2',
           'field height', 'field weight',
@@ -1289,7 +1289,7 @@ scope:
       scope.registerConstruct(cons1, position='-weight')
       test.iseqvec(
         [
-          'field name', 'field height', 
+          'field name', 'field height',
           'method amethod',
           'field weight', 'lifecycle Person',
           'method bmi', 'method show',

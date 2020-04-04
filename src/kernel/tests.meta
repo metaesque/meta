@@ -358,7 +358,9 @@ scope:
       /# the command line:
       /#   bazel test --action_env=BLAH=blork --test_output=all //wmh:regexp_test
       import os
-      cls.WriteGoldensIs(os.getenv('WRITE_GOLDENS', '') == 'true')
+      cls.WriteGoldensIs(
+        os.getenv('WRITE_GOLDENS', '') == 'true'
+        or os.getenv('metagold', '') == 'true')
       debug = os.getenv('META_DEBUG', '')
       if ' tests ' in debug:
         cls.DebugIs(True)
@@ -376,7 +378,16 @@ scope:
 
       visname = username[:39] + '$' if len(username) > 40 else username
       if not self.silent():
-        sys.stdout.write('%-40s ...' % visname)
+        /# NOTE: On 2020-03-18, added a space after ... to address an issue
+        /# when a single method test takes longer than 10 seconds. The text
+        /# that appears next on sys.stdout will be a duration in microseconds,
+        /# formatted in 8 digits. That means for times less than 10 seconds
+        /# there is a space before the number, but for times of >= 10 seconds
+        /# there is no space. The timere regexp in OoplPython.processTestOutput
+        /# assumes at least one space before the time, and I'm not clear whether
+        /# it is safe to remove it.  Note that %8d was also changed to %9d.
+        /# CODE TANGLE(methstart)
+        sys.stdout.write('%-40s ... ' % visname)
       self._start = time.time()
       /# NOTE: Most fields have been initialized to their default values within
       /# the initializer.
@@ -429,7 +440,7 @@ scope:
           /# If a test is disabled, status should always be null, but just in
           /# case, we distinguish.
           status = '???' if status else 'DISABLED'
-        sys.stdout.write('%8d us  %s\n' % (seconds * 1000000, status or '.'))
+        sys.stdout.write('%9d us  %s\n' % (seconds * 1000000, status or '.'))
 
       /# Clean up moxes
       self.clearMoxes()
@@ -552,14 +563,15 @@ scope:
     test:
     end method enable;
 
-    new method enableEnv #:
+    new
+    method enableEnv #:
       Enable an option by testing the environment.
     params:
       var option : str #:
         The name of the option being enabled.
       var env : str = null #:
         The name of the environment variable to test. If null, the env.var
-        'META:<option>' is used.
+        'META_<option>' is used.
       var value : str = 'true' #:
         The value the environment variable must have in order to enable the option.
     scope:
@@ -665,7 +677,7 @@ scope:
     test<py>:
       tc = self._tc
       tc.setUp()
-      test.iseq('???', tc.status())
+      test.iseq('', tc.status())
     scope<js>:
       /# console.log('Fix TestCase.status in Javascript');
       return 'FIXME';
@@ -955,7 +967,10 @@ scope:
         if isinstance(item, tuple) and len(item) == 2:
           obj, name = item
         elif isinstance(item, (types.FunctionType, types.MethodType)):
-          obj = item.im_class
+          /# https://stackoverflow.com/questions/961048/get-class-that-defined-method
+          mod = sys.modules[item.__module__]
+          clsname = item.__qualname__.split('.')[0]
+          obj = vars(mod)[clsname]
           name = item.__name__
         else:
           raise metax.root.Error('Unrecognized item %s' % item)
@@ -1138,6 +1153,20 @@ scope:
     scope<cc>:
       throw metax::root::Error("TestCase.fileContents() not yet implemented");
     end method fileContents;
+
+    new
+    method fileWrite #:
+      Write contents to a specified file.
+    params:
+      var path : str #:
+        Where to write.
+      var contents : str #:
+        What to write.
+    scope:
+      with open(path, 'w') as fp:
+        fp.write(contents)
+    test:
+    end method fileWrite;
 
     new
     method isInteractive : bool #:
@@ -1638,6 +1667,15 @@ scope:
     params:
       var val : str;
       var width : int;
+    scope<cc>:
+      std::string result;
+      int v = val.size();
+      absl::PrintF("TestCase.FormStr not yet implemented (%d)\n", v);
+      return result;
+    scope<js>:
+      var result = 'fixme';
+      console.log('metax.test.TestCase.FormStr not implemented')
+      return result;
     scope<py>:
       if sys.version_info[0] < 3 and isinstance(val, unicode):
         vstr = val
@@ -1653,11 +1691,6 @@ scope:
       return result
     test<py>:
       test.iseq('abc$', metax.test.TestCase.FormStr('abcdef', 4))
-    scope<cc>:
-      std::string result;
-      int v = val.size();
-      absl::PrintF("TestCase.FormStr not yet implemented (%d)\n", v);
-      return result;
     end method FormStr;
 
     method recursiveCompare #:
@@ -1675,6 +1708,11 @@ scope:
         Width of key
       var valwidth : int = 27 #:
         Width of the two values.
+    scope<cc>:
+      throw metax::root::Error(
+        "TestCase.recursiveCompare() not yet implemented");
+    scope<js>:
+      console.log('metax.test.TestCase.recursiveCompare not implemented')
     scope<py>:
       formstr = TestCase.FormStr
       indent = ' ' * depth
@@ -1777,9 +1815,10 @@ scope:
         {'apple': 1, 'banana': 2, 'cantelope': 3},
         {'apple': 1, 'banana': 2, 'cantelope': 3},
         0, test.fp())
+      out = test.out()
       test.iseq(
-        "                       {'cantelope': 3, 'apple': $ {'cantelope': 3, 'apple': $\n",
-        test.out())
+        "                       {'apple': 1, 'banana': 2, $ {'apple': 1, 'banana': 2, $\n",
+        out)
 
       /# Unequal dicts
       tc.recursiveCompare(
@@ -1808,9 +1847,6 @@ scope:
         '  2                    here                        here                       \n'
         " cantelope             [True, 7, 'cold']           [True, 7, 'cold']          \n",
         test.out())
-    scope<cc>:
-      throw metax::root::Error(
-        "TestCase.recursiveCompare() not yet implemented");
     end method recursiveCompare;
 
     method assertDictContains params:
@@ -2239,10 +2275,10 @@ scope:
         print('iseqmap:')
         pprint.pprint(data)
       elif expected != data:
-        /# Don't use BytesIO, as one cannot write unicode to such.
-        fp = io.StringIO()
+        print('iseqmap: not equal!')
         pprint.pprint(data)
         pprint.pprint(expected)
+        fp = io.StringIO()
         self.recursiveCompare('', expected, data, 0, fp=fp, valwidth=width)
         self.fail(fp.getvalue())
     test<py>:
@@ -2250,8 +2286,11 @@ scope:
       tc.setUp()
       m = {'a': 1, 'b': 2}
       m2 = {'a': 1, 'b': 3}
+      tc.captureStdout()
       tc.iseqmap(m, m)
       tc.raises(AssertionError, tc.iseqmap, m, m2)
+      out = tc.getStdout()
+      test.contains('not equal!', out)
     scope<js>:
       if (msg) {
         assertHashEquals(msg, expected, data);
@@ -2321,11 +2360,11 @@ scope:
         if True:
           with open(golden, 'r') as fp:
             content2 = fp.read()
-            /# By comparing the golden on the right, the output produced
+            /# By comparing the golden on the left, the output produced
             /# reflects what needs to be done to the passed in 'content',
             /# not what needs to be done to the golden. For example, '+'
             /# means add a line to content, '-' means remove a line, etc.
-            self.assertMultiLineEqual(content, content2)
+            self.assertMultiLineEqual(content2, content)
         else:
           fd, tmpfile = tempfile.mkstemp()
           os.write(fd, content)
@@ -2350,9 +2389,13 @@ scope:
     scope<py>:
       if TestCase.WriteGoldens():
         shutil.copyfile(path, golden)
-        print('Copied %s to %s' % (path, golden))
+        print('iseqfilegold: Copied %s to %s' % (path, golden))
       else:
-        self.iseqfile(golden, path)
+        if not os.path.exists(golden):
+          self.fail('%s does not exist' % golden)
+        else:
+          /# We want the right side to represent the goal state.
+          self.iseqfile(path, golden)
     test<py>:
       tc = self._tc
       tc.setUp()
@@ -2370,6 +2413,8 @@ scope:
       var f2 : double = MISSING_FLOAT;
       var delta : double = 0.00001;
       var msg : str = null;
+    scope<cc>:
+      throw metax::root::Error("TestCase.isapprox() not yet implemented");
     scope<py>:
       if f2 is MISSING_FLOAT:
         print('isapprox: %f' % f1)
@@ -2386,8 +2431,6 @@ scope:
       } else {
         assertRoughlyEquals(f1, f2, delta);
       }
-    scope<cc>:
-      throw metax::root::Error("TestCase.isapprox() not yet implemented");
     end method isapprox;
 
     method isapproxvec #:
@@ -2397,6 +2440,10 @@ scope:
       var lf2 : vec = MISSING_VEC;
       var delta : double = 0.00001;
       var msg : str = null;
+    scope<cc>:
+      throw metax::root::Error("TestCase.isapproxvec() not yet implemented");
+    scope<js>:
+      console.log('metax.test.TestCase.isapproxvec not implemented')
     scope<py>:
       /# TODO(wmh): Make this more robust
       /# TODO(wmh): Make a general purpose comparison method that can handle
@@ -2417,8 +2464,6 @@ scope:
       tc.setUp()
       tc.isapproxvec([1.2, 1.2], [1.2, 1.2])
       tc.raises(AssertionError, tc.isapproxvec, [1.2, 1.2], [1.2, 1.3])
-    scope<cc>:
-      throw metax::root::Error("TestCase.isapproxvec() not yet implemented");
     end method isapproxvec;
 
     method islt params:
@@ -2684,6 +2729,11 @@ scope:
         A path to verify exists.
       var msg : str = null #:
         The message to print on failure.
+    scope<cc>:
+      throw metax::root::Error(
+        "TestCase.exists() not yet implemented");
+    scope<js>:
+      console.log('metax.test.TestCase.exists not implemented')
     scope<py>:
       self.istrue(os.path.exists(path), msg or '%s does not exist' % path)
     test<py>:
@@ -2691,9 +2741,6 @@ scope:
       tc.setUp()
       tc.exists(tc.filepath)
       tc.raises(AssertionError, tc.exists, tc.filepath + '.missing')
-    scope<cc>:
-      throw metax::root::Error(
-        "TestCase.exists() not yet implemented");
     end method exists;
 
     method notexists #:
@@ -2703,6 +2750,11 @@ scope:
         A path to verify does not exist.
       var msg : str = null #:
         The message to print on failure.
+    scope<cc>:
+      throw metax::root::Error(
+        "TestCase.notexists() not yet implemented");
+    scope<js>:
+      console.log('metax.test.TestCase.notexists not implemented')
     scope<py>:
       self.isfalse(os.path.exists(path), msg or '%s unexpectedly exists' % path)
     test<py>:
@@ -2710,9 +2762,6 @@ scope:
       tc.setUp()
       tc.notexists('/not-a-file')
       tc.raises(AssertionError, tc.notexists, '/tmp')
-    scope<cc>:
-      throw metax::root::Error(
-        "TestCase.notexists() not yet implemented");
     end method notexists;
 
     method fail #:

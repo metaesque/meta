@@ -1115,7 +1115,7 @@ config:
     Attribute comment:;
     Attribute icomment:;
     Attribute config:;
-    Attribute scope: : simplex children <var|block|loop|switch>;
+    Attribute scope: : simplex children <var|set|block|loop|switch>;
 
     Template python scope:
       >|
@@ -1130,6 +1130,7 @@ config:
     Template javascript scope:
       >|
       >|${comment}
+      >|${modifiers}
       >|${method}${params} {
       >|  ${preamble}
       >|  ${scope}
@@ -1691,7 +1692,7 @@ config:
 
     feature
     Attribute kind : <virtual|scoped|named> = virtual #:
-      Identifies one of a variety of mutually exclusive kinds of methods.
+      Identifies one of a variety of mutually exclusive kinds of blocks.
 
       TODO(wmh): The fact that executables have a feature attribute named kind',
       combined with us using 'kind to refer to the primary key, is destined to
@@ -1707,20 +1708,22 @@ config:
         Meta*, code written in Meta<Python> using scoped blocks may have
         different semantics from what occurs in Meta<C++>, etc.
         TODO(wmh): Does python 3 provide support for this?
+        TODO(wmh): Rename 'scoped' to 'nested'?
       FeatureValue named #:
-        An instance-level method is defined to implement the block. The method
-        is defined on the class within which the 'command' construct was found,
-        and accepts one argument of type metax.root.flags.Values representing
-        the instantiated flags (and associated Command). Note that only commands
-        of kind 'instance' can be invoked outside of the method implementing the
+        Currently only applicable within a 'command' construct. An
+        instance-level method is defined to implement the block. The method is
+        defined on the class within which the 'command' construct was found, and
+        accepts one argument of type metax.root.flags.Values representing the
+        instantiated flags (and associated Command). Note that only commands of
+        kind 'instance' can be invoked outside of the method implementing the
         command construct (blocks of kind 'virtual' or 'scoped' are local to the
         top-level command).
 
-        TODO(wmh): Provide support for returning values.  Although one
-        can use 'return' in such blocks, if the block is changed to
-        virtual, it will return from the entire surrounding function,
-        which isn't usually what is desired. A safer mechanism that works
-        for both instance and virtual blocks is preferred.
+        TODO(wmh): Provide support for returning values. Although one can use
+        'return' in such blocks, if the block is changed to virtual, it will
+        return from the entire surrounding function, which isn't usually what is
+        desired. A safer mechanism that works for both instance and virtual
+        blocks is preferred.
     end Attribute kind;
 
     primary
@@ -1770,6 +1773,32 @@ config:
 
   end Construct var;
 
+  Construct set < _statement_ #:
+    @set: A variable assignment.
+  config:
+
+    primary
+    Attribute set : id = <auto> replacer varname #:
+      The uid by which this assignment can be identified.
+
+    secondary
+    Attribute varname : id = <empty> #:
+      The metatype of the var.
+      TODO(wmh): can we use 'var' instead of 'varname'? It shouldn't
+      conflict with the 'var' construct since it is a secondary attribute.
+      TODO(wmh): If default is set to <required> for an attribute that
+      is the target of 'replacer' semantics, does Meta handle it properly?
+
+    secondary
+    Attribute value : expr = <special> aliases <=> #:
+      The value being assigned to the variable.
+    end Attribute value;
+
+    Attribute comment:;
+    Attribute icomment:;
+
+  end Construct set;
+
   Construct call < _statement_ #:
     This will not be used as a user-facing construct, but stores call
     expressiosn.
@@ -1796,7 +1825,7 @@ config:
          loop over <expr>
 
      - for (i = 0; i < 10; ++i)
-         loop i from <expr> to <expr> by <expr>
+         loop [on] i from <expr> to <expr> by <expr>
      - while expr ...
          loop while <bool_expr>
      - do ... while expr
@@ -1805,8 +1834,8 @@ config:
 
     primary
     Attribute loop : id = <auto> replacer on #:
-      The name of the loop. The value is implicitly mapped onto the 'name'
-      attribute if a 'name' does not exist.
+      The name of the loop. The value is implicitly mapped onto the 'on'
+      attribute if 'on' does not exist.
 
     secondary
     Attribute on : id = <empty> #:
@@ -1857,8 +1886,8 @@ config:
 
     primary
     Attribute switch : id = <auto> replacer on #:
-      The name of the cond. The value is implicitly mapped onto the 'name'
-      attribute if a 'name' does not exist.
+      The name of the cond. The value is implicitly mapped onto the 'on'
+      attribute if 'on' does not exist.
 
     secondary
     Attribute on : id = <empty> #:
@@ -1879,7 +1908,7 @@ config:
   end Construct switch;
 
   Construct case < _statement_ #:
-    @case: A clause in an 'if' statement.
+    @case: A clause in a 'switch' statement.
   config:
 
     primary

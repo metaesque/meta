@@ -21,7 +21,7 @@ parser.meta:
   The Meta V2 parsing code.
 
 root.meta2:
-  An implementation of the metax.root namespace in Meta. 
+  An implementation of the metax.root namespace in Meta.
 
 test.meta2:
   An implementation of the metax.test namespace in Meta.

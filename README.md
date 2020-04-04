@@ -1475,6 +1475,10 @@ Emacs (EIEIO): https://www.gnu.org/software/emacs/manual/html_mono/eieio.html
 
 ## TODO
 
+- In Javascript, remove the strict reliance on Google Closure and
+  instead use node.js and ES6.
+   - Module support now avialable: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules
+
 - In type specifications, support named params:
 
     For example:

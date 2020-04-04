@@ -1,0 +1,10 @@
+namespace demo.stmts2 scope:
+  class A scope:
+    method f scope<*>:
+      var i = 1;
+      set s1 varname i = 2;
+      set varname i = 3;
+      set i = 4;
+    end method;
+  end class A;
+end namespace demo.stmts2;

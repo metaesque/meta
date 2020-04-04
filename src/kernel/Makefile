@@ -73,27 +73,24 @@ slowtest: fullmeta-py
 meta-%:
 	metac -b $* root.meta tests.meta
 
-up%:
-	cd ../schema/$*; metac meta$*.meta
-
-schema%:
-	cd ../schema/$*; metac schema $* schema.meta
-
-cup%:
-	cd ../schema/$*; metac --meta_version=current meta$*.meta
-
-cschema%:
-	cd ../schema/$*; metac --meta_version=current schema $* schema.meta
+# 2020-03-20: I believe all of these would be fatal to invoke nowadays.
+#up%:
+#	cd ../schema/$*; metac meta$*.meta
+#schema%:
+#	cd ../schema/$*; metac schema $* schema.meta
+#cup%:
+#	cd ../schema/$*; metac --meta_version=current meta$*.meta
+#cschema%:
+#	cd ../schema/$*; metac --meta_version=current schema $* schema.meta
+#fullmeta-py: ../schema/meta/metameta.meta ../schema/oopl/metaoopl.meta ../schema/doc/metadoc.meta .FORCE
+#	metac -b py $(METAFILES)
+#	@echo "================================================================================"
 
 # target fullmeta-%:
 #   Compile all code needed to compile Meta in the specified baselang.
 fullmeta-%:
-	echo "HHHHHHHHHHHHHHHHHEEEEEEEEEEEEEERRRRRRRRRRRRREEE"
+	@echo "################################################################################"
 	echo metac -b $* $(METAFILES)
-	@echo "================================================================================"
-
-fullmeta-py: ../schema/meta/metameta.meta ../schema/oopl/metaoopl.meta ../schema/doc/metadoc.meta .FORCE
-	metac -b py $(METAFILES)
 	@echo "================================================================================"
 
 # target oopl:
@@ -134,18 +131,20 @@ html-%: fullmeta-py
 #   This target should work even if <repository_path>/oopl/python doesn't
 #   exist, as long as <src_root>/lib/versions/current points to a valid
 #   directory and <src_root>/src/bootstrap/metac.py exists.
-bootstrap: .FORCE
-	python ../bootstrap/metac.py --meta_version=current *.meta ../lib/*.meta
-	python ../bootstrap/metac.py --meta_version=current *.meta ../lib/*.meta
-	cd ../schema/meta; \
-	python ../../bootstrap/metac.py --meta_version=current schema meta schema.meta; \
-	python ../../bootstrap/metac.py --meta_version=current metameta.meta
-	cd ../schema/oopl; \
-	python ../../bootstrap/metac.py --meta_version=current schema oopl schema.meta; \
-	python ../../bootstrap/metac.py --meta_version=current metaoopl.meta
-	cd ../schema/doc; \
-	python ../../bootstrap/metac.py --meta_version=current schema doc schema.meta; \
-	python ../../bootstrap/metac.py --meta_version=current metadoc.meta
+#
+# TODO(wmh): I believe this is invalid nowadays
+#bootstrap: .FORCE
+#	python ../bootstrap/metac.py --meta_version=current *.meta ../lib/*.meta
+#	python ../bootstrap/metac.py --meta_version=current *.meta ../lib/*.meta
+#	cd ../schema/meta; \
+#	python ../../bootstrap/metac.py --meta_version=current schema meta schema.meta; \
+#	python ../../bootstrap/metac.py --meta_version=current metameta.meta
+#	cd ../schema/oopl; \
+#	python ../../bootstrap/metac.py --meta_version=current schema oopl schema.meta; \
+#	python ../../bootstrap/metac.py --meta_version=current metaoopl.meta
+#	cd ../schema/doc; \
+#	python ../../bootstrap/metac.py --meta_version=current schema doc schema.meta; \
+#	python ../../bootstrap/metac.py --meta_version=current metadoc.meta
 
 
 # target snapshot:

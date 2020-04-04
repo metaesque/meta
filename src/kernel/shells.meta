@@ -78,7 +78,7 @@ scope:
       /#  /ns/<nmsp1>/<nmsp2>/.../<class>
       /#    provides access to information about already-compiled namespaces
       /#    and classes, aggregating information across all base langs.
-      /#  /disk/<path> 
+      /#  /disk/<path>
       /#    provides access to the real contents of disk directory <path>
       /#  /mem/<metafile>/<nmsp>/.../<class>/<method>
       /#    provides access to information about in-memory parsed .meta files

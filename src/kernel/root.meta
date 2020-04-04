@@ -192,6 +192,13 @@ scope:
       if (resources != nullptr) {
         Object::ResourceMapIs(*resources);
       }
+    scope<js>:
+      if (cli != null) {
+        metax.root.Object.CLIIs(cli);
+      }
+      if (resources != null) {
+        metax.root.Object.ResourceMapIs(resources);
+      }
     scope<py>:
       if cli is not None:
         Object.CLIIs(cli)
@@ -215,6 +222,8 @@ scope:
       Object::ResourceMapRef()[name] = path;
     test<cc>:
       metax::root::Object::RegisterResource('a', '/a/b/c');
+    scope<js>:
+      metax.root.Object.ResourceMapRef()[name] = path;
     scope<py>:
       Object.ResourceMapRef()[name] = path
     test<py>:

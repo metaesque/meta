@@ -16,21 +16,24 @@ namespace metax.oopl scope:
       /# NATIVE : map
       /#   Each key is the name of a native type supported by Meta. The value
       /#   is a map:
-      /#    - The '__template__' key is special, and is a vec<str>
-      /#       - number of elements indicates how many parameters this native
-      /#         type has.
-      /#       - each element is a string repr of a meta-level type, and
-      /#         represents the default type for the param in question. For
-      /#         example, 'map' is short for 'map<str,any>' and 'map<int>'
-      /#         is short for 'map<str,int>' because __templates__ for map is
-      /#           ['str', 'str']
-      /#       - if a particular template parameter is required, use a value
-      /#         of null within the __template__ list for it.
-      /#    - Keys are method names defined on the conceptual type, values are
-      /#      maps describing info about the method:
-      /#        args: vec<map>
-      /#         - if not present or null, the method has no args.
-      /#         - each element describes information about an arg of the method
+      /#     template : vec<str>
+      /#       Number of elements indicates how many parameters this native
+      /#       type has. If not present or empty, the type is not templated.
+      /#       Each element is a string repr of a meta-level type, and
+      /#       represents the default type for the param in question. For
+      /#       example, 'map' is short for 'map<str,any>' and 'map<int>'
+      /#       is short for 'map<str,int>' because __templates__ for map is
+      /#          ['str', 'str']
+      /#       If a particular template parameter is required, use a value
+      /#       of null within the __template__ list for it.
+      /#     alias : vec<str>
+      /#       The list of aliases for this metatype.
+      /#     scope : map<str,map>
+      /#       Keys are method names defined on the conceptual type, values are
+      /#       maps describing info about the method:
+      /#         args: vec<map>
+      /#           If not present or null, the method has no args.
+      /#           Each element describes information about an arg of the method
       /#             type: str
       /#               The meta-level type of the arg (template substitutions
       /#               are applied before passing to metax.c.Type.Instance).
@@ -38,26 +41,36 @@ namespace metax.oopl scope:
       /#               Indicates the arg is optional, and specifies the value
       /#               to use if one is not provided (a string representing
       /#               legal Meta expr syntax?)
-      /#        alias: vec<str>
-      /#         - alternate names for the method.
-      /#        returns: str
-      /#         - the meta-level return type
-      /#         - template substitutions are applied before passing to
-      /#           metax.c.Type.Instance.
-      /#        code: map
-      /#         - keys are baselang suffixes starting with '.'
-      /#         - values are strings containing the following special
+      /#         alias: vec<str>
+      /#           alternate names for the method.
+      /#         returns: str
+      /#           The meta-level return type. Template substitutions are
+      /#           applied before passing to metax.c.Type.Instance.
+      /#         expr : bool
+      /#           If true, the resulting code can be used in baselang
+      /#           expressions. If false or not present, the code returned
+      /#           represents a statement.
+      /#            - TODO(wmh): Work related to expr vs statement is ongoing
+      /#              and needs more details. Need to also add in how the
+      /#              return type plays into this (void vs non-void) wrt when
+      /#              the code can be assigned to a variable or used in a
+      /#              baselang expr.
+      /#         code: map
+      /#           Keys are baselang suffixes starting with '.'
+      /#           Values are strings containing the following special
       /#           substitutions:
-      /#            ${rec}   : the receiver
-      /#            ${recsep}: the receiver and separator ('val.', 'ptr->',..)
-      /#            ${T<k>}  : the kth template type (as a metatype string)
-      /#            ${A<k>}  : the kth argument (as baselang code)
+      /#             ${rec}   : the receiver
+      /#             ${recsep}: the receiver and separator ('val.', 'ptr->',..)
+      /#             ${T<k>}  : the kth template type (as a metatype string)
+      /#             ${A<k>}  : the kth argument (as baselang code)
       /#
       /#   IMPORTANT: The dict intentionally stores only strings (rather than
       /#   richer types like metax.c.Type instance) so that we can easily move
-      /#   the dict into a config file.  We can perform optimization on the
-      /#   data after it is read in (by converting type strings to Type
-      /#   instances, etc.)
+      /#   the dict into a config file. We can perform optimization on the data
+      /#   after it is read in (by converting type strings to Type instances,
+      /#   etc.). Note however that because template variable instantiation
+      /#   depends on the types at the callsite, some optimizations may not be
+      /#   possible.
       /#
       /# TODO(wmh): An alternative way of defining the following would be to
       /# provide a metax.native namespace that defines a class for each
@@ -85,16 +98,20 @@ namespace metax.oopl scope:
                 /# TODO(wmh): Fix these!
                 '.cc': '%(recsep)ssize()',
                 '.js': '%(rec)s.length',
-                /# TODO(wmh): Verify the following is valid in both py2 and py3
                 '.py': "len(%(rec)s.encode('utf8'))",
               },
             },
           }
         },
         'vec': {
+          /# cc: http://www.cplusplus.com/reference/vector/vector/
+          /# js: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array
+          /# py: https://docs.python.org/3/tutorial/datastructures.html
+
           'alias': ['list', 'vector'],
           'template': ['any'],
           'scope': {
+
             'size': {
               'comment': 'Number of elements in the vector.',
               'args': None,
@@ -106,73 +123,267 @@ namespace metax.oopl scope:
                 '.py': 'len(%(rec)s)',
               },
             },
-            'append': {
-              'args': [{'type': '$V'}],
-              'returns': '&vec<%(T1)s>',
-              'alias': ('push', 'push_back'),
+
+            /# Add/remove from end of list
+            'push': {
+              'comment': 'Add an element at the end of a list.',
+              'alias': ('add', 'append', 'push_back'),
+              'args': [{'type': '%(T1)s'}],
+              'returns': 'void',
               'code': {
                 '.cc': '%(rec)s.push_back(%(A1)s)',
                 '.js': '%(rec)s.push(%(A1)s)',
                 '.py': '%(rec)s.append(%(A1)s)',
               },
             },
+            'pop': {
+              'comment': 'Remove and return an element from the end of a list.',
+              'alias': ('pop_back'),
+              'args': [],
+              'returns': '%(T1)s',
+              'code': {
+                '.cc': '%(rec)s.pop_back()',
+                '.js': '%(rec)s.pop()',
+                '.py': '%(rec)s.pop()',
+              },
+            },
+
+            /# Add/remove from front of list
+            'push_front': {
+              'comment': 'Add an element at the beginning of a list.',
+              /# does NOT support adding multiple elements at front (use splice)
+              'alias': ('unshift',),
+              'args': [{'type': '%(T1)s'}],
+              'returns': 'void',
+              'code': {
+                '.cc': '%(rec)s.insert(%(rec)s.begin(), %(A1)s)',
+                '.js': '%(rec)s.unshift(%(A1)s)',
+                '.py': '%(rec)s.insert(0, %(A1)s)',
+              },
+            },
+            'pop_front': {
+              'comment': 'Remove and return an element from the beginning of a list.',
+              'args': [{'type': '%(T1)s'}],
+              'returns': '%(T1)s',
+              'alias': ('shift',),
+              'code': {
+                /# In C++, there is no built-in rvalue way to delete an
+                /# arbitrary element by index and return that element. The
+                /# vector::erase method does not return the element deleted
+                /# (because it can delete multiple elements). We rely on the
+                /# existence of G_scratch here. See ./tests/cc/vector/main.cc
+                /# for how this works. Meta<C++> needs to ensure G_scratch
+                /# is available and thread_local.
+                '.cc': '(G_scratch = v[0], v.erase(v.begin()), std::any_cast<int>(G_scratch))',
+                '.js': '%(rec)s.shift()',
+                '.py': '%(rec)s.pop(0)',
+              },
+            },
+
+            /# Add/remove to/from specified index of list.
+            'insert': {
+              'comment': 'Add an element after given index of a list.',
+              'args': [{'type': 'int'}, {'type': '%(T1)s'}],
+              'returns': 'void',
+              'code': {
+                '.cc': '%(rec)s.insert(%(rec)s.begin() + %(A1)s, %(A2)s)',
+                '.js': '%(rec)s.splice(%(A1)s, 0, %(A2)s)',
+                '.py': '%(rec)s.insert(%(A1)s, %(A2)s)',
+              },
+            },
+            'remove': {
+              'comment': 'Remove and return the element at given index of a list.',
+              'args': [{'type': 'int'}],
+              'returns': '%(T1)s',
+              'code': {
+                /# See pop_front above for C++ limitation here.
+                '.cc': '(G_scratch = v[%(A1)s], v.erase(v.begin()+%(A1)s), std::any_cast<int>(G_scratch))',
+                '.js': '%(rec)s.splice(%(A1)s, 1)[0]',
+                '.py': '%(rec)s.pop(%(A1)s)',
+              },
+            },
+
+            /# TODO(wmh): Need a 'slice' method
+            /#  - Obtain a copy of a subset of element in the vector.
+            /#  - Do we provide
+            /#      slice(<start>, <count>)
+            /#    or
+            /#      slice(<start>, <end>)
+            /#    or
+            /#      slice(<start>, <end_plus_1>)
+            /#    or some combination of these?
+
+            /# TODO(wmh): Need a 'splice' method:
+            /#  - Remove n elements starting at index i and insert m new elements.
+            /#  - Problem: The above syntax does not yet support varargs.
           },
         },
         'map': {
-          /# TODO(wmh): In Javascript, use goog.structs.Map instead of Object to
-          /# represent hashmap? Problem is that 'var a = {};' is an Object, so
-          /# we'd have a mismatch.
+          /# cc: http://www.cplusplus.com/reference/map/map/
+          /# js: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map
+          /# py: https://docs.python.org/3/library/stdtypes.html#typesmapping
+
+          /# TODO(wmh): In Javascript, need to decide whether it is viable to
+          /# have the meta-level 'map' type be implemented by Map instead of
+          /# Object.
+          /#  - problems:
+          /#     - the very common idiom:
+          /#         var a = {};
+          /#       produces an Object
+          /#     - initializing a complex datastructure like:
+          /#         var data = {a: 1, 'b c': 2, 'd': {'more': [1,2]}}
+          /#       produces Object instances not Maps. The above would need
+          /#       to be specified as
+          /#         var data = Map();
+          /#         data.set('a', 1);
+          /#         data.set('b c', 2);
+          /#         var subdata = Map();
+          /#         subdata['more'] = [1,2];
+          /#         data.set('d', subdata);
+          /#       but we can define a convenience method:
+          /#         var data = metax.t.Map.New(
+          /#           {a: 1, 'b c': 2, 'd': {'more': [1,2]}})
+          /#       which would recursively convert Object to Map
+          /#       (but incurs an entire traversal of the Object input
+          /#       when creation occurs.
+          /#     - do the efficiency benefits gained by Map outweigh the
+          /#       syntactic overhead and efficiency deteriments incurred
+          /#       by Map?
+          /#     - may not be too problematic for greenfield implementations,
+          /#       but dealing with legacy javascript could be problematic.
+          /#  - The code below is assuming meta 'map' is javascript Map, and
+          /#    we'll see if this poses too many problems.
+
           'alias': ['hash', 'dict'],
           /# TODO(wmh): The 'template' key stores the number of template
           /# parameters for this metatype. It indicates that 'map' is short for
           /# 'map<str,any>'. It would be more convenient for 'map<int>' to
-          /# means 'map<str,int>' than 'map<int,any>', but that would require
+          /# mean 'map<str,int>' than 'map<int,any>', but that would require
           /# that missing params be filled from the left when it is more common
           /# to fill from the right). Look at other multi-param metatypes and
           /# decide whether we need to special-case 'map' or can handle it
-          /# more generally.
+          /# more generally. Can we introduce some notation into template to
+          /# indicate left-to-rigth assignment of defaults?
           'template': ['str', 'any'],
           'scope': {
             'size': {
+              'comment': 'Number of elements in the map',
               'args': None,
               'alias': ('len', 'length'),
               'returns': 'int',
               'code': {
                 '.cc': '%(recsep)ssize()',
-                '.js': '%(rec)s.getCount()',  # goog.structs.Map instance?
+                '.js': '%(rec)s.size',
                 '.py': 'len(%(rec)s)',
               },
             },
-            'keys': {
-              'args': None,
-              'returns':'vec<%(T1)s>',
+            'has': {
+              'comment': 'Check if a given key exists in the map.',
+              'args': [{'type': '%(T1)s'}],
+              'returns': 'bool',
               'code': {
-                '.cc': 'meta::lang::Dictionary::Keys(%(rec)s)',
-                '.js': '%(rec)s.getKeys()',
-                '.py': '%(rec)s.keys()',
-              },
-            },
-            'values': {
-              'args': None,
-              'returns':'vec<%(T2)s>',
-              'code': {
-                '.cc': 'meta::lang::Dictionary::Values(%(rec)s)',
-                '.js': '%(rec)s.getValues()',
-                '.py': '%(rec)s.values()',
+                '.cc': '%(rec)s.find(%(A1)s) != %(rec)s.end()',
+                /# '.js': '%(A1)s in %(rec)s',
+                '.js': '%(rec)s.has(%(A1)s)',
+                '.py': '%(A1)s in %(rec)s',
               },
             },
             'get': {
+              'comment': 'Obtain the value for a given key, with default or exception',
               'args': [{'type': '%(T1)s'}],
               'returns': '%(T2)s',
               'alias': ('at',),
               'code': {
                 '.cc': '%(rec)s[%(A1)s]',
-                '.js': '%(rec)s[%(A1)s]',
+                /# '.js': '%(rec)s[%(A1)s]',
+                '.js': '%(rec)s.get(%(A1)s)',
                 '.py': '%(rec)s[%(A1)s]',
+              },
+            },
+            'set': {
+              'comment': 'Set the value of a key',
+              'args': [{'type': '%(T1)s'}, {'type': '%(T2)s'}],
+              'returns': 'void',
+              'code': {
+                '.cc': '%(rec)s[%(A1)s] = %(A2)s',
+                '.js': '%(rec)s.set(%(A1)s, %(A2)s)',
+                '.py': '%(rec)s[%(A1)s] = %(A2)s',
+              },
+            },
+
+            /# TODO(wmh): Do we NOT provide keys() and values() and instead
+            /# just provide pairs()? C++ does not provide keys() or values(),
+            /# only ::begin() to iterator over pairs.
+            'keys': {
+              'comment': 'Obtain an iterator over all keys in the map',
+              'args': None,
+              'returns':'iter<vec<%(T1)s>>',
+              'code': {
+                /# TODO(wmh): Need to support iterators over keys in C++
+                /#  - https://stackoverflow.com/questions/1443793/iterate-keys-in-a-c-map
+                /#  - http://www.lonecpluspluscoder.com/2015/08/13/an-elegant-way-to-extract-keys-from-a-c-map/
+                /#    and https://ideone.com/k0H8Ei
+                '.cc': 'meta::lang::Dictionary::Keys(%(rec)s)',
+                '.js': '%(rec)s.keys()',
+                '.py': '%(rec)s.keys()',
+              },
+            },
+            'values': {
+              'comment': 'Obtain an iterator over all values in the map',
+              'args': None,
+              'returns':'iter<vec<%(T2)s>>',
+              'code': {
+                /# TODO(wmh): Need to support iterators over keys in C++
+                /#  - https://stackoverflow.com/questions/1443793/iterate-keys-in-a-c-map
+                /#  - http://www.lonecpluspluscoder.com/2015/08/13/an-elegant-way-to-extract-keys-from-a-c-map/
+                /#    and https://ideone.com/k0H8Ei
+                '.cc': 'meta::lang::Dictionary::Values(%(rec)s)',
+                '.js': '%(rec)s.values()',
+                '.py': '%(rec)s.values()',
+              },
+            },
+            'pairs': {
+              'comment': 'Obtain an iterator over all <key,value> pairs in the map',
+              'alias': ('entries', 'items'),
+              'args': None,
+              'returns':'iter<vec<tuple<%(T1)s,%(T2)s>>>',
+              'code': {
+                '.cc': '%(rec)s.begin()',
+                '.js': '%(rec)s.entries()',
+                '.py': '%(rec)s.items()',
               },
             },
           },
         },
+
+        're': {
+          /# cc: https://en.cppreference.com/w/cpp/regex
+          /# js: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+          /# py: https://docs.python.org/3/library/re.html
+
+          'scope': {
+            /# TODO(wmh): Any symbol of form (<name>) is not actually a user
+            /# visible native method. It is instead something used internally
+            /# by Meta to do implicit typecasting. For example, in Meta the
+            /# following syntax is valid:
+            /#   field vre : re = '(.)(..)';
+            /# even though the default value is not of type 're' (it is a str).
+            /# The code supports the implicit conversation of str-typed values
+            /# instances of 're' because 're' defines '(str)', which provides
+            /# the baselang code for converting a string into a regexp.
+            '(str)': {
+              'args': [{'type': 'str'}],
+              'code': {
+                '.cc': 'std::regex(%(A1)s)',
+                /# TODO(wmh): console.log() is just a hack till we get real
+                /# streams in javascript via phantomjs or Meta.
+                '.js': 'new Regexp(%(A1)s)',
+                '.py': 're.compile(%(A1)s)',
+              },
+            },
+          },
+        },
+
         'meta!ostream': {
           'scope': {
             'write': {
@@ -257,8 +468,10 @@ namespace metax.oopl scope:
     params:
       var executable : metax.oopl.ExecutableConstruct;
     scope:
+      /# If this output is seen, it is usually an indication that some class
+      /# needs to define a myexec() field or at least a myexecIs() setter.
       print(
-        'TEMPORARY: Not that %s is dropping executable %s in myexecIs()' %
+        'TEMPORARY: Note that %s is dropping executable %s in myexecIs()' %
         (self.kindfqn(), executable.kindfqn() if executable else None))
     test:
       pass
@@ -2089,7 +2302,7 @@ namespace metax.oopl scope:
         ('initializer', self.initializer()),
       ):
         fp.write(
-          u'  %-12s: %s\n' %
+          '  %-12s: %s\n' %
           (ckind, construct.kindfqn() if construct else 'null'))
       fields = self.fields()
       if fields:
@@ -3286,6 +3499,20 @@ namespace metax.oopl scope:
         [assoc.asStr() for assoc in assocs.value()])
     end method CreateAssocs;
 
+    method inheritsFromTestCase : bool #:
+      Returns true if this class inherits from metax.test.TestCase
+
+      IMPORTANT: Currently implementation is NOT complete ... assumes all such
+      subclasses contain 'TestCase' in them. Need a more robust implementation.
+      Assuming we've invoked importMeta(), we can traverse the inheritance
+      hierarchy to establish this.
+    scope:
+      /# TODO(wmh): Fix this!!!! Lookup inheritance hierarchy if importMeta()
+      /# has been invoked.
+      return 'TestCase' in self.id()
+    test:
+    end method inheritsFromTestCase;
+
   end class ClassConstruct;
 
   class FieldConstruct < ClassicConstruct #:
@@ -4398,33 +4625,76 @@ namespace metax.oopl scope:
   class StatementConstruct < OoplConstruct #:
     @_statement_: abstract superconstruct for all statement constructs
 
-    These are constructs in Meta(Oopl)* those that can appear within
-    complex blocks representing statement level code.
+    These are constructs in Meta(Oopl)* that can appear within complex
+    blocks representing statement level code.
 
-    TODO(wmh): I think we need to delete StatementConstruct. There are too
-    many special cases that do not fit neatly into a single-inheritance
-    hierarchy.
-      - VarConstruct is a statement but also appears in params: and does not
-        need symboltables.
-      - LoopConstruct is a statement and introduces a new scoping level so
-        it needs a symboltable for vars defined within it.
-      - SwitchConstruct is a statement but vars cannot be introduced within it
-        so no need for a symboltable.
-      - SetConstruct is a statement but does not need a symboltable.
+    TODO(wmh): Consider removing StatementConstruct, or at least address the
+    various special cases that pose problems using single-inheritance:
+     - VarConstruct
+        - is a statement but also appears in params: and does not need
+          symboltables.
+     - SetConstruct
+        - is a statement but does not need a symboltable.
+     - LoopConstruct
+        - is a statement and introduces a new scoping level so it needs a
+          symboltable for vars defined within it.
+     - SwitchConstruct
+        - is a statement but vars cannot be introduced within it so no need
+          for a symboltable.
+     - CallConstruct
+        - is optimized away by the specialized expr syntax for it.
+     - BlockConstruct
+        - can appear in statements, but does not inherit from
+          StatementConstruct as it can also appear in almost all other
+          scopes.
+        - does need a symboltable (and inherits from SymbolConstruct)
   scope:
 
     field myexec : ExecutableConstruct #:
       The executable this statement is a part of. This implements the
       interface defined in OoplConstruct.
 
+    method isStatement : bool scope:
+      return True
+    test:
+      pass
+
   end class StatementConstruct;
 
   class BlockConstruct < SymbolConstruct #:
-    @block: A meta-level means of introduce lexical scoping.
+    @block: A meta-level means of introducing lexical scoping.
 
     One common use of this construct is to move from Meta(Oopl)* to Meta<X>
     within a complex method block.
+
+    Note that although this is a statement-level construct, it does
+    not inherit from StatementConstruct because it is better
+    considered a SymbolConstruct (it can introduce new symbols and
+    needs a symboltable).
+
+    Examples:
+      method f *:
+        var a : int = 2;
+        block py:
+          print('hello')
+        js:
+          console.log('hello')
+        cc:
+          // TODO: fix emacs highlighting when double-quotes used in comments
+          cout << 'Hello' << endl;
+      end method;
   scope:
+
+    field myexec : metax.oopl.ClassConstruct #:
+      Since BlockConstruct is not a subclass of StatementConstruct we need
+      to explicitly define the myexec field.
+
+    lifecycle setup:
+      test.scope = test.constructInCode(
+        '/demo.tmp/Test/test/@scope', name='statements')
+      test.block1 = test.scope.cons('b1')
+      test.block2 = test.scope.cons('b2')
+    end;
 
   end class BlockConstruct;
 
@@ -4469,14 +4739,25 @@ namespace metax.oopl scope:
 
   end class VarConstruct;
 
-  class CallConstruct < StatementConstruct #:
-    @call: A placeholder for callsites.
+  class SetConstruct < StatementConstruct #:
+    @set: A generalization of all looping syntax.
 
-    This is not intended to be used as a normal construct. Instead, the
-    special '@' syntax is handled specially in parseConstruct() and a
-    CallConstruct is implicitly created.
+    Kinds of sets supported:
+     - set i = 1;
+
+    To support:
+     - set [i,j,k] = someVec;
+     - set [k1,k2,k3] = someMap;
+    similar to javascript destructuring assignment: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Destructuring_assignment
   scope:
-  end class CallConstruct;
+
+    lifecycle setup:
+      test.scope = test.constructInCode(
+        '/demo.tmp/Test/test/@scope', name='statements')
+      test.set1 = test.scope.cons('s1')
+    end;
+
+  end class SetConstruct;
 
   class LoopConstruct < StatementConstruct #:
     @loop: A generalization of all looping syntax.
@@ -4511,11 +4792,12 @@ namespace metax.oopl scope:
     lifecycle setup:
       test.scope = test.constructInCode(
         '/demo.tmp/Test/test/@scope', name='statements')
-      test.switch1 = test.scope.cons('s1')
+      test.switch1 = test.scope.cons('sw1')
       /# NOTE: The actual id is somewhat fragile ... if the code in the
       /# statements sample is extended and implicit ids are assign, this could
       /# change.
-      test.switch2 = test.scope.cons('Meta__4__')
+      /# test.switch2 = test.scope.cons('h')
+      /# test.switch2 = test.scope.cons('Meta__4__')
     end;
 
   end class SwitchConstruct;
@@ -4525,6 +4807,49 @@ namespace metax.oopl scope:
   scope:
 
   end class CaseConstruct;
+
+  class CallConstruct < StatementConstruct #:
+    @call: A placeholder for callsites.
+
+    This is not intended to be used as a normal construct. Instead, the
+    special '@' syntax is handled specially in parseConstruct() and a
+    CallConstruct is implicitly created.
+  scope:
+
+    method write : int #:
+      Serialize this construct.
+
+      Returns:
+        For now, always -1, but this may change in the future.
+    params:
+      var fp : ostream = out #:
+        Where to write output.
+      var indent : str = '' #:
+        How much indentation before each line.
+      var mode : map = null #:
+        A mechanism for controlling how the output is generated.
+        See metax.meta.Construct.write() for details.
+    scope:
+      /# If this CallConstruct came from the common short-hand notation
+      /# (parser finds '@' when expecting construct primary), then
+      /# the call construct will have an auto-assigned index and we can
+      /# write out the short-hand syntax again. If the id is not auto-assigned,
+      /# we print out the full construct.
+
+      if not metax.c.Context.IsAutoId(self.id()):
+        /# id not auto-assigned, so we print out the full construct.
+        super(CallConstruct, self).write(fp=fp, indent=indent, mode=mode)
+      else:
+        /# Auto-assigned index means short-hand notation used to describe,
+        /# so we print out short-hand notation again.
+        term_str = self.termStr(
+          mode=mode, lastattr=None, indent=indent, update=True)
+        expr = self.attr('expr')
+        expr.writeValueLines(fp=fp, indent=indent, mode=mode)
+        fp.write(term_str)
+    end method write;
+
+  end class CallConstruct;
 
   class ExternalClassConstruct < metax.oopl.ClassConstruct #:
     A class defined external to Meta, in baselang-space.
@@ -5522,22 +5847,18 @@ namespace metax.oopl scope:
           /# implicit params: containing a single 'var meta__name : &str' is to
           /# be added (and passed up via an auto-inserted 'super (meta__name)'.
           /# However, the latter kind of class can have an initializer with
-          /# arbitrary signature and is not modified by this code. The difficult
-          /# part here is in answering the question of whether the class
-          /# inherits from metax.test.TestCase or not. For now, we use a
-          /# crude and limiting heuristic ... if the class name has 'TestCase'
-          /# anywhere in it, or ends in 'Test', we assume it inherits from
-          /# metax.test.TestCase, otherwise it does not.
+          /# arbitrary signature and is not modified by this code.
           /#
-          /# TODO(wmh): When we get fully parsing of the inheritance hierarchy
-          /# implemented, we can replace this heuristic with a real subclass
-          /# test.
-          if 'TestCase' in name or metax.oopl.ClassConstruct.IsTestName(name):
+          /# TODO(wmh): Remember that inheritsFromTestCase() is currently
+          /# hacky .. .need to fix it!
+          if self.inheritsFromTestCase() or metax.oopl.ClassConstruct.IsTestName(name):
             /# We assume this class inherits from metax.test.TestCase and thus
             /# needs a special params
             params = initializer.attr('params:', default=None)
             if params is not None:
-              metafile.error(
+              print(params)
+              params.write()
+              metafile.warning(
                 'testclass initializer %s '
                 '(assumed to inherit from metax.test.TestCase) '
                 'should not specify params:' %
@@ -6244,9 +6565,12 @@ namespace metax.oopl scope:
 
             voidtype = metax.c.Type.Instance('void')
 
-            if variant == 'meta' or kind == 'initializer':
-              /# For meta classes and initializer, we do not produce a warning
-              /# message.
+            if (
+              variant == 'meta'
+              or kind == 'initializer'
+            ):
+              /# For meta classes, initializer, and abstract methods, we do
+              /# not produce a warning message.
               missing_message = None
             else:
               missing_message = '%s does not yet have a unittest' % fqn
@@ -6372,9 +6696,10 @@ namespace metax.oopl scope:
         /#    metax.test.TestCase, the 'setup:' and 'teardown:' block attributes
         /#    correspond to the baselang-specific and location-specific
         /#    setUp and tearDown methods.
-        /#  - the setup*/teardown* attributes do not make sense for user-defined
-        /#    classes (at normal or meta level, even if they are service test
-        /#    classes)
+        /#  - the setup*/teardown* attributes do not normally make sense for
+        /#    user-defined classes (at normal or meta level, even if they are
+        /#    service test classes). The one exception is when one is defining
+        /#    a subclass of metax.test.TestCase (or a subclass of a subclass).
         /#  - the setup/teardown attributes do make sense (and are common) for
         /#    lifecycles with location 'test'. They are also common in
         /#    lifecycles appearing in user-defined test classes, but only if the
@@ -6598,10 +6923,16 @@ namespace metax.oopl scope:
         for attr in test_attr_list:
           block = self.attr(attr + ':', default=None)
           if block:
+            /# IMPORTANT: We need a accurate way to answer the question
+            /# "Does this class inherit from metax.test.TestCase?". If it
+            /# does, we allow these attributes (which are normally reserved
+            /# for test classes) to reside in user classes (and not get moved).
+            /# For now, using a very heuristic solution that requires users
+            /# to know to put TestCase in the names of these classes.
             if (
               (variant == 'testuser') or
               (variant == 'test') or
-              (variant == 'user' and myclass.id() == 'TestCase')
+              (variant == 'user' and myclass.inheritsFromTestCase())
             ):
               /# We are processing a test class, so we generate special methods
               /# within this class scope.
@@ -7182,7 +7513,10 @@ namespace metax.oopl scope:
           /# the lexical scope does not affect its value outside that scope?
           for line in clines:
             /# TODO(wmh): Generalize to all baselangs.
-            command_code.append(indent + rem + ' ' + line)
+            if line:
+              command_code.append(indent + rem + ' ' + line)
+            else:
+              command_code.append(indent + rem)
           for line in blines:
             command_code.append(indent + line)
           command_body.extend(command_code)
@@ -7413,7 +7747,9 @@ namespace metax.oopl scope:
 
     receiver BlockConstruct ::
       metax.c.D.expand.sinfo(self.kindfqn())
-      print('HERE in %s.expandMeta()' % self.kindfqn())
+      /# No expansion currently needed for block constructs.
+      /# TODO(wmh): If we support kind='named' for statement-level blocks,
+      /# the auto-generated method would need to be created/registered here.
       metax.c.D.expand.end()
     test:
       pass
@@ -7425,6 +7761,21 @@ namespace metax.oopl scope:
       /# Noop
       pass
     end receiver VarConstruct;
+
+    receiver SetConstruct ::
+      /# This is not being invoked because we currently do not bother
+      /# invoking expandMeta on statement-level constructs within
+      /# method blocsk. Should we? That would slow down compilation,
+      /# so let's avoid it unless it provides some utility. For
+      /# example, supporting function and class definitions within
+      /# method blocks would be one good justification for invoking
+      /# expandMeta here. Most statement subclasses would just noop
+      /# their expandMeta implementation.
+      print('SetConstruct.expandMeta: Here with %s' % self.kindfqn())
+    test:
+      /# Noop
+      pass
+    end receiver SetConstruct;
 
     receiver LoopConstruct ::
       /# noop.
@@ -8492,17 +8843,120 @@ namespace metax.oopl scope:
 
     receiver BlockConstruct ::
       metax.c.D.translate.sinfo(self.kindfqn())
-      /# I don't believe we ever use this, right?
-      print('HERE in %s.translateMeta()' % self.kindfqn())
+      /# IMPORTANT: It is assumed this code is only invoked for
+      /# statement-level blocks. Blocks are also used within commands,
+      /# but the command-compiling code handles them directly without
+      /# delegating to this method.
+      metafile = self.metafile()
+      metac = metafile.compiler()
+      baselang = metac.baselang()
+      basel = baselang.id()
+
+      start_lines = []
+      end_lines = []
+
+      ok = True
+      method = self.myexec()
+      if not method:
+        metafile.error('failed to find parent method for block %s' % self.fqn())
+        ok = False
+      else:
+        myclass = method.myclass()
+        bkind = self.attrval('kind')
+        if bkind == 'virtual':
+          /# No start/end lines, and the scope is compiled at same indentation
+          /# level as containing code.
+          indent = ''
+        elif bkind == 'scoped':
+          /# TODO(wmh): Rename scoped to nested or at least provide an alias.
+          indent = '  '
+          if basel == 'python':
+            start_lines.append('if True:')
+          elif basel == 'javascript':
+            start_lines.append('if (true) {')
+            end_lines.append('}')
+          elif basel == 'cpp':
+            start_lines.append('{')
+            end_lines.append('}')
+          else:
+            ok = False
+            raise metax.c.InternalError(
+              'BlockConstruct.translateMeta needs work for %s' % basel)
+        elif bkind == 'named':
+          /# For now we do not support named blocks within statements. However,
+          /# it is possible this could be a useful idea.
+          metafile.error(
+            'failed to find parent method', attr=self.primary())
+          ok = False
+
+      /# TODO(wmh): Confirm this supports baselang qualifiers!
+      scope_attr, scope = self.attrpair('scope:', default=None)
+      if scope_attr is None:
+          metafile.error(
+            'failed to find required scope', attr=self.primary())
+          ok = False
+
+      if ok:
+        assert indent is not None
+        self._statementCode(
+          start_lines, scope_attr, end_lines=end_lines, indent=indent)
+
       metax.c.D.translate.end()
     test:
-      pass
+      /# Test virtual and scoped blocks.
+      test.checkStatement("""\
+        >|namespace hack.stmts scope:
+        >|  class A scope:
+        >|    method f scope<*>:
+        >|      block b1 scope<py>:
+        >|        print('hello')
+        >|      scope<js>:
+        >|        console.log('hello')
+        >|      scope<cc>:
+        >|        std::cout << "Hello" << std::endl;
+        >|      end;
+        >|
+        >|      scoped block b2 scope<py>:
+        >|        print('hello')
+        >|      scope<js>:
+        >|        console.log('hello')
+        >|      scope<cc>:
+        >|        std::cout << "Hello" << std::endl;
+        >|      end;
+        >|""",
+        /# Path
+        '/hack.stmts/A/f',
+        /# Output
+        expected={
+          'cc': """\
+            >|std::cout << "Hello" << std::endl;
+            >|
+            >|{
+            >|  std::cout << "Hello" << std::endl;
+            >|}
+            >|""",
+          'js': """\
+            >|console.log('hello')
+            >|
+            >|if (true) {
+            >|  console.log('hello')
+            >|}
+            >|""",
+          'py': """\
+            >|print('hello')
+            >|
+            >|if True:
+            >|  print('hello')
+            >|""",
+        }
+      )
     end receiver BlockConstruct;
 
     receiver VarConstruct ::
       metafile = self.metafile()
       metac = metafile.compiler()
       baselang = metac.baselang()
+      basel = baselang.id()
       /# TODO(wmh): Use a stream within the method instead (and have statements
       /# cache their method??)
       method = self.myexec()
@@ -8520,7 +8974,21 @@ namespace metax.oopl scope:
       assert isinstance(segment, metax.c.BaseSegment)
       code, codetype = baselang.compileExpr(
         expr, metafile, metatype=self.attrval('type'), indent='')
-      segment.addLine('%s = %s' % (self.id(), code))
+
+      if basel == 'python':
+        line = '%s = %s' % (self.id(), code)
+      elif basel == 'javascript':
+        /# TODO(wmh): Decide whether we want to support a similar distinction
+        /# between method-level and block-level variables as javascript
+        /# supports via 'var' and 'let'.  For now always using block-level.
+        /# Note that it will be difficult to emulate block-level scoping in
+        /# python.
+        line = 'let %s = %s;' % (self.id(), code)
+      else:
+        raise metax.c.InternalError(
+          'SetConstruct.translateMeta not implemented for %s' % basel)
+
+      segment.addLine(line)
     test:
       metafile = test.metafile
 
@@ -8542,7 +9010,77 @@ namespace metax.oopl scope:
       /# robust.
     end receiver VarConstruct;
 
-    receiver LoopConstruct ::
+    receiver SetConstruct #:
+      Assign a value to a variable.
+    scope:
+      metafile = self.metafile()
+      baselang = self.baselang()
+      basel = baselang.id()
+
+      /# TODO(wmh): Verify that replacer semantics is working properly.
+      /#  - The syntax 'set i = 1;' is shorthand for 'set varname i = 1;'
+      /#    with an implicit id assigned.
+      varname = self.attrval('varname', default=None)
+      if varname is None:
+        print('*********** HERE IN SET WITH FAILED REPLACER!')
+        varname = self.id()
+
+      /# Obtain the value of the expression to assign to.
+      value_attr, value_expr = self.attrpair('value', default=None)
+      if not value_attr:
+        metafile.error('must provide value on set')
+      else:
+        value_code, codetype = baselang.compileExpr(
+          value_expr, metafile, metatype=None, indent='')
+
+        /# TODO(wmh): Do this part in BaseLanguageOoopl subclasses.
+        if basel == 'python':
+          line = '%s = %s' % (varname, value_code)
+        elif basel == 'javascript':
+          line = '%s = %s;' % (varname, value_code)
+        else:
+          raise metax.c.InternalError(
+            'SetConstruct.translateMeta not implemented for %s' % basel)
+
+        myclass = self.ancestor('class')
+        segment = myclass.streamNamed('current-body')[-1]
+        segment.addLine(line)
+    test:
+      /# Test set.
+      test.checkStatement("""\
+        >|namespace hack.stmts scope:
+        >|  class A scope:
+        >|    method f scope<*>:
+        >|      var a = 1;
+        >|      set s1 varname a = 2;
+        >|      set varname a = 3;
+        >|      set a = 4;
+        >|""",
+        /# Path
+        '/hack.stmts/A/f',
+        /# Output
+        expected={
+          'py': """\
+            >|a = 1
+            >|a = 2
+            >|a = 3
+            >|a = 4
+            >|""",
+          'js': """\
+            >|let a = 1;
+            >|a = 2;
+            >|a = 3;
+            >|a = 4;
+            >|""",
+        }
+      )
+    end receiver SetConstruct;
+
+    receiver LoopConstruct #:
+      Resources:
+        For javascript:
+          https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Loops_and_iteration
+    scope:
       metafile = self.metafile()
       /# There are numerous variants of a loop, dictated by which secondary
       /# attributes exist.  Existence is checked for in the following order:
@@ -8558,14 +9096,21 @@ namespace metax.oopl scope:
       /#    at end of loop for the bool (if the baselang doesn't support
       /#    until directly).
       scope_attr, scope = self.attrpair('scope:', default=metax.c.EMPTY)
+      baselang = self.baselang()
+      basel = baselang.id()
 
       /# TODO(wmh): The 'loop' construct specifies that the primary attribute
-      /# has replacer semantics (the id is implicitly transfered to the 'name'
-      /# attribute and the id is auto-assigned if there is no explicit 'name'.
+      /# has replacer semantics (the id is implicitly transfered to the 'on'
+      /# attribute and the id is auto-assigned if there is no explicit 'on'.
       /# However, that is not working ... fix it and clean up this code.
       name = self.attrval('on', default=None)
       if name is None:
         name = self.id()
+
+      /# One or both to be initialized below.
+      start_lines = None
+      end_lines = None
+      invalid = False
 
       /# If 'to' exists, generate numeric loop (consider 'from' and 'by', ignore
       /# all others).
@@ -8577,17 +9122,43 @@ namespace metax.oopl scope:
         by_expr = self.attrval('by', default=None)
         by_val = by_expr.value() if by_expr else '1'
 
-        self._statementCode(
-          ['for %s in range(%s, %s, %s):' % (name, from_val, to_val, by_val)],
-          scope_attr)
+        /# TODO(wmh): Do this part in BaseLanguageOoopl subclasses.
+        if basel == 'python':
+          start_lines = [
+            'for %s in range(%s, %s, %s):' % (name, from_val, to_val, by_val)
+          ]
+        elif basel == 'javascript':
+          /# TODO(wmh): Insert a 'let' if name isn't already defined in
+          /# the block, but do not insert it if it is defined.
+          letstr = 'let ' if True else False
+          start_lines = [
+            'for (%s%s = %s; %s < %s; %s += %s) {' % (
+              (letstr, name, from_val, name, to_val, name, by_val))
+          ]
+          end_lines = ['}']
+        else:
+          raise metax.c.InternalError(
+            'LoopConstruct.translateMeta (to) not implemented for %s' % basel)
 
       else:
         over_attr, over_expr = self.attrpair('over', default=None)
         if over_attr:
-          /# If 'over' exists, generate loop over enuemration, ignoring all
+          /# If 'over' exists, generate loop over enumration, ignoring all
           /# other attributes.
-          self._statementCode(
-            ['for %s in %s:' % (name, over_expr.value())], scope_attr)
+
+          if basel == 'python':
+            start_lines = ['for %s in %s:' % (name, over_expr.value())]
+          elif basel == 'javascript':
+            /# TODO(wmh): Insert a 'let' if name isn't already defined in
+            /# the block, but do not insert it if it is defined.
+            letstr = 'let ' if True else False
+            start_lines = [
+              'for (%s%s of %s) {' % (letstr, name, over_expr.value()),
+            ]
+            end_lines = ['}']
+          else:
+            raise metax.c.InternalError(
+              'LoopConstruct.translateMeta (over) not implemented for %s' % basel)
 
         else:
           while_attr, while_expr = self.attrpair('while', default=None)
@@ -8596,29 +9167,47 @@ namespace metax.oopl scope:
             /# TODO(wmh): Consider allowing both 'while' and 'until' in same
             /# statement.
             assert while_expr.kind() == 'bool'
-            baselang = metafile.compiler().baselang()
             boolstr, mtype = baselang.compileExpr(while_expr, metafile)
             /# TODO(wmh): If the result is multilined, we need to split it into
             /# lines. Would be better if compileExpr or some variant returned
             /# a list of lines.
             assert '\n' not in boolstr
-            self._statementCode(['while %s:' % boolstr], scope_attr)
+
+            if basel == 'python':
+              start_lines = ['while %s:' % boolstr]
+            elif basel == 'javascript':
+              start_lines = ['while %s {' % boolstr]
+              end_lines = ['}']
+            else:
+              raise metax.c.InternalError(
+                'LoopConstruct.translateMeta (while) not implemented for %s' % basel)
 
           else:
             until_attr, until_expr = self.attrpair('until', default=None)
             if until_attr:
               /# Generate do ... until loop.
               assert until_expr.kind() == 'bool'
-              baselang = metafile.compiler().baselang()
               boolstr, btype = baselang.compileExpr(until_expr, metafile)
               assert '\n' not in boolstr
-              self._statementCode(
-                ['while True:'],
-                scope_attr,
-                end_lines=['  if %s: break' % boolstr])
+
+              if basel == 'python':
+                start_lines = ['while True:']
+                end_lines = ['  if %s: break' % boolstr]
+              elif basel == 'javascript':
+                start_lines = ['do {']
+                end_lines = ['} while %s;' % boolstr]
+              else:
+                raise metax.c.InternalError(
+                  'LoopConstruct.translateMeta (until) not implemented for %s' % basel)
 
             else:
               metafile.error('Useless loop', line=self.primary().line())
+              invalid = True
+
+      /# Generate the actual code based on start lines, scope and end lines.
+      if not invalid:
+        self._statementCode(start_lines, scope_attr, end_lines=end_lines)
+
     test:
 
       /# Test loop from ... to ...
@@ -8626,64 +9215,118 @@ namespace metax.oopl scope:
         >|namespace hack.stmts scope:
         >|  class A scope:
         >|    method f scope<*>:
-        >|      loop l1 on i from 1 to 10 scope:
+        >|      loop l1 on i from 1 to 10 scope<py>:
         >|        print(i)
+        >|      scope<js>:
+        >|        console.log(i);
         >|""",
         /# Path
         '/hack.stmts/A/f/l1',
         /# Output
-        >|"""\
-        >|for i in range(1, 10, 1):
-        >|  print(i)
-        >|""")
+        expected={
+          'py': """\
+            >|for i in range(1, 10, 1):
+            >|  print(i)
+            >|""",
+          'js': """\
+            >|for (let i = 1; i < 10; i += 1) {
+            >|  console.log(i);
+            >|}
+            >|""",
+        }
+      )
 
       /# Test loop from ... to ...
       test.checkStatement("""\
         >|namespace hack.stmts scope:
         >|  class A scope:
         >|    method f scope<*>:
-        >|      loop l2 on j over values scope:
+        >|      loop l2 on j over values scope<py>:
         >|        print(j)
+        >|      scope<js>:
+        >|        console.log(j);
         >|""",
+        /# Path
         '/hack.stmts/A/f/l2',
-        """\
-        >|for j in values:
-        >|  print(j)
-        >|""")
+        /# Output
+        expected={
+          'py': """\
+            >|for j in values:
+            >|  print(j)
+            >|""",
+          'js': """\
+            >|for (let j of values) {
+            >|  console.log(j);
+            >|}
+            >|""",
+        },
+      )
 
       /# Test while.
       test.checkStatement("""\
         >|namespace hack.stmts scope:
         >|  class A scope:
         >|    method f scope<*>:
-        >|      loop while ((3 < i < 10) and (j == 10)) scope:
+        >|      loop while ((3 < i < 10) and (j == 10)) scope<py>:
         >|        print(i)
         >|        i += 1
+        >|      scope<js>:
+        >|        console.log(i);
+        >|        i += 1;
         >|""",
+        /# Path
         '/hack.stmts/A/f/Meta__1__',
-        """\
-        >|while ((3 < i) and (i < 10) and (j == 10)):
-        >|  print(i)
-        >|  i += 1
-        >|""", verbose=False)
+        /# Output
+        expected={
+          'py': """\
+            >|while ((3 < i) and (i < 10) and (j == 10)):
+            >|  print(i)
+            >|  i += 1
+            >|""",
+          'js': """\
+            >|while ((3 < i) and (i < 10) and (j == 10)) {
+            >|  console.log(i);
+            >|  i += 1;
+            >|}
+            >|""",
+        },
+        verbose=False,
+      )
 
       /# Test until.
+      /#  - TODO(wmh): Note the 'loop _' (without it, parsing fails when
+      /#    scope<py> appears after 'loop' rather than just 'scope:'.
       test.checkStatement("""\
         >|namespace hack.stmts scope:
         >|  class A scope:
         >|    method f scope<*>:
-        >|      loop scope:
+        >|      loop _ scope<py>:
         >|        print(i)
         >|        i += 1
+        >|      scope<js>:
+        >|        console.log(i);
+        >|        i += 1;
         >|      until ((3 < i < 10) and (j == 10));
         >|""",
+        /# Path
         '/hack.stmts/A/f/Meta__1__',
-        """\
-        >|while True:
-        >|  print(i)
-        >|  i += 1
-        >|  if ((3 < i) and (i < 10) and (j == 10)): break
-        >|""", verbose=False)
+        /# Output
+        expected={
+          'py': """\
+            >|while True:
+            >|  print(i)
+            >|  i += 1
+            >|  if ((3 < i) and (i < 10) and (j == 10)): break
+            >|""",
+          'js': """\
+            >|do {
+            >|  console.log(i);
+            >|  i += 1;
+            >|} while ((3 < i) and (i < 10) and (j == 10));
+            >|""",
+        },
+        verbose=False,
+      )
     end receiver LoopConstruct;
 
     receiver SwitchConstruct ::
@@ -8701,7 +9344,7 @@ namespace metax.oopl scope:
       scope_attr, scope = self.attrpair('scope:', default=None)
       if scope_attr is None:
         metafile.error(
-          'Must provide at least one case', attr=self.primary().line())
+          'Must provide at least one case', attr=self.primary())
         return None
 
       /# Establish the variable we are switching on, if any, and the else.
@@ -8751,7 +9394,7 @@ namespace metax.oopl scope:
         >|namespace hack.stmts scope:
         >|  class A scope:
         >|    method f scope<*>:
-        >|      switch s1 on a scope:
+        >|      switch input scope:
         >|        case 1 ::
         >|          v = 2
         >|        case 2 ::
@@ -8759,14 +9402,59 @@ namespace metax.oopl scope:
         >|""",
         expand=True, imports=False, translate=True, compile=False)
 
-      switch = metafile.construct().child('hack.stmts.A.f.s1')
+      /# We intentionally are not naming the switch statement using
+      /#   switch somename on input scope:
+      /# as that isn't remotely going to be a common case. But it does
+      /# mean we cannot access the node directly via Construct.child().
+      /# We obtain the method scope, and grab the first construct within it.
+      scope = metafile.construct().child('/hack.stmts/A/f/@scope')
+      switch = scope.value()[0]
+      test.iseq('switch', switch.kind())
       test._checkStatement(
         metafile, switch, expected="""\
-         >|if a == 1:
+         >|if input == 1:
          >|  v = 2
-         >|elif a == 2:
+         >|elif input == 2:
          >|  v = 7
          >|""")
+
+      /# TODO(wmh): Support the following syntax!
+      /#  - note that there is no explicit scope: on the switch, and the
+      /#    case constructs are at the same level as the 'switch'.
+      /#  - Meta should support this kind of syntactic short-hand:
+      /#     - register certain constructs allowed within the scope: to also
+      /#       be allowed to appear at same indentation as the construct
+      /#     - when encountered, they are implicitly added to the scope:
+      /#     - code must remember the implicitness so that write() can recreate
+      /#       the verbatim syntax.
+      /#     - only makes sense for constructs with complex-valued scope blocks.
+      /#     - could be extended to apply to attributes other than scope:, for
+      /#       example:
+      /#         method f : int params:
+      /#           var a : int;
+      /#           var b : str = null;
+      /#         scope:
+      /#         end;
+      /#       could become:
+      /#         method f : int
+      /#         var a : int;
+      /#         var b : str = null;
+      /#         scope:
+      /#         end;
+      return
+      metafile, _, _ = test.compiler.processMeta(
+        '/dummy/path65.meta',
+        text="""\
+        >|namespace hack.stmts scope:
+        >|  class A scope:
+        >|    method f scope<*>:
+        >|      switch input
+        >|      case 1 ::
+        >|        v = 2
+        >|      case 2 ::
+        >|        v = 7
+        >|""",
+        expand=True, imports=False, translate=True, compile=False)
     end receiver SwitchConstruct;
 
     receiver CaseConstruct ::
@@ -8829,28 +9517,36 @@ namespace metax.oopl scope:
         >|  class A scope:
         >|    method f scope<*>:
         >|      switch s1 on h scope:
-        >|        case is 1 ::
+        >|        case is 1 :<py>:
         >|          f = 1
-        >|        case is 2 ::
+        >|        case is 2 :<py>:
         >|          f = 7
         >|"""
 
       test.checkStatement(
         code,
+        /# Path
         '/hack.stmts/A/f/s1/Meta__1__',
-        """\
-        >|if h == 1:
-        >|  f = 1
-        >|""",
+        /# Output
+        expected={
+          'py': """\
+            >|if h == 1:
+            >|  f = 1
+            >|""",
+        },
       )
 
       test.checkStatement(
         code,
+        /# Path
         '/hack.stmts/A/f/s1/Meta__2__',
-        """\
-        >|elif h == 2:
-        >|  f = 7
-        >|""",
+        /# Output
+        expected={
+          'py': """\
+            >|elif h == 2:
+            >|  f = 7
+            >|""",
+        },
       )
     end receiver CaseConstruct;
 
@@ -8989,21 +9685,21 @@ namespace metax.oopl scope:
     end field metatypes;
 
     static
-    field SpecialRE : regexp #:
+    field SpecialRE : re #:
       A regexp to apply to each line in comment blocks. A matching line is
       a request to suppress some Meta (or base-lang) warning.
 
     static
-    field SuperxRE : regexp #:
+    field SuperxRE : re #:
       Required text if a method is marked superx.
 
     static
-    field CommentRE : regexp #:
+    field CommentRE : re #:
       A regexp to apply to each line in a block to capture meta-level comment
       references (so we can convert to baselang comment).
 
     static
-    field InterpolateRE : regexp #:
+    field InterpolateRE : re #:
       A regexp matching a single meta-level string literal interpolation
       request. Examples:
         ${name}
@@ -9215,9 +9911,10 @@ namespace metax.oopl scope:
         ('true', 'True', 'true', 'true'),
         ('false', 'False', 'false', 'false'),
         ('null', 'None', 'null', 'nullptr'),
-        ('out', 'sys.stdout', 'fixme', 'std::cout'),
-        ('err', 'sys.stderr', 'fixme', 'std::cerr'),
-        ('in', 'sys.stdin', 'fixme', 'std::cin'),
+        ('out', 'sys.stdout', 'null', 'std::cout'),
+        ('err', 'sys.stderr', 'null', 'std::cerr'),
+        ('in', 'sys.stdin', 'null', 'std::cin'),
+        ('sout', 'metax.io.Sink.Out()', 'metax.io.Sink.Out()', 'metax::io::Sink::Out()'),
       ):
         test.iseq(py, ooplpy.metabaseValue(metaval))
         test.iseq(js, oopljs.metabaseValue(metaval))
@@ -9482,10 +10179,11 @@ namespace metax.oopl scope:
         The meta file being parsed/compiled.
       var executable : metax.oopl.ExecutableConstruct = null #:
         The context within which this expr is being compiled.  Used in order
-        to establish type of result from type analysis.
-        TODO(wmh): This should probably be renamed to symbol_construct of type
-        SymbolConstruct ... for vars it will be a MethodConstruct, but for
-        fields it will be a ClassConstruct.
+        to establish type of result from type analysis and to resolve native
+        methods.
+        TODO(wmh): This should probably be renamed to symcons of type
+        SymbolConstruct ... for var-related exprs it will be a MethodConstruct,
+        but for fields it will be a ClassConstruct.
       var metatype : metax.c.Type = null #:
         The expected type of the expression. Used if expr is null, to establish
         a default value. Note that this method returns the metatype when expr is
@@ -9512,7 +10210,8 @@ namespace metax.oopl scope:
       /#  code = self.pseudovars().get(code, code)
       code2 = self.pseudovars().get(code, code)
       if code2 != code:
-        print('*** HERE with "%s" vs "%s"' % (code, code2))
+        /# print('*** HERE with "%s" vs "%s"' % (code, code2))
+        code = code2
 
       return code, metatype
     tests:
@@ -9554,6 +10253,7 @@ namespace metax.oopl scope:
           if expected_type is None:
             test.isnull(mtype)
           elif isinstance(expected_type, list):
+            test.isinst(mtype, list)
             for i, etype in enumerate(expected_type):
               mt = mtype[i]
               if mt is None:
@@ -9575,10 +10275,10 @@ namespace metax.oopl scope:
           ('null', 'None', 'meta.Null', None),
           ('1', '1', 'uint', None),
           ('apple', 'apple', None, None),
-          ('""', 'u""', '&str', None),
-          ('"hello"', 'u"hello"', '&str', None),
-          ("''", "u''", '&str', None),
-          ("'world'", "u'world'", '&str', None),
+          ('""', '""', '&str', None),
+          ('"hello"', '"hello"', '&str', None),
+          ("''", "''", '&str', None),
+          ("'world'", "'world'", '&str', None),
           ('(a, b=1)', '(a, b=1)', [None, None],
            metax.oopl.ClassConstruct.DummySuperAttribute),
           ('(a)', 'a', 'bool',
@@ -9591,7 +10291,7 @@ namespace metax.oopl scope:
            '[\n  False,\n  True,\n  None,\n  1,\n  a,\n]',
            'vec', None),
           ("{'a': false, 'b': true, 'c': a}",
-           "{\n  u'a' : False,\n  u'b' : True,\n  u'c' : a,\n}",
+           "{\n  'a' : False,\n  'b' : True,\n  'c' : a,\n}",
            'map', None),
         ):
           expr = metax.c.Expr.FromStr(estr, attribute=attribute)
@@ -9600,6 +10300,7 @@ namespace metax.oopl scope:
           if expected_type is None:
             test.isnull(mtype)
           elif isinstance(expected_type, list):
+            test.isinst(mtype, list)
             for i, etype in enumerate(expected_type):
               mt = mtype[i]
               if mt is None:
@@ -9934,6 +10635,7 @@ namespace metax.oopl scope:
           /#   'Here with %s and %s' %
           /#   (executable.kindfqn() if executable else executable, rec))
           if executable:
+            print('DEBUG: Dumping symbols due to missing metatype')
             executable.showSymbols()
 
       /#print('Here with receiver %s : %s' % (rec, metatype))
@@ -10010,11 +10712,7 @@ namespace metax.oopl scope:
           else:
             /# We have a field access request. No args.
             callcode = name
-
-            /# TODO(wmh): Update the rectype ... the type of the field being
-            /# accessed.
             if typecheck:
-              /# Note that rectype will be None if no type info was found.
               metatype = self.typecheckField(metafile, metatype, name)
 
           rec += sep + callcode
@@ -10051,7 +10749,6 @@ namespace metax.oopl scope:
             metatype = None
             callcode = name + '(' + ', '.join([p[0] for p in args]) + ')'
             rec += sep + callcode
-          /# TODO(wmh): Update the rectype ... the return type of the method
 
       lines[-1] += rec
 
@@ -10259,7 +10956,7 @@ namespace metax.oopl scope:
     end method compileMethodInvocation;
 
     method nativeMethodToBase : tuple<str,Type> #:
-      Type check the method 'methname' applied to rectype.
+      Type check the method with name $name applied to receiver $receiver.
 
       Returns:
         0. the baselang code corresponding to an invocation of a native
@@ -10270,6 +10967,10 @@ namespace metax.oopl scope:
 
       TODO(wmh): Since this method may return multiple lines of baselang code,
       we should instead pass in a 'lines' param rather than returning a string.
+      Actually, it is best to provide both an 'expr' string that can be used in
+      an expr context, as well as a 'prelines' list of lines that would need to
+      be inserted into the baselang code stream as statements sometime before
+      the baselang statement containing the expr being compiled.
     params:
       var metafile : MetaFile #:
         Where to report errors
@@ -10286,7 +10987,7 @@ namespace metax.oopl scope:
     scope:
       code = None
       metatype = None
-      iscc = self.id() == 'cc'
+      iscc = self.id() == 'cpp'
       sep = '->' if iscc and rectype.isPtr() else '.'
 
       /#  print(
@@ -10378,63 +11079,198 @@ namespace metax.oopl scope:
         metafile.error('Unrecognized native type "%s"' % native_type)
 
       return code, metatype
-    tests:
-      testx py ::
-        test.tpy(
-          /# expanding so that classes are registered in compiler.classes()
-          expand=True)
-        baselang = test.baselang
-        T = metax.c.Type.Instance
+    test:
+      T = metax.c.Type.Instance
+      bls = {}
+      mfs = {}
+      for basel in ('cc', 'javascript', 'python'):
+        metac = metax.c.Compiler(
+          metal='oopl', basel=basel, metalangs=metax.c_test.METALANGS)
+        baselang = metac.baselang()
+        suffix = baselang.suffix().replace('.', '')
+        bls[suffix] = baselang
+        mfs[suffix] = metax.c.MetaFile(None, metac, '')
 
-        def Chk(rectype, rec, meth, args, ecode, etype):
+      def Chk(rectype, rec, meth, args, etypestr, codemap):
+        /# rectype : metax.c.Type
+        /#   type of receiver (crucial to determining which native methods)
+        /# rec : str
+        /#   the base-lang code representing the receiver (can be an
+        /#   arbitrarily complex baselang expr as long as it produces an
+        /#   object of type rectype).
+        /# meth : str
+        /#   name of meta-level native method being invoked on receiver
+        /# args : vec<tuple<str,metax.c.Type>>
+        /#   describes args of the native method, as a two-tuple containing
+        /#   baselang code for the passed-in arg value, and the required
+        /#   meta-level type of the arg.
+        /# etypestr : str
+        /#   The expected meta-level type of native method invocation, as a
+        /#   string.
+        /# codemap : map
+        /#   maps baselang suffixes to strings representing the baselang
+        /#   code correponding to the native method invocation.
+        for suffix in codemap:
+          baselang = bls[suffix]
+          expected_code = codemap[suffix]
           code, mtype = baselang.nativeMethodToBase(
-            test.metafile, rec, rectype, meth, args)
-          test.iseq(ecode, code)
-          test.iseq(etype, mtype.raw())
+            mfs[suffix], rec, rectype, meth, args)
+          mtypestr = mtype.raw() if mtype else None
+          if etypestr is None:
+            print('%s: etype: %s' % (suffix, mtypestr))
+          else:
+            test.iseq(etypestr, mtypestr)
+          if expected_code is None:
+            print("%s: code: '%s'" % (suffix, code))
+          else:
+            test.iseq(code, expected_code)
 
-        /# Tests on 'str'
-        strtype = T('str')
-        Chk(strtype, 'name', 'size', [], 'len(name)', 'int')
-        Chk(strtype, 'name', 'len', [], 'len(name)', 'int')
-        Chk(strtype, 'name', 'length', [], 'len(name)', 'int')
-        Chk(strtype, 'name', 'bytes', [], "len(name.encode('utf8'))", 'int')
+      /# Methods on type 'str'
+      strtype = T('str')
+      Chk(
+        strtype, 'name', 'size', [],
+        'int', {
+          'cc': 'name->size()',
+          'js': 'name.length',
+          'py': 'len(name)',
+        })
+      Chk(
+        strtype, 'name', 'len', [],
+        'int', {
+          'cc': 'name->size()',
+          'js': 'name.length',
+          'py': 'len(name)',
+        })
+      Chk(
+        strtype, 'name', 'length', [],
+        'int', {
+          'cc': 'name->size()',
+          'js': 'name.length',
+          'py': 'len(name)',
+        })
 
-        /# Tests on 'vec<int>'
-        vectype = T('vec<int>')
-        Chk(vectype, 'values', 'size', [], 'len(values)', 'int')
-        Chk(vectype, 'values', 'append', [('3', T('int'))],
-           'values.append(3)', '&vec<int>')
-        /# Tests on 'vec'  # param defaults to 'any'
-        vectype = T('vec')
-        Chk(vectype, 'values', 'size', [], 'len(values)', 'int')
-        Chk(vectype, 'values', 'append', [('3', T('int'))],
-           'values.append(3)', '&vec<any>')
+      /# Methods on type 'vec<int>'
+      vectype = T('vec<int>')
+      Chk(
+        vectype, 'alist', 'size', [],
+        'int', {
+          'cc': 'alist->size()',
+          'js': 'alist.length',
+          'py': 'len(alist)',
+        })
+      vectype = T('vec<int>')
+      Chk(
+        vectype, 'alist', 'push', [('3', T('int'))],
+        'void', {
+          'cc': 'alist.push_back(3)',
+          'js': 'alist.push(3)',
+          'py': 'alist.append(3)',
+        })
+      Chk(
+        vectype, 'alist', 'pop', [],
+        'int', {
+          'cc': 'alist.pop_back()',
+          'js': 'alist.pop()',
+          'py': 'alist.pop()',
+        })
+      Chk(
+        vectype, 'alist', 'push_front', [('3', T('int'))],
+        'void', {
+          'cc': 'alist.insert(alist.begin(), 3)',
+          'js': 'alist.unshift(3)',
+          'py': 'alist.insert(0, 3)',
+        })
+      Chk(
+        vectype, 'alist', 'pop_front', [],
+        'int', {
+          'cc': '(G_scratch = v[0], v.erase(v.begin()), std::any_cast<int>(G_scratch))',
+          'js': 'alist.shift()',
+          'py': 'alist.pop(0)',
+        })
+      Chk(
+        vectype, 'alist', 'insert', [('1', T('int')), ('3', T('int'))],
+        'void', {
+          'cc': 'alist.insert(alist.begin() + 1, 3)',
+          'js': 'alist.splice(1, 0, 3)',
+          'py': 'alist.insert(1, 3)',
+        })
+      Chk(
+        vectype, 'alist', 'remove', [('1', T('int'))],
+        'int', {
+          'cc': '(G_scratch = v[1], v.erase(v.begin()+1), std::any_cast<int>(G_scratch))',
+          'js': 'alist.splice(1, 1)[0]',
+          'py': 'alist.pop(1)',
+        })
 
-        /# Tests on 'map<str,float>'
-        maptype = T('map<str,float>')
-        Chk(maptype, 'abbrevs', 'size', [], 'len(abbrevs)', 'int')
-        Chk(maptype, 'abbrevs', 'keys', [], 'abbrevs.keys()', 'vec<str>')
-        Chk(maptype, 'abbrevs', 'values', [], 'abbrevs.values()', 'vec<float>')
-        Chk(maptype, 'abbrevs', 'get', [("'apple'", T('str'))],
-            "abbrevs['apple']", 'float')
-        /# Tests on 'map' (defaults to map<str,any>)
-        maptype = T('map')
-        Chk(maptype, 'abbrevs', 'size', [], 'len(abbrevs)', 'int')
-        Chk(maptype, 'abbrevs', 'keys', [], 'abbrevs.keys()', 'vec<str>')
-        Chk(maptype, 'abbrevs', 'values', [], 'abbrevs.values()', 'vec<any>')
-        Chk(maptype, 'abbrevs', 'get', [("'apple'", T('str'))],
-            "abbrevs['apple']", 'any')
-        /# Tests on 'map<int>' (for now defaults to map<int,any> but should be
-        /# map<str,int>)
-        maptype = T('map<int>')
-        Chk(maptype, 'abbrevs', 'size', [], 'len(abbrevs)', 'int')
-        Chk(maptype, 'abbrevs', 'keys', [], 'abbrevs.keys()', 'vec<int>')
-        Chk(maptype, 'abbrevs', 'values', [], 'abbrevs.values()', 'vec<any>')
-        Chk(maptype, 'abbrevs', 'get', [(3, T('int'))],
-            "abbrevs[3]", 'any')
+      /# Methods on type 'map<str,int>'
+      maptype = T('map<str,int>')
+      Chk(
+        maptype, 'amap', 'size', [],
+        'int', {
+          'cc': 'amap->size()',
+          'js': 'amap.size',
+          'py': 'len(amap)',
+        })
+      Chk(
+        maptype, 'amap', 'has', [('"apple"', T('str'))],
+        'bool', {
+          'cc': 'amap.find("apple") != amap.end()',
+          'js': 'amap.has("apple")',
+          'py': '"apple" in amap',
+        })
+      Chk(
+        maptype, 'amap', 'get', [('"apple"', T('str'))],
+        'int', {
+          'cc': 'amap["apple"]',
+          'js': 'amap.get("apple")',
+          'py': 'amap["apple"]',
+        })
+      Chk(
+        maptype, 'amap', 'set', [('"apple"', T('str')), ('3', T('int'))],
+        'void', {
+          'cc': 'amap["apple"] = 3',
+          'js': 'amap.set("apple", 3)',
+          'py': 'amap["apple"] = 3',
+        })
+      Chk(
+        maptype, 'amap', 'keys', [],
+        'iter<vec<str>>', {
+          'cc': 'meta::lang::Dictionary::Keys(amap)',
+          'js': 'amap.keys()',
+          'py': 'amap.keys()',
+        })
+      Chk(
+        maptype, 'amap', 'values', [],
+        'iter<vec<int>>', {
+          'cc': 'meta::lang::Dictionary::Values(amap)',
+          'js': 'amap.values()',
+          'py': 'amap.values()',
+        })
+      Chk(
+        maptype, 'amap', 'pairs', [],
+        'iter<vec<tuple<str,int>>>', {
+          'cc': 'amap.begin()',
+          'js': 'amap.entries()',
+          'py': 'amap.items()',
+        })
 
-        /# Tests on ostream
-        otype = T('&ostream')
+      /# Tests on ostream
+      otype = T('&ostream')
+
+      return
+
+      /# STUB for new tests
+      /#  - if etype is None, it is a request to print out result
+      /#  - last arg is map ... only baselangs with a key suffix in that
+      /#    arg are tested. If the value is null, the resulting code is
+      /#    tested, otherwise it is compared.
+      Chk(
+        fixme, 'name', 'size', [],
+        None, {
+          'cc': None,
+          'js': None,
+          'py': None,
+        })
     end method nativeMethodToBase;
 
     method analyzeVariable : tuple<str,Type> #:
@@ -10807,7 +11643,7 @@ namespace metax.oopl scope:
     method defaultValue : str #:
       The default value for a given metatype.
     params:
-      var metatype : *metax.oopl.Type;
+      var metatype : metax.oopl.Type;
     scope:
       if metatype.isPtr():
         default = self.pseudovars()['null']
@@ -10871,7 +11707,11 @@ namespace metax.oopl scope:
       else:
         parent = simple.parent()
         metafile = parent.metafile()
-        metafile_str = "'" + metafile.path() + "'"
+        metapath = metafile.path()
+        metafile_str = "'" + metapath + "'"
+        didx = metapath.rfind('/')
+        metadir = metapath[:didx] if didx > -1 else '.'
+        metadir_str = "'" + metadir + "'"
         comre = BaseLanguageOopl.CommentRE()
         lines = simple.value()
 
@@ -10888,15 +11728,22 @@ namespace metax.oopl scope:
         /#  - '^ */# ' is replaced with baselang comment one-line comment
         /#  - replace __meta file__ with the absolute path of the .meta file
         /#    that the __meta file__ is found within.
+        /#  - replace __meta dir__ with the absolute path of the directory
+        /#    within which the .meta file that the __meta dir__ is found within.
         /#  - do NOT replace replace '^ *>|' with '' (occurs in ...)
         /#  - do NOT perform pseudovar rewriting (e.g. 'meta' to 'self',
         /#    'test' to 'self', etc.). Instead, in methodInfo() we add a
         /#    local variable called 'test' or 'meta' (assigned to 'self').
         /#    The rewrites produced a difference between user expectations and
         /#    error messages, causing confusion.
+        /#  - TODO(wmh): Compare this implementation against one that uses
+        /#    a single regexp capturing all things we want to substitute,
+        /#    with a function replacer (that will require a single scan of
+        /#    the string, albeit a more expensive scan).
         for i in range(s, e):
           line = lines[i]
           line = line.replace('__meta' + 'file__', metafile_str)
+          line = line.replace('__meta' + 'dir__', metadir_str)
           m = comre.match(line)
           if m:
             infix = '' if strip_comments else m.group(2)
@@ -11302,8 +12149,7 @@ namespace metax.oopl scope:
         'istream': {'base': 'file', 'default': 'sys.stdin'},
         'strstream': {'base': 'file', 'default': 'None'},
 
-        /# TODO(wmh): Need a better means of specifying regexp class in python.
-        'regexp': {'base': 're._pattern_type', 'default': 'None'},
+        'regexp': {'base': 're.Pattern', 'default': 'None'},
 
         'date': {'base': 'datetime.datetime', 'default': 'None'},
         'ymd': {'base': 'datetime.date', 'default': 'None'},
@@ -11379,6 +12225,9 @@ namespace metax.oopl scope:
         'out': 'sys.stdout',
         'in': 'sys.stdin',
         'err': 'sys.stderr',
+        'sout': 'metax.io.Sink.Out()',
+        'serr': 'metax.io.Sink.Err()',
+        'snull': 'metax.io.Sink.Null()',
       })
     setup:
       baselang, _, context, _ = self.cachedInfo(basel='python')
@@ -11539,9 +12388,13 @@ namespace metax.oopl scope:
         'true': 'true',
         'false': 'false',
         'null': 'null',
-        'out': 'fixme',
-        'in': 'fixme',
-        'err': 'fixme',
+        /# TODO(wmh): Fix these! If we use Node.js we will have process.stdout, etc.
+        'out': 'null',
+        'in': 'null',
+        'err': 'null',
+        'sout': 'metax.io.Sink.Out()',
+        'serr': 'metax.io.Sink.Err()',
+        'snull': 'metax.io.Sink.Null()',
       })
     setup:
       baselang, _, context, _ = self.cachedInfo(basel='javascript')
@@ -11760,6 +12613,9 @@ namespace metax.oopl scope:
         'out': 'std::cout',
         'in': 'std::cin',
         'err': 'std::cerr',
+        'sout': 'metax::io::Sink::Out()',
+        'serr': 'metax::io::Sink::Err()',
+        'snull': 'metax::io::Sink::Null()',
       })
     setup:
       baselang, _, context, _ = self.cachedInfo(basel='cpp')
@@ -12891,8 +13747,17 @@ namespace metax.oopl scope:
         myclass = construct.myclass()
         method_prefix = myclass.fqn()
         kind = construct.attrval('kind')
+        modifiers = varset.getValue('modifiers')
+
         if kind == 'instance':
           method_prefix += dot + 'prototype'
+
+        elif kind == 'static':
+          modifiers.append('static')
+
+        elif kind == 'cls':
+          raise metax.c.Error("Fix this ... these should be in the metaclass, yes?'")
+
         elif kind == 'initializer':
           /# Javascript is a snowflake. In most languages, class nm.sp.Class has
           /# initializer nm.sp.Class.Class, but in javascript it is nm.sp.Class
@@ -12924,6 +13789,10 @@ namespace metax.oopl scope:
               (baselang.typeToBase(ftype, class_construct=myclass, defqn=True),
               field.rawfield()))
 
+        /# TODO(wmh): This is obviously not being used, as it is totally
+        /# broken.  Look above in "kind == 'instance'", where dot is added
+        /# to method_prefix, and again below. What is this for? method_prefix
+        /# does not appear in the javascript varset for construct method.
         method_prefix += dot
         varset.addVar('method_prefix', method_prefix)
     test:
@@ -14451,13 +15320,16 @@ namespace metax.oopl scope:
           comment.append(' * @fileoverview %s' % construct.kindfqn())
           comment.append(' *')
         for line in data['user']:
-          comment.append(' *   ' + line)
+          if line:
+            comment.append(' *   ' + line)
+          else:
+            comment.append(' *')
         comment.append(' * @%s' % visibility)
 
         specials = data['special']
         suppress_str = specials.get('suppress', None)
         if suppress_str:
-          suppress_list = re.split('\s*,\s*', suppress_str.strip())
+          suppress_list = re.split(r'\s*,\s*', suppress_str.strip())
           if suppress is not None:
             for supvar in suppress_list:
               suppress[supvar] = (
@@ -14478,7 +15350,7 @@ namespace metax.oopl scope:
         ['/**',
          ' * demo.tmp.Person',
          ' *   First line should be oneline summary.',
-         ' *   ',
+         ' *',
          ' *   Subsequent lines are for more details and can be formatted in',
          ' *   Meta(Doc) syntax.',
          ' * @public',
@@ -14647,17 +15519,36 @@ namespace metax.oopl scope:
         result = []
       else:
         result = comment[:]
-      rem = self.config('rem') + ' '
+      rem = self.config('rem')
+      remsp = rem + ' '
       for i in range(0, len(result)):
-        result[i] = rem + result[i]
+        if result[i]:
+          result[i] = remsp + result[i]
+        else:
+          result[i] = rem
       return result
     test:
       _, oopl, _, _ = test.cachedInfo()
       js = oopl.baselangNamed('javascript')
       comment = js.formatComment(['This is a test'])
       test.iseqvec(['// This is a test'], comment)
-      comment = js.formatComment(['This is a test', 'of two lines'])
-      test.iseqvec(['// This is a test', '// of two lines'], comment)
+      comment = js.formatComment(
+        [
+          'This is a test',
+          'of multiple lines',
+          '',
+          'In multiple',
+          'paragraphs.'
+        ])
+      test.iseqvec(
+        [
+          '// This is a test',
+          '// of multiple lines',
+          '//',
+          '// In multiple',
+          '// paragraphs.'
+        ],
+        comment)
     end receiver OoplJavascript;
 
     receiver OoplCpp scope:
@@ -15050,6 +15941,19 @@ namespace metax.oopl scope:
         basedef, mtype2 = self.compileExpr(
           default, self.metafile(), metatype=mtype)
         if mtype is not mtype2:
+          if mtype.isNative():
+            /# we check if there is an explicit type conversion from mtype2
+            /# to mtype that we can apply to the default value.
+            nativemap = MetaxOopl.NATIVE
+            tmap = nativemap[mtype.base()]['scope']
+            dmap = tmap.get('(%s)' % mtype2.base(), None)
+            if dmap:
+              /# TODO(wmh): Need a general method for instantiating
+              /# template code (something lower-level than nativeMethodToBase).
+              suffix = self.suffix()
+              tmplcode = dmap['code'][suffix]
+              basedef = tmplcode % {'A1': basedef}
+
           /# Sanity check.
           print(
             'NOTE: In formatFieldDefinition, default type %s vs %s' %
@@ -15103,7 +16007,10 @@ namespace metax.oopl scope:
           clines.append('  %s: %s' % (param['name'], str(param['type'])))
           if 'comment' in param:
             for ln in param['comment']:
-              clines.append('    ' + ln)
+              if ln:
+                clines.append('    ' + ln)
+              else:
+                clines.append('')
 
       if comdata['returns']:
         clines.append('')
@@ -15135,13 +16042,16 @@ namespace metax.oopl scope:
         construct=construct, parse_return=True)
       clines = comdata['user']
       if 'suppress' in comdata['special']:
-        suppress.update(re.split('\s*,\s*', comdata['special']['suppress']))
+        suppress.update(re.split(r'\s*,\s*', comdata['special']['suppress']))
 
       /# Add the user-provided documentation for this executable.
       lines.append(' * %s' % ('initializer' if is_init else construct.fqn()))
       if clines:
         for line in clines:
-          lines.append(' *   ' + line)
+          if line:
+            lines.append(' *   ' + line)
+          else:
+            lines.append(' *')
 
       /# Add annotations for all parameters.
       params = construct.parsedParams()
@@ -15183,7 +16093,10 @@ namespace metax.oopl scope:
             basetype, param['name'], defval))
         pcom = param.get('comment', [])
         for line in pcom:
-          lines.append(' *   ' + line)
+          if line:
+            lines.append(' *   ' + line)
+          else:
+            lines.append(' *')
       if 'varvec' in params or 'varmap' in params:
         lines.append(' * @param {*} varargs')
 
@@ -15195,7 +16108,10 @@ namespace metax.oopl scope:
         lines.append(' * @return {%s}' % baseret)
         if 'returns' in comdata:
           for rline in comdata['returns']:
-            lines.append(' *   ' + rline)
+            if rline:
+              lines.append(' *   ' + rline)
+            else:
+              lines.append(' *')
 
       /# Record the visibility
       if is_init:
@@ -15239,7 +16155,7 @@ namespace metax.oopl scope:
       /# Handle 'new' vs 'override' semantics.
       inheritance = construct.attrval('inheritance', default=metax.c.LOOKUP)
       if inheritance != 'new':
-        lines.append(' * @override ')
+        lines.append(' * @override')
 
       /# Suppress requested warnings.
       if suppress:
@@ -15397,7 +16313,7 @@ namespace metax.oopl scope:
       test.tpy(expand=True)
       preamble = []
       test.iseq(
-        "(self, fp=sys.stdout, indent=u'')",
+        "(self, fp=sys.stdout, indent='')",
         test.baselang.formatParams(test.method2, preamble))
       test.iseq([], preamble)
     end receiver OoplPython;
@@ -15436,7 +16352,7 @@ namespace metax.oopl scope:
       test.tjs(expand=True)
       preamble = []
       test.iseq(
-        "(fp=fixme, indent='')",
+        "(fp=null, indent='')",
         test.baselang.formatParams(test.method2, preamble))
       test.iseq([], preamble)
     end receiver OoplJavascript;
@@ -16436,13 +17352,13 @@ namespace metax.oopl scope:
       /# both python2 and python3 compliant, we preface all literal strings with
       /# a unicode indicator.
       assert expr.kind() == 'str'
-      return 'u' + expr.asStr(quote=True)
+      return expr.asStr(quote=True)
     test:
       test.tpy()
-      test.iseq("u''", test.baselang.literalString(metax.c.Expr.FromStr("''")))
-      test.iseq('u""', test.baselang.literalString(metax.c.Expr.FromStr('""')))
+      test.iseq("''", test.baselang.literalString(metax.c.Expr.FromStr("''")))
+      test.iseq('""', test.baselang.literalString(metax.c.Expr.FromStr('""')))
       test.iseq(
-        'u"Hello World!"',
+        '"Hello World!"',
         test.baselang.literalString(metax.c.Expr.FromStr('"Hello World!"')))
     end receiver OoplPython;
 
@@ -16881,8 +17797,8 @@ namespace metax.oopl scope:
       class_start_re = re.compile(
         r'\n-> (?P<time>\S+) : Starting tests: (?P<fqn>\S+)\n')
       class_end_re = re.compile(
-        '\n-> (?P<time>\S+) : (?P<runcount>\d+) of (?P<count>\d+) tests run in '
-        '(?P<duration>\S+)\.\n')
+        r'\n-> (?P<time>\S+) : (?P<runcount>\d+) of (?P<count>\d+) tests run in '
+        r'(?P<duration>\S+)\.\n')
       method_start_re = re.compile(
         r'^-> (?P<time>\S+) : Running test: (?P<method>\S+)')
 
@@ -16916,7 +17832,7 @@ namespace metax.oopl scope:
               test_method_name = m.group('method')
               method_name = metax.oopl.ExecutableConstruct.UntestifyName(test_method_name)
               end_re = re.compile(
-                '^-> (?P<time>\S+) : %s : (?P<status>\S+)' % test_method_name)
+                r'^-> (?P<time>\S+) : %s : (?P<status>\S+)' % test_method_name)
               cmname = class_name + '.' + method_name
               stdout = []
 
@@ -17107,14 +18023,14 @@ namespace metax.oopl scope:
       /# (written into tdata by invocation).
       tdata = {
         'methods': collections.OrderedDict(),
-        /# 'status': u'FAILED',
-        /# 'time': u'0.2s',
-        /# 'target': u'//demo/cards2_test:FrenchPackTest',
+        /# 'status': 'FAILED',
+        /# 'time': '0.2s',
+        /# 'target': '//demo/cards2_test:FrenchPackTest',
         /# 'cached': None,
-        /# 'logpath': u'/Users/wmh/src/meta/src/kernel/testdata/sample_logs/demo/cards2_test/FrenchPackTest/test.log',
-        /# 'namespace': u'demo.cards2',
-        /# 'class': u'FrenchPack',
-        /# 'dir': u'/Users/wmh/src/meta/src/kernel/testdata/sample_logs/demo/cards2_test/FrenchPackTest',
+        /# 'logpath': '/Users/wmh/src/meta/src/kernel/testdata/sample_logs/demo/cards2_test/FrenchPackTest/test.log',
+        /# 'namespace': 'demo.cards2',
+        /# 'class': 'FrenchPack',
+        /# 'dir': '/Users/wmh/src/meta/src/kernel/testdata/sample_logs/demo/cards2_test/FrenchPackTest',
         /# 'log': 'exec ${PAGER:-/usr/bin/less} "$0" || exit 1\n-----------------------------------------------------------------------------\n.E\n======================================================================\nERROR: test_asStr (__main__.FrenchPackTest)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File "/private/var/tmp/_bazel_wmh/8a547b9529defa4d451cf083bf4156d1/bazel-sandbox/e96aaaed-7873-4fb6-a866-0c97391c7dd1-0/execroot/python/bazel-out/local-fastbuild/bin/demo/cards2_test/FrenchPackTest.runfiles/__main__/demo/cards2_test/FrenchPackTest.py", line 13, in test_asStr\n    card = demo.cards2.Card(1, 2)\nAttributeError: \'module\' object has no attribute \'Card\'\n\n----------------------------------------------------------------------\nRan 2 tests in 0.001s\n\nFAILED (errors=1)\nFrenchPack.__init__                      ...demo.cards2.FrenchPack.__init__ missing unittest\n      14 us  \nFrenchPack.asStr                         ...     163 us  ERROR\n',
       }
 
@@ -17178,13 +18094,14 @@ namespace metax.oopl scope:
         if stdout or stderr:
           dsep(end=True)
         return
+
       import io
       vv = metax.root.SafeStr(stderr or '')
       /# print('*** HERE with %s' % repr(vv))
       ifp = io.StringIO(vv)
       efp = io.StringIO()
       metac = self.compiler()
-      metac.filterMetaOutput(cwd=cwd, ifp=ifp, ofp=efp)
+      metac.filterMetaOutput(cwd=cwd, ifp=ifp, ofp=efp, debug=False)
       filterr = efp.getvalue()
 
       /# Perform base-to-meta line mapping on stderr
@@ -17193,7 +18110,8 @@ namespace metax.oopl scope:
 
       /# Establish some vars.
       outre = re.compile(
-        r'^(?P<fqn>\S+)\s+\.\.\.(?P<rest>.*)')
+        /# CODE TANGLE(methstart)
+        r'^(?P<fqn>\S+)\s+\.\.\. (?P<rest>.*)')
       timere = re.compile(
         r'^(?P<head>.*?)\s+(?P<us>\d+) us  (?:(?P<status>.*))?$')
       failre = re.compile(
@@ -17348,7 +18266,7 @@ namespace metax.oopl scope:
 
       /# Merge the stdout and stderr into a single stream, in the same
       /# format as used in the bazel-generated output.
-      sep = u'-' * 70 + '\n'
+      sep = '-' * 70 + '\n'
       show_nums = False
       /# print(stdout)
       last_printed_sep = False
@@ -17362,7 +18280,7 @@ namespace metax.oopl scope:
         if special or verbosity:
           prefix = '%3d) ' % i if show_nums else ''
           fp.write(
-            u'%s%-40s ... %7d us   %s\n' %
+            '%s%-40s ... %7d us   %s\n' %
             (prefix, item['fqn'], item['time'] or -1, item['status']))
 
         PrintStripped(out, ' |')
@@ -17376,7 +18294,7 @@ namespace metax.oopl scope:
 
       if summary_data:
         fp.write(
-          u'%-20s: %3d tests in %s seconds: %s\n' %
+          '%-20s: %3d tests in %s seconds: %s\n' %
           (namespace, int(summary_data['numtests']), summary_data['seconds'],
           summary_data['status']))
       if postamble:
@@ -18255,46 +19173,63 @@ namespace metax.oopl scope:
         The meta-syntax code to be parsed.
       var mxpath : str #:
         A path identifying a statement construct within the parsed meta code.
-      var expected : str = null #:
-        The expected baselang output. If null, print out the output rather
-        than check against it (and also print out the construct identified by
-        mxpath).
+      var expected : map = null #:
+        Maps baselang suffix (py, cc, js, jv) to expected baselang output. If
+        a key exists with a null value, it is a request to print the output
+        rather than check against it (and also print out the construct
+        identified by mxpath). If expected itself is null, it is shorthand
+        for {'py': None, 'js': None}, so the output in python and javascript
+        are printed out.
       var verbose : bool = false #:
         If true, print out the identified statement construct and the output
         produced by invoking translateMeta().
       var debuglevel : int = 0 #:
         How much debugging info to print out.
     scope:
-      /# Parse namespace/class/method/loop constructs and find the loop by
-      /# xpath.
-      statement = test.constructInCode(mxpath, text=code, debuglevel=debuglevel)
-      if not statement:
-        print('#' * 80)
-        print(code)
-        print('#' * 80)
-        /# test.metafile.hasErrors(show=True)
-        test.fail('Failed to parse code')
+      if expected is None:
+        expected = {'py': None, 'js': None}
 
-      /# Conditionally print out the statement.
-      if verbose or expected is None:
-        print('=' * 80)
-        print('construct at %s:' % mxpath)
-        statement.write(indent='  ')
+      result = {}
+      for bl in sorted(expected):
+        basel = metax.c.Compiler.SUFFIX_HACK['oopl'][bl]
+        expected_text = expected[bl]
 
-      /# Setup the stream expected by translateMeta().
-      metafile = statement.metafile()
-      return self._checkStatement(
-        metafile, statement, expected=expected, verbose=verbose)
+        /# Parse namespace/class/method/loop constructs and find the loop by
+        /# xpath.
+        statement = test.constructInCode(
+          mxpath, text=code, metal='oopl', basel=basel, debuglevel=debuglevel)
+        if not statement:
+          print('#' * 80)
+          print(code)
+          print('#' * 80)
+          /# test.metafile.hasErrors(show=True)
+          test.fail('Failed to parse code')
+
+        /# Conditionally print out the statement.
+        if verbose or expected_text is None:
+          print('=' * 80)
+          print('construct at %s:' % mxpath)
+          statement.write(indent='  ')
+
+        /# Setup the stream expected by translateMeta().
+        metafile = statement.metafile()
+        new_statement = self._checkStatement(
+          metafile, statement, expected=expected_text, verbose=verbose)
+        result[bl] = new_statement
+
+      return result
     test:
     end method checkStatement;
 
     method _checkStatement : any #:
-      docstr
+      Given a statement construct, invoke expandMeta() and translateMeta() on
+      it, obtain the resulting base language code produced for the statement,
+      and compare it against expected text.
     params:
       var metafile : MetaFile #:
         The metafile containing the statement.
-      var statement : StatementConstruct #:
-        The statement to generate code for.
+      var construct : Construct #:
+        The statement or method to generate code for.
       var expected : str = null #:
         The expected baselang output. If null, print out the output rather
         than check against it (and also print out the construct identified by
@@ -18305,22 +19240,50 @@ namespace metax.oopl scope:
     scope:
       if metafile.hasErrors(show=True):
         return None
-      /# TODO(wmh): Use a stream within the method instead (and have statements
-      /# cache their method??)
-      myclass = statement.ancestor('class')
+
+      if construct.isMethod():
+        method = construct
+        statement = None
+      else:
+        /# TODO(wmh): Why is this only necessary for SetConstruct and none of the
+        /# other statement subclasses?
+        statement = construct
+        method = statement.ancestor('method')
+        assert method
+        statement.myexecIs(method)
+
+      baselang = construct.baselang()
+      myclass = method.myclass()
+      if myclass is None:
+        /# TODO(wmh): Use a stream within the method instead (and have statements
+        /# cache their method??)
+        myclass = method.ancestor('class')
+        method.myclassIs(myclass)
+
+      namespace = myclass.namespace()
+      if namespace is None:
+        namespace = myclass.ancestor('namespace')
+        myclass.namespaceIs(namespace)
+
+      /# Obtain the stream.
       segments = myclass.streamNamed('current-body')
-      segment = metax.c.BaseSegment(None)
-      segments.append(segment)
+      if not segments or not isinstance(segments[-1], metax.c.BaseSegment):
+        segment = metax.c.BaseSegment(None)
+        segments.append(segment)
 
       /# Invoke translateMeta on the statement
-      statement.expandMeta()
-      statement.translateMeta()
+      construct.expandMeta()
+      construct.translateMeta()
+
+      /# Obtain last segment of current-body stream in class.
+      segments = myclass.streamNamed('current-body')
+      segment = segments[-1]
 
       /# Validate output.
       output = segment.flattenStr()
       if verbose or expected is None:
         print('=' * 80)
-        print('Output produced by translateMeta:')
+        print('Output produced by translateMeta for %s:' % baselang.id())
         print(output)
         print('=' * 80)
       if expected is not None:

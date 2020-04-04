@@ -102,7 +102,13 @@ scope:
         title: str
           The (optional) title associated with the label.
 
-    lifecycle scope:
+    field quiet : bool #:
+      If true, certain warnings are not reported
+       - Line <l>: Ignoring special <kind> semantics because it is not preceeded by blank line: ...
+
+    lifecycle params:
+      var quiet -> quiet = false;
+    scope:
     clinit:
       cls.ListReIs(re.compile(
         r'^(?P<indent> {0,3})'
@@ -111,10 +117,11 @@ scope:
         r'(?P<text>.*)'))
 
       cls.CATEGORIES = [
+        /# Each of these is (name, regexp, needs_new_block)
         ('empty', re.compile(r'^\s*$'), False),
         ('html', re.compile(r'^<(?P<tag>[a-zA-Z0-9]+)[ >]'), True),
         ('section', re.compile(r'^(?P<hash>#{1,6})\s*(?P<title>.*)'), True),
-        ('quote', re.compile(r'^> '), True),
+        ('quote', re.compile(r'^> '), False),
         ('code', re.compile(r'^    '), True),
         ('code', re.compile(r'^(?P<code>[`~]{3,})\s*(?P<lang>\S+)?'), True),
         ('table', re.compile(r'^Table:'), True),
@@ -123,7 +130,10 @@ scope:
           r'^\s*\[(?P<label>[^ \t\]]+)\]:\s*(?P<url>\S+)'
           r'(?:\s*\"(?P<title>[^\"]*)\")?'), False),
         ('list', cls.ListRe(), None),
+        /# TODO(wmh): Consider allow whitespace before the  to support
+        /# pagebreaks inside code blocks (indented 4 spaces), etc.
         ('page', re.compile(r'^\{(?P<page>\d+)\}'), False),
+        ('newcol', re.compile(r'^'), False),
         ('comment', re.compile('^\s*/\#\s*(?P<comment>.*)'), False),
       ]
       cls.CATMAP = {trip[0]: trip[1] for trip in cls.CATEGORIES}
@@ -180,13 +190,17 @@ scope:
         If null, a dummy parent is implicitly created. An externally created
         Section can be passed in for situations where this file is just one
         section among many within a multi-file book.
+      var titlere : regexp = null #:
+        If present, specifies how section titles should be massaged. See
+        Parser.parseLines() for details.
       var debug : bool = false #:
         Enable debugging if true.
         TODO(wmh): Delete this param.
     scope:
       with open(path, 'r') as fp:
         lines = fp.read().replace('\t', '    ').split('\n')
-      return self.parseLines(lines, parent=parent, path=path, debug=debug)
+      return self.parseLines(
+        lines, parent=parent, path=path, debug=debug, titlere=titlere)
     test:
       simple = test.parseMarkdown('simple_md')
       fp = test.fp()
@@ -265,6 +279,16 @@ scope:
         Some subset of the keys in Parser.CATEGORIES. Indicates which syntactic
         entities are not legal for this invocation. If null, all categories are
         legal.
+      var titlere : regexp = null #:
+        If present, each parsed section title is matched against this re. If a
+        match occurs, one of the named groups should be 'title', and only
+        the value of that match is used as the official title. This allows
+        for domain-specific syntax to be added to section titles without
+        requiring all of that syntax to be present in the official hierarchy.
+        Example usecase is D&D, where the manuals sometimes have page numbers
+        at the end of section titles starting race definitions. For example
+            '# Race: Golem/Clay (Clay Golem) {MM-168}'
+        should be treated simple as 'Race: Golem/Clay' when registered.
     scope:
       /# The parsing logic is as follows:
       /# - parse each line one after another
@@ -435,9 +459,10 @@ scope:
               needs_new_block = False
 
             if needs_new_block and current_lines:
-              print(
-                'Line %4d: Ignoring special "%s" semantics because it is not '
-                'preceeded by blank line: %s' % (i+1, nm, line))
+              if not self.quiet():
+                print(
+                  'Line %4d: Ignoring special "%s" semantics because it is not '
+                  'preceeded by blank line: %s' % (i+1, nm, line))
             elif illegals and nm in illegals:
               print(
                 'Line %4d: %s is not legal in this context '
@@ -510,7 +535,8 @@ scope:
           table = metax.lib.markdown.Table.New(
             lines[table_start:i], terrors, parent=current_group,
             prelines=prelines)
-          current_group.addTable(table)
+          if table:
+            current_group.addTable(table)
           if terrors:
             for err in terrors:
               sys.stderr.write('  ' + err + '\n')
@@ -529,8 +555,20 @@ scope:
           Record(i, 'section start')
 
           if current_group.isSection():
+            title = mdata['title']
+            if titlere:
+              tm = titlere.match(title)
+              if tm:
+                tmgd = tm.groupdict()
+                if 'title' not in tmgd:
+                  raise Error(
+                    'If titlere specified, must have named title group')
+                title = tmgd.pop('title')
+                /# TODO(wmh): Consider storing the rest of tmgd somewhere
+                /# in the newly created sectionl
+
             current_group = current_group.newNextSection(
-              len(mdata['hash']), mdata['title'], prelines=prelines,
+              len(mdata['hash']), title, prelines=prelines,
               pagenum=pagenum)
           else:
             /# TODO(wmh): We should never get here, because we specify
@@ -816,6 +854,11 @@ scope:
           pagenum = int(mdata['page'])
           i += 1
 
+        elif kind == 'newcol':
+          /# We have an explicit column break
+          /# TODO(wmh): Do something with this!
+          i += 1
+
         else:
           print('#' * 70)
           print(line)
@@ -859,7 +902,7 @@ scope:
 
       /# Format the file in ascii and compare it with a golden file.
       fp = test.fp()
-      root.show(fp=fp)
+      root.show(fp=fp, width=0)
       golden = metax.root.Object.Resource(
         'simple_golden', fqn='metax.lib.markdown_test.TestCase')
       test.iseqstrgold(fp.getvalue(), golden)
@@ -916,7 +959,7 @@ scope:
       /# TODO(wmh): finish up this test by ensuring that html support
       /# in C.show() is implemented for all subclasses C of Text.
       fp = test.fp()
-      section.show(fp=fp, aspect='ascii')
+      section.show(fp=fp, aspect='ascii', width=0)
       golden = metax.root.Object.Resource(
         'raw_txt_golden', fqn='metax.lib.markdown_test.TestCase')
       test.iseqstrgold(fp.getvalue(), golden)
@@ -1117,20 +1160,23 @@ scope:
         The files to load up as sections in the book.
       var bookname : str = 'Book' #:
         The name of the book containing all the paths.
+      var titlere : regexp = null #:
+        If present, specifies how section titles should be massaged. See
+        Parser.parseLines() for details.
     scope:
       book = Book(bookname, self)
       root = book.root()
       /# metax.lib.markdown.Section(None, title=bookname, parser=self)
       for path in paths:
         if os.path.exists(path):
-          section = self.parseFile(path, root)
+          section = self.parseFile(path, root, titlere=titlere)
         else:
           print('WARNING: Path %s does not exist' % path)
       return book
     test:
       /# NOTE: test.parseBook() invokes test.md.loadBook()
       book = test.parseBook(['metax.lib.markdown_test.TestCase.simple_md'])
-      test.iseq(1, len(book.children()))
+      test.iseq(1, len(book.root().children()))
     end method loadBook;
 
     implicit
@@ -1186,6 +1232,10 @@ scope:
     end command;
   end class Parser;
 
+  native scope:
+    def Identity(v):
+      return v
+
   abstract
   class Object #:
     Abstract superclass of Section and Block.
@@ -1200,6 +1250,13 @@ scope:
       var prelines -> prelines = 0;
     scope:
     end;
+
+    method kind : str #:
+      Return the name of the class of this instance.
+    scope:
+      return self.__class__.__name__
+    test:
+    end method kind;
 
     method isBlock : bool scope:
       return False
@@ -1229,11 +1286,17 @@ scope:
       test.istrue(test.p1.isPara())
     end method isPara;
 
+    method isCode : bool scope:
+      return False
+    test:
+    end method isCode;
+
     method isTable : bool scope:
       return False
     test:
       test.isfalse(test.section.isTable())
-      test.istrue(test.p1.isTable())
+      test.isfalse(test.p1.isTable())
+      test.istrue(test.table.isTable())
     end method isTable;
 
     method isList : bool scope:
@@ -1296,19 +1359,22 @@ scope:
         title(): the title associated with an object (titles are what can be searched on)
         keys(): maps legal keys (the titles of child objects) to child objects
     params:
-      var spec : str #:
-        The name(s) desired.
+      var spec : any #:
+        The name(s) desired. This can be either a string with '/' delimiters
+        between parent/children, or a list of hierarchial titles. The list
+        version is useful when any of the titles contain a '/'.
     scope:
-      parts = spec.split('/')
+      parts = spec if isinstance(spec, (list, tuple)) else re.split(r'(?<!\\)/', spec)
       obj = self
 
       for part in parts:
         /# Exact match ... there can only be one possible result.
+        part = part.replace('\/', '/')
         keys = obj.keys()
         if part in keys:
           obj = keys[part]
         else:
-          print('Failed to find child "%s" of "%s"' % (part, obj.title()))
+          /# print('Failed to find child "%s" of "%s"' % (part, obj.title()))
           obj = None
           break
       return obj
@@ -1341,7 +1407,8 @@ scope:
           sep = '-' * 80
           /# sink.writeln('PATTERN: %s' % pattern.pattern)
           sink.writeln(sep)
-          sink.write('%s\n' % self.parent().fulltitle())
+          if self.parent():
+            sink.write('%s\n' % self.parent().fulltitle())
           sink.indent('  ')
           sink.writeln(text.strip())
           sink.undent()
@@ -1350,9 +1417,21 @@ scope:
           if sink:
             sink.write('Found: %s\n' % mval)
           /# print('  Found: %s\n' % mval)
-          results.append(m)
+          results.append(mval)
     test:
     end method searchInText;
+
+    static
+    method TerminalWidth : int #:
+      Obtain the width of the terminal
+    scope:
+      try:
+        width = os.get_terminal_size().columns
+      except OSError as e:
+        width = 80
+      return width
+    test:
+    end method TerminalWidth;
 
   end class Object;
 
@@ -1378,7 +1457,7 @@ scope:
         empty line (usually there is also an empty line before the 'Table:').
   scope:
 
-    field parent : Object #:
+    field parent : BlockGroup #:
       The section that this text object belongs to (or, for Row instances,
       the Table it belongs to).
 
@@ -1400,9 +1479,14 @@ scope:
     method fulltitle : str #:
       The fully qualified title of this text object.
     scope:
-      return self.parent().fulltitle() + '/' + self.title()
+      fixed_title = self.title().replace('/', '\\/')
+      return self.parent().fulltitle() + '/' + fixed_title
     test:
-      test.iseq('/Section 1/SubSection A', test.subsection.fulltitle())
+      /# Note that testing section instances here is misleading because
+      /# Section overrides fulltitle ... see the tests therein for sections.
+      test.iseq(
+        '/Section 1/SubSection A/Table with \\/ in it',
+        test.table.fulltitle())
     end method fulltitle;
 
     method fqn : str #:
@@ -1432,6 +1516,31 @@ scope:
       hr = metax.lib.markdown.HR(test.subsection, '* * *', prelines=1)
       test.isfalse(hr.isBlock())
     end method isBlock;
+
+    method asStr : vec<str> #:
+      Return a string representing the formatted contents of this block.
+
+      Note that this is optimized/overridden in Paragraph.
+    params:
+      var raw : bool = false #:
+        IF true, replace newlines with spaces.
+    scope:
+      fp = io.StringIO()
+      self.show(fp=fp, aspect='ascii')
+      text = fp.getvalue()
+      if raw:
+        text = text.replace('\n', ' ')
+      return text
+    test:
+    end method asStr;
+
+    method asLines : vec<str> #:
+      Return a list of lines representing the ascii representation of
+      this block. Each element has a newline at the end.
+    scope:
+      return self.asStr().splitlines(keepends=True)
+    test:
+    end method asLines;
 
   end class Block;
 
@@ -1512,7 +1621,9 @@ scope:
     A paragraph ends when any of the following are encountered:
      - an empty line
      - a line starting an ordered or unordered list
-
+  assocs:
+    std assoc textwrap;
+    std assoc os;
   scope:
 
     field text : str #:
@@ -2074,6 +2185,28 @@ scope:
       test.istrue(test.p1.isPara())
     end method isPara;
 
+    method asStr : vec<str> #:
+      Return a string representing the formatted contents of this block
+    params:
+      var raw : bool = false #:
+        IF true, replace newlines with spaces.
+    scope:
+      text = self.text()
+      if raw:
+        text = text.replace('\n', ' ')
+      return text
+    test:
+    end method asStr;
+
+    method clone : Paragraph #:
+      Make a copy of myself (NOT attached to any parent).
+    scope:
+      cls = self.__class__
+      return cls(
+        None, self.text(), implicit=self.implicit(), prelines=self.prelines())
+    test:
+    end method clone;
+
   end class Paragraph;
 
   class Quote < Block #:
@@ -2117,6 +2250,8 @@ scope:
     field items : @vec<ListItem> #:
       The collection of items making up the list.  Each item consists
       of one or more blocks.
+      TODO(wmh): Should List inherit from BlockGroup so we can use blocks
+      instead of items?
 
     lifecycle params:
       var parent : Object #:
@@ -2268,6 +2403,11 @@ scope:
         language='python')
     end lifecycle;
 
+    method isCode : bool scope:
+      return True
+    test:
+    end method isCode;
+
   end class Code;
 
   class HR < Object #:
@@ -2329,9 +2469,10 @@ scope:
     are the titles of each data Row, and the title of a Row is the value of
     its unique-key column (for now, always column 0).
   assocs:
-    std assoc string;
+    std assoc copy;
     std assoc pprint;
-
+    std assoc string;
+    std assoc textwrap;
   scope:
 
     field title : str = null #:
@@ -2357,8 +2498,11 @@ scope:
       (size equal to the size of 'columns') representing the values
       of each column within the row.
 
+    field separators : @vec<int> #:
+      Indicies within self.rows() after which a separator should be printed.
+
     lifecycle params:
-      var parent : *Section #:
+      var parent : Section #:
         The section this text object belongs to.
       var columns -> columns;
       var rawrows : vec<vec<str>> #:
@@ -2424,15 +2568,23 @@ scope:
       if errors is None:
         errors = []
 
+      header_start = 1
+      if not lines[header_start].strip():
+        header_start += 1
+
       /# If the lines represent a table, the 1st, 3rd or 4th line
       /# must contain the column spec, so we look for it in those lines.
       m = None
       spec = None
-      for i in range(0, min(4, len(lines))):
+      for i in range(header_start, min(10, len(lines))):
         m = cls.TableRe().match(lines[i])
         if m:
           spec = lines[i]
           break
+      try:
+        data_start = i + 1
+      except UnboundLocalError:
+        print('******** EHRE with %s' % lines)
 
       if m:
         columns = []
@@ -2485,11 +2637,11 @@ scope:
 
         /# Parse the column headers, if they exist.
         if i > 0:
-          headers = delim_re.split(lines[i-1].strip())[1:-1]
+          headers = delim_re.split(lines[header_start].strip())[1:-1]
           if len(headers) != numcols:
             errors.append(
               'Found %d headers but %d columns: %s' %
-              (len(headers), numcols, lines[i-1]))
+              (len(headers), numcols, lines[header_start]))
             for line in lines:
               errors.append('  ' + line)
           else:
@@ -2500,7 +2652,7 @@ scope:
         title = None
         csscls = None
         tblid = None
-        if i == 3:
+        if True:
           title = lines[0].strip()
           m = re.match(
             '^Table: (?P<title>[^\[\]]+)(?:\s*\[(?P<class>.*)\])?', title)
@@ -2579,12 +2731,12 @@ scope:
       test.isnull(table3)
       test.iseq(
         [
-          'For row 1, found 3 columns when expecting 2: | Bob | 23 | extra |',
+          "For row 1, found 3 columns when expecting 2: | Bob | 23 | extra | (['Bob', '23', 'extra'])",
           '  | Name | Age | ',
           '  | --- | ---| ',
           '  | Bob | 23 | extra |',
           '  Alice',
-          'For row 2, found 0 columns when expecting 2: Alice',
+          'For row 2, found 0 columns when expecting 2: Alice ([])',
           '  | Name | Age | ',
           '  | --- | ---| ',
           '  | Bob | 23 | extra |',
@@ -2614,6 +2766,46 @@ scope:
       return True
     end method isTable;
 
+    method unwrapped : Table #:
+      Create a new Table instance with columns unwrapped.
+    scope:
+      columns = []
+      for cdata in self.columns():
+        newdata = copy.copy(cdata)
+        newdata.pop('minwidth', None)
+        columns.append(newdata)
+      ouid = self.uid()
+      uid = None if ouid is None else ouid + '-unwrapped'
+
+      rawrows = []
+      for row in self.rows():
+        data = row.data()
+        if not data[0]:
+          /# First column is empty, which indicates that this is not a real
+          /# row, but rather that subsequent columns are wrapped text from
+          /# previous row. We are to append all such strings to previous.
+          if not rawrows:
+            raise Error('Table has an empty first column of first row')
+          prev_row = rawrows[-1]
+          for i in range(1, len(data)):
+            prev_row[i] += ' ' + data[i]
+        else:
+          rawrows.append(data[:])
+
+      cls = self.__class__
+      result = cls(
+        /# TODO(wmh): Should the table have same parent, or null?
+        self.parent(),
+        columns,
+        rawrows,
+        prelines=self.prelines(),
+        title=self.title(),
+        csscls=self.csscls(),
+        uid=uid)
+      return result
+    test:
+    end method unwrapped;
+
   end class Table;
 
   class Row < Block #:
@@ -2627,10 +2819,13 @@ scope:
       The values of each column within this row.
 
     lifecycle params:
-      var table : &Table;
-      var columns : &vec<str>;
+      var table : Table;
+      var columns : vec<str>;
       var prelines : int = 0 #:
         The number of empty lines found before this block started.
+        TODO(wmh): Does prelines make any sense for an individual Row?
+        I think this was accidentally cut-and-pasted when it shouldn't
+        have been. More generally, is Row even needed?
     super (table, prelines=prelines)
     scope:
       self.dataIs(columns)
@@ -2664,7 +2859,7 @@ scope:
 
     See
     http://tex.stackexchange.com/questions/36524/how-to-put-a-framed-box-around-text-math-environment
-    for how to add a box around text.
+    for how to add a box around text in Latex.
   scope:
 
     field title : str = null #:
@@ -2678,6 +2873,7 @@ scope:
       var title -> title = null;
     super (parent, prelines=prelines)
     scope:
+      print('**** HERE with Panel %s' % title)
     test:
       panel = metax.lib.markdown.Panel(test.subsection, title='Testing')
       test.iseq('Testing', panel.title())
@@ -2696,6 +2892,7 @@ scope:
     allowed to have any block elements, but can have child sections).
   assocs:
     std assoc collections;
+    std assoc io;
   scope:
 
     meta
@@ -2716,7 +2913,7 @@ scope:
       TODO(wmh): Replace this with the newly defined 'uid' field inherited
       from Block.
 
-    field children : @vec<*Section> #:
+    field children : @vec<Section> #:
       The ordered collection of child sections
 
     field depth : int #:
@@ -2724,7 +2921,7 @@ scope:
       parents) has a depth of 0.  Immediate children of that section have
       depth 1, etc.
 
-    field keys : @map<str,*Object> #:
+    field keys : @map<str,Object> #:
       Maps section or text titles to Section or Text instances. Used by find().
 
     field pagenum : int #:
@@ -2752,6 +2949,16 @@ scope:
     clinit:
       cls.AbbrevReIs(re.compile(r'[^a-z]'))
     end lifecycle;
+
+    method root : Section #:
+      Obtain the ancestor section without a parent.
+    scope:
+      result = self
+      while result.parent():
+        result = result.parent()
+      return result
+    test:
+    end method root;
 
     method addTable #:
       Add a table to myself.
@@ -2926,6 +3133,16 @@ scope:
       test.iseq(1, len(section.children()))
     end method newChild;
 
+    method mapChildren : map<str,Section> #:
+      Obtain a mapping from child title to child Section
+    scope:
+      result = {}
+      for child in self.children():
+        result[child.title()] = child
+      return result
+    test:
+    end method mapChildren;
+
     method newNextSection : Section #:
       Create a Section to represent text after this section.  The result
       may or may not be a child of self, depending on 'depth'.
@@ -3006,12 +3223,71 @@ scope:
       parts = []
       obj = self
       while obj is not None:
-        parts.append(obj.title() or '')
+        title = obj.title() or ''
+        parts.append(title.replace('/', '\\/'))
         obj = obj.parent()
       return '/'.join(reversed(parts))
     test:
       test.iseq('/Section 1/SubSection A', test.subsection.fulltitle())
+      test.iseq('/Section 1/SubSection\\/B', test.subsection2.fulltitle())
     end method fulltitle;
+
+    method source : str #:
+      Returns the source page and page number of this section.
+    scope:
+      root = self.root()
+      return '%s-%d' % (root.title(), self.pagenum())
+    test:
+    end method source;
+
+    method visit #:
+      Visit every leaf block in this section depth-first and apply the given
+      function to each block.
+    params:
+      var function : function #:
+        The function to apply. It accepts a Block, a Sink, and an arbitrary
+        opaque object.
+      var sink : metax.io.Sink #:
+        Where to write info.
+      var opaque : any #:
+        Arbitrary object useable within the function.
+    scope:
+      for block in self.blocks():
+        assert block.parent() is self
+        function(block, sink, opaque)
+      for child in self.children():
+        if child.isSection():
+          child.visit(function, sink, opaque)
+    test:
+    end method visit;
+
+    method walk #:
+      Visit every subsection (recursively), invoking function on each and
+      adding the child to result if the function returns true. Also applies
+      to self.
+    params:
+      var function : function #:
+        A function accepting a Section that returns true if it is to be added
+        to result, false otherwise.
+      var result : vec<Section> #:
+        Where to write matches.
+    scope:
+      if function(self):
+        result.append(self)
+      for child in self.children():
+        child.walk(function, result)
+    test:
+      /# This filter will selection 'Section 1' and 'SubSection A', but not
+      /# 'SubSection/B'.
+      def Filt(section):
+        return 'tion ' in section.title()
+      section = test.section
+      result = []
+      section.walk(Filt, result)
+      test.iseq(
+        ['Section 1', 'SubSection A'],
+        [s.title() for s in result])
+    end method walk;
 
   end class Section;
 
@@ -3029,6 +3305,9 @@ scope:
     field tables : @map #:
       Mapping from table title to Table instance.
 
+    field panels : @map #:
+      Mapping from panel title to Panel instance.
+
     lifecycle params:
       var name -> name;
       var parser -> parser;
@@ -3038,6 +3317,16 @@ scope:
       parser.bookIs(self)
     end;
 
+    method find : Object #:
+      Find an Object by fully qualified title path.
+    params:
+      var spec : str #:
+        The fully qualified title to search for.
+    scope:
+      return self.root().find(spec)
+    test:
+    end method find;
+
     method showToc #:
       Print out the table of contents
     params:
@@ -3045,7 +3334,7 @@ scope:
         Where to write output.
     scope:
       root = self.root()
-
+      /# TODO(wmh): Implement this.
     test:
     end method showToc;
 
@@ -3112,8 +3401,10 @@ scope:
   params:
     var fp : ostream = out #:
       Where to write the object
+      TODO(wmh): Replace with metax.io.Sink.
     var indent : str = '' #:
       Indentation before each line.
+      TODO(wmh): Replace with metax.io.Sink.
     var aspect : str = 'ascii' #:
       What to show. Valid values are:
         ascii: show text representation
@@ -3123,13 +3414,14 @@ scope:
         markdown: recreate the markdown text
     var parser : Parser = null #:
       The parser instance to use.
+    var depth : int = 10000 #:
+      Only recurse to children at most 'depth' levels below this one.
+      A value of 0 or less means do not show children.
     multi var kwds : map = null #:
       Additional params used only by certain subclasses:
 
-      depth : int = -1 (only Section)
-        Only recurse to children at most 'depth' levels below this one.
-        A value of 0 means do not show children. A negative value means
-        show unlimited depth.
+      start : int = 0 #:
+        Which depth to start at. Useful for adjusting indentation levels.
       nohead : bool = false (only Section)
         If true, do not insert special header/footer for top-level.
       style : str = null (only Section)
@@ -3154,6 +3446,13 @@ scope:
         The length of mark is used to determine the indentation of
         subsequent lines/blocks within the listitem.
         Currently only relevant for aspect 'ascii'.
+      width : int = 0
+        Maximum number of characters to print per line (implies line wrapping).
+        If this is 0, the width is determine by term cols.
+      rewriter : function = null #:
+        If present, any to-be-printed text is first passed to this function
+        (which accepts only the one arg of text and returns a client-specific
+        modification of the text). The text may contain newlines.
   scope:
 
     abstract receiver Block;
@@ -3170,19 +3469,41 @@ scope:
 
     receiver Paragraph ::
       nofirst = kwds.get('nofirst', False)
+      width = kwds.get('width', -1)
+      rewriter = kwds.get('rewriter', Identity)
       implicit = self.implicit()
       prelines = self.prelines()
-      rawtext = self.text()
+      rawtext = rewriter(self.text())
+
       if aspect == 'ascii':
+        /# width 0 means do not line wrap. width <0 means use terminal width
+        if width < 0:
+          /# Obtain width from the terminal
+          width = Object.TerminalWidth()
+
+        /# Insert initial blank lines as dictated by prelines.
         if prelines:
           fp.write(u'\n' * prelines)
-        if indent:
-          sep = '\n' + indent
-          if not nofirst:
-            fp.write(indent)
-          fp.write(rawtext.replace('\n', sep) + '\n')
+
+        if width:
+          /# We are to perform line wrapping
+          formatted = textwrap.fill(
+            rawtext,
+            width=width,
+            initial_indent='' if nofirst else indent,
+            subsequent_indent=indent)
+          fp.write(formatted)
+          fp.write('\n')
         else:
-          fp.write(rawtext + u'\n')
+          /# We are to keep the lines of the paragraph unwrapped.
+          if indent:
+            sep = '\n' + indent
+            if not nofirst:
+              fp.write(indent)
+            fp.write(rawtext.replace('\n', sep) + '\n')
+          else:
+            fp.write(rawtext + u'\n')
+
       elif aspect == 'html':
         if parser is None:
           parser = self.parent().parser()
@@ -3194,17 +3515,27 @@ scope:
           fp.write(indent + text.replace('\n', sep) + '\n')
         else:
           fp.write(indent + '<p>' + text.replace('\n', sep) + '</p>\n')
+
       elif aspect == 'tex':
         text = self.__class__.TextToTex(rawtext)
         fp.write(text + u'\n')
+
       else:
         print('ERROR: Unknown aspect %s for Table.show()' % aspect)
     test:
       fp = test.fp()
-      test.p2.show(fp=fp, aspect='ascii')
+      test.p2.show(fp=fp, aspect='ascii', width=0)
       test.iseqtext(
         >|"""**Some Title**. This is an example paragraph with a
         >|title (the first one is not titled)
+        >|""",
+        fp.getvalue())
+
+      fp = test.fp()
+      test.p2.show(fp=fp, aspect='ascii', width=80)
+      test.iseqtext(
+        >|"""**Some Title**. This is an example paragraph with a title (the first one is not
+        >|titled)
         >|""",
         fp.getvalue())
 
@@ -3254,7 +3585,7 @@ scope:
           fp.write(u'\n' * prelines)
         fp.write(u'%s<%s>\n' % (indent, tag))
         for item in self.items():
-          item.show(fp=fp, indent=subindent, aspect=aspect)
+          item.show(fp=fp, indent=subindent, aspect=aspect, **kwds)
         fp.write(u'%s</%s>\n' % (indent, tag))
       elif aspect == 'ascii':
         /# For ascii, the amount of extra indentation (beyond 'indent') is
@@ -3296,7 +3627,8 @@ scope:
             mark = mark_format % {'num': (i + int(self.mark()))}
           else:
             mark = mark_format
-          item.show(fp=fp, indent=indent, aspect=aspect, mark=mark)
+          kwds['mark'] = mark
+          item.show(fp=fp, indent=indent, aspect=aspect, **kwds)
       elif aspect == 'tex':
         fp.write(u'List.show() not implemented for aspect=%s\n' % aspect)
       elif aspect == 'markdown':
@@ -3340,6 +3672,8 @@ scope:
         extra_dent = len(mark)
         subindent = indent + (' ' * extra_dent)
         prelines = self.prelines()
+        /# width 0 means do not line wrap. width <0 means use terminal width
+        width = kwds.get('width', -1)
 
         if prelines:
           fp.write(u'\n' * prelines)
@@ -3348,13 +3682,16 @@ scope:
             /# This is the first block in the listitem, so we add the listitem
             /# indicator.
             if not block.isPara():
-              raise Error(
-                'Expecting paragraph but found %s in %s' %
+              print(
+                'ERROR: Expecting paragraph but found %s in %s' %
                 (type(block), block.ancestorSection().fulltitle()))
-            fp.write(indent + mark)
-            block.show(fp=fp, indent=subindent, aspect=aspect, nofirst=True)
+              fp.write('PROBLEM!\n')
+            else:
+              fp.write(indent + mark)
+              block.show(
+                fp=fp, indent=subindent, aspect=aspect, nofirst=True, **kwds)
           else:
-            block.show(fp=fp, indent=subindent, aspect=aspect)
+            block.show(fp=fp, indent=subindent, aspect=aspect, **kwds)
 
       elif aspect == 'tex':
         fp.write(u'ListItem.show() for aspect text not yet implemented\n')
@@ -3370,7 +3707,7 @@ scope:
           block.show(**kwds)
         else:
           for block in blocks:
-            block.show(fp=fp, indent=indent, aspect=aspect)
+            block.show(fp=fp, indent=indent, aspect=aspect, **kwds)
         fp.write(u'%s</li>\n' % indent)
 
       elif aspect == 'markdown':
@@ -3391,6 +3728,7 @@ scope:
     end receiver ListItem;
 
     receiver Code ::
+      rewriter = kwds.get('rewriter', Identity)
       prelines = self.prelines()
       lines = self.lines()
       if aspect == 'html':
@@ -3404,7 +3742,7 @@ scope:
             if line:
               assert line.startswith('    ')
               /# TODO(wmh): Use translate instead of multiple replace calls()
-              codeline = line[4:].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+              codeline = rewriter(line[4:]).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
               fp.write(codeline + u'\n')
             else:
               fp.write(u'\n')
@@ -3414,7 +3752,7 @@ scope:
           fp.write(u'%s<pre><code%s>' % (indent, cstr))
           for line in lines:
             /# TODO(wmh): Use translate instead of multiple replace calls()
-            codeline = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            codeline = rewriter(line).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             fp.write(codeline + u'\n')
         fp.write(u'</code></pre>\n')
       elif aspect == 'ascii':
@@ -3425,7 +3763,11 @@ scope:
           /# The indented form
           for line in lines:
             assert line.startswith('    ') or not line
-            fp.write(indent + line + '\n')
+            newline = rewriter(line) if rewriter else line
+            /# TODO(wmh): Decide whether to keep the 4 spaces of indentation,
+            /# or strip them. The important semantics here is that unlike
+            /# paragraphs, these lines are not wrapped.
+            fp.write(indent + newline + '\n')
         else:
           /# The quoted form.
           fp.write(u'%s~~~%s\n' % (indent, lang))
@@ -3522,10 +3864,82 @@ scope:
         parent = self.parent()
         parser = parent.parser() if parent else None
       prelines = self.prelines()
+      max_line_width = kwds.get('width', -1)
+      if max_line_width < 0:
+        max_line_width = Object.TerminalWidth()
+      separators = self.separators()
 
-      def FormatRow(row, aligns, widths):
-        return ' | '.join(
-          [aligns[i](row[i], widths[i]) for i in range(0, len(row))])
+      column_separator = ' | '
+      left_delim = '| '
+      right_delim = ' |'
+
+      /# Checks whether the text of a column looks like a list item, and if
+      /# so, indents wrapped lines accordingly.
+      spre = re.compile(r'^(?P<mark>\s*\* |\s*\d+\. )\S')
+
+      def WriteRow(fp, row, aligns, widths, target_widths, truncate=False):
+        N = len(row)
+
+        if truncate:
+          /# This is a simple truncation solution.
+          cols = []
+          for i in range(0, N):
+            col = row[i]
+            tw = target_widths[i]
+            if len(col) > tw:
+              col = col[:tw-1] + '$'
+            col = aligns[i](col, tw)
+            cols.append(col)
+          line = column_separator.join(cols)
+          full_line = '%s%s%s%s' % (indent, left_delim, line, right_delim)
+          if max_line_width and len(full_line) > max_line_width:
+            full_line = full_line[:max_line_width-1] + '$'
+          fp.write(full_line + '\n')
+
+        elif widths == target_widths:
+          /# Easy formatting
+          line = column_separator.join(
+            [aligns[i](row[i], widths[i]) for i in range(0, N)])
+          fp.write(u'%s%s%s%s\n' % (indent, left_delim, line, right_delim))
+
+        else:
+          /# This performs smart wrapping of every column, ensuring
+          /# that column i contributes exactly target_widths[i] characters
+          /# to the output.
+          column_lines = []
+          for i in range(0, N):
+            col = row[i]
+            n = len(col)
+            tw = target_widths[i]
+            if n > tw:
+              spm = spre.match(col)
+              coldent = ''
+              if spm:
+                coldent = ' ' * len(spm.group('mark'))
+              column_lines.append(
+                textwrap.wrap(col, width=tw, subsequent_indent=coldent))
+            else:
+              column_lines.append([col])
+          /# Now we iterate over column_lines looking at column_lines[j]. In
+          /# iteration i, we grap all values in column_lines[j][i] and form
+          /# them into a table row to print.
+          j = 0
+          while True:
+            cols = []
+            found = False
+            for i in range(0, N):
+              vlines = column_lines[i]
+              if j < len(vlines):
+                found = True
+                cstr = vlines[j]
+              else:
+                cstr = ''
+              col = aligns[i](cstr, target_widths[i])
+              cols.append(col)
+            if not found: break
+            line = column_separator.join(cols)
+            fp.write(u'%s%s%s%s\n' % (indent, left_delim, line, right_delim))
+            j += 1
 
       if aspect == 'ascii':
         if prelines:
@@ -3535,12 +3949,13 @@ scope:
 
         /# Accumulate all the entries in each column (including header)
         columns = self.columns()
+        N = len(columns)
         header = [cd['header'] for cd in columns]
         rows = self.rows()
         column_lists = []
         widths = []
         aligns = []
-        for i in range(0, len(columns)):
+        for i in range(0, N):
           clist = [header[i]]
           for row in rows:
             clist.append(row.data()[i])
@@ -3551,31 +3966,133 @@ scope:
             str.ljust if align == 'left' else
             (str.rjust if align == 'right' else str.center))
 
+        truncate = False
+        target_widths = widths
+        if max_line_width:
+          /# how much space is introduced by the column separators
+          sep_width = len(column_separator) * (N-1)
+          prepost_width = len(indent) + len(left_delim) + len(right_delim)
+          extra_width = sep_width + prepost_width
+          if max_line_width < extra_width + 2*N:
+            raise Error('Cannot shrink table to width %d' % max_line_width)
+          text_width = sum(widths)
+          available = max_line_width - extra_width
+
+          /# We create a new set of widths that will ensure the overall
+          /# width of every line does not exceed max_line_width.
+          /#  - accounts for indent, left_delim, column separators and right_delim
+          if text_width + extra_width <= max_line_width:
+            /# The widths are fine as-is
+            target_widths = widths
+
+          elif widths[0] < 10 and N == 2:
+            /# This is a special case where the first column is small, so we
+            /# don't adjust it.
+            first_width = widths[0]
+            second_width = max_line_width - first_width - extra_width
+            if second_width < 2:
+              /# TODO(wmh): We can do better than this.
+              first_width = 2
+              second_width = 2
+            target_widths = [first_width, second_width]
+
+          elif False and N == 2:
+            /# TODO(wmh): This makes column1 too small sometimes.
+            /# Enforce a minimum width on each column.
+            fractions = [w / text_width for w in widths]
+            free_width = max_line_width - extra_width
+            target_widths = [
+              int(free_width * fraction) for fraction in fractions]
+
+          else:
+            /# TODO(wmh): Some ideas here:
+            /#  - identify a certain set of columns whose widths are fixed:
+            /#     - any column whose width (ignoring header value) is less
+            /#       than some value (e.g. 10)
+            /#     - any column in which none of the non-header values has
+            /#       any spaces
+            /#  - all columns other than the ones identified above are deemed
+            /#    able to be resized with impunity
+            /#     - obtain the total width of all such columns, and
+            /#       compute the fraction each such column contributes to
+            /#       that total width
+            /#     - assign widths that maintain the percentages (or, if this
+            /#       doesn't work well, just assign equal width to each).
+            /#
+            /#  - Alternatively:
+            /#     - try a certain width distribution, then analyze the
+            /#       resulting wrappings.
+            /#        - for a specific column, if most rows do not wrap and
+            /#          only a few do, consider giving that column more
+            /#          width to avoid the uncommon wrapping.
+            tws = [0] * N
+            frozen = []
+            resizable = []
+            resize_available = available
+            retot = 0
+            for i, w in enumerate(widths):
+              if w < 10:
+                /# A column whose width is fixed.
+                frozen.append(i)
+                tws[i] = w
+                resize_available -= w
+              elif 'minwidth' in columns[i]:
+                frozen.append(i)
+                tws[i] = columns[i]['minwidth']
+                resize_available -= w
+              else:
+                /# A column whose width can be resized.
+                resizable.append(i)
+                retot += w
+
+            /# Now resize each resizable width
+            /#  - maintain relative proportion such that sum is 'resize_available'
+            newtot = 0
+            for i in resizable:
+              w = widths[i]
+              new_w = int((w/retot) * resize_available)
+              tws[i] = new_w
+              newtot += new_w
+            if resizable:
+              tws[resizable[-1]] += (resize_available - newtot)
+            target_widths = tws
+            if False:
+              print(
+                'max=%d avail=%d rzavail=%d extra=%d retot=%d newtot=%d tws=%s' %
+                (max_line_width, available, resize_available,
+                 extra_width, retot, newtot, tws))
+
         /# Print the header.
-        fp.write(
-          u'%s| %s |\n' %
-          (indent,
-           FormatRow(header, aligns, widths)))
+        WriteRow(fp, header, aligns, widths, target_widths, truncate=truncate)
 
         /# Compute and print the separator
         seplist = []
+        sepline = left_delim.replace(' ', '-')
         for i, cdata in enumerate(columns):
           align = cdata['align'] or 'left'
           left = ':' if align != 'right' else ''
           right = ':' if align != 'left' else ''
-          width = widths[i]
+          width = target_widths[i]
           sep = left + ('-' * (max(1, width - len(left + right)))) + right
           seplist.append(sep)
-        fp.write(u'%s| %s |\n' % (indent, FormatRow(seplist, aligns, widths)))
+          sepline += '-' * target_widths[i]
+          if i < N-1:
+            sepline += column_separator.replace('|', '+').replace(' ', '-')
+        sepline += right_delim.replace(' ', '-') + '\n'
+        /# WriteRow(fp, seplist, aligns, widths, target_widths, truncate=truncate)
+        fp.write(indent + sepline)
 
         /# Print the data rows.
         /#   TODO(wmh): Find max width for each column.
-        for row in self.rows():
-          fp.write(
-            u'%s| %s |\n' %
-            (indent, FormatRow(row.data(), aligns, widths)))
+        sepdx = 0
+        for i, row in enumerate(self.rows()):
+          if sepdx < len(separators) and separators[sepdx] == i:
+            fp.write(sepline)
+            sepdx += 1
+          WriteRow(fp, row.data(), aligns, widths, target_widths, truncate=truncate)
 
-        fp.write(u'\n')
+        /# Everything ends with an empty line.
+        fp.write('\n')
 
       elif aspect == 'tex':
         columns = self.columns()
@@ -3676,7 +4193,7 @@ scope:
         >|r"""...Table: Table Title
         >|
         >|...| Name  | Age | Height | Fruit |
-        >|...| :---- | :-- | -----: | :---: |
+        >|...|-------+-----+--------+-------|
         >|...| Alice | 25  |   1.7m |  Kiwi |
         >|...| Bob   | 23  |   1.9m | Apple |
         >|
@@ -3713,24 +4230,90 @@ scope:
         >|""".rstrip().split('\n'))
       fp = test.fp()
       table.show(fp=fp, aspect='html')
+
+      text = """\
+        >|Table: Subclasses
+        >|
+        >|| Class      | Subclass                      | Level | Description                                                       |
+        >||------------+-------------------------------+-------+-------------------------------------------------------------------|
+        >|| Barbarian  | Path ofthe Ancestral Guardian | 3rd   | Calls on the spirits of honored ancestors to protect others       |
+        >|| Barbarian  | Path of the Storm Herald      | 3rd   | Filled with a rage that channels the primal magic of the storm    |
+        >|| Barbarian  | Path ofthe Zealot             | 3rd   | Fueled by a religious zeal that visits destruction on foes        |
+        >|| Bard       | College of Glamour            | 3rd   | Wields the beguiling, glorious magic of the Feywild               |
+        >|| Bard       | College of Swords             | 3rd   | Entertains and slays with daring feats of weapon prowess          |
+        >|| Bard       | College of Whispers           | 3rd   | Plants fear and doubt in the minds of others                      |
+        >|| Cleric     | Forge Domain                  | 1st   | Clad in heavy armor, serves a god of the forge or creation        |
+        >|| Cleric     | Grave Domain                  | 1st   | Opposes the blight of undeath                                     |
+        >|| Druid      | Circle of Dreams              | 2nd   | Mends wounds, guards the weary, and strides through dreams        |
+        >|| Druid      | Circle of the Shepherd        | 2nd   | Summons nature spirits to bolster friends and harry foes          |
+        >|| Fighter    | Arcane Archer                 | 3rd   | Imbues arrows with spectacular magical effects                    |
+        >|| Fighter    | Cavalier                      | 3rd   | Defends allies and knocks down enemies, often on horseback        |
+        >|| Fighter    | Samurai                       | 3rd   | Combines resilience with courtly elegance and mighty strikes      |
+        >|| Monk       | Way of the Drunken Master     | 3rd   | Confounds foes through a martial arts tradition inspired by the   |
+        >||            |                               |       | swaying of a drunkard                                             |
+        >|| Monk       | Way of the Kensei             | 3rd   | Channels ki through a set of mastered weapons                     |
+        >|| Monk       | Way of the Sun Soul           | 3rd   | Transforms ki into bursts of fire and searing bolts of light      |
+        >|| Paladin    | Oath of Conquest              | 3rd   | Strikes terror in enemies and crushes the forces of chaos         |
+        >|| Paladin    | Oath of Redemption            | 3rd   | Offers redemption to the worthy and destruction to those who      |
+        >||            |                               |       | refuse mercy or righteousness                                     |
+        >|| Ranger     | Gloom Stalker                 | 3rd   | Unafraid of the dark, relentlessly stalks and ambushes foes       |
+        >|| Ranger     | Horizon Walker                | 3rd   | Finds portals to other worlds and channels planar magic           |
+        >|| Ranger     | Monster Slayer                | 3rd   | Hunts down creatures of the night and wielders of grim magic      |
+        >|| Rogue      | Inquisitive                   | 3rd   | Roots out secrets, akin to a masterful detective                  |
+        >|| Rogue      | Masterm ind                   | 3rd   | A master tactician , manipulates others                           |
+        >|| Rogue      | Scout                         | 3rd   | Combines stealth with a knack for survival                        |
+        >|| Rogue      | Swashbuckler                  | 3rd   | Delivers deadly strikes with speed and panache                    |
+        >|| Sorcerer   | Divine Soul                   | 1st   | Harnesses magic bestowed by a god or other divine source          |
+        >|| Sorcerer   | Shadow Magic                  | 1st   | Wields the grim magic of the Shadowfell                           |
+        >|| Sorcerer   | Storm Sorcery                 | 1st   | Crackles with the power of the storm                              |
+        >|| Warlock    | The Celestial                 | 1st   | Forges a pact with a being from celestial realms                  |
+        >|| Warlock    | The Hexblade                  | 1st   | Serves a shadowy entity that bestows dread curses                 |
+        >|| Wizard     | War Magic                     | 2nd   | Mixes evocation and abjuration magic to dominate the battlefield  |
+        >|"""
+      lines = text.split('\n')
+      lines.pop()
+      table, errors = test.newTable(lines=lines)
+      test.iseq([], errors)
+      fp = test.fp()
+      table.show(width=80, fp=fp)
+      out = test.out()
+      golden = metax.root.Object.Resource(
+        'table_golden', fqn='metax.lib.markdown_test.TestCase')
+      test.iseqstrgold(out, golden)
     end receiver Table;
 
     receiver Section ::
-      depth = kwds.get('depth', -1)
+      start = kwds.get('start', 0)
       nohead = kwds.get('nohead', False)
       style = kwds.get('style', None)
       preamble = kwds.get('preamble', None)
       postamble = kwds.get('postamble', None)
+      width = kwds.get('width', -1)
+      if width < 0:
+        width = Object.TerminalWidth()
+
+      /# A width of 0 means do not format. But when printing the section itself
+      /# we need to have some width for toc, etc.
+      toc_width = width or Object.TerminalWidth()
 
       d = self.depth()
 
+      /#print('Here with aspect=%s depth=%d d=%d' % (aspect, depth, d))
+
       prelines = self.prelines()
       if aspect.startswith('title'):
+        /# Show table-of-contents style output
         abbrev = self.abbrev()
         abbrevstr = ' [=%s]' % abbrev if abbrev else ''
-        fp.write(
-          u'%s%s%s%s\n' %
-          (indent, '  ' * d, self.title() or '(sham)', abbrevstr))
+        pagenum = self.pagenum()
+        indented_title = '%s%s%s%s' % (
+          indent, '  ' * (d-start), self.title() or '(sham)', abbrevstr)
+        if pagenum:
+          fp.write(
+            '%s%s%d\n' %
+            (indented_title, '.' * (toc_width-5-len(indented_title)), pagenum))
+        else:
+          fp.write('%s\n' % indented_title)
         if aspect == 'title*':
           for block in self.blocks():
             title = block.title()
@@ -3739,15 +4322,16 @@ scope:
               /# section titles.
               title = '*' + title
               /# Write the augmented text title.
-              fp.write(u'%s%s%s\n' % (indent, '  ' * (d+1), title))
+              fp.write(u'%s%s%s (%d)\n' % (indent, '  ' * (d+1), title))
         /# Now handle children
-        if depth != 0:
+        if depth > 0:
           for child in self.children():
             child.show(
-              fp=fp, indent=indent, aspect=aspect, depth=depth-1,
-              parser=parser)
+              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser,
+              **kwds)
 
       elif aspect == 'ascii':
+        /# Format into ascii
         if d:
           if prelines:
             fp.write(u'\n' * prelines)
@@ -3755,15 +4339,16 @@ scope:
             u'%s%s %s\n' %
             (indent, '#' * d, self.title()))
         for block in self.blocks():
-          block.show(fp=fp, indent=indent, aspect=aspect, parser=parser)
+          block.show(fp=fp, indent=indent, aspect=aspect, parser=parser, **kwds)
         /# Now handle children
-        if depth != 0:
+        if depth > 0:
           for child in self.children():
             child.show(
-              fp=fp, indent=indent, aspect=aspect, depth=depth-1,
-              parser=parser)
+              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser,
+              **kwds)
 
       elif aspect == 'html':
+        /# Format as HTML
         d = self.depth()
         title = self.title() or ''
 
@@ -3803,13 +4388,14 @@ scope:
 
         /# Print out any block objects.
         for block in self.blocks():
-          block.show(fp=fp, aspect=aspect, parser=parser)
+          block.show(fp=fp, aspect=aspect, parser=parser, **kwds)
 
         /# Now handle children
-        if depth != 0:
+        if depth > 0:
           for child in self.children():
             child.show(
-              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser)
+              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser,
+              **kwds)
 
         /# Perform any wrap-up needed.
         if d == 0 and not nohead:
@@ -3890,13 +4476,14 @@ scope:
 
         /# Print out any block objects.
         for block in self.blocks():
-          block.show(fp=fp, aspect=aspect, parser=parser)
+          block.show(fp=fp, aspect=aspect, parser=parser, **kwds)
 
         /# Now handle children
-        if depth != 0:
+        if depth > 0:
           for child in self.children():
             child.show(
-              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser)
+              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser,
+              **kwds)
 
         /# Perform any wrap-up needed.
         if d == 0:
@@ -3915,7 +4502,7 @@ scope:
       test.iseq(2, block2.prelines())
 
       fp = test.fp()
-      section.show(fp=fp)
+      section.show(fp=fp, width=0)
       test.iseqtext("""
         >|## SubSection A
         >|
@@ -4181,6 +4768,10 @@ scope:
       test.section = test.root.newChild(title='Section 1')
       test.subsection = test.section.newChild(
         abbrev='suba', title='SubSection A')
+      test.subsection2 = test.section.newChild(
+        /# This is a subsection whose title contains a '/' ... need to escape
+        /# it when forming fulltitle.
+        abbrev='sub2', title='SubSection/B')
       test.p1 = metax.lib.markdown.Paragraph(
         test.subsection,
         'This is an example paragraph containing a few lines\n'
@@ -4189,6 +4780,9 @@ scope:
         test.subsection,
         '**Some Title**. This is an example paragraph with a\n'
         'title (the first one is not titled)')
+      test.table = metax.lib.markdown.Table(
+        /# This title must escaped the / when forming fulltitle.
+        test.subsection, [], [], title='Table with / in it')
       /# NOTE: Intentionally have NOT added p1 and p2 to subsection yet,
       /# although they know they are children of subsection.
     clsetup:
@@ -4200,10 +4794,13 @@ scope:
     method parseMarkdown params:
       var resource : str #:
         The resource (defined here in this class) containing a markdown file.
+      var titlere : regexp = null #:
+        If present, specifies how section titles should be massaged. See
+        Parser.parseLines() for details.
     scope:
       respath = metax.root.Object.Resource(
         resource, fqn='metax.lib.markdown_test.TestCase')
-      result = self.md.parseFile(respath)
+      result = self.md.parseFile(respath, titlere=titlere)
       return result
     end;
 

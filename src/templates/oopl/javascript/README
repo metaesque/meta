@@ -10,4 +10,7 @@ WORKSPACE:
   Of particular importance is io_bazel_rules_closure, from
   https://github.com/bazelbuild/rules_closure, which defines the bazel rules
   for compiling javascript using the Google Closure Compiler.
-  
+  TODO(wmh): Look into whether rules_nodejs is a better solution.
+   - https://github.com/bazelbuild/rules_nodejs
+   - See also https://github.com/bazelbuild/rules_nodejs/issues/966 and
+     https://docs.google.com/document/d/1Sq9c8NybsOzUy0EfoSc71469g-HWxRMAJx-ucfBqAGM/edit

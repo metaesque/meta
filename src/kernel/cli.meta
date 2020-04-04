@@ -215,7 +215,7 @@ scope:
           else:
             raise Error('Unrecognized date "%s"' % value)
 
-      elif mytype == 'regexp':
+      elif mytype == 're':
         if value == '':
           /# Fix this hackery. How to specify a default value?
           result = re.compile(r'.*')
@@ -1129,7 +1129,7 @@ scope:
           >|    Height in meters.
           >|  --name : str = "Bob"
           >|    The name of the person
-          >|  --version|r : regexp = |<
+          >|  --version|r : re = |<
           >|    Version to use.
           >|  image:
           >|    Image processing.
@@ -1160,7 +1160,7 @@ scope:
           >|    Height in meters.
           >|  --name : str = "Bob"
           >|    The name of the person
-          >|  --version|r : regexp = |<
+          >|  --version|r : re = |<
           >|    Version to use.
           >|  files: The image files.
           >|""",
@@ -1813,7 +1813,7 @@ scope:
         'dob', mytype='date', aliases='d', default='1980-05-17',
         summary='Date of birth.')
       test.reflag = test.faux.newFlag(
-        'version', mytype='regexp', aliases='r', default='',
+        'version', mytype='re', aliases='r', default='',
         summary='Version to use.')
       test.enumflag = test.faux.newFlag(
         'gender', mytype='enum<undef|female|male|trans>', default='undef',

@@ -478,6 +478,11 @@ namespace metax.meta scope:
     test:
       pass
 
+    method isStatement : bool scope:
+      return False
+    test:
+      pass
+
     method rawattr : metax.attr.Attribute #:
       Obtain the attribute with given key.
 
@@ -650,7 +655,8 @@ namespace metax.meta scope:
       /# TODO(wmh): If attr was found via LOOKUP, consider returning None
       /# for attr (but keeping the value as-is). This signals the caller that
       /# the attr cannot be used to form a meta-line number, so the caller
-      /# can use some other attribute (e.g. primary) instead.
+      /# can use some other attribute (e.g. primary) instead. Or, better,
+      /# return a third arg to accomplish this.
       return (attr, attr.value() if attr else None)
     test:
       cards1, scope, namespace, path = test.getMetaFile(
@@ -880,6 +886,9 @@ namespace metax.meta scope:
         a request to return an Attribute rather than a Construct. For example,
         '/nm.sp/Person/bmi@scope' returns the 'bmi' method construct, while
         '/nm.sp/Person/@scope' returns the scope of Person.
+
+        TODO(wmh): Support integer specifiers here (first child within
+        scope, etc).
       var delim : str = None #:
         What is used to separate descendents.
          - Use '/' to avoid the issues with the non-nesting of namespace ids,
@@ -1609,7 +1618,7 @@ namespace metax.meta scope:
       var suffix : str = null #:
         If present, another format string to print, after primary text
         is aligned to width chars. Same escapes available as in 'form'.
-      var filter : regexp = null #:
+      var filter : re = null #:
         If present, only display a summary line if level is less than 3
         or if the summary line contains the specified regexp.
     scope:

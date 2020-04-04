@@ -291,10 +291,20 @@ scope:
       /# Establish column width
       /#   TODO(wmh): If we went to python3-only, we could use
       /#   shutil.get_terminal_size()
-      rows, columns = os.popen('stty size', 'r').read().split()
+      fp = os.popen('stty size', 'r')
+      rows, columns = fp.read().split()
+      fp.close()
       self.columnsIs(int(columns))
 
     clinit:
+      /# Clean up this silliness
+      def Hack(v):
+        fp = os.popen('stty size', 'r')
+        width = int(fp.read().split()[1])
+        fp.close()
+        return width
+      cls.Hack = Hack
+
       cls.HISTORY_RE = re.compile('^\s*!(-?\d+|!)\s*$')
 
       def Bool(v):
@@ -867,8 +877,8 @@ scope:
         for command in sorted(self._commands.keys()):
           info = self._commands[command]
           method = info['method']
-          /#print(dir(method.im_func))
-          desc = method.im_func.func_doc
+          /# print(dir(method))
+          desc = method.__doc__
           lines = re.split(
             '\n', desc or 'Missing doc string: ' % method.__name__)
           self.log('%-15s: %s\n', command, lines[0])
@@ -1106,9 +1116,10 @@ scope:
       sh = test.shell
       sh.defineVariable(
         'width', int, kind='shell', default=70, summary='desired output width')
+
       sh.defineVariable(
         'termwidth', int, kind='shell', default=75,
-        readonly=lambda sh: int(os.popen('stty size', 'r').read().split()[1]),
+        readonly=metax.lib.shell.Shell.Hack,
         summary='current terminal width')
       sh.defineVariable('cell', str, kind='context', default='qa')
       sh.defineVariable('HOME', str, kind='env', default='/home/bob')
@@ -1216,7 +1227,7 @@ scope:
         'width', int, kind='shell', default=70, summary='desired output width')
       sh.defineVariable(
         'termwidth', int, kind='shell', default=75,
-        readonly=lambda sh: int(os.popen('stty size', 'r').read().split()[1]),
+        readonly=metax.lib.shell.Shell.Hack,
         summary='current terminal width')
       sh.defineVariable('cell', str, kind='context', default='qa')
       sh.defineVariable('HOME', str, kind='env', default='/home/bob')
@@ -1280,7 +1291,7 @@ scope:
         'width', int, kind='shell', default=70, summary='desired output width')
       sh.defineVariable(
         'termwidth', int, kind='shell', default=75,
-        readonly=lambda sh: int(os.popen('stty size', 'r').read().split()[1]),
+        readonly=metax.lib.shell.Shell.Hack,
         summary='current terminal width')
       sh.defineVariable('cell', str, kind='context', default='qa')
       sh.defineVariable('HOME', str, kind='env', default='/home/bob')

@@ -10,11 +10,20 @@ scope:
     std usertest assoc io;
     std assoc os #:
       TODO(wmh): Does this need to use metax.fs???
+    std assoc sys;
   scope:
 
     static
     field Null : Sink #:
-      A special instance of Sink that writes to /dev/null.
+      An instance of Sink that writes to /dev/null.
+
+    static
+    field Out : Sink #:
+      An instance of Sink that writes to stdout.
+
+    static
+    field Err : Sink #:
+      An instance of Sink that writes to stderr.
 
     field fp : ostream #:
       Where to write.
@@ -42,6 +51,8 @@ scope:
       /# logic as all other lines.
       self.lastcIs('\n')
     clinit:
+      cls.OutIs(Sink(fp=sys.stdout))
+      cls.ErrIs(Sink(fp=sys.stderr))
       dfp = open(os.devnull, 'w')
       cls.NullIs(Sink(fp=dfp))
     setup:
@@ -50,6 +61,18 @@ scope:
     end;
 
     test field sink : wmh.google.hotels.Sink;
+
+    method clone : Sink #:
+      Make a copy of myself
+    scope:
+      cls = self.__class__
+      result = cls(fp=self.fp())
+      result.prefixesIs(self.prefixes()[:])
+      result.lastcIs(self.lastc())
+      result.pathmapIs(self.pathmap())
+      return result
+    test:
+    end method clone;
 
     method prefix : str #:
       Returns current indentation prefix.
@@ -121,7 +144,7 @@ scope:
       sink.writeln('goodbye')
       test.iseqtext("""\
         >|..hello
-        >|..
+        >|
         >|
         >|..goodbye
         >|""",
@@ -132,7 +155,7 @@ scope:
       Write text to the sink, honoring indent.
     params:
       var text : str #:
-        The text to write.  All newlines are replaces with indentation.
+        The text to write.  All newlines are replaced with indentation.
       multi var args : vec<any> #:
         A collection of args to apply to the printf template specified by text.
     scope:
@@ -175,29 +198,29 @@ scope:
     test:
       sink = test.sink()
 
-      sink.write(u'hello.')
+      sink.write('hello.')
       test.iseq('.', sink.lastc())
-      test.iseqtext(u'..hello.', sink.fp().getvalue())
+      test.iseqtext('..hello.', sink.fp().getvalue())
 
-      sink.write(u' This is\na test ')
+      sink.write(' This is\na test ')
       test.iseq(' ', sink.lastc())
-      test.iseqtext(u'..hello. This is\n..a test ', sink.fp().getvalue())
+      test.iseqtext('..hello. This is\n..a test ', sink.fp().getvalue())
 
-      sink.write(u'and now\nanother\n')
+      sink.write('and now\nanother\n')
       test.iseq('\n', sink.lastc())
       test.iseqtext(
-        u'..hello. This is\n'
-        u'..a test and now\n'
-        u'..another\n',
+        '..hello. This is\n'
+        '..a test and now\n'
+        '..another\n',
         sink.fp().getvalue())
 
-      sink.write(u'to verify newlines\n')
+      sink.write('to verify newlines\n')
       test.iseq('\n', sink.lastc())
       test.iseqtext(
-        u'..hello. This is\n'
-        u'..a test and now\n'
-        u'..another\n'
-        u'..to verify newlines\n',
+        '..hello. This is\n'
+        '..a test and now\n'
+        '..another\n'
+        '..to verify newlines\n',
         sink.fp().getvalue())
     end method write;
 
@@ -235,6 +258,23 @@ scope:
       sink.write('a test')
       sink.flush()
     end method flush;
+
+    method append #:
+      Write text to stream without adding indentation.
+    params:
+      var phrase : str #:
+        Should NOT contain newlines except optionally at the end.
+    scope:
+      if phrase:
+        self.fp().write(phrase)
+        self.lastcIs(phrase[-1])
+    test:
+      sink = test.sink()
+      sink.indent('..')
+      sink.write('a test')
+      sink.append(' and more\n')
+      test.iseq('....a test and more\n', sink.fp().getvalue())
+    end method append;
 
     method truncate : str #:
       Truncate a path by using a prefix from prefixes.
