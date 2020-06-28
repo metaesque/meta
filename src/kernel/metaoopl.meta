@@ -9461,6 +9461,10 @@ namespace metax.oopl scope:
       metafile = self.metafile()
       baselang = metafile.compiler().baselang()
 
+      /# TODO(wmh): We need a method that obtains the nearest ancestor of self
+      /# that has a symboltable.
+      symcons = self.parentConstruct().parentConstruct()
+
       /# Must have an 'expr' attribute.
       /#  - or do we want to have a case without 'expr' be the final 'else'
       /#    clause?
@@ -9468,7 +9472,8 @@ namespace metax.oopl scope:
       if expr_attr is None:
         metafile.error('missing required expr', attr=self.primary())
         return
-      estr, etype = baselang.compileExpr(expr, metafile)
+      estr, etype = baselang.compileExpr(
+        expr, metafile, executable=symcons)
 
       /# Must have a 'scope' attribute
       scope_attr = self.attr('scope:', default=None)
@@ -9548,6 +9553,37 @@ namespace metax.oopl scope:
             >|""",
         },
       )
+
+      code2 = """\
+        >|namespace hack.stmts scope:
+        >|  class B scope:
+        >|    method f scope<*>:
+        >|      var h : map;
+        >|      var i : int;
+        >|      switch i ::
+        >|        case expr (@h.has('a')) :<py>:
+        >|          f = 1
+        >|        case is 2 :<py>:
+        >|          f = 7
+        >|"""
+
+      test.checkStatement(
+        code2,
+        /# Path
+        '/hack.stmts/B/f',
+        /# Output
+        expected={
+          'py': """\
+            >|h = None
+            >|i = 0
+            >|if 'a' in h:
+            >|  f = 1
+            >|elif i == 2:
+            >|  f = 7
+            >|"""
+        },
+      )
+
     end receiver CaseConstruct;
 
   end behavior translateMeta;
@@ -10183,7 +10219,9 @@ namespace metax.oopl scope:
         methods.
         TODO(wmh): This should probably be renamed to symcons of type
         SymbolConstruct ... for var-related exprs it will be a MethodConstruct,
-        but for fields it will be a ClassConstruct.
+        but for fields it will be a ClassConstruct. And for experessions found
+        within CaseConstructs, etc. it can be numerous things (SwitchConstruct,
+        LoopConstruct, etc.)
       var metatype : metax.c.Type = null #:
         The expected type of the expression. Used if expr is null, to establish
         a default value. Note that this method returns the metatype when expr is
@@ -10429,7 +10467,7 @@ namespace metax.oopl scope:
               metafile.error('expression returned non bool %s' % str(btype))
             else:
               /# We do not need to wrap code in (), as code will be properly
-              /# wrapper per the baselang.
+              /# wrapped per the baselang.
               lines[-1] += code
               /# print('LINES: %s' % str(lines))
         elif n == 2:
@@ -10437,7 +10475,7 @@ namespace metax.oopl scope:
           /# operator is '!'
           if edata[0] != '!':
             metafile.error(
-              'Found 2 elements in expr but 2nd is not Expr: %s' % str(edata))
+              'Found 2 elements in expr but 1st is not !: %s' % str(edata))
           elif not isinstance(edata[1], metax.c.Expr):
             metafile.error(
               'Found 2 elements in expr but 2nd is not Expr: %s' % str(edata))
@@ -15952,7 +15990,9 @@ namespace metax.oopl scope:
               /# template code (something lower-level than nativeMethodToBase).
               suffix = self.suffix()
               tmplcode = dmap['code'][suffix]
-              basedef = tmplcode % {'A1': basedef}
+              /# If the default value is a string, we make it a raw string.
+              litstr = 'r' + basedef if mtype2.base() == 'str' else basedef
+              basedef = tmplcode % {'A1': litstr}
 
           /# Sanity check.
           print(

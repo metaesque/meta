@@ -1179,6 +1179,24 @@ scope:
       test.iseq(1, len(book.root().children()))
     end method loadBook;
 
+    method readBook : Section #:
+      Read a book from an open istream
+    params:
+      var ifp : istream #:
+        The stream to read from.
+      var bookname : str = 'Book' #:
+        The name of the book containing all the paths.
+      var path : str = null #:
+        The path associated with the input stream.
+    scope:
+      book = Book(bookname, self)
+      root = book.root()
+      lines = ifp.read().replace('\t', '    ').split('\n')
+      self.parseLines(lines, parent=root, path=path)
+      return book
+    test:
+    end method readBook;
+
     implicit
     command wmd #:
       Wade's markdown.
@@ -1517,6 +1535,10 @@ scope:
       test.isfalse(hr.isBlock())
     end method isBlock;
 
+    method isPanel : bool scope:
+      return False
+    end method isPanel;
+
     method asStr : vec<str> #:
       Return a string representing the formatted contents of this block.
 
@@ -1541,6 +1563,12 @@ scope:
       return self.asStr().splitlines(keepends=True)
     test:
     end method asLines;
+
+    abstract
+    method blobs : vec<str> #:
+      Convert this block into a collection of strings suitable for use
+      in visit() and other text-based searches.
+    end method blobs;
 
   end class Block;
 
@@ -1605,6 +1633,16 @@ scope:
       group = test.group
       test.iseq(2, len(group.blocks()))
     end method addBlock;
+
+    method blobs : vec<str> #:
+      Convert this block into a collection of strings suitable for use
+      in visit() and other text-based searches.
+    scope:
+      result = []
+      for block in self.blocks():
+        result.extend(block.blobs())
+      return result
+    end method blobs;
 
   end class BlockGroup;
 
@@ -1797,7 +1835,7 @@ scope:
       if display_height:
         imgattrs['height'] = display_height
       imgattrstr = ' '.join(
-        ['%s=%s' % (attr, imgattrs[attr]) for attr in sorted(imgattrs)])
+        ['%s="%s"' % (attr, imgattrs[attr]) for attr in sorted(imgattrs)])
 
       /# If actual image dimensions are provided, format a string for them.
       width = data.get('width', None)
@@ -1850,6 +1888,11 @@ scope:
     scope:
       orig = text
       urlmap = {'': 0}
+      textlen = len(text)
+
+      /# A collection of multi-line html strings formatting an inline image.
+      /# All such html is inserted BEFORE the paragraph text.
+      image_chunks = []
 
       /# Now handle url replacement. This is a three-step process:
       /#  1. identify the url and image references and compute the desired
@@ -1886,9 +1929,10 @@ scope:
 
         data = {
           'indent': '',
-          'class': csscls or 'image bgblack right',
+          'class': csscls or 'image right',
           'url': url,
-          'header': text,
+          /# 'header': text,
+          'alt': text,
           'tooltip': title,
         }
 
@@ -1901,7 +1945,30 @@ scope:
           result = 'ERROR{%s}' % error
         elif d['img']:
           /# We are to inline an image.
-          result = cls.Image2Html(data)
+          /#  - determine if the inline image is appearing at the start of the
+          /#    paragraph, end of the paragraph, or in the middle of a paragraph.
+          if m.start(0) < 2:
+            /# Inline image at beginning of paragraph.
+            align = 'left'
+          elif m.end(0) >= textlen - 2:
+            /# Inline image at beginning of paragraph.
+            /#  - TODO(wmh): How to get the image to float to the right AND
+            /#    float to the bottom of the paragraph? Currently floats right
+            /#    but starts at top of paragraph.
+            align = 'right'
+          else:
+            align = None
+
+          if align:
+            data['class'] = csscls or ('image ' + align)
+            img_html = cls.Image2Html(data)
+            image_chunks.append(img_html)
+          else:
+            orig = m.group(0)
+            print('ERROR: Not currently handling inline images inside paragraph: %s' % orig)
+            image_chunks.append('<b>ERROR(EMBEDDEDURL):%s:(IGNORED)' % orig)
+          /# The markdown syntax is removed (we recorded the image html above).
+          result = ''
         else:
           data['csscls'] = ' class="%s"' % csscls if csscls else ''
           /# Although the adding of newline-indent was meant to make certain
@@ -1909,7 +1976,7 @@ scope:
           /# code in various situations, so as of 2017-12-27 I'm disabling
           /# it.
           result = (
-            '%(indent)s<a href="%(url)s"%(csscls)s>%(header)s</a>' % data)
+            '%(indent)s<a target="_blank" href="%(url)s"%(csscls)s>%(alt)s</a>' % data)
 
         key = '<<<URLKEY%d>>>' % urlmap['']
         urlmap[''] += 1
@@ -1944,6 +2011,14 @@ scope:
       def KeyRepl(m):
         return urlmap[m.group('key')]
       text = keyre.sub(KeyRepl, text)
+
+      if image_chunks:
+        if False:
+          print('#' * 80)
+          pprint.pprint(image_chunks)
+          print('#' * 80)
+        image_chunks.append(text)
+        text = '\n'.join(image_chunks)
 
       return text
     test:
@@ -2207,6 +2282,13 @@ scope:
     test:
     end method clone;
 
+    method blobs : vec<str> #:
+      Convert this block into a collection of strings suitable for use
+      in visit() and other text-based searches.
+    scope:
+      return [self.text()]
+    end method blobs;
+
   end class Paragraph;
 
   class Quote < Block #:
@@ -2228,6 +2310,13 @@ scope:
       /# the caller to do so.
       self.linesIs(lines)
     end lifecycle;
+
+    method blobs : vec<str> #:
+      Convert this block into a collection of strings suitable for use
+      in visit() and other text-based searches.
+    scope:
+      return [' '.join(self.lines())]
+    end method blobs;
 
   end class Quote;
 
@@ -2334,6 +2423,16 @@ scope:
       test.iseq(3, len(test.ul.items()))
     end method newItem;
 
+    method blobs : vec<str> #:
+      Convert this block into a collection of strings suitable for use
+      in visit() and other text-based searches.
+    scope:
+      result = []
+      for item in self.items():
+        result.extend(item.blobs())
+      return result
+    end method blobs;
+
   end class List;
 
   class ListItem < BlockGroup #:
@@ -2408,6 +2507,13 @@ scope:
     test:
     end method isCode;
 
+    method blobs : vec<str> #:
+      Convert this block into a collection of strings suitable for use
+      in visit() and other text-based searches.
+    scope:
+      return [' '.join(self.lines())]
+    end method blobs;
+
   end class Code;
 
   class HR < Object #:
@@ -2431,6 +2537,14 @@ scope:
     lifecycle setup:
       self.hr = metax.lib.markdown.HR(test.section, '* * *', prelines=1)
     end lifecycle;
+
+    method blobs : vec<str> #:
+      Convert this block into a collection of strings suitable for use
+      in visit() and other text-based searches.
+    scope:
+      return []
+
+    end method blobs;
 
   end class HR;
 
@@ -2459,6 +2573,14 @@ scope:
       self.html = metax.lib.markdown.HTML(
         test.section, ['<p>blah</p>'])
     end;
+
+    method blobs : vec<str> #:
+      Convert this block into a collection of strings suitable for use
+      in visit() and other text-based searches.
+    scope:
+      return [' '.join(self.lines())]
+    end method blobs;
+
   end class HTML;
 
   class Table < Block #:
@@ -2572,8 +2694,9 @@ scope:
       if not lines[header_start].strip():
         header_start += 1
 
-      /# If the lines represent a table, the 1st, 3rd or 4th line
-      /# must contain the column spec, so we look for it in those lines.
+      /# If the lines represent a table, some line must represent the column
+      /# spec, consisting solely of chars in [-<|:+ ]. We identify which line
+      /# this spec is in.
       m = None
       spec = None
       for i in range(header_start, min(10, len(lines))):
@@ -2635,19 +2758,6 @@ scope:
               '"%s" is not a valid colspec in "%s"' % (colspec, xspec))
         numcols = len(columns)
 
-        /# Parse the column headers, if they exist.
-        if i > 0:
-          headers = delim_re.split(lines[header_start].strip())[1:-1]
-          if len(headers) != numcols:
-            errors.append(
-              'Found %d headers but %d columns: %s' %
-              (len(headers), numcols, lines[header_start]))
-            for line in lines:
-              errors.append('  ' + line)
-          else:
-            for j in range(0, numcols):
-              columns[j]['header'] = headers[j].strip()
-
         /# Obtain the table title.
         title = None
         csscls = None
@@ -2671,6 +2781,35 @@ scope:
                 else:
                   css.append(part)
               csscls = ' '.join(css)
+
+        /# Parse the column headers, if they exist.
+        if i > 0:
+          hi = header_start
+          while hi < data_start-1:
+            headers = delim_re.split(lines[hi].strip())[1:-1]
+            if len(headers) != numcols:
+              errors.append(
+                'Found %d headers but %d columns: %s' %
+                (len(headers), numcols, lines[header_start]))
+              for line in lines:
+                errors.append('  ' + line)
+            else:
+              if hi == header_start:
+                /# First header line
+                for j in range(0, numcols):
+                  columns[j]['header'] = headers[j].strip()
+              else:
+                /# Not first header line (append to previously computed values)
+                for j in range(0, numcols):
+                  nh = headers[j].strip()
+                  ch = columns[j]['header']
+                  if ch:
+                    if nh:
+                      /# TODO(wmh): Should this use a newline or a space??
+                      columns[j]['header'] = ch + ' ' + nh
+                  else:
+                    columns[j]['header'] = nh
+            hi += 1
 
         /# Parse the remaining lines as rows in the table.
         rows = []
@@ -2785,7 +2924,9 @@ scope:
           /# row, but rather that subsequent columns are wrapped text from
           /# previous row. We are to append all such strings to previous.
           if not rawrows:
-            raise Error('Table has an empty first column of first row')
+            raise Error(
+              'Table %s has an empty first column of first row' %
+              self.fqn())
           prev_row = rawrows[-1]
           for i in range(1, len(data)):
             prev_row[i] += ' ' + data[i]
@@ -2805,6 +2946,16 @@ scope:
       return result
     test:
     end method unwrapped;
+
+    method blobs : vec<str> #:
+      Convert this block into a collection of strings suitable for use
+      in visit() and other text-based searches.
+    scope:
+      result = []
+      for row in self.rows():
+        result.extend(row.blobs())
+      return result
+    end method blobs;
 
   end class Table;
 
@@ -2851,6 +3002,13 @@ scope:
       self.row2 = self.table.rows()[1]
     end lifecycle;
 
+    method blobs : vec<str> #:
+      Convert this block into a collection of strings suitable for use
+      in visit() and other text-based searches.
+    scope:
+      return self.data()
+    end method blobs;
+
   end class Row;
 
   class Panel < BlockGroup #:
@@ -2878,6 +3036,10 @@ scope:
       panel = metax.lib.markdown.Panel(test.subsection, title='Testing')
       test.iseq('Testing', panel.title())
     end;
+
+    method isPanel : bool scope:
+      return True
+    end method isPanel;
 
   end class Panel;
 
@@ -2922,7 +3084,8 @@ scope:
       depth 1, etc.
 
     field keys : @map<str,Object> #:
-      Maps section or text titles to Section or Text instances. Used by find().
+      Maps section or text titles to Section or Text instances. Used by find()
+      and child().
 
     field pagenum : int #:
       The page number that this section starts on
@@ -3089,6 +3252,23 @@ scope:
       test.iseq(1, len(section.blocks()))
     end method addBlock;
 
+    method child : Section #:
+      Obtain an immediate child by child title.
+    params:
+      var title : str #:
+        The title of the child.
+    scope:
+      result = self.keys().get(title, None)
+      /# TODO(wmh): Is it possible the result is NOT a section? Should we return
+      /# null if it is not?
+      if result and not result.isSection():
+        print(
+          '************ metax.lib.markdown.Section.child: HERE with %s' % result)
+        result = None
+      return result
+    test:
+    end method child;
+
     method addChild #:
       Add a child section to myself.
     params:
@@ -3247,9 +3427,9 @@ scope:
       var function : function #:
         The function to apply. It accepts a Block, a Sink, and an arbitrary
         opaque object.
-      var sink : metax.io.Sink #:
+      var sink : metax.io.Sink = sout #:
         Where to write info.
-      var opaque : any #:
+      var opaque : any = null #:
         Arbitrary object useable within the function.
     scope:
       for block in self.blocks():
@@ -3293,6 +3473,8 @@ scope:
 
   class Book #:
     A repository for multiple top-level files.
+  assocs:
+    std assoc collections;
   scope:
 
     field root : Section;
@@ -3302,7 +3484,7 @@ scope:
 
     field parser : Parser;
 
-    field tables : @map #:
+    field tables : map #:
       Mapping from table title to Table instance.
 
     field panels : @map #:
@@ -3315,6 +3497,8 @@ scope:
       root = Section(None, title=name, parser=parser)
       self.rootIs(root)
       parser.bookIs(self)
+      tables = collections.OrderedDict()
+      self.tablesIs(tables)
     end;
 
     method find : Object #:
@@ -3399,11 +3583,15 @@ scope:
   behavior show #:
     Write an object.
   params:
+    var sink : metax.io.Sink = null #:
+      Where to write output.
+      TODO(wmh): Need to make sink default sout and remove fp/indent when
+      code has been migrated.
     var fp : ostream = out #:
-      Where to write the object
+      Where to write the object. This should be replaced with sink.
       TODO(wmh): Replace with metax.io.Sink.
     var indent : str = '' #:
-      Indentation before each line.
+      Indentation before each line. This should be replaced with sink.
       TODO(wmh): Replace with metax.io.Sink.
     var aspect : str = 'ascii' #:
       What to show. Valid values are:
@@ -3455,19 +3643,27 @@ scope:
         modification of the text). The text may contain newlines.
   scope:
 
-    abstract receiver Block;
+    abstract
+    receiver Block;
 
     receiver BlockGroup ::
       /# TODO(wmh): We may need to provide some support for a prefix before
       /# the first block.
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
       for block in self.blocks():
-        block.show(fp=fp, indent=indent, aspect=aspect, parser=parser)
+        block.show(
+          fp=fp, indent=indent, aspect=aspect, parser=parser)
     test:
       fp = test.fp()
       test.group.show(fp=fp)
     end;
 
     receiver Paragraph ::
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
       nofirst = kwds.get('nofirst', False)
       width = kwds.get('width', -1)
       rewriter = kwds.get('rewriter', Identity)
@@ -3521,7 +3717,7 @@ scope:
         fp.write(text + u'\n')
 
       else:
-        print('ERROR: Unknown aspect %s for Table.show()' % aspect)
+        print('ERROR: Unknown aspect %s for Paragraph.show()' % aspect)
     test:
       fp = test.fp()
       test.p2.show(fp=fp, aspect='ascii', width=0)
@@ -3549,6 +3745,9 @@ scope:
     end receiver Paragraph;
 
     receiver Quote ::
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
       prelines = self.prelines()
       if aspect == 'ascii':
         if prelines:
@@ -3563,7 +3762,7 @@ scope:
       elif aspect == 'tex':
         fp.write(u'Not yet handling blockquotes in tex\n')
       else:
-        print('ERROR: Unknown aspect %s for Table.show()' % aspect)
+        print('ERROR: Unknown aspect %s for Quote.show()' % aspect)
     test:
       quote = metax.lib.markdown.Quote(test.section, ['> quote', '> more quote'])
       fp = test.fp()
@@ -3572,6 +3771,9 @@ scope:
     end receiver Quote;
 
     receiver List ::
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
       /# How much spacing before the list item indicator? In the past I've
       /# usually done one space, but I'm looking into using 0 spaces.
       pre_indicator_indent = ''
@@ -3657,6 +3859,9 @@ scope:
     end receiver List;
 
     receiver ListItem ::
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
       mark = kwds.get('mark', None)
       parent = self.parent()
 
@@ -3714,7 +3919,7 @@ scope:
         pass
 
       else:
-        print(u'ERROR: Unknown aspect %s for Table.show()' % aspect)
+        print(u'ERROR: Unknown aspect %s for ListItem.show()' % aspect)
     test:
       test.makeLists()
 
@@ -3728,6 +3933,9 @@ scope:
     end receiver ListItem;
 
     receiver Code ::
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
       rewriter = kwds.get('rewriter', Identity)
       prelines = self.prelines()
       lines = self.lines()
@@ -3780,7 +3988,7 @@ scope:
       elif aspect == 'markdown':
         fp.write(u'%sFIX markdown CODE\n' % indent)
       else:
-        print(u'ERROR: Unknown aspect %s for Table.show()' % aspect)
+        print(u'ERROR: Unknown aspect %s for Code.show()' % aspect)
     test:
       fp = test.fp()
       test.code.show(fp=fp, aspect='ascii')
@@ -3805,6 +4013,9 @@ scope:
     end receiver Code;
 
     receiver HR ::
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
       prelines = self.prelines()
       if aspect == 'html':
         if prelines:
@@ -3819,7 +4030,7 @@ scope:
       elif aspect == 'markdown':
         fp.write(u'%s%s' % (indent, self.text()))
       else:
-        print(u'ERROR: Unknown aspect %s for Table.show()' % aspect)
+        print(u'ERROR: Unknown aspect %s for HR.show()' % aspect)
     test:
       fp = test.fp()
       test.hr.show(fp=fp, aspect='ascii')
@@ -3833,6 +4044,9 @@ scope:
     end receiver HR;
 
     receiver HTML ::
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
       prelines = self.prelines()
       lines = self.lines()
       if aspect == 'ascii':
@@ -3851,7 +4065,7 @@ scope:
           fp.write(u'%s%s\n' % (indent, line))
         fp.write(u'%s\\end{comment}\n' % indent)
       else:
-        print('ERROR: Unknown aspect %s for Table.show()' % aspect)
+        print('ERROR: Unknown aspect %s for HTML.show()' % aspect)
     test:
       fp = test.fp()
       test.html.show(fp=fp)
@@ -3859,6 +4073,9 @@ scope:
     end receiver HTML;
 
     receiver Table ::
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
       title = self.title()
       if parser is None:
         parent = self.parent()
@@ -3867,6 +4084,7 @@ scope:
       max_line_width = kwds.get('width', -1)
       if max_line_width < 0:
         max_line_width = Object.TerminalWidth()
+        /# print('HERE with max %d' % max_line_width)
       separators = self.separators()
 
       column_separator = ' | '
@@ -3968,20 +4186,25 @@ scope:
 
         truncate = False
         target_widths = widths
+        /# print('w: %s' % str(widths))
+        /# print('c: %s' % str(columns))
         if max_line_width:
           /# how much space is introduced by the column separators
           sep_width = len(column_separator) * (N-1)
           prepost_width = len(indent) + len(left_delim) + len(right_delim)
-          extra_width = sep_width + prepost_width
-          if max_line_width < extra_width + 2*N:
-            raise Error('Cannot shrink table to width %d' % max_line_width)
+          extra_width = prepost_width + sep_width * (N-1)
           text_width = sum(widths)
           available = max_line_width - extra_width
 
           /# We create a new set of widths that will ensure the overall
           /# width of every line does not exceed max_line_width.
-          /#  - accounts for indent, left_delim, column separators and right_delim
-          if text_width + extra_width <= max_line_width:
+          /#  - accounts for indent, left_delim, right_delim and the N-1
+          /#    column separators.
+          if max_line_width < extra_width:
+            truncate = True
+            print('WARNING: Cannot shrink table to width %d (truncating)' % max_line_width)
+
+          elif text_width + extra_width <= max_line_width:
             /# The widths are fine as-is
             target_widths = widths
 
@@ -4018,6 +4241,7 @@ scope:
             /#       that total width
             /#     - assign widths that maintain the percentages (or, if this
             /#       doesn't work well, just assign equal width to each).
+            /#     - column i never needs a width larger than widths[i]
             /#
             /#  - Alternatively:
             /#     - try a certain width distribution, then analyze the
@@ -4038,12 +4262,15 @@ scope:
                 resize_available -= w
               elif 'minwidth' in columns[i]:
                 frozen.append(i)
-                tws[i] = columns[i]['minwidth']
-                resize_available -= w
+                minw = columns[i]['minwidth']
+                tws[i] = minw
+                resize_available -= minw
               else:
                 /# A column whose width can be resized.
                 resizable.append(i)
                 retot += w
+
+            /# print('Resizable: %s' % str(resizable))
 
             /# Now resize each resizable width
             /#  - maintain relative proportion such that sum is 'resize_available'
@@ -4055,12 +4282,16 @@ scope:
               newtot += new_w
             if resizable:
               tws[resizable[-1]] += (resize_available - newtot)
+              sz = sum(tws)
+              /# print('here with %d + %d = %d vs %d' % (extra_width, sz, extra_width + sz, max_line_width))
             target_widths = tws
             if False:
               print(
                 'max=%d avail=%d rzavail=%d extra=%d retot=%d newtot=%d tws=%s' %
                 (max_line_width, available, resize_available,
                  extra_width, retot, newtot, tws))
+
+        /# print(target_widths)
 
         /# Print the header.
         WriteRow(fp, header, aligns, widths, target_widths, truncate=truncate)
@@ -4283,6 +4514,9 @@ scope:
     end receiver Table;
 
     receiver Section ::
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
       start = kwds.get('start', 0)
       nohead = kwds.get('nohead', False)
       style = kwds.get('style', None)
@@ -4520,9 +4754,18 @@ scope:
     receiver Book #:
       Top-level print.
     scope:
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
       /# First, print out the contents.
-      self.root().show(
-        fp=fp, indent=indent, aspect=aspect, parser=parser, **kwds)
+      if aspect == 'tables':
+        tables = self.tables()
+        for table in tables.values():
+          section = table.parent()
+          sink.writeln('%-40s in %s' % (table.title(), section.fulltitle()))
+      else:
+        self.root().show(
+          fp=fp, indent=indent, aspect=aspect, parser=parser, **kwds)
 
       /# Now print out the meta-level info.
       /# ...
@@ -4531,7 +4774,7 @@ scope:
   end behavior show;
 
   behavior search #:
-    Write an object.
+    Find a pattern in the given instance.
   params:
     var pattern : regexp #:
       The regexp to match against.

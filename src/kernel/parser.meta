@@ -9958,6 +9958,7 @@ scope:
     cls assoc metax.fs.Filesystem;
     cls assoc metax.cli.Command;
     cls assoc metax.cli.Values;
+    cls assoc metax.io.Sink;
 
     resource emacs_template path "../templates/meta-mode-template.el";
     resource oopl_tgz path "../templates/oopl.tgz";
@@ -16445,6 +16446,121 @@ scope:
         if not errors:
           self.writeSummary(metafiles)
       end command get;
+
+      named
+      command grep #:
+        Search for regexps in specific places
+
+        Useful variants:
+         - every method scope
+         - every comment
+         - ...
+      interface:
+        flag usercode : bool = true #:
+          Search user-located constructs
+        flag testcode : bool = false #:
+          Search test-located constructs
+        arg restr : str #:
+          The regexp to apply to lines.
+      scope:
+        /# Establish regexp and meta files to search.
+        cli = self.cli()
+        verbose = cli.verbose
+        usercode = cli.usercode
+        testcode = cli.testcode
+        restr = cli.restr
+        lre = re.compile(restr)
+        args = self.cli().rest
+        sink = metax.io.Sink()
+
+        /# Compile all specified metafiles.
+        argmap = self._parseArgs(args, implicit=True)
+        metafile_paths = argmap['metafiles']
+        try:
+          metafiles, errors, warnings = self.getMetas(metafile_paths)
+        except Exception as e:
+          self.handleCompilationException(e)
+          sys.exit(1)
+        self.writeSummary(metafiles, groups=argmap['groups'])
+
+        def MatchesLocation(construct):
+          try:
+            location = construct.attrval('location')
+          except metax.c.Error:
+            if verbose:
+              sink.writeln('Skipping %s (no location)' % construct.kindfqn())
+            return False
+
+          if usercode and 'user' not in location:
+            if verbose:
+              sink.writeln(
+                'Skipping %s (%s not user location)' %
+                (construct.kindfqn(), location))
+            return False
+          if testcode and 'test' not in location:
+            if verbose:
+              sink.writeln(
+                'Skipping %s (%s not test location)' %
+                (construct.kindfqn(), location))
+            return False
+          return True
+
+        /# For every metafile, for every namespace, for every construct within
+        /# the namespace, for every construct within that subconstruct,
+        /# performing relevant searches.
+        for metafile in metafiles:
+          header_printed = False
+          for namespace in metafile.construct().attrval('scope:', default=EMPTY):
+            nscope = namespace.attr('scope:', default=None)
+
+            if nscope:
+              for nmsp_construct in nscope.value():
+                /# mostly classes and behaviors
+                if not MatchesLocation(nmsp_construct):
+                  continue
+                cscope = nmsp_construct.attr('scope:', default=None)
+                if cscope and cscope.isComplexBlock():
+                  for construct in cscope.value():
+                    /# methods/fields for classes, receivers for behaviors
+                    if not MatchesLocation(construct):
+                      continue
+
+                    scope = construct.attr('scope:', default=None)
+                    if scope:
+                      if scope.isSimpleBlock():
+                        matches = 0
+                        start = scope.line()
+                        if start <= 0:
+                          /# We don't have line numbers. This can happen for
+                          /# example with auto-generated methods like
+                          /# 'sizeMeta', etc. We ignore them.
+                          continue
+                        for i, line in enumerate(scope.value()):
+                          m = lre.search(line)
+                          if m:
+                            if not header_printed:
+                              sink.writeln('')
+                              sink.writeln('#' * 80)
+                              sink.writeln(metafile.path())
+                              sink.writeln('=' * 40)
+                              header_printed = True
+
+                            if not matches:
+                              sink.writeln('')
+                              sink.writeln(construct.kindfqn())
+
+                            /# start is the line that 'scope:' appears on, so we
+                            /# need to advance by 1 for first line of content,
+                            /# and advance by 1 to get 1-indexed line-numbers
+                            /# instead of 0-indexed.
+                            sink.writeln('  %4d: %s' % (start + 2 + i, line))
+                      else:
+                        if construct.kind() != 'field':
+                          /# field scopes are always complex. We will want to
+                          /# search them at some point, but for now we don't
+                          /# print warnings for such a common case.
+                          print('NOTE: Not yet searching complex %s' % construct.kindfqn())
+      end command grep;
 
       command html #:
         Create .html files for the specified metafile(s) and their basefiles.

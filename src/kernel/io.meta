@@ -62,6 +62,15 @@ scope:
 
     test field sink : wmh.google.hotels.Sink;
 
+    meta
+    method Str : Sink #:
+      Create a Sink writing to a io.StringIO() instance.
+    scope:
+      fp = io.StringIO()
+      return cls(fp=fp)
+    test:
+    end method Str;
+
     method clone : Sink #:
       Make a copy of myself
     scope:
@@ -72,6 +81,9 @@ scope:
       result.pathmapIs(self.pathmap())
       return result
     test:
+      sink = test.sink()
+      sink2 = sink.clone()
+      test.iseq(sink.prefix(), sink2.prefix())
     end method clone;
 
     method prefix : str #:
@@ -82,22 +94,31 @@ scope:
       test.iseq('..', test.sink().prefix())
     end method prefix;
 
-    method indent : str #:
+    method indent : Sink #:
       Add more indentation to the current value.
+
+      Returns:
+        An instance of Sink. This allows us to use the idiom:
+          with sink.indent('  '):
+            ...
     params:
-      var value : str #:
+      var value : str = '  ' #:
         The additional indentation.
-        NOTE: Although it would be convenient to provide a default value, we
-        intentionally do not do so, to ensure that the similarities between
-        indent() and undent() do not pose problems.  indent() requires an
-        arg and undent does not have an arg, which avoids subtle bugs related
-        to typos.
+
+        TODO(wmh): Need to consider the pros and cons of providing a default
+        value for the 'value' param.
+         - pros: almost always, the value is '  '
+         - cons:
+            - can this lead to confusion between indent() and undent()?
+            - if someone prefers a default of '   ' or '    ', they cannot
+              have it (unless we provide a default indent field in Sink.
     scope:
       /# if we want to support newlines in indent, write() will need updating.
       assert '\n' not in value
       newdent = self.prefix() + value
       self.prefixes().append(newdent)
-      return newdent
+      /# return newdent
+      return self
     test:
       sink = test.sink()
       sink.indent('__')
@@ -115,7 +136,7 @@ scope:
       return prefixes[-1]
     test:
       sink = test.sink()
-      test.iseq('..  ', sink.indent('  '))
+      test.iseq('..  ', sink.indent('  ').dent())
       test.iseq('..', sink.undent())
       test.iseq('..', sink.undent())
     end method undent;
@@ -328,6 +349,58 @@ scope:
       sink.updatePaths({'/a/b/c': '$TEST3'})
       test.iseq('$TEST3/d', sink.truncate('/a/b/c/d'))
     end method updatePaths;
+
+    method __enter__ : any #:
+      Support the use of sink objects in 'with' clauses:
+        with sink.indent('  '):
+          ...
+      Is equivalent to:
+        sink.indent('  ')
+        try:
+          ...
+        finally:
+          sink.undent()
+    scope:
+      /# noop
+      pass
+    test:
+      /# noop .. tested in __exit__
+      pass
+    end method __enter__;
+
+    method __exit__ : any #:
+      Support the use of sink objects in 'with' clauses:
+        with sink.indent('  '):
+          ...
+    params:
+      var type : class #:
+        Some subclass of Exception
+      var value : ^Exception #:
+        Some instance of the class type defined by 'type'.
+      var traceback : types.TracebackType #:
+        A traceback object.
+    scope:
+      self.undent()
+    test:
+      sink = test.sink()
+
+      sink.writeln('hello')
+      sink.indent('##')
+      sink.writeln('a test')
+      sink.undent()
+      sink.writeln('goodbye')
+      test.iseq('..hello\n..##a test\n..goodbye\n', sink.fp().getvalue())
+
+      sink2 = metax.io.Sink(fp=test.fp())
+      sink2.writeln('hello')
+      with sink2.indent('  '):
+        sink2.writeln('here')
+        with sink2.indent('  '):
+          sink2.writeln('and here')
+        sink2.writeln('back')
+      sink2.writeln('goodbye')
+      test.iseq('hello\n  here\n    and here\n  back\ngoodbye\n', test.out())
+    end method __exit__;
 
   end class Sink;
 
