@@ -1948,7 +1948,7 @@ scope:
         if not member in container:
           self.fail(
             'Failed to find\n  "%s"\nin\n  %s\n%s' %
-            (member, container.replace('\n', '\n  '), msg or ''))
+            (member, container.replace('\n', '\n  ') if isinstance(container, str) else container, msg or ''))
     test<py>:
       tc = self._tc
       tc.setUp()
