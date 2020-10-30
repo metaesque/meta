@@ -53,7 +53,7 @@ VARS = collections.OrderedDict([
     'type': ValidPath,
   }),
   ('python', {
-    'desc': 'The path of the python2 executable.',
+    'desc': 'The path of the python3 executable.',
     'default': '/usr/bin/python',
     'type': ValidPath,
   }),
@@ -112,7 +112,7 @@ def CreateConfig(src_root, bazel_path):
   ifp = sys.stdin
   ofp = sys.stdout
   with open(new_path, 'w') as cfp:
-    for var, data in VARS.iteritems():
+    for var, data in VARS.items():
       dlines = data['desc'].split('\n')
       ofp.write('\n')
       ofp.write('%s:\n' % var)
@@ -123,6 +123,7 @@ def CreateConfig(src_root, bazel_path):
 
       while True:
         ofp.write('value [%s]: ' % default_value)
+        ofp.flush()
         ans = ifp.readline()
         if ans == '':
           # EOF
@@ -162,7 +163,7 @@ def InstallBazel():
   print('environment variables in the path.')
   default_install_dir = os.path.join(os.getenv('HOME'), 'bin')
   install_dir = os.path.expandvars(
-    raw_input('Path [%s]: ' % default_install_dir) or default_install_dir)
+    input('Path [%s]: ' % default_install_dir) or default_install_dir)
 
   # Download the releases page
   github_bazel_releases = 'https://github.com/bazelbuild/bazel/releases'
@@ -222,7 +223,7 @@ def InstallBazel():
 
   # Install
   if installer:
-    os.chmod(installer, 0755)
+    os.chmod(installer, 0o755)
     args = [
       installer,
       os.path.expandvars('--base=$HOME/.bazel'),
@@ -249,7 +250,7 @@ def SetupBootstrap(src_root):
   while True:
     default_pdir = os.path.expandvars('$HOME/src/$USER/lib/python')
     pdir = (
-      raw_input('Preferred path for python libraries [%s]: ' % default_pdir) or
+      input('Preferred path for python libraries [%s]: ' % default_pdir) or
       default_pdir)
     python_dir = os.path.realpath(os.path.expandvars(pdir))
     if python_dir in paths:
@@ -288,7 +289,7 @@ def ExtractCode(src_root):
     print('TRUE: %s exists' % cdir)
   else:
     # We require link to start with 'v' and end with '.00'
-    assert link.startswith('v') and link.endswith('.00')
+    assert link.startswith('v') and link.endswith('.00'), 'link=%s' % link
     # Obtain the .tgz file (strip off .00)
     tgzpath = cdir[:-3] + '.tgz'
     if not os.path.exists(tgzpath):
@@ -336,7 +337,7 @@ def BuildMeta(src_root):
 
 def main():
   default_src_root = os.path.expandvars('$HOME/src/meta')
-  src_root = raw_input(
+  src_root = input(
     'Directory containing local Meta github client [%s]: ' % default_src_root
   ) or default_src_root
   src_root = os.path.expandvars(src_root)
