@@ -3432,9 +3432,11 @@ scope:
       var opaque : any = null #:
         Arbitrary object useable within the function.
     scope:
-      for block in self.blocks():
+      for bi, block in enumerate(self.blocks()):
         assert block.parent() is self
-        function(block, sink, opaque)
+        /# NOTE: Added 'bi' as a first arg on 2020-11-26, which will break
+        /# any clients using this method.
+        function(bi, block, sink, opaque)
       for child in self.children():
         if child.isSection():
           child.visit(function, sink, opaque)

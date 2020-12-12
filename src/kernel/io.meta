@@ -133,6 +133,8 @@ scope:
       prefixes = self.prefixes()
       if len(prefixes) > 1:
         prefixes.pop()
+      else:
+        print('WARNING: Attempt to undent with no indent')
       return prefixes[-1]
     test:
       sink = test.sink()
