@@ -911,7 +911,10 @@ scope:
 
     new specific
     method newMock params:
-      multi var stubs : vec;
+      var magic : bool = false #:
+        If true, create MagicMock rather than Mock
+      multi var kwds : map #:
+        Keywords to pass to the Mock constructor
     comment:
       Return a new mox.Mox, optionally stubbing out various entities.
     scope<py>:
@@ -922,7 +925,7 @@ scope:
         import unittest.mock as mock
       else:
         import mock
-      m = mock.Mock()
+      m = mock.MagicMock(**kwds) if magic else mock.Mock(**kwds)
       self._mocklist.append(m)
       return m
     test<py>:

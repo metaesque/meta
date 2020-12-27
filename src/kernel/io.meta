@@ -11,6 +11,7 @@ scope:
     std assoc os #:
       TODO(wmh): Does this need to use metax.fs???
     std assoc sys;
+    std assoc textwrap;
   scope:
 
     static
@@ -271,6 +272,48 @@ scope:
         >|""",
         sink.fp().getvalue())
     end method writeln;
+
+    method truncln : any #:
+      Write a line, truncating at given width.
+    params:
+      var line : str #:
+        The line to write.
+      var width : int = 80 #:
+        Max number of characters to write (including indent).
+      var delim : str = '$' #:
+        How to delimit truncation.
+    scope:
+      prefix = self.prefix()
+      assert '\n' not in line
+      full_line = prefix + line
+      if len(full_line) > width:
+        full_line = full_line[:width - len(delim)] + delim
+      fp = self.fp()
+      fp.write(full_line)
+      self.newline()
+    test:
+    end method truncln;
+
+    method wrap : any #:
+      Write one or more lines to the stream, wrapping text to ensure no line is
+      longer than 'width'.
+    params:
+      var text : str #:
+        Potentially multi-line text. Note that all whitespace is removed from
+        the end of this text before splitting into wrapped lines.
+      var width : int = 80 #:
+        The maximum width of each output line. This takes into account the
+        text added due to implicit indent.
+      var extra : str = '' #:
+        Additional indentation to add to all wrapped lines except the first one.
+    scope:
+      w = width - len(self.prefix())
+      for line in textwrap.wrap(
+        text.rstrip(), width=w, initial_indent='', subsequent_indent=extra
+      ):
+        self.writeln(line)
+    test:
+    end method wrap;
 
     method flush #:
       Flush the output stream.
