@@ -185,9 +185,9 @@ def InstallBazel():
   tmpdir = tempfile.mkdtemp()
 
   # Establish which release url to use based on platform.
-  system = platform.system()
+  system = platform.system().lower()
   url = 'https://github.com/bazelbuild/bazel/releases/download/%s/' % version
-  if system == 'Darwin':
+  if system == 'darwin':
     # Alternatively we could use brew (prompt user?)
     # TODO(wmh): Must ensure xcode is installed and that license is accepted
     #  % sudo xcodebuild -license accept
@@ -195,7 +195,7 @@ def InstallBazel():
     url += base
     installer = os.path.join(tmpdir, base)
     executable = os.path.join(install_dir, 'bazel')
-  elif system == 'Linux':
+  elif system == 'linux':
     # Alternatively we could use yum (prompt user?)
     # TODO(wmh): Must install prereqs:
     #  % sudo apt-get install pkg-config zip g++ zlib1g-dev unzip python
@@ -203,7 +203,7 @@ def InstallBazel():
     url += base
     installer = os.path.join(tmpdir, base)
     executable = os.path.join(install_dir, 'bazel')
-  elif system == 'Windows':
+  elif system == 'windows':
     # This is different than mac and linux ... executable binary, not bash script.
     base = 'bazel-%s-windows-x86_64.exe' % version
     url += base
@@ -256,6 +256,7 @@ def SetupBootstrap(src_root):
     if python_dir in paths:
       break
     print('ERROR: %s not in PYTHONPATH' % python_dir)
+    print(paths)
 
   metastrap_path = os.path.join(src_root, 'lib', 'metastrap.py')
   full_path = os.path.join(python_dir, 'metastrap.py')
@@ -331,8 +332,8 @@ def BuildMeta(src_root):
   out, err = subprocess.Popen(
     command, cwd=kdir, shell=True,
     stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-  print(out)
-  print(err)
+  print(out.decode('utf8'))
+  print(err.decode('utf8'))
 
 
 def main():

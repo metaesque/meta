@@ -12997,9 +12997,11 @@ scope:
               'Test output processing disabled because --dumptests was '
               'specified')
           else:
+            timestamp = time.time()
             baselang.processTestOutput(
               stdout, stderr, cwd, newdata['namespace'],
-              nofilt=flags.raw, verbosity=1 if verbose else 0)
+              nofilt=flags.raw, timestamp=timestamp,
+              verbosity=1 if verbose else 0)
 
         else:
           try:

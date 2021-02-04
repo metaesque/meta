@@ -156,7 +156,7 @@
 ;;;   - The values of these variables differ for each particular Meta language
 ;;;     (but not each Meta sub-language)
 
-; (defconst metaoopl-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
+;(defconst metaoopl-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
 (defconst metaoopl-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
 (defconst metaoopl-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "accessor" "arg" "assoc" "behavior" "block" "call" "case" "category" "class" "command" "field" "flag" "if" "lifecycle" "loop" "method" "namespace" "native" "receiver" "remark" "resource" "switch" "testx" "var"))

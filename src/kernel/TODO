@@ -1,3 +1,16 @@
+2021-01-17
+  The following is problematic because the access for test1() gets
+  interpreted as a test method. Need to disallow methods and fields
+  that start with 'test' in test classes.
+
+    test
+    class TestCase < metax.test.TestCase assocs:
+      std assoc os;
+    scope:
+      field q1 : wmh.ask.Question;
+      field test1 : wmh.ask.Test;
+    end class TestCase;
+
 2019-05-21
  - When parsing a construct with replacer semantics and no explicit id,
    calling 'write' on the resulting construct has two problems:

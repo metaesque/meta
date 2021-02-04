@@ -440,7 +440,11 @@ scope:
         if conditional:
           /# If a test is disabled, status should always be null, but just in
           /# case, we distinguish.
-          status = '???' if status else 'DISABLED'
+          status = (
+            /# TODO(wmh): Why am I doing this?
+            '???' if status
+            /# User must remember to set partial=True when self.enabled() is called)
+            else ('PARTIAL' if conditional[0]['partial'] else 'DISABLED'))
         sys.stdout.write('%9d us  %s\n' % (seconds * 1000000, status or '.'))
 
       /# Clean up moxes
@@ -593,13 +597,17 @@ scope:
         quiet : bool
           If true, do NOT print out an indicator of how to enable the test
           if false is returned.
+        partial : bool
+          If true, the portion of the test guarded by this enabled() method is
+          only part of the overall test.
     scope:
       quiet = kwds.get('quiet', False)
       notset = []
       result = True
       for option in options:
         if not self.options().get(option, False):
-          notset.append(option)
+          notset.append(
+            {'option': option, 'partial': kwds.get('partial', False)})
           result = False
           /# We intentionally do NOT break, so that notset is a complete list.
       self.conditionalIs(notset)

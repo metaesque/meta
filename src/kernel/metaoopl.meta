@@ -14445,6 +14445,38 @@ namespace metax.oopl scope:
 
   end behavior buildPreambleText;
 
+  behavior testLogDir : str #:
+    Obtain the baselang specific directory into which tests are written. Unlike
+    other methods, this returns an absolute path, not one relative to
+    repositoryPath(). The directory is created if not present.
+  params:
+    var fqn : str #:
+      A method fqn to convert to a test directory.
+    var create : bool = false #:
+      If true, create the directory if not present.
+  scope:
+
+    receiver BaseLanguageOopl scope:
+      metac = self.context().compiler()
+      fs = metac.fs()
+      basepath = metac.basePath()
+      parts = fqn.split('.')
+      methname = parts.pop()
+      clsname = parts.pop()
+      result = fs.join(
+        metac.repositoryPath(), basepath, *parts, '.' + clsname, methname)
+      if create and not fs.isdir(result):
+        fs.makedirs(result, mode=0o700)
+      return result
+    test:
+      test.tpy()
+      test.endswith(
+        '/oopl/python/demo/tmp/.Person/bmi',
+        test.baselang.testLogDir(test.method.fqn()))
+    end receiver BaseLanguageOopl;
+
+  end behavior testLogDir;
+
   behavior classPath : str #:
     Obtain the baselang specific path in which a class is stored.
   params:
@@ -14454,6 +14486,7 @@ namespace metax.oopl scope:
       Usually null, in which case the primary suffix for the baselang is used,
       but may be an alternative suffix.
   scope:
+
     receiver BaseLanguageOopl scope:
       if suffix is None:
         suffix = self.suffix()
@@ -18114,6 +18147,8 @@ namespace metax.oopl scope:
       The namespace under test.
     var nofilt : bool = false #:
       If true, do not filter the stdout/stderr, just print verbatim
+    var timestamp : float = 0.0 #:
+      Unix timestamp of when the test run was invoked.
     var verbosity : int = 0 #:
       0 = Show only errors
       1 = Show one line for each method, and full errors
@@ -18142,6 +18177,7 @@ namespace metax.oopl scope:
       efp = io.StringIO()
       metac = self.compiler()
       metac.filterMetaOutput(cwd=cwd, ifp=ifp, ofp=efp, debug=False)
+      fs = metac.fs()
       filterr = efp.getvalue()
 
       /# Perform base-to-meta line mapping on stderr
@@ -18325,6 +18361,22 @@ namespace metax.oopl scope:
 
         PrintStripped(out, ' |')
         PrintStripped(err, 'E|')
+
+        /# Log this test result.
+        if timestamp > 0:
+          fullfqn = namespace + '.' + item['fqn']
+          testlogdir = self.testLogDir(fullfqn, create=True)
+          testidxpath = fs.join(testlogdir, 'LOG')
+          with open(testidxpath, 'a') as ofp:
+            ofp.write(
+              '%13.3f %7dus %s\n' %
+              (timestamp, item['time'] or -1, item['status']))
+          if out or err:
+            testlogpath = fs.join(testlogdir, 't%d.log' % timestamp)
+            with open(testlogpath, 'w') as ofp:
+              ofp.write('\n'.join(out) + '\n')
+              ofp.write('##--##--##--##\n')
+              ofp.write('\n'.join(err) + '\n')
 
         if special:
           fp.write(sep)
