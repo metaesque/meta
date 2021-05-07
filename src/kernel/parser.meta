@@ -12918,6 +12918,33 @@ scope:
         else:
           print('Running tests with bazel')
 
+      testone = flags.testone
+      if testone:
+        if len(fqns) != 1:
+          /# TODO(wmh): What is the right way to report errors here?
+          print('ERROR: -T requires a single fqn')
+          sys.exit(1)
+        else:
+          fqn = list(fqns)[0]
+          newdata = baselang.fqnToTarget(fqn)
+          tmeth = newdata.get('method', None)
+          if not tmeth:
+            print('ERROR: -T implies fqn must be method within class')
+            sys.exit(1)
+          klass = self.getClass(newdata['namespace'] + '.' + newdata['class'])
+          newfqns = None
+          fqn_prefix = klass.fqn() + '.'
+          for child in klass.attrval('scope:', default=[]):
+            if child.kind() == 'method':
+              mname = child.id()
+              if newfqns is None:
+                if mname == tmeth:
+                  newfqns = [fqn_prefix + mname]
+              else:
+                /# We've already found the starting method.
+                newfqns.append(fqn_prefix + mname)
+          fqns = newfqns
+
       tester_map = {}
       raw_commands = []
       for fqn in fqns:
@@ -16163,6 +16190,14 @@ scope:
       flag test2 @ t : bool = false #:
         If true, invoke unit tests on all namespaces in all metafiles processed.
         TODO(wmh): Remove this in favor of 'test' command.
+      flag testone @ T : bool = false #:
+        If true, there should be a single fqn, specifying a method within a
+        class. It indicates that we are to test one method at a time within the
+        class starting at the given method (in lexical order, not alphabetical
+        order). If a test method fails, Meta provides an interactive prompt, and
+        if indicated to proceed, will recompile and rerun the failed test
+        (assuming that the code has been modified in the interim). If a test
+        method does not fail, Meta proceeds to the next test without prompting.
       flag showfs : bool = false #:
         If true, print out filesystem after compilation.
 
@@ -17413,7 +17448,7 @@ scope:
               clsnames = {}
               for mfpath in argmap['metafiles']:
                 metafile = metac.metafiles()[mfpath]
-                print(metafile.path())
+                /# print(metafile.path())
                 for klass in metafile.constructs()['class']:
                   if not klass.isTest():
                     clsnames.setdefault(klass.id(), []).append(klass.fqn())

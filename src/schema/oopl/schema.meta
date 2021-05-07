@@ -1008,7 +1008,7 @@ config:
       TODO(wmh): Make this an idlist instead of word!
 
     secondary
-    Attribute params: : complex = <required> children <var> #:
+    Attribute params: : complex = <required> children <var|remark> #:
       The parameters of this method.
 
     secondary

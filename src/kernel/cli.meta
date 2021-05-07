@@ -451,6 +451,29 @@ scope:
         The subcommand(s) for which help is desired. If null or empty,
         top-level help is produced.
     scope<py>:
+
+      /# Print flags inherited from parent commands.
+      subindent = indent + '  '
+      full = 'ful' in mode
+      ancestors = []
+      parent = self.parent()
+      while parent:
+        ancestors.append(parent)
+        parent = parent.parent()
+      for parent in reversed(ancestors):
+        fp.write('%s%s\n' % (indent, parent.name()))
+        parts = parent.allParts() if full else parent.parts()
+        count = 0
+        for flagname in sorted(parts):
+          part = parts[flagname]
+          if part.name() != flagname: continue   # skip aliases
+          if part.isFlag():
+            part.show(fp=fp, indent=subindent, mode=mode)
+            count += 1
+        if not count:
+          fp.write('%sno flags\n' % subindent)
+
+      /# Print specified child commands
       command = self
       if commands:
         for nora in commands:
@@ -465,7 +488,9 @@ scope:
             print(u'WARNING: Unknown command "%s"' % nora)
             break
 
+      /# Print self
       command.show(fp=fp, indent=indent, mode=mode)
+
     test<py>:
       fp = test.fp()
       test.command.help(fp=fp)

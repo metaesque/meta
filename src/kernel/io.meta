@@ -42,6 +42,17 @@ scope:
       including the '$ explicitly if appropriate).  Used by Sink.truncate()
       to shorten paths, etc.
 
+    field withpost : vec<str> #:
+      Should only be present when the following idiom is used:
+        with sink.indent(pre='before', post='after'):
+          sink.writeln('hello')
+      which will yield the following output:
+        before
+          hello
+        after
+      The last entry in this list is removed each time __exit__ is
+      invoked.
+
     lifecycle params:
       var fp -> fp = out;
       var indent : str = '' #:
@@ -113,7 +124,21 @@ scope:
             - can this lead to confusion between indent() and undent()?
             - if someone prefers a default of '   ' or '    ', they cannot
               have it (unless we provide a default indent field in Sink.
+      var pre : str = null #:
+        If present, a single line to write before indentation occurs.
+      var post : str = null #:
+        If present, a single line to write after indentation returns.
+        Should only be used within 'with' clauses.
     scope:
+      if pre is not None:
+        self.writeln(pre)
+      if post is not None:
+        withpost = self.withpost()
+        if withpost is None:
+          withpost = []
+          self.withpostIs(withpost)
+        withpost.append(post)
+
       /# if we want to support newlines in indent, write() will need updating.
       assert '\n' not in value
       newdent = self.prefix() + value
@@ -174,6 +199,9 @@ scope:
         The text to write.  All newlines are replaced with indentation.
       multi var args : vec<any> #:
         A collection of args to apply to the printf template specified by text.
+      multi var kwds : map #:
+        flush : bool
+          If true, flush after writing.
     scope:
       fp = self.fp()
       prefix = self.prefix()
@@ -211,6 +239,9 @@ scope:
         lastc = prefix[-1] if prefix else ''
       self.lastcIs(lastc)
       fp.write(newtext)
+
+      if kwds.get('flush', False):
+        fp.flush()
     test:
       sink = test.sink()
 
@@ -365,6 +396,18 @@ scope:
       test.iseq('$TEST2/d', sink.truncate('/a/b/c/d'))
     end method truncate;
 
+    method adjWidth : int #:
+      Return a width reduced by current indent.
+    params:
+      var width : int = 0 #:
+        The width to adjust. If not specified, terminal width is assumed.
+    scope:
+      if width <= 0:
+        width = os.get_terminal_size().columns
+      return width - len(self.prefix())
+    test:
+    end method adjWidth;
+
     method updatePaths #:
       Update the prefix/abbrev pathmap
     params:
@@ -418,6 +461,12 @@ scope:
         A traceback object.
     scope:
       self.undent()
+      withpost = self.withpost()
+      if withpost:
+        post = withpost.pop()
+        sink.writeln(post)
+        if not withpost:
+          self.withpostIs(None)
     test:
       sink = test.sink()
 

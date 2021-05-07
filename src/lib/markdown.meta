@@ -1189,7 +1189,7 @@ scope:
       var path : str = null #:
         The path associated with the input stream.
     scope:
-      book = Book(bookname, self)
+      book = Book(bookname, self, path=path)
       root = book.root()
       lines = ifp.read().replace('\t', '    ').split('\n')
       self.parseLines(lines, parent=root, path=path)
@@ -3492,9 +3492,13 @@ scope:
     field panels : @map #:
       Mapping from panel title to Panel instance.
 
+    field path : str #:
+      Where the book resides on disk. May be null.
+
     lifecycle params:
       var name -> name;
       var parser -> parser;
+      var path -> path = null;
     scope:
       root = Section(None, title=name, parser=parser)
       self.rootIs(root)
