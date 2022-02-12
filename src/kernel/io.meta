@@ -53,10 +53,16 @@ scope:
       The last entry in this list is removed each time __exit__ is
       invoked.
 
+    field width : int #:
+      Maximum width of each line. If negative, truncated at abs(width),
+      else wrapped with two spaces of extra indentation for subsequent
+      lines.
+
     lifecycle params:
       var fp -> fp = out;
       var indent : str = '' #:
         The top-level indentation.
+      var width -> width = 0;
     scope:
       self.prefixes().append(indent)
       /# Important to set this to newline so that first line printed uses same
@@ -164,9 +170,9 @@ scope:
       return prefixes[-1]
     test:
       sink = test.sink()
-      test.iseq('..  ', sink.indent('  ').dent())
+      test.iseq('..  ', sink.indent('  ').prefix())
       test.iseq('..', sink.undent())
-      test.iseq('..', sink.undent())
+      /# test.iseq('..', sink.undent())
     end method undent;
 
     method newline #:
@@ -279,11 +285,23 @@ scope:
       multi var args : vec<any> #:
         A collection of args to apply to the printf template specified by text.
     scope:
-      if text:
-        self.write(text, *args)
-      if not text or text[-1] != '\n':
-        fp = self.fp()
-        self.newline()
+      width = self.width()
+      if width == 0:
+        if text:
+          self.write(text, *args)
+        if not text or text[-1] != '\n':
+          /# fp = self.fp()
+          self.newline()
+      else:
+        text = text % args
+        if width < 0:
+          /# truncate at width
+          self.truncln(text, width=abs(width))
+        else:
+          /# wrap lines at width.
+          self.widthIs(0)  # need to clear this to avoid infinite recursion
+          self.wrap(text, width=width, extra='  ')
+          self.widthIs(width)
     test:
       sink = test.sink()
       sink.writeln('hello')
@@ -294,6 +312,19 @@ scope:
         >|..goodbye fun world
         >|""",
         sink.fp().getvalue())
+
+      sink2 = metax.io.Sink(io.StringIO(), indent='', width=-30)
+      sink2.writeln('This is a test to see if truncation works')
+      test.iseq('This is a test to see if trun$\n', sink2.fp().getvalue())
+
+      sink3 = metax.io.Sink(io.StringIO(), indent='', width=30)
+      sink3.writeln(
+        'This is a test to see if wrapping works as desired with more text')
+      test.iseq(
+        'This is a test to see if\n'
+        '  wrapping works as desired\n'
+        '  with more text\n',
+        sink3.fp().getvalue())
     end method writeln;
 
     method truncln : any #:
@@ -315,6 +346,12 @@ scope:
       fp.write(full_line)
       self.newline()
     test:
+      sink = test.sink()
+      sink.truncln(
+        'this is a test to see if lines are truncated', width=30)
+      test.iseq(
+        '..this is a test to see if li$\n',
+        sink.fp().getvalue())
     end method truncln;
 
     method wrap : any #:
@@ -336,6 +373,14 @@ scope:
       ):
         self.writeln(line)
     test:
+      sink = test.sink()
+      sink.wrap(
+        'this is a test to see how wrapping works', width=20, extra='..')
+      test.iseq(
+        '..this is a test to\n'
+        '....see how wrapping\n'
+        '....works\n',
+        sink.fp().getvalue())
     end method wrap;
 
     method flush #:
@@ -406,6 +451,8 @@ scope:
         width = os.get_terminal_size().columns
       return width - len(self.prefix())
     test:
+      /# noop - iteractive
+      pass
     end method adjWidth;
 
     method updatePaths #:

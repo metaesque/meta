@@ -239,7 +239,7 @@
 ; Various methods set these variables
 (setq metaoopl-current-construct-kind nil)
 (if (not (boundp 'metaoopl-meta-binary))
-  (setq metaoopl-meta-binary "meta2"))
+  (setq metaoopl-meta-binary "metac"))
 
 (defun metaoopl-goto-construct-line (&optional target-dent)
   ;; Find the line defining the construct within which the current line
@@ -997,7 +997,7 @@ such newline-indentation is provided.")
       ;; Color multi-line comment blocks
       '("\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\|\n\\)*\\)" 2 font-lock-comment-face)
       ;; Color the "end" token.
-      '("end\\( [a-zA-Z0-9_. ]+\\)?;" . font-lock-metaoopl-end-face)
+      '("end\\( [-a-zA-Z0-9_. ]+\\)?;" . font-lock-metaoopl-end-face)
       ;; Color literal strings.
       (cons "'[^'\n]*'" font-lock-string-face)
       ;'("#:\n\\([ \t]*.*\\)" 1 font-lock-comment-face)

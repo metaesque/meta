@@ -5600,6 +5600,8 @@ scope:
       cls.PrimitivesIs({
         /# bool, boolean
         'bool': {},
+        /# trilean
+        'trilean': {},
         /# char
         'char': {},  # <1>, <2>, <4> ???
         /# byte, short, int, long, longlong
@@ -7251,6 +7253,16 @@ scope:
     scope:
       metax_module = sys.modules['metax']
       sub_module = getattr(metax_module, modname, None)
+
+      /# TODO(wmh): This is a temporary hack. Find a more general mechanism
+      /# for this based on the 'nmsp' attribute of the MetaLanguage construct.
+      if sub_module is None:
+        import importlib
+        sub_module = importlib.import_module('wmh.meta%s' % modname)
+        if sub_module:
+          /# print('***** dynamicallyObtainMetaxSymbol found %s' % sub_module)
+          pass
+
       return sub_module
     test:
       test.notnull(test.metafile.dynamicallyObtainMetaxSymbol('c'))
@@ -12812,12 +12824,12 @@ scope:
             line = line.replace('metalang', 'meta%s' % metaid)
             line = line.replace('MetaLang', 'Meta(%s)' % MetaLang)
 
-            reps = []
-            reps = replacements.keys()
+            freps = []
+            reps = list(replacements.keys())
             for rep in reps:
               if rep in line:
                 line = line.replace(rep, replacements[rep])
-                reps.append(rep)
+                freps.append(rep)
                 del replacements[rep]
 
           ofp.write(line)
@@ -13024,11 +13036,12 @@ scope:
               'Test output processing disabled because --dumptests was '
               'specified')
           else:
+            verbosity = 1 if verbose else 0
             timestamp = time.time()
             baselang.processTestOutput(
               stdout, stderr, cwd, newdata['namespace'],
               nofilt=flags.raw, timestamp=timestamp,
-              verbosity=1 if verbose else 0)
+              verbosity=verbosity)
 
         else:
           try:
@@ -17547,7 +17560,7 @@ scope:
       Parse a Meta<basel>(metal) source file into constructs.
     params:
       var metapath : str #:
-        The .metabio file to parse.
+        The .meta file to parse.
     scope:
       metac = self.metac()
       metafile = metac.parseMeta(metapath)

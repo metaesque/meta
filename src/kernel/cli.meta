@@ -109,13 +109,15 @@ scope:
     scope<cc>:
     clinit<py>:
       cls.RegexpClass = re.compile('.').__class__
+      cls.InvalidValue = object()
     end lifecycle;
 
     method typecheck : any #:
       Convert a string value into some python object as dictated by mytype.
 
       Returns:
-        A python object dictated by vtype. If the typecheck fails, returns null.
+        A python object dictated by vtype. If the typecheck fails, returns
+        Part.InvalidValue.
     params:
       var value : str #:
         The type to convert.
@@ -123,7 +125,7 @@ scope:
         The type to use to typecheck. Normally null, in which case self.mytype()
         is used.
     scope<py>:
-      result = None
+      result = Part.InvalidValue
       if mytype is None:
         mytype = self.mytype()
 
@@ -143,6 +145,18 @@ scope:
           result = True
         elif value == 'false':
           result = False
+
+      elif mytype == 'trilean':
+        if isinstance(value, bool):
+          result = value
+        elif value == 'true':
+          result = True
+        elif value == 'false':
+          result = False
+        elif value == 'null':
+          result = None
+        else:
+          raise Error('Invalid trilean "%s"' % value)
 
       elif mytype == 'int':
         if isinstance(value, int):
@@ -212,13 +226,11 @@ scope:
             result = datetime.datetime.strptime(val, '%Y%m%d%H%M%S')
           elif val == 'now':
             result = datetime.datetime.now()
-          else:
-            raise Error('Unrecognized date "%s"' % value)
 
       elif mytype == 're':
         if value == '':
           /# Fix this hackery. How to specify a default value?
-          result = re.compile(r'.*')
+          result = None
         else:
           try:
             result = re.compile(value)
@@ -244,6 +256,7 @@ scope:
               result = value
 
       elif mytype.startswith('list<'):
+
         m = re.match('^list<(.*)>', mytype)
         if m:
           subtype = m.group(1)
@@ -256,12 +269,12 @@ scope:
           error = False
           for subval in value:
             realval = self.typecheck(subval, mytype=subtype)
-            if realval is None:
+            if realval is Part.InvalidValue:
               /# How to report this?
               error = True
             result.append(realval)
           if error:
-            result = None
+            result = Part.InvalidValue
         else:
           raise Error('Unknown type "%s"' % mytype)
       else:
@@ -269,7 +282,7 @@ scope:
 
       return result
     test<py>:
-      invalid = None
+      invalid = metax.cli.Part.InvalidValue
       test.iseq(87, test.arg1.typecheck('87'))
       test.iseq(-1, test.arg1.typecheck('-1'))
       test.iseq(12, test.arg1.typecheck('+12'))
@@ -281,6 +294,9 @@ scope:
       test.iseq('red', test.arg3.typecheck('red'))
       test.iseq(invalid, test.arg3.typecheck('purple'))
       test.iseq('female', test.enumflag.typecheck('female'))
+      test.iseq(True, test.trilflag.typecheck('true'))
+      test.iseq(False, test.trilflag.typecheck('false'))
+      test.iseq(None, test.trilflag.typecheck('null'))
       test.iseq(
         datetime.datetime(2018, 12, 11, 6, 37, 11),
         test.dateflag.typecheck('2018-12-11@06:37:11'))
@@ -1093,7 +1109,7 @@ scope:
               break
         index += 1
 
-      /# After consume all args in argv, we now verify that all required
+      /# After consuming all args in argv, we now verify that all required
       /# args and flags have values.
       if result and not errors:
         for arg in result.args():
@@ -1154,6 +1170,8 @@ scope:
           >|    Height in meters.
           >|  --name : str = "Bob"
           >|    The name of the person
+          >|  --top : trilean = true
+          >|    Misc. trilean flag
           >|  --version|r : re = |<
           >|    Version to use.
           >|  image:
@@ -1185,6 +1203,8 @@ scope:
           >|    Height in meters.
           >|  --name : str = "Bob"
           >|    The name of the person
+          >|  --top : trilean = true
+          >|    Misc. trilean flag
           >|  --version|r : re = |<
           >|    Version to use.
           >|  files: The image files.
@@ -1349,7 +1369,7 @@ scope:
         self.valueIs(None)
       else:
         value = self.typecheck(default)
-        if value is None:
+        if value is Part.InvalidValue:
           raise Error(
             '%s cannot have default value "%s"' % (self.title(), default))
         self.valueIs(value)
@@ -1412,12 +1432,12 @@ scope:
           flagval = inval
         realval = self.typecheck(flagval)
 
-      if realval is None:
-        /# realval None means the specified value is not legal for the flag,
-        /# and returning None from this method indicates that.
-        result = None
-        /# We mark the value of the flag is undefined (aka None).
-        self.valueIs(None)
+      if realval is Part.InvalidValue:
+        /# means the specified value is not legal for the flag, and returning
+        /# None from this method indicates that.
+        result = realval
+        /# We mark the value of the flag is invalid.
+        self.valueIs(realval)
       else:
         self.valueIs(realval)
 
@@ -1427,6 +1447,7 @@ scope:
         res = flag.instantiate(flagname, inval, nextval)
         test.iseq(eres, res)
         test.iseq(evalue, flag.value())
+      invalid = metax.cli.Part.InvalidValue
 
       /# str flags.
       Chk(test.metalang, 'metalang', 'oopl', 'blah', False, 'oopl')
@@ -1444,7 +1465,7 @@ scope:
       Chk(test.expand, 'e', 'false', 'true', False, False)
       Chk(test.expand, 'expand', None, 'true', False, True)
       Chk(test.expand, 'noexpand', None, 'true', False, False)
-      Chk(test.expand, 'expand', 'blah', 'true', None, None)
+      Chk(test.expand, 'expand', 'blah', 'true', invalid, invalid)
     end method instantiate;
 
     method isFlag : bool scope<py>:
@@ -1484,16 +1505,17 @@ scope:
       var index : int #:
         The index within values corresponding to this arg.
     scope<py>:
-
       error = None
       if self.ismulti():
         /# This is a multi-valued arg (i.e. type 'list<...>')
         value_list = values[index:]
         realval = self.typecheck(value_list)
-        if realval is None:
+
+        if realval is Part.InvalidValue:
           error = (
             "%s cannot have value '%s'" % (self.title(), str(value_list)))
           result = -1
+          /# TODO(wmh): SHould we set value to Part.InvalidValue?
           self.valueIs(None)
         else:
           /# We've consumed all the values.
@@ -1503,10 +1525,11 @@ scope:
         /# This is a single-valued arg.
         value = values[index]
         realval = self.typecheck(value)
-        if realval is None:
+        if realval is Part.InvalidValue:
           error = (
             "%s cannot have value '%s'" % (self.title(), value))
           result = -1
+          /# TODO(wmh): SHould we set value to Part.InvalidValue?
           self.valueIs(None)
         else:
           self.valueIs(realval)
@@ -1520,6 +1543,7 @@ scope:
       arg1 = test.arg1
       arg4 = test.arg4
       values = ['abc', '500', '200', '300']
+
       test.isnull(arg1.value())
 
       def Chk(arg, values, index, expected_index, expected_value):
@@ -1787,7 +1811,7 @@ scope:
           raise AttributeError('Undefined flag --%s (or arg %s)' % (nora, nora))
         else:
           realval = part.typecheck(value)
-          if realval is None:
+          if realval is Part.InvalidValue:
             logging.error("%s cannot have value '%s'", self.title(), value)
           else:
             part.valueIs(value)
@@ -1843,6 +1867,9 @@ scope:
       test.enumflag = test.faux.newFlag(
         'gender', mytype='enum<undef|female|male|trans>', default='undef',
         summary='Gender of person')
+      test.trilflag = test.faux.newFlag(
+        'top', mytype='trilean', default='true',
+        summary='Misc. trilean flag')
 
       test.fauximg = test.faux.newCommand(
         'image', summary='Image processing.')

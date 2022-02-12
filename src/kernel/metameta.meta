@@ -1252,16 +1252,19 @@ namespace metax.meta scope:
         else:
           /# We are to insert before or after a pre-existing attribue.
           index = None
+          sindex = None
           aid = position[1:]
           for i, attr in enumerate(order):
-            if attr.key() == aid:
+            akey = attr.key()
+            if akey == aid:
               index = i
               break
+            elif akey.startswith('scope'):
+              sindex = i
+          if index is None and sindex is not None:
+            index = sindex
           if index is None:
-            self.metafile().error(
-              'Failed to insert %s before missing %s' % (key, aid),
-              line=attribute.line())
-            raise metax.c.Error('Here')
+            order.append(attribute)
           elif position[0] == '+':
             order.insert(index + 1, attribute)
           elif position[0] == '-':

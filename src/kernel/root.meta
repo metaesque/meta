@@ -302,6 +302,9 @@ scope:
         import metastrap
         version = metastrap.Version
         if version is None:
+          /# Note that this is only printed if metax.root.Object.Resource() is
+          /# used. Do we need to log the warning, or can we safely silently do
+          /# this?
           logging.warning('Implicitly invoking metastrap.Setup()')
           metastrap.Setup()
           version = metastrap.Version

@@ -12149,6 +12149,10 @@ namespace metax.oopl scope:
           'base': 'bool', 'default': 'False',
           'format': lambda var: 'str(' + var + ').lower()',
         },
+        'trilean': {
+          'base': 'trilean', 'default': 'None',
+          'format': lambda var: 'str(' + var + ').lower().replace("None", "null")',
+        },
         'char': {
           'base': 'str', 'default': "''",
           'format': lambda var: var,
@@ -18356,14 +18360,16 @@ namespace metax.oopl scope:
 
         if special and not last_printed_sep: fp.write(sep)
 
+        /# Print out details
+        /#  - if verbosity is 0, only print methods that have out/err.
+        /#  - if verbosity is 1, print every method (and out/err if present)
         if special or verbosity:
           prefix = '%3d) ' % i if show_nums else ''
           fp.write(
             '%s%-40s ... %7d us   %s\n' %
             (prefix, item['fqn'], item['time'] or -1, item['status']))
-
-        PrintStripped(out, ' |')
-        PrintStripped(err, 'E|')
+          PrintStripped(out, ' |')
+          PrintStripped(err, 'E|')
 
         /# Log this test result.
         if timestamp > 0:

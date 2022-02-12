@@ -89,6 +89,7 @@ scope:
     supported.
   assocs<py>:
     std assoc logging;
+    std assoc math;
     std assoc re;
   scope:
 
@@ -180,6 +181,10 @@ scope:
       var powers -> powers;
     scope<py>:
     clinit<py>:
+
+      /# TODO(wmh): This variable is unused currently (field 'Dimensions' is
+      /# initialized explicitly below). Decide whether the Dimension class
+      /# is useful or not.
       dimensions = {
         'length': Dimension(
           0, 'length', 'meter', 'l', 'L', units=[
@@ -383,6 +388,21 @@ scope:
           },
         },
       })
+
+      /# For each dimension, we add a 'units2' map that maps unit suffixes
+      /# to the same maps that unit names have. This will allow us to implement
+      /# the units method using either names or suffixes. Although it would
+      /# be more intuitive to just add suffix keys to the existing 'units'
+      /# map, code elsewhere relies on units keys being unit names not
+      /# suffixes.
+      for dim, dimdata in cls.Dimensions().items():
+        units = dimdata['units']
+        units2 = {}
+        for udata in list(units.values()):
+          suffix = udata['suffix']
+          assert suffix not in units2
+          units2[suffix] = udata
+        dimdata['units2'] = units2
 
       /# Initialize PowerMap
       /#   If we use k bits to represent each power, we can represent (2^k)-1
@@ -601,6 +621,7 @@ scope:
       test.q4 = Quantity.New('6m / s')
       test.q5 = Quantity.New('2')
       test.q6 = Quantity.New('1 / 3s')
+      test.q7 = Quantity.New('14.41 g/cm^3')
     scope<cc>:
     end lifecycle;
 
@@ -636,7 +657,7 @@ scope:
       /#      3. operator ('*', '' or '/'  with spaces removed)
       nre = cls.Re()
       parts = nre.split(spec)
-      if debug: print(parts)
+      if debug: print('parts: %s' % parts)
       n = len(parts)
       assert (n - 1) % 4 == 0
 
@@ -662,6 +683,8 @@ scope:
         sep = parts[i+3].strip()
 
         /# Establish the unit data.
+        /#  - note that unit is None for the first bundle of 4 values, and
+        /#    unitmap has an entry for None (power=0, num=0)
         udata = unitmap.get(unit, None)
         if not udata:
           raise Error('Invalid unit "%s" in "%s"' % (unit, spec))
@@ -670,15 +693,21 @@ scope:
         /#  - if no power is provided, one is assumed except for the special
         /#    'no unit' unit, which has power 0.
         power = int(pstr or udata.get('power', 1))
+        if denominator:
+          power = -power
+          val = 1/val
 
-        /# Convert the value to si if not already.
+        /# Convert the value to canonical si if not already.
         num = udata['num']
+        scale = udata.get('scale', None)
         if num:
-          /# A non-zero num means the specified unit is not SI, so we need to
-          /# convert val to the SI equivalent
-          scale = udata['scale']
+          assert power
+          /# A non-zero num means the specified unit is not canonical
+          /# SI, so we need to convert val to the canonical SI representation.
+          if not scale:
+            raise Error('when is scale boolean false?')
           if scale:
-            val *= udata['scale']
+            val *= scale ** power
           else:
             /# The only time we should get here is for 'temperature'. In
             /# python, we could store a 'to' key in the udata that contains
@@ -692,18 +721,20 @@ scope:
           /# print('HERE with nonsi %s = %s' % (udata['unit'], udata['suffix']))
 
         if debug:
-          print(val)
-          print(unit)
-          print(power)
-          print(udata)
+          print('-' * 70)
+          print('udata=%s' % udata)
+          print('value=%s' % value)
+          print('val=%s' % val)
+          print('unit=%s' % unit)
+          print('power=%s' % power)
+          print('num=%s' % num)
+          print('scale=%s' % scale)
 
-        /# Modify the total value of the quantity appropriately based on whether
-        /# we are currently multiplying or dividing.
-        if denominator:
-          value /= val
-          power = -power
-        else:
-          value *= val
+        /# Modify the total value of the quantity appropriately.
+        /# - note that we have already switched the sign of power if denominator
+        /#   is true, so we can simply multiple by val and rest assured that
+        /#   it will divide when appropriate.
+        value *= val
 
         /# Encode the power in powers.
         /#  - each dimension is assigned a chunk of bits within 'powers'
@@ -715,6 +746,7 @@ scope:
         /#    value of each bitchunk is PB2 (which represents 0). We thus
         /#    add/subtraction power from that baseline.
         if power:
+          /# Encode powers
           index = udata.get('index', None)
           if index is None:
             /# We have a derived unit
@@ -750,11 +782,12 @@ scope:
       return result
     test<py>:
       New = metax.units.Quantity.New
+
       q1 = New('7.5kg')
       test.iseq(7.5, q1.value())
       q2 = New('7.5kg 8.1m / 10s^2')
       test.iseq(6.075, q2.value())
-      q3 = New('7.5kg*8.1m / 10s^2')
+      q3 = New('7.5kg*8.1m / 10s^2', debug=False)
       test.iseq(q2.value(), q3.value())
       q4 = New('30 degs')
       test.isapprox(0.523599, q4.value())
@@ -764,6 +797,9 @@ scope:
       test.isapprox(-8640.0, q6.value())
       q7 = New('5h')
       test.isapprox(18000.0, q7.value())
+
+      q8 = New('14.41 g/cm^3', debug=False)
+      test.isapprox(14410.0, q8.value())
     end method New;
 
     static
@@ -1003,7 +1039,7 @@ scope:
           /# result of quantity.units().
         }
         cls.Subclasses = subclasses
-      units = self.units()
+      units, umult = self.units()
       subclass = subclasses.get(units, None)
       if subclass:
         result = subclass(self.value())
@@ -1033,11 +1069,12 @@ scope:
     scope<py>:
       return self.asStr()
     test<py>:
-      test.iseq(' 7.50000 m', str(test.q1))
+      test.iseq('7.50000 m', str(test.q1))
     end method __str__;
 
     method asStr : str #:
-      docstr
+      Format this quantity according to desired units, precision, digits, width,
+      format, unicode status, etc.
     params:
       var units : map = null #:
         If specified, indicates for some subset of units which unit to use.
@@ -1051,24 +1088,69 @@ scope:
         How many digits to use to represent the numeric portion.
       var unicode : bool = false #:
         If true, express result in unicde.
+      var form : str = '%1.5f' #:
+        Format of numeric portion
     scope<cc>:
     scope<py>:
-      form = u'%8.5f'
-      suffix = self.units(units=units, unicode=unicode)
-      value = self.value()
+      suffix, umult = self.units(units=units, unicode=unicode)
+      value = self.value() * umult
       result = (form % value)
       if suffix:
         result += ' ' + suffix
       return result
     test<py>:
-      test.iseq(' 7.50000 m', test.q1.asStr())
-      test.iseq(' 1.88976 m', test.q2.asStr())
-      test.iseq(' 3.00000 m*s^-1', test.q3.asStr())
-      test.iseq(' 3.00000 m\u00b7s\u207b\u00b9', test.q3.asStr(unicode=True))
-      test.iseq(' 6.00000 m*s^-1', test.q4.asStr())
-      test.iseq(' 2.00000', test.q5.asStr())
-      test.iseq(' 0.33333 s^-1', test.q6.asStr())
+      test.iseq('7.50000 m', test.q1.asStr())
+      test.iseq('1.88976 m', test.q2.asStr())
+      test.iseq('3.00000 m/s', test.q3.asStr())
+      test.iseq('3.00000 m/s', test.q3.asStr(unicode=True))
+      test.iseq('6.00000 m/s', test.q4.asStr())
+      test.iseq('2.00000', test.q5.asStr())
+      test.iseq('0.33333 /s', test.q6.asStr())
+
+      units = {'length': 'foot'}
+      q1 = test.q1
+      test.iseq('24.60630 ft', q1.asStr(units=units))
+      q4 = q1 * q1
+      test.iseq('605.46996 ft^2', q4.asStr(units=units))
     end method asStr;
+
+    method unitValue : float #:
+      Obtain the value of this quantity in specified units
+    params:
+      var units : map = null #:
+        If specified, indicates for some subset of units which unit to use.
+    scope:
+      suffix, umult = self.units(units=units)
+      return self.value() * umult
+    test:
+      test.iseq(7.5, test.q1.unitValue())
+      test.iseq(750.0, test.q1.unitValue(units={'length': 'cm'}))
+      test.isapprox(24.606299, test.q1.unitValue(units={'length': 'ft'}))
+    end method unitValue;
+
+    method dimPower : int #:
+      The power to which a given dimension is raised.
+    params:
+      var dim : str #:
+        The dimension (a key in Dimensions()) to obtain a power for.
+    scope:
+      cls = self.__class__
+      PowerBits = cls.PowerBits()
+      HalfPB = 1 << (PowerBits-1)
+      mask = (1 << PowerBits) - 1
+      powers = self.powers()
+      dimension_data = Quantity.Dimensions()[dim]
+      start = PowerBits * dimension_data['index']
+      power = int(((powers >> start) & mask) - HalfPB)
+      return power
+    test:
+      test.iseq(1, test.q1.dimPower('length'))
+      test.iseq(0, test.q1.dimPower('mass'))
+
+      test.iseq(1, test.q7.dimPower('mass'))
+      test.iseq(-3, test.q7.dimPower('length'))
+      test.iseq(0, test.q7.dimPower('temperature'))
+    end method dimPower;
 
     method units : str #:
       Return back the units (as a str or unicode) for this quantity.
@@ -1079,34 +1161,86 @@ scope:
         If true, return unicode, else str.
     scope<cc>:
     scope<py>:
+      umult = 1.0
       if units is None:
         units = {}
       cls = self.__class__
-      PowerBits = cls.PowerBits()
-      HalfPB = 1 << (PowerBits-1)
-      mask = (1 << PowerBits) - 1
       dimensions = Quantity.Dimensions()
-      powers = self.powers()
-      suffixes = []
+      psuffixes = []   # positive power suffixes
+      nsuffixes = []   # negative power suffixes
       cmap = cls.Unicode() if unicode else cls.Str()
       times_char = cmap['times']
-      for dimension_data in sorted(
-        dimensions.values(), key=lambda unit: unit['index']
+      for dim in sorted(
+        dimensions, key=lambda dim: dimensions[dim]['index']
       ):
-        start = PowerBits * dimension_data['index']
-        power = int(((powers >> start) & mask) - HalfPB)
+        power = self.dimPower(dim)
         if power:
-          udata = dimension_data['units'][dimension_data['si']]
+          dimension_data = dimensions[dim]
+          dunit = units.get(dim, dimension_data['si'])
+          udata = dimension_data['units'].get(dunit, dimension_data['units2'].get(dunit, None))
+          if udata is None:
+            raise Error('Failed to find %s unit with name/suffix "%s"' % (dim, dunit))
+          umult /= udata['scale'] ** power
+
           suffix = udata['suffix']
-          if power != 1:
-            suffix += cmap[power]
-          suffixes.append(suffix)
-      return times_char.join(suffixes)
+          if abs(power) != 1:
+            suffix += cmap[abs(power)]
+
+          if power < 0:
+            nsuffixes.append(suffix)
+          else:
+            psuffixes.append(suffix)
+
+      suffix = times_char.join(psuffixes)
+      if nsuffixes:
+        suffix += '/'
+        suffix += times_char.join(nsuffixes)
+      return (suffix, umult)
     test<py>:
-      test.iseq('m', test.q1.units())
-      test.iseq('m*s^-1', test.q3.units())
-      test.iseq('m\u00b7s\u207b\u00b9', test.q3.units(unicode=True))
+      test.iseq(('m', 1.0), test.q1.units())
+      test.iseq(('m/s', 1.0), test.q3.units())
+      test.iseq(('m/s', 1.0), test.q3.units(unicode=True))
+
+      test.iseq(('ft', 3.280839895013123), test.q1.units(units={'length': 'foot'}))
+      test.iseq(('ft', 3.280839895013123), test.q1.units(units={'length': 'ft'}))
+
+      q4 = test.q1 * test.q1
+      test.iseq(('ft^2', 10.763910416709722), q4.units(units={'length': 'foot'}))
+
+      test.iseq(('kg/m^3', 1.0), test.q7.units())
+      test.iseq(('kg/m³', 1.0), test.q7.units(unicode=True))
+      test.iseq(('g/cm^3', 0.0010000000000000002), test.q7.units(units={'length': 'cm', 'mass': 'g'}))
+      test.iseq(('g/cm³', 0.0010000000000000002), test.q7.units(units={'length': 'cm', 'mass': 'g'}, unicode=True))
     end method units;
+
+    method sqrt : Quantity #:
+      Return a new Quantity that is the square root (in value and units)
+      of this quantity.
+    scope:
+      uparts = []
+      dimensions = Quantity.Dimensions()
+      for dim in sorted(
+        dimensions, key=lambda dim: dimensions[dim]['index']
+      ):
+        power = self.dimPower(dim)
+        if power:
+          if power % 2 != 0:
+            raise Error('Not yet handling dim %s power %d in sqrt' % (dim, power))
+          power /= 2
+          dimension_data = dimensions[dim]
+          units = dimension_data['units']
+          upart = units[dimension_data['si']]['suffix']
+          if power != 1:
+            upart = '^%d' % power
+          uparts.append(upart)
+      ustr = '*'.join(uparts)
+      result = Quantity.New('%1.16f %s' % (math.sqrt(self.value()), ustr))
+      return result
+    test:
+      q1 = metax.units.Quantity.New('100 m^2')
+      q2 = q1.sqrt()
+      test.iseq('10.00000 m', q2.asStr())
+    end method sqrt;
 
     method __add__ : Quantity #:
       Return a new Quantity produced by adding self and other
@@ -1121,7 +1255,7 @@ scope:
       return Quantity(self.value() + other.value(), self.powers())
     test<py>:
       q = test.q1 + test.q2
-      test.iseq(' 9.38976 m', q.asStr())
+      test.iseq('9.38976 m', q.asStr())
       test.raises(TypeError, test.q1.__add__, test.q6)
     end method __add__;
 
@@ -1140,7 +1274,7 @@ scope:
     test<py>:
       q = test.q1
       q.plus(test.q2)
-      test.iseq(' 9.38976 m', q.asStr())
+      test.iseq('9.38976 m', q.asStr())
       test.raises(TypeError, test.q1.plus, test.q6)
     end method plus;
 
@@ -1154,7 +1288,7 @@ scope:
     test<py>:
       q = test.q1
       q += test.q2
-      test.iseq(' 9.38976 m', q.asStr())
+      test.iseq('9.38976 m', q.asStr())
       test.raises(TypeError, test.q1.__iadd__, test.q6)
     end method __iadd__;
 
@@ -1171,7 +1305,7 @@ scope:
       return Quantity(self.value() - other.value(), self.powers())
     test<py>:
       q = test.q1 - test.q2
-      test.iseq(' 5.61024 m', q.asStr())
+      test.iseq('5.61024 m', q.asStr())
       test.raises(TypeError, test.q1.__add__, test.q6)
     end method __sub__;
 
@@ -1190,7 +1324,7 @@ scope:
     test<py>:
       q = test.q1
       q.minus(test.q2)
-      test.iseq(' 5.61024 m', q.asStr())
+      test.iseq('5.61024 m', q.asStr())
       test.raises(TypeError, test.q1.__sub__, test.q6)
     end method minus;
 
@@ -1204,7 +1338,7 @@ scope:
     test<py>:
       q = test.q1
       q -= test.q2
-      test.iseq(' 5.61024 m', q.asStr())
+      test.iseq('5.61024 m', q.asStr())
       test.raises(TypeError, test.q1.__sub__, test.q6)
     end method __isub__;
 
@@ -1226,7 +1360,7 @@ scope:
     test<py>:
       /# Multiply by another quantity.
       res = test.q1 * test.q6
-      test.iseq(' 2.50000 m*s^-1', res.asStr())
+      test.iseq('2.50000 m/s', res.asStr())
 
       /# Multiple by scalar.
       res2 = test.q1 * 2
@@ -1251,12 +1385,12 @@ scope:
     test<py>:
       q = test.q1
       q.times(test.q6)
-      test.iseq(' 2.50000 m*s^-1', test.q1.asStr())
+      test.iseq('2.50000 m/s', test.q1.asStr())
 
       /# We verify that q.times(q) properly squares value and increments power.
       q = metax.units.Quantity.New('2.5m')
       q.times(q)
-      test.iseq(' 6.25000 m^2', q.asStr())
+      test.iseq('6.25000 m^2', q.asStr())
 
       /# Multiple by int and float scalars.
       q.times(2)
@@ -1274,7 +1408,7 @@ scope:
       return self.times(other)
     test<py>:
       test.q1 *= test.q6
-      test.iseq(' 2.50000 m*s^-1', test.q1.asStr())
+      test.iseq('2.50000 m/s', test.q1.asStr())
     end method __imul__;
 
     method __truediv__ : Quantity #:
@@ -1296,13 +1430,13 @@ scope:
     test<py>:
       q = metax.units.Quantity.New('3s')
       res = test.q1 / q
-      test.iseq(' 2.50000 m*s^-1', res.asStr())
+      test.iseq('2.50000 m/s', res.asStr())
 
       /# Divide by int/float scalars.
       res2 = test.q1 / 2
-      test.iseq(' 3.75000 m', res2.asStr())
+      test.iseq('3.75000 m', res2.asStr())
       res3 = res2 / 0.5
-      test.iseq(' 7.50000 m', res3.asStr())
+      test.iseq('7.50000 m', res3.asStr())
     end method __truediv__;
 
     method __div__ : Quantity #:
@@ -1327,13 +1461,13 @@ scope:
     test<py>:
       q = metax.units.Quantity.New('3s')
       res = test.q1 / q
-      test.iseq(' 2.50000 m*s^-1', res.asStr())
+      test.iseq('2.50000 m/s', res.asStr())
 
       /# Divide by int/float scalars.
       res2 = test.q1 / 2
-      test.iseq(' 3.75000 m', res2.asStr())
+      test.iseq('3.75000 m', res2.asStr())
       res3 = res2 / 0.5
-      test.iseq(' 7.50000 m', res3.asStr())
+      test.iseq('7.50000 m', res3.asStr())
     end method __div__;
 
     method divideby : Quantity #:
@@ -1356,13 +1490,13 @@ scope:
       newq = metax.units.Quantity.New('3s')
       q = test.q1
       q.divideby(newq)
-      test.iseq(' 2.50000 m*s^-1', q.asStr())
+      test.iseq('2.50000 m/s', q.asStr())
 
       /# Divide by scalars.
       q = metax.units.Quantity.New('5.2m')
       q.divideby(2)
       q.divideby(1.5)
-      test.iseq(' 1.73333 m', q.asStr())
+      test.iseq('1.73333 m', q.asStr())
     end method divideby;
 
     method __idiv__ : Quantity #:
@@ -1376,7 +1510,7 @@ scope:
     test<py>:
       newq = metax.units.Quantity.New('3s')
       test.q1 /= newq
-      test.iseq(' 2.50000 m*s^-1', test.q1.asStr())
+      test.iseq('2.50000 m/s', test.q1.asStr())
     end method __idiv__;
 
     implicit
@@ -1458,9 +1592,25 @@ scope:
       test.l1 = metax.units.Length(7.5)
     end;
 
+    method inches : float #:
+      Returns this length in inches.
+    scope:
+      return self.value() / Quantity.Dimensions()['length']['units']['inch']['scale']
+    test:
+      test.isapprox(295.275590, test.l1.inches())
+    end method inches;
+
+    method feet : float #:
+      Returns this length in feet
+    scope:
+      return self.value() / Quantity.Dimensions()['length']['units']['foot']['scale']
+    test:
+      test.isapprox(24.6062992, test.l1.feet())
+    end method feet;
+
     test
     method testx_basics scope<py>:
-      test.iseq(' 7.50000 m', test.l1.asStr())
+      test.iseq('7.50000 m', test.l1.asStr())
     scope<cc>:
     end method testx_basics;
 
@@ -1472,13 +1622,21 @@ scope:
     clinit<py>:
       cls.PowersIs(Quantity.DimensionEncoding({'mass': 1}))
     setup<py>:
-      test.l1 = metax.units.Mass(7.5)
+      test.m1 = metax.units.Mass(7.5)
     end;
+
+    method pounds : float #:
+      Returns this mass in pounds
+    scope:
+      return self.value() / Quantity.Dimensions()['mass']['units']['pound']['scale']
+    test:
+      test.isapprox(16.534683, test.m1.pounds())
+    end method pounds;
 
     test
     method testx_basics
     scope<py>:
-      test.iseq(' 7.50000 kg', test.l1.asStr())
+      test.iseq('7.50000 kg', test.m1.asStr())
     scope<cc>:
     end method testx_basics;
 
@@ -1580,7 +1738,7 @@ scope:
     test
     method testx_basics
     scope<py>:
-      test.iseq(' 6.10000 s', test.l1.asStr())
+      test.iseq('6.10000 s', test.l1.asStr())
     scope<cc>:
     end method testx_basics;
 
