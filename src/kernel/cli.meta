@@ -1122,7 +1122,7 @@ scope:
         for flagname in sorted(allflags):
           flag = allflags[flagname]
           if flag.isArg(): continue
-          if flag.value() is None:
+          if flag.value() is Part.InvalidValue:
             /# A required flag without a value
             errors.append(
               'Command %s has required %s that is missing a value' %
@@ -1259,7 +1259,7 @@ scope:
       Obtain the value of a flag or arg defined within this command.
 
       Returns:
-        The value if present, or null.
+        The value if present, or Part.InvalidValue
     params:
       var nora : str #:
         The name or alias desired.
@@ -1269,7 +1269,7 @@ scope:
       if part:
         result = part.value()
       else:
-        result = None
+        result = Part.InvalidValue
       return result
     test<py>:
       res = test.faux.instantiate(
@@ -1312,6 +1312,7 @@ scope:
         int
         real<n> or float or double
         enum<val1,val2,...>
+        re
         list<T> for T above.
 
     field enumtype : map #:
@@ -1612,7 +1613,9 @@ scope:
 
       else:
         /# Multi-line help
-        fp.write(u'%s%s:\n' % (indent, self.name()))
+        aliases = '|'.join(self.aliases())
+        fp.write('\n')
+        fp.write('%s%s%s:\n' % (indent, self.name(), '' if not aliases else '|' + aliases))
         summary = self.summary()
         if summary:
           fp.write(u'%s  %s\n' % (indent, summary))
@@ -1774,7 +1777,7 @@ scope:
     scope<py>:
       command = self._command_()
       result = command.findValue(nora)
-      if result is None:
+      if result is Part.InvalidValue:
         raise AttributeError('Undefined flag --%s (or arg %s)' % (nora, nora))
       return result
     test<py>:

@@ -3588,7 +3588,7 @@ namespace metax.oopl scope:
       elif accessors != '+r#w!x-@':
         /# We have a non-default accessors specification, so we use it.
 
-        print('NOTE: Found non-default accessor: %s = %s' % (self.kindfqn(), accessors))
+        /# print('NOTE: Found non-default accessor: %s = %s' % (self.kindfqn(), accessors))
         accre = FieldConstruct.AccessorOneRE
         accmap = FieldConstruct.AccessorMap
         accvis = FieldConstruct.AccessorVis
@@ -4247,7 +4247,7 @@ namespace metax.oopl scope:
     @behavior: An executable defined on a collection of receivers.
   ##:
     TODO(wmh): This is currently inheriting from ExeutableConstruct, but I
-    suspect it can inhert from ClassicConstruct instead, as the executable
+    suspect it can inherit from ClassicConstruct instead, as the executable
     aspects of behaviors are handled by generating MethodConstruct instances
     that are inserted in classes.  At least, that is true for single-receivers.
     When we start supporting multi-method dispatch, we may actually need
@@ -7028,6 +7028,13 @@ namespace metax.oopl scope:
         if fval is not None:
           default_feature_map[fkey] = fval
 
+      prerec, prerec_lines = self.attrpair('prerec:', default=None)
+      if prerec_lines is None:
+        prerec_lines = []
+      postrec, postrec_lines = self.attrpair('postrec:', default=None)
+      if postrec_lines is None:
+        postrec_lines = []
+
       scope, receivers = self.attrpair('scope:', default=None)
       for receiver in receivers:
 
@@ -7049,9 +7056,12 @@ namespace metax.oopl scope:
           feature_map['presence'] = presence
 
         /# scope may be null if receiver is abstract
-        receiver_scope, receiver_lines = receiver.attrpair(
+        receiver_scope, rec_lines = receiver.attrpair(
           'scope:', default=None)
-        if receiver_scope is None:
+        if rec_lines is None:
+          rec_lines = []
+        receiver_lines = prerec_lines + rec_lines + postrec_lines
+        if not receiver_scope:
           receiver_lines = baselang.emptyBlockCode(receiver)
           receiver_linenum = receiver.primary().line()
         else:
@@ -7521,7 +7531,10 @@ namespace metax.oopl scope:
             else:
               command_code.append(indent + rem)
           for line in blines:
-            command_code.append(indent + line)
+            if not line:
+              command_code.append('')
+            else:
+              command_code.append(indent + line)
           command_body.extend(command_code)
 
       /# Now parse the scope
@@ -7544,17 +7557,13 @@ namespace metax.oopl scope:
         elif kind == 'command':
           if len(subcmds) == 0:
             /# This is the first subcommand ... insert an initial block that
-            /# never gets executed (avoids special case code latter).
+            /# handles help requests.
             command_body.append('')
-            if True:
-              command_body.append(
-                "%sif cli.rest and cli.rest[0].startswith('help'):" % indent)
-              command_body.append(
-                '%s  meta__command.help'
-                "(mode='helpfull' if 'ful' in cli.rest[0] else 'help', commands=cli.rest[1:])" % indent)
-            else:
-              command_body.append('%sif False:\n' % indent)
-              command_body.append('%s  pass' % indent)
+            command_body.append(
+              "%sif cli.rest and cli.rest[0].startswith('help'):" % indent)
+            command_body.append(
+              '%s  meta__command.help'
+              "(mode='helpfull' if 'ful' in cli.rest[0] else 'help', commands=cli.rest[1:])" % indent)
           elif default_encountered:
             /# We previously encountered the special default command, which
             /# must occur after all other commands, so the current one is
@@ -7564,6 +7573,16 @@ namespace metax.oopl scope:
               'The special %s command must occur last' %
               special_default_command, line=child.primary().line())
             break
+
+          /# Insert a check to ensure that sub_var (i.e. meta__names[1] or
+          /# meta__names[2], etc.) exists
+          command_body.append('')
+          command_body.append(
+            '%selif len(meta__names) < %d:' % (indent, level+2))
+          command_body.append(
+            '%s  print("ERROR: unrecognized command \\\"%%s\\\"" %% " ".join(meta__args))' %
+            indent)
+          command_body.append('%s  sys.exit(1)' % indent)
 
           subcmds.append(child)
           command_body.append('')
@@ -12189,6 +12208,7 @@ namespace metax.oopl scope:
         'string': {'base': 'str', 'default': 'None'},
         'vec': {'base': 'list', 'default': '[]'},
         'map': {'base': 'dict', 'default': '{}'},
+        'set': {'base': 'set', 'default': 'set()'},
 
         'ostream': {'base': 'file', 'default': 'sys.stdout'},
         'istream': {'base': 'file', 'default': 'sys.stdin'},
@@ -15114,9 +15134,11 @@ namespace metax.oopl scope:
         if presence == 'abstract':
           /# No formal mechanism for marking a method abstract in Javascript,
           /# so we raise a runtime error.
-          result.append(
+          code = (
             'raise NotImplementedError'
-            "('%s.%s' % (self.__class__.__module__, self.__class__.__name__))")
+            "('%s.%s.REPLACE' % (self.__class__.__module__, self.__class__.__name__))"
+          )
+          result.append(code.replace('REPLACE', executable.id()))
         if returns and not returns.isVoid():
           defval = self.defaultValue(returns)
           result.append('return %s' % defval)

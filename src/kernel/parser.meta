@@ -11867,6 +11867,8 @@ scope:
         If false, do not translate (or compile)
       var compile : bool = true #:
         If false, do not compile.
+      var quiet : bool = false #:
+        If true, don't print out errors.
     scope:
       flags = self.cli()
       context = self.metalang().context()
@@ -11880,7 +11882,9 @@ scope:
           path, text=text, debuglevel=flags.debug, context=context)
       phases = metafile.phases()
 
-      if metafile.hasErrors(show=True):
+      show = not quiet
+
+      if metafile.hasErrors(show=show):
         errors += 1
       elif expand:
         /# Expand
@@ -11888,7 +11892,7 @@ scope:
           if debug:
             print('processMeta: expanding %s' % path)
           metafile.expandMeta()
-        if metafile.hasErrors(show=True):
+        if metafile.hasErrors(show=show):
           errors += 1
         elif imports:
           /# Import
@@ -11896,7 +11900,7 @@ scope:
             if debug:
               print('processMeta: importing %s' % path)
             metafile.importMeta()
-          if metafile.hasErrors(show=True):
+          if metafile.hasErrors(show=show):
             errors += 1
           elif translate:
             /# Translate
@@ -11904,7 +11908,7 @@ scope:
               if debug:
                 print('processMeta: translating %s' % path)
               metafile.translateMeta()
-            if metafile.hasErrors(show=True):
+            if metafile.hasErrors(show=show):
               errors += 1
             elif compile:
               /# Compile
@@ -11912,9 +11916,9 @@ scope:
                 if debug:
                   print('processMeta: compiling %s' % path)
                 metafile.compileMeta()
-              if metafile.hasErrors(show=True):
+              if metafile.hasErrors(show=show):
                 errors += 1
-              if metafile.hasErrors(show=True, category='W'):
+              if metafile.hasErrors(show=show, category='W'):
                 warnings += 1
               metafile.stateIs('complete')
       return metafile, errors, warnings

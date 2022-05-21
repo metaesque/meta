@@ -59,14 +59,14 @@
 ;;;   which block-valued attribute the current line is contained
 ;;;   within, and only perform the above indentation of that attribute
 ;;;   value is complex.  If simple, each line should be indented at
-;;;   least metameta-indent-offset more than the start-of-block line, but
+;;;   least metameta2-indent-offset more than the start-of-block line, but
 ;;;   if the line already has more indentation than that, it should be
 ;;;   left as-is.
 ;;;
 ;;; With respect to coloring, a simple set of rules is:
-;;;   1) All construct names are colored with font-lock-metameta-construct-face
-;;;   2) All attribute keys are colored with font-lock-metameta-attribute-key-face
-;;;   3) All feature values are colored with font-lock-metameta-feature-value-face
+;;;   1) All construct names are colored with font-lock-metameta2-construct-face
+;;;   2) All attribute keys are colored with font-lock-metameta2-attribute-key-face
+;;;   3) All feature values are colored with font-lock-metameta2-feature-value-face
 ;;;
 ;;;   However, this must be extended significantly.
 ;;;
@@ -156,20 +156,20 @@
 ;;;   - The values of these variables differ for each particular Meta language
 ;;;     (but not each Meta sub-language)
 
-; (defconst metameta-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
-(defconst metameta-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
+; (defconst metameta2-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
+(defconst metameta2-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
-(defconst metameta-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template"))
-(defconst metameta-attribute-keys '("#" "<" "=" "aliases" "autokey" "children" "comment" "config" "default" "delim" "key" "kind" "name" "parent" "presence" "replacer" "scope" "suffixes" "toplevel" "type" "value"))
-(defconst metameta-feature-values '("abstract" "aliaskey" "concrete" "feature" "nokey" "noval" "primary" "secondary" "showkey" "showval" "undef" "userval"))
-(defconst metameta-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
-(defconst metameta-basewords      '())
+(defconst metameta2-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template"))
+(defconst metameta2-attribute-keys '("#" "<" "=" "aliases" "autokey" "children" "comment" "config" "default" "delim" "key" "kind" "name" "parent" "presence" "replacer" "scope" "suffixes" "toplevel" "type" "value"))
+(defconst metameta2-feature-values '("abstract" "aliaskey" "concrete" "feature" "nokey" "noval" "primary" "secondary" "showkey" "showval" "undef" "userval"))
+(defconst metameta2-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
+(defconst metameta2-basewords      '())
 
-(defconst metameta-constructs-re     (regexp-opt metameta-constructs t))
-(defconst metameta-attribute-keys-re (regexp-opt metameta-attribute-keys t))
-(defconst metameta-feature-values-re (regexp-opt metameta-feature-values t))
-(defconst metameta-keywords-re       (regexp-opt metameta-keywords t))
-(defconst metameta-basewords-re      (regexp-opt metameta-basewords t))
+(defconst metameta2-constructs-re     (regexp-opt metameta2-constructs t))
+(defconst metameta2-attribute-keys-re (regexp-opt metameta2-attribute-keys t))
+(defconst metameta2-feature-values-re (regexp-opt metameta2-feature-values t))
+(defconst metameta2-keywords-re       (regexp-opt metameta2-keywords t))
+(defconst metameta2-basewords-re      (regexp-opt metameta2-basewords t))
 
 (setq RE (make-hash-table))
 (puthash 'metameta-Attribute-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("aliaskey" "feature" "key" "kind" "nokey" "noval" "primary" "secondary" "showkey" "showval" "undef" "userval" "value")) "\[ \t\]\\)*") RE)
@@ -189,13 +189,13 @@
 (puthash 'metameta-all-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("abstract" "aliaskey" "concrete" "feature" "key" "kind" "nokey" "noval" "presence" "primary" "secondary" "showkey" "showval" "undef" "userval" "value")) "\[ \t\]\\)*") RE)
 (puthash 'metameta-construct-line (concat (gethash 'metameta-all-kv RE) "\\(" metameta-constructs-re "\\)[ \t]+\\([^ \t]+\\)") RE)
 
-(defconst metameta-comment-start-re "\\(?:comment\\|#\\):\n")
-(defconst metameta-comment-re "\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\)*\\)")
+(defconst metameta2-comment-start-re "\\(?:comment\\|#\\):\n")
+(defconst metameta2-comment-re "\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\)*\\)")
 
 ; Various methods set these variables
-(setq metameta-current-construct-kind nil)
+(setq metameta2-current-construct-kind nil)
 
-(defun metameta-goto-construct-line (&optional target-dent)
+(defun metameta2-goto-construct-line (&optional target-dent)
   ;; Find the line defining the construct within which the current line
   ;; resides.  If not currently within a construct (e.g. between constructs),
   ;; find the nearest start-of-construct above point).
@@ -224,7 +224,7 @@
   (let* ((p (point))
          ; we skip the initial newline of our construct re since we will be
          ; doing per-line matching.
-         (cons-re (substring (gethash 'metameta-construct-line RE) 1))
+         (cons-re (substring (gethash 'metameta2-construct-line RE) 1))
          ; we ignore lines whose indentation is greater than the smallest
          ; indentation we've seen.
          (min-dent (if (null target-dent) (meta-current-indentation) target-dent))
@@ -262,14 +262,14 @@
            ((looking-at cons-re) (setq done t) (if debug (message "found cons-re")))
          )))
     )
-    (setq metameta-current-construct-kind (match-string 3))
-    (message "Construct %s" metameta-current-construct-kind)
+    (setq metameta2-current-construct-kind (match-string 3))
+    (message "Construct %s" metameta2-current-construct-kind)
     (forward-char dent)
     (point)
   )
 )
 
-(defun metameta-current-block ()
+(defun metameta2-current-block ()
   ;; Establish bounds of current block.
   ;; Returns (start . end) cons cell.
   (let* ((p (point))
@@ -279,13 +279,13 @@
          (orig-dent (meta-current-indentation))
          ; we find the construct line for the current line, which establishes
          ; the indentation we want.
-         (cons-start (metameta-goto-construct-line))
+         (cons-start (metameta2-goto-construct-line))
          ; we record the line number of the construct line
          (cons-line (line-number-at-pos cons-start))
          ; we record the indentation of the construct line (NOT for line of p)
          (dent (meta-current-indentation))
          ; we need to match against lines representing constructs.
-         (cons-re (substring (gethash 'metameta-construct-line RE) 1))
+         (cons-re (substring (gethash 'metameta2-construct-line RE) 1))
          ; debugging
          (debug t)
          ; an indication that there is no block at the current position
@@ -388,7 +388,7 @@
   )
 )
 
-(defun metameta-toggle-block (region &optional force)
+(defun metameta2-toggle-block (region &optional force)
   ;; If specified region is hidden, reveal it, else hide it.
   ;;
   ;; Args:
@@ -437,7 +437,7 @@
       (overlay-put result 'invisible t)
       result))))
 
-(defun metameta-hide-blocks (key-pattern &optional lang-pattern)
+(defun metameta2-hide-blocks (key-pattern &optional lang-pattern)
   ;; Hide all blocks in file whose secondary key matches pattern.
   ;;   key-pattern: re
   ;;     The secondary key to match
@@ -449,9 +449,9 @@
       ;(message "Here with '%s'" re)
       (goto-char (point-min))
       (while (re-search-forward re nil t)
-        (metameta-toggle-current-block)))))
+        (metameta2-toggle-current-block)))))
 
-(defun metameta-hide-blocks-old (key-pattern &optional lang-pattern)
+(defun metameta2-hide-blocks-old (key-pattern &optional lang-pattern)
   ;; Hide all blocks in file whose secondary key matches pattern.
   ;;   key-pattern: re
   ;;     The secondary key to match
@@ -464,9 +464,9 @@
       (goto-char (point-min))
       (while (re-search-forward re nil t)
         (forward-line)
-        (metameta-toggle-current-block)))))
+        (metameta2-toggle-current-block)))))
 
-(defun metameta-hide-blocks-except (key-pattern lang-pattern)
+(defun metameta2-hide-blocks-except (key-pattern lang-pattern)
   ;; Hide all blocks that match key-pattern that do NOT match lang-pattern.
   (save-excursion
     (goto-char (point-min))
@@ -482,7 +482,7 @@
             ; advance into the block and hide it
             (message "hidding block for %s<%s>" key-pattern lang)
             (forward-line)
-            (metameta-toggle-current-block)))))))
+            (metameta2-toggle-current-block)))))))
 
 (defun blank-line-p ()
   ;; t if current line consists solely of whitespace.
@@ -493,24 +493,24 @@
 ;; ----------------------------------------------------------------------
 ;; Interactive command
 
-(defun metameta-toggle-current-block (&optional force)
+(defun metameta2-toggle-current-block (&optional force)
   ;; If current block is hidden, reveal it, else hide it.
   ;; If force is t, always hide, do not toggle.
   (interactive)
-  (metameta-toggle-block (metameta-current-block) force))
+  (metameta2-toggle-block (metameta2-current-block) force))
 
-(defun metameta-show-current-block ()
+(defun metameta2-show-current-block ()
   (interactive)
   ; Establish bound of current block. If invoked on a line that ends with
   ; the block start char (':') and starts with $indent whitespace, it scans
   ; down for lines with MORE than $indent whitespace.  Mark is set to the
   ; end of the region (last character of last line with more $indent), and
   ; point is set to the newline after the ':' on the original line.
-  (let ((region (metameta-current-block)))
+  (let ((region (metameta2-current-block)))
     (goto-char (car region))
     (push-mark (cdr region) nil t)))
 
-(defun metameta-remove-overlays ()
+(defun metameta2-remove-overlays ()
   (interactive)
   (let ((overlays (overlays-in (point-min) (point-max))))
     (while overlays
@@ -518,11 +518,11 @@
         (delete-overlay overlay))
       (setq overlays (cdr overlays)))))
 
-(defun metameta-next-construct (kind &optional backward)
+(defun metameta2-next-construct (kind &optional backward)
   ;; Find the start/end of the next construct of give kind
   (if (null kind) (setq kind "construct"))
   (let* ((p (point))
-         (re (gethash (intern (concat "metameta-" kind "-line")) RE))
+         (re (gethash (intern (concat "metameta2-" kind "-line")) RE))
          (s (if backward (re-search-backward re nil t) (re-search-forward re nil t)))
          se)
     (cond
@@ -562,7 +562,7 @@
                 "\n"
                 indent
                 "\\([^ \t\n].*\\)?"
-                metameta-constructs-re
+                metameta2-constructs-re
                 " ")
                nil t))
         (cond
@@ -614,7 +614,7 @@
   )
 )
 
-(defun metameta-narrow-to-current-construct (&optional kind)
+(defun metameta2-narrow-to-current-construct (&optional kind)
   (interactive)
   (cond
    (kind
@@ -622,7 +622,7 @@
       ; line of a construct of kind 'kind', we will narrow this
       ; construct, not the previous one.
       (next-line 1)
-      (let ((data (metameta-next-construct kind 'backward)))
+      (let ((data (metameta2-next-construct kind 'backward)))
         (widen)
         (narrow-to-region
          (assoc-default 'start data) 
@@ -631,10 +631,10 @@
      ))
    (t
     ; kind is nil, so we narrow to whatever the current construct is.
-    (setq metameta-current-construct-kind nil)
-    (metameta-goto-construct-line)
-    (if metameta-current-construct-kind
-        (metameta-narrow-to-current-construct metameta-current-construct-kind)))
+    (setq metameta2-current-construct-kind nil)
+    (metameta2-goto-construct-line)
+    (if metameta2-current-construct-kind
+        (metameta2-narrow-to-current-construct metameta2-current-construct-kind)))
   )
 )
 
@@ -706,11 +706,11 @@
 
 (defun metaoopl-python-only ()
   (interactive)
-  (metameta-hide-blocks-except "scope" "py\\|python"))
+  (metameta2-hide-blocks-except "scope" "py\\|python"))
 
 (defun metaoopl-cpp-only ()
   (interactive)
-  (metameta-hide-blocks-except "scope" "cpp\\|c\\+\\+"))
+  (metameta2-hide-blocks-except "scope" "cpp\\|c\\+\\+"))
 
 ;; Miscellaneous metaoopl-specific
 (defun metaoopl-hide-tests ()
@@ -766,7 +766,7 @@
 
 ;;; **************************************************************
 ;; Service routines
-(defun metameta-set-face (face foreground background font)
+(defun metameta2-set-face (face foreground background font)
   (interactive "sFace: \nsForeground: \nsBackground: \n Font: ")
 
   (let ( (res (facep face)) )
@@ -785,33 +785,33 @@
 ;;; **************************************************************
 ;;; User customization:
 
-;; Users can call 'metameta-set-face' to customize the colors
+;; Users can call 'metameta2-set-face' to customize the colors
 ;; used for Meta programs. See http://raebear.net/comp/emacscolors.html
 ;; for a useful way to view background and foreground colors together.
-(metameta-set-face 'font-lock-metaoopl-class-face          "red"             nil  metameta-default-font)
-(metameta-set-face 'font-lock-metaoopl-behavior-face       "red"             nil  metameta-default-font)
-(metameta-set-face 'font-lock-metaoopl-method-face         "orange"          nil  metameta-default-font)
-(metameta-set-face 'font-lock-metaoopl-field-face          "orange"          nil  metameta-default-font)
-(metameta-set-face 'font-lock-metameta-construct-face      "darkgreen"       nil  metameta-default-font)
-(metameta-set-face 'font-lock-metameta-attribute-key-face  "darkolivegreen"  nil  metameta-default-font)
-(metameta-set-face 'font-lock-metameta-feature-value-face  "hotpink4"        nil  metameta-default-font)
-(metameta-set-face 'font-lock-metameta-keyword-face        "deep pink"       nil  metameta-default-font)
-(metameta-set-face 'font-lock-metameta-baseword-face       "purple"          nil  metameta-default-font)
-(metameta-set-face 'font-lock-metameta-end-face            "ivory4"          nil  metameta-default-font)
+(metameta2-set-face 'font-lock-metaoopl-class-face          "red"             nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metaoopl-behavior-face       "red"             nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metaoopl-method-face         "orange"          nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metaoopl-field-face          "orange"          nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metameta2-construct-face      "darkgreen"       nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metameta2-attribute-key-face  "darkolivegreen"  nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metameta2-feature-value-face  "hotpink4"        nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metameta2-keyword-face        "deep pink"       nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metameta2-baseword-face       "purple"          nil  metameta2-default-font)
+(metameta2-set-face 'font-lock-metameta2-end-face            "ivory4"          nil  metameta2-default-font)
 
-;; Users can define 'metameta-mode-hook' to get special functionality
+;; Users can define 'metameta2-mode-hook' to get special functionality
 ;; when this mode is invoked.
-(defvar metameta-mode-hook nil
+(defvar metameta2-mode-hook nil
   ""
 )
 
 ;; Users can specify the indentation at each level
-(defvar metameta-indent-offset 2
+(defvar metameta2-indent-offset 2
   "The amount of indentation to add to lines within a scope block.  It
 is also currently used for indentation within '(' ')' lists but this
 will be generalized later.")
 
-(defvar metameta-wrap-collapsed-block-ends t
+(defvar metameta2-wrap-collapsed-block-ends t
   "When a block attribute value is collapsed, the attribute that
 appears next will by default appear on the same line, which makes for
 very long single lines for fully collapsed constructs.  To address this,
@@ -820,21 +820,21 @@ indication string so that the next attribute appears to reside on the
 next line at the proper indentation level.  If this variable is true,
 such newline-indentation is provided.")
 ;:TEMP
-(setq metameta-wrap-collapsed-block-ends t)
+(setq metameta2-wrap-collapsed-block-ends t)
 ;:ENDTEMP
 
-(defun metameta-make-map ()
-  (let ((metameta-mode-map (make-keymap))
+(defun metameta2-make-map ()
+  (let ((metameta2-mode-map (make-keymap))
         (space-map (make-sparse-keymap))
         )
     ;; Add key bindings here
-    (define-key metameta-mode-map "\C-j" 'newline-and-indent)
+    (define-key metameta2-mode-map "\C-j" 'newline-and-indent)
 
     ;; Iniital bindings for \C-@
     ;;   some emacs versions don't bind \C-@ to Ctrl space, so we
     ;;   do both
-    (define-key metameta-mode-map [?\C-\ ] space-map)
-    (define-key metameta-mode-map "\C-@" space-map)
+    (define-key metameta2-mode-map [?\C-\ ] space-map)
+    (define-key metameta2-mode-map "\C-@" space-map)
     (define-key space-map [?\C-\ ] 'set-mark-command)
     (define-key space-map "\C-@" 'set-mark-command)
 
@@ -846,8 +846,8 @@ such newline-indentation is provided.")
     ;(define-key space-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
     ;(define-key space-map [(control \>)] 'meta-toggle-next-overlay-visibility)
     ;(define-key space-map "ro" 'meta-remove-all-overlays)
-    ;(define-key space-map "vm" (lambda () (interactive) (find-file (concat (getenv "METAROOT") "/root/lib/emacs/metameta-mode.el"))))
-    ;(define-key space-map "lm" (lambda () (interactive) (load-file (concat (getenv "METAROOT") "/root/lib/emacs/metameta-mode.el"))))
+    ;(define-key space-map "vm" (lambda () (interactive) (find-file (concat (getenv "METAROOT") "/root/lib/emacs/metameta2-mode.el"))))
+    ;(define-key space-map "lm" (lambda () (interactive) (load-file (concat (getenv "METAROOT") "/root/lib/emacs/metameta2-mode.el"))))
 
     ; construct-related macros
     ;(define-key space-map "cm" 'metaoopl-complete-construct)  ; intentional metaoopl
@@ -856,10 +856,10 @@ such newline-indentation is provided.")
     ;(define-key space-map "c<" 'meta-construct-beginning)
     ;(define-key space-map "c>" 'meta-construct-end)
     ;(define-key space-map "c." 'meta-collapse-construct)
-    ;(define-key metameta-mode-map [(control \,)] 'meta-toggle-prev-overlay-color)
-    ;(define-key metameta-mode-map [(control \.)] 'meta-toggle-next-overlay-color)
-    ;(define-key metameta-mode-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
-    ;(define-key metameta-mode-map [(control \>)] 'meta-toggle-next-overlay-visibility)
+    ;(define-key metameta2-mode-map [(control \,)] 'meta-toggle-prev-overlay-color)
+    ;(define-key metameta2-mode-map [(control \.)] 'meta-toggle-next-overlay-color)
+    ;(define-key metameta2-mode-map [(control \<)] 'meta-toggle-prev-overlay-visibility)
+    ;(define-key metameta2-mode-map [(control \>)] 'meta-toggle-next-overlay-visibility)
 
     ; Paragraph modifying functions
     ;(define-key space-map "pa" '(lambda (prefix) (interactive "p") (let ((s (region-beginning)) (e (region-end)) d) (goto-char s) (insert "[++===") (setq d (- (point) 3)) (goto-char (+ e 6)) (insert "--]") (goto-char d))))
@@ -867,30 +867,30 @@ such newline-indentation is provided.")
     ;(define-key space-map "pu" '(lambda () (interactive) (let (p) (re-search-forward "\\[\\+\\+" nil) (forward-char -3) (setq p (point)) (re-search-forward "===" nil)  (delete-region p (point)) (re-search-forward "--\\]") (delete-region (- (point) 3) (point)))))
 
     ; return the map!
-    metameta-mode-map
+    metameta2-mode-map
   )
 )
 
 ;; We establish the map
-(setq metameta-mode-map
-;;(defvar metameta-mode-map
-   (metameta-make-map)
+(setq metameta2-mode-map
+;;(defvar metameta2-mode-map
+   (metameta2-make-map)
    ;;"Keymap for Meta major mode"
 )
 
 ;; Establish a file-suffix to mode mapping
-(add-to-list 'auto-mode-alist '("\\.metameta" . metameta-mode))
+(add-to-list 'auto-mode-alist '("\\.metameta" . metameta2-mode))
 (add-to-list 'auto-mode-alist '("\\.metaschema" . metaoopl-mode))
 
 ;; Establish which tokens get highlighted, and with which font.
-(defun metameta-compute-font-lock-keywords ()
+(defun metameta2-compute-font-lock-keywords ()
   (let ((executable-constructs '("method" "initializer" "finalizer" "function" "lifecycle" "behavior" "receiver"))
      )
     (list
       ;; Color multi-line comment blocks
       '("\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\|\n\\)*\\)" 2 font-lock-comment-face)
       ;; Color the "end" token.
-      '("end\\( [^;\n]*\\)?;" . font-lock-metameta-end-face)
+      '("end\\( [^;\n]*\\)?;" . font-lock-metameta2-end-face)
       ;; Color literal strings.
       (cons "'[^'\n]*'" font-lock-string-face)
       ;'("#:\n\\([ \t]*.*\\)" 1 font-lock-comment-face)
@@ -903,10 +903,10 @@ such newline-indentation is provided.")
       (cons "\\<field\\>" font-lock-metaoopl-field-face)
       ;; End Meta(Oopl) code.
 
-      (cons (concat "\\<" metameta-constructs-re     "\\>") font-lock-metameta-construct-face)
-      (cons (concat "\\<" metameta-attribute-keys-re "\\>") font-lock-metameta-attribute-key-face)
-      (cons (concat "\\<" metameta-feature-values-re "\\>") font-lock-metameta-feature-value-face)
-      ;; metameta-level keywords
+      (cons (concat "\\<" metameta2-constructs-re     "\\>") font-lock-metameta2-construct-face)
+      (cons (concat "\\<" metameta2-attribute-keys-re "\\>") font-lock-metameta2-attribute-key-face)
+      (cons (concat "\\<" metameta2-feature-values-re "\\>") font-lock-metameta2-feature-value-face)
+      ;; metameta2-level keywords
       (cons (concat "\\<" metameta-keywords-re "\\>") font-lock-metameta-keyword-face)
       ;; baselang-level keywords
       (cons (concat "\\<" metameta-basewords-re "\\>") font-lock-metameta-baseword-face)
@@ -915,9 +915,9 @@ such newline-indentation is provided.")
         2 font-lock-function-name-face)
     )))
 
-(defvar metameta-font-lock-keywords (metameta-compute-font-lock-keywords))
+(defvar metameta2-font-lock-keywords (metameta2-compute-font-lock-keywords))
 ; TEMP - force changes to font info into the var
-(setq metameta-font-lock-keywords (metameta-compute-font-lock-keywords))
+(setq metameta2-font-lock-keywords (metameta2-compute-font-lock-keywords))
 ; ENDTEMP.
 
 
@@ -933,20 +933,20 @@ such newline-indentation is provided.")
 ;;  - meta has a 'comment' secondary attribute defined on most constructs
 ;;    that is a simple block of comments ... text indented to at least the
 ;;    same level as the first line in the comment should be marked as a comment.
-(setq metameta-mode-syntax-table
-  (let ((metameta-mode-syntax-table (make-syntax-table)))
+(setq metameta2-mode-syntax-table
+  (let ((metameta2-mode-syntax-table (make-syntax-table)))
 
-    (modify-syntax-entry ?- "w" metameta-mode-syntax-table)
-    (modify-syntax-entry ?_ "w" metameta-mode-syntax-table)
-    (modify-syntax-entry ?. "w" metameta-mode-syntax-table)
+    (modify-syntax-entry ?- "w" metameta2-mode-syntax-table)
+    (modify-syntax-entry ?_ "w" metameta2-mode-syntax-table)
+    (modify-syntax-entry ?. "w" metameta2-mode-syntax-table)
 
     ;; This gives C++-style comments (/* ... */ and //)
     ;; Do not yet know how to treat COMMENT { ... } as a comment
-    ;;;;;(modify-syntax-entry ?/  ". 124b" metameta-mode-syntax-table)
-    ;;;;;(modify-syntax-entry ?*  ". 23" metameta-mode-syntax-table)
-    ;;;;;(modify-syntax-entry ?\n "> b" metameta-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?/  ". 124b" metameta2-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?*  ". 23" metameta2-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?\n "> b" metameta2-mode-syntax-table)
     ;; This gives perl-style comments ('#').
-    ;;;;;(modify-syntax-entry ?#  "< b" metameta-mode-syntax-table)
+    ;;;;;(modify-syntax-entry ?#  "< b" metameta2-mode-syntax-table)
     ;; We need to extend this to provide meta-style comments ('/#')
     ;; but I do not yet know how to do this while still providing
     ;; perl-style comments.
@@ -957,28 +957,28 @@ such newline-indentation is provided.")
 
       )
      (t
-      (modify-syntax-entry ?/  ". 14" metameta-mode-syntax-table)
-      (modify-syntax-entry ?#  ". 2b" metameta-mode-syntax-table)
-      ;(modify-syntax-entry ?\n "> a" metameta-mode-syntax-table)
-      (modify-syntax-entry ?\n "> b" metameta-mode-syntax-table)
+      (modify-syntax-entry ?/  ". 14" metameta2-mode-syntax-table)
+      (modify-syntax-entry ?#  ". 2b" metameta2-mode-syntax-table)
+      ;(modify-syntax-entry ?\n "> a" metameta2-mode-syntax-table)
+      (modify-syntax-entry ?\n "> b" metameta2-mode-syntax-table)
 
       ;; Both single quote and double quote are string delimiters, but
       ;; we cannot use the syntax table to fontify them due to how comments
       ;; are defined.
-      ;;;;(modify-syntax-entry ?\' "\"" metameta-mode-syntax-table)
-      ;;;;(modify-syntax-entry ?\" "\"" metameta-mode-syntax-table)
+      ;;;;(modify-syntax-entry ?\' "\"" metameta2-mode-syntax-table)
+      ;;;;(modify-syntax-entry ?\" "\"" metameta2-mode-syntax-table)
 
       ;; This adds in C-style multiline comments --> /* ... */
-      ;; (modify-syntax-entry ?*  ". 23" metameta-mode-syntax-table)
+      ;; (modify-syntax-entry ?*  ". 23" metameta2-mode-syntax-table)
       )
      )
-    metameta-mode-syntax-table
+    metameta2-mode-syntax-table
   )
-  ;;"Syntax table for metameta-mode"
+  ;;"Syntax table for metameta2-mode"
 )
 
 ;; This method indents the current line as Meta code
-(defun metameta-indent-line ()
+(defun metameta2-indent-line ()
    "Indent current line as Meta code"
    (interactive)
    (beginning-of-line)
@@ -1030,7 +1030,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*{[ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metameta-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metameta2-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1042,7 +1042,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*([ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metameta-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metameta2-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1054,7 +1054,7 @@ such newline-indentation is provided.")
              (while (looking-at "^[ \t]*$") (forward-line -1))
              (if (looking-at ".*([ \t]*$")
                (setq cur-indent (meta-current-indentation))
-               (setq cur-indent (- (meta-current-indentation) metameta-indent-offset))
+               (setq cur-indent (- (meta-current-indentation) metameta2-indent-offset))
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
@@ -1078,19 +1078,19 @@ such newline-indentation is provided.")
                 ;; Check for rule 3
                 ((looking-at ".*{[ \t]*$")
                  (message "Rule 3")
-                 (setq cur-indent (+ (meta-current-indentation) metameta-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metameta2-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 3b
                 ((looking-at ".*([ \t]*$")
                  (message "Rule 3b")
-                 (setq cur-indent (+ (meta-current-indentation) metameta-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metameta2-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 3c
                 ((and (looking-at ".*:[ \t]*$") (not (looking-at "^[ \t]*\/\#")))
                  (message "Rule 3c")
-                 (setq cur-indent (+ (meta-current-indentation) metameta-indent-offset))
+                 (setq cur-indent (+ (meta-current-indentation) metameta2-indent-offset))
                  (setq not-indented nil))
 
                 ;; Check for rule 4
@@ -1160,7 +1160,7 @@ such newline-indentation is provided.")
     (if (null list)
        (let ())
        (insert (car list))
-       (metameta-indent-line)
+       (metameta2-indent-line)
        (end-of-line)
        (insert "\n")
        (insert-lines-indented (cdr list))
@@ -1173,17 +1173,17 @@ such newline-indentation is provided.")
    (let ((str (if (null id) "" (concat " " id))))
 
      ;; Insert construct start at correct indentation
-     (metameta-indent-line)
+     (metameta2-indent-line)
      (insert (concat ctype str " {\n"))
 
      ;; Insert (empty) one line within the SCOPE
-     (metameta-indent-line)
+     (metameta2-indent-line)
      (insert "\n")
 
      ;; Insert the end-of-construct line
      (insert (concat "} " (downcase ctype) str ";\n"))
      (next-line -1)
-     (metameta-indent-line)
+     (metameta2-indent-line)
 
      ;; Move back up to original line and position cursor
      ;; after the construct primary key/value.
@@ -1194,21 +1194,21 @@ such newline-indentation is provided.")
 )
 
 ;; The mode method
-(defun metameta-mode ()
+(defun metameta2-mode ()
   "Major mode for editing Meta(Meta) language files"
   (interactive)
   (kill-all-local-variables)
-  (set-syntax-table metameta-mode-syntax-table)
+  (set-syntax-table metameta2-mode-syntax-table)
 
   ;; We explicitly set the map here so that each time the mode
   ;; entry function is called we recompute - this is temporary
   ;; until the meta modes are stable (after which the setq
   ;; line can be removed for efficiency)
-  (setq metameta-mode-map (metameta-make-map))
-  (use-local-map metameta-mode-map)
+  (setq metameta2-mode-map (metameta2-make-map))
+  (use-local-map metameta2-mode-map)
 
-  (set (make-local-variable 'font-lock-defaults) '(metameta-font-lock-keywords))
-  (set (make-local-variable 'indent-line-function) 'metameta-indent-line)
+  (set (make-local-variable 'font-lock-defaults) '(metameta2-font-lock-keywords))
+  (set (make-local-variable 'indent-line-function) 'metameta2-indent-line)
   (set (make-local-variable 'parse-sexp-ignore-comments) t)
 
   ;; This ensures that multi-line fontification (e.g. comment blocks) are
@@ -1218,15 +1218,15 @@ such newline-indentation is provided.")
   ;; TODO(wmh): explore modifying the code so that every 1000 invocations we use
   ;; a longer min/max value.
   (make-local-variable 'font-lock-extend-region-functions)
-  (add-hook 'font-lock-extend-region-functions 'metameta-font-lock-extend-region)
+  (add-hook 'font-lock-extend-region-functions 'metameta2-font-lock-extend-region)
   
   ;; This sets up comment info
   (set (make-local-variable 'comment-start) "/#")
   (set (make-local-variable 'comment-style) 'multi-line)
 
-  (setq major-mode 'metameta-mode)
+  (setq major-mode 'metameta2-mode)
   (setq mode-name "Meta(Meta)")
-  (run-hooks 'metameta-mode-hook)
+  (run-hooks 'metameta2-mode-hook)
 )
 
 (defun meta-current-indentation ()
@@ -1244,18 +1244,18 @@ we need its actual indentation to be reported)."
 ;;   https://www.gnu.org/software/emacs/manual/html_node/elisp/Multiline-Font-Lock.html
 ;; and 
 ;;   https://www.emacswiki.org/emacs/MultilineFontLock
-(defun metameta-font-lock-extend-region ()
-  ; (message "Here in metameta-font-lock-extend-region")
+(defun metameta2-font-lock-extend-region ()
+  ; (message "Here in metameta2-font-lock-extend-region")
   (save-excursion
     (goto-char font-lock-beg)
     (let* ((back-limit (- font-lock-beg 2000))
            (future-limit (+ font-lock-beg 2000))
-           (found-point (re-search-backward metameta-comment-start-re back-limit t)))
+           (found-point (re-search-backward metameta2-comment-start-re back-limit t)))
       (if found-point
-          (let ((last-point (re-search-forward metameta-comment-re future-limit t)))
+          (let ((last-point (re-search-forward metameta2-comment-re future-limit t)))
             (if (and last-point (> last-point font-lock-end))
                 (progn
                   (setq font-lock-end last-point)))
             (setq font-lock-beg found-point))))))
 
-(provide 'metameta-mode)
+(provide 'metameta2-mode)

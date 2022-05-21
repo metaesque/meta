@@ -1334,6 +1334,15 @@ config:
     Attribute config:;
     Attribute scope: : complex children <receiver>;
 
+    secondary
+    Attribute prerec: : simplex = <empty> children <_statement_> #:
+      Code to insert before the scope: of every receiver construct inside
+      the scope: of this construct.
+    secondary
+    Attribute postrec: : simplex = <empty> children <_statement_> #:
+      Code to insert after the scope: of every receiver construct inside
+      the scope: of this construct.
+
   end Construct behavior;
 
   Construct receiver < _oopl_ #:

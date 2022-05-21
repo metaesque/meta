@@ -1180,6 +1180,7 @@ namespace metax.meta scope:
         Otherwise, insert before (if first char is '-') or after (if first char
         is '+') the attribute key identified by position.
     scope:
+      metafile = self.metafile()
       key = attribute.key()
       if attribute.isBlock():
         assert key[-1] == ':'
@@ -1224,7 +1225,7 @@ namespace metax.meta scope:
           /#    eligible keys for this same attribute and report an error.
           /#  - otherwise we register both key and cankey.
           if cankey in self._attributes:
-            self.metafile().error(
+            metafile.error(
               'Cannot specify both %s and %s in same construct' %
               (cankey, attribute.litkey()))
           else:
@@ -1232,7 +1233,7 @@ namespace metax.meta scope:
             key2 = cankey
 
       if key in self._attributes:
-        self.metafile().error(
+        metafile.error(
           'Found duplicate key %s in %s' % (key, self.kindid()),
           line=attribute.line())
         attribute = None
@@ -1241,6 +1242,21 @@ namespace metax.meta scope:
         self._attributes[key] = attribute
         if key2:
           self._attributes[key2] = attribute
+
+        /# TODO(wmh): If the attribute is secondary, and position == '-', we should
+        /# change position to be '+<construct_name>', no?
+        if position == '-' and not isinstance(attribute, metax.attr.FeatureAttribute):
+          /# The at-the-beginning position for a secondary attribute is just after the
+          /# primary attribute.
+          newpos = '+' + self.id()
+          metafile.warning(
+            'Do we need to update position from "%s" to "%s"?' % (position, newpos))
+        elif position == '+' and isinstance(attribute, metax.attr.FeatureAttribute):
+          /# The at-the-end position for a feature attribute is just before the
+          /# primary attribute.
+          newpos = '-' + self.id()
+          metafile.warning(
+            'Do we need to update position from "%s" to "%s"?' % (position, newpos))
 
         order = self._order
         if position is None or position == '+':

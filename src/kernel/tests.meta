@@ -2291,7 +2291,7 @@ scope:
         pprint.pprint(data)
         pprint.pprint(expected)
         fp = io.StringIO()
-        self.recursiveCompare('', expected, data, 0, fp=fp, valwidth=width)
+        self.recursiveCompare('', data, expected, 0, fp=fp, valwidth=width)
         self.fail(fp.getvalue())
     test<py>:
       tc = self._tc
