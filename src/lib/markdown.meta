@@ -125,6 +125,7 @@ scope:
         ('code', re.compile(r'^    '), True),
         ('code', re.compile(r'^(?P<code>[`~]{3,})\s*(?P<lang>\S+)?'), True),
         ('table', re.compile(r'^Table:'), True),
+        /# ('panel', re.compile(r'^Panel:'), True),
         ('hr', re.compile(r'^\s*([*+-] ?){3,}\s*$'), False),
         ('label', re.compile(
           r'^\s*\[(?P<label>[^ \t\]]+)\]:\s*(?P<url>\S+)'
@@ -545,6 +546,9 @@ scope:
             book = self.book()
             if book:
               book.registerTable(table, location=(path, table_start))
+
+        elif kind == 'panel':
+          pass
 
         elif kind == 'section':
           /# We have a new section.
@@ -3642,7 +3646,7 @@ scope:
         Currently only relevant for aspect 'ascii'.
       width : int = 0
         Maximum number of characters to print per line (implies line wrapping).
-        If this is 0, the width is determine by term cols.
+        If this is 0, the width is determined by term cols.
       concise : bool = false
         If true, sections with empty title and no top-level blocks skip the
         printing of the title and just show children.
@@ -3692,13 +3696,31 @@ scope:
 
         if width:
           /# We are to perform line wrapping
-          formatted = textwrap.fill(
-            rawtext,
-            width=width,
-            initial_indent='' if nofirst else indent,
-            subsequent_indent=indent)
-          fp.write(formatted)
-          fp.write('\n')
+          /#  - if there are at least 3 bolded phrases at start of lines in
+          /#    rawtext, we format each separately.
+          bolds = re.split(r'(?:^|\n)(\*\*[^\*]+\*\*[:.])\s*', rawtext)
+          bn = len(bolds)
+
+          if bolds[0] == '' and bn >= 7:
+            bi = 1
+            while bi < bn:
+              part = bolds[bi] + ' ' + bolds[bi+1]
+              formatted = textwrap.fill(
+                part,
+                width=width,
+                initial_indent='' if nofirst else indent,
+                subsequent_indent=indent)
+              fp.write(formatted)
+              fp.write('\n')
+              bi += 2
+          else:
+            formatted = textwrap.fill(
+              rawtext,
+              width=width,
+              initial_indent='' if nofirst else indent,
+              subsequent_indent=indent)
+            fp.write(formatted)
+            fp.write('\n')
         else:
           /# We are to keep the lines of the paragraph unwrapped.
           if indent:

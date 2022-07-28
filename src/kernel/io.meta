@@ -300,7 +300,7 @@ scope:
         else:
           /# wrap lines at width.
           self.widthIs(0)  # need to clear this to avoid infinite recursion
-          self.wrap(text, width=width, extra='  ')
+          self.wrap(text, width=width, extra='')
           self.widthIs(width)
     test:
       sink = test.sink()
