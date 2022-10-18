@@ -121,10 +121,13 @@ scope:
         ('empty', re.compile(r'^\s*$'), False),
         ('html', re.compile(r'^<(?P<tag>[a-zA-Z0-9]+)[ >]'), True),
         ('section', re.compile(r'^(?P<hash>#{1,6})\s*(?P<title>.*)'), True),
+        /# TODO(wmh): When I remove the space from '^> ' in the quote re, 
+        /# the 'dnd sh' command hangs. Why?
         ('quote', re.compile(r'^> '), False),
         ('code', re.compile(r'^    '), True),
         ('code', re.compile(r'^(?P<code>[`~]{3,})\s*(?P<lang>\S+)?'), True),
         ('table', re.compile(r'^Table:'), True),
+        /# TODO: Need to support panels in parseLines().
         /# ('panel', re.compile(r'^Panel:'), True),
         ('hr', re.compile(r'^\s*([*+-] ?){3,}\s*$'), False),
         ('label', re.compile(
@@ -373,6 +376,8 @@ scope:
       html_end_re = re.compile(r'^</(?P<tag>[a-zA-Z0-9]+)>')
       /# When we are in a block quote
       block_quote_re = re.compile(r'^> ')
+      /# A line representing a panel line
+      panel_re = re.compile(r'^(\s{4,}|$)(.*)')
 
       def Record(pos, msg):
         """Record status of current line."""
@@ -548,7 +553,38 @@ scope:
               book.registerTable(table, location=(path, table_start))
 
         elif kind == 'panel':
-          pass
+          /# TODO(wmh): This code is not currently executed because 'panel'
+          /# is commented out in Parse.CATEGORIES. Uncomment to continue
+          /# developing this code.
+
+          /# We can consume the entire table here.
+          panel_start = i
+          /# We parse lines to end of table.
+          panel_title = None
+          if line.startswith('Panel:'):
+            /# We allow an optional empty line.
+            panel_title = line[6:].strip()
+            if not lines[i+1].strip():
+              i += 1
+          i += 1
+
+          /# Now we advance past all lines looking like table rows.
+          i = self._advancePosition(
+            lines, i, matcher=panel_re, category='panel' if debug else None)
+
+          plines = []
+          for line in lines[panel_start+1:i]:
+            m = panel_re.match(line)
+            text = m.group(2)
+            plines.append(text)
+          parent = metax.lib.markdown.Section(
+            None, title=panel_title, parser=self, prelines=0)
+          section = self.parseLines(plines, parent=parent)
+
+          /# THIS CODE IS NOT YET FULLY WORKING.
+          /#  - need to wrap the 'section' insstance insides a Panel and add
+          /#    at the panel to current_group.
+          /# section.show()
 
         elif kind == 'section':
           /# We have a new section.
@@ -4611,6 +4647,7 @@ scope:
               '%s%s %s\n' %
               (indent, '#' * d, self.title()))
             for block in self.blocks():
+              /# print(type(block))
               block.show(fp=fp, indent=indent, aspect=aspect, parser=parser, **kwds)
 
         /# Now handle children
