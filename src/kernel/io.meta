@@ -327,6 +327,20 @@ scope:
         sink3.fp().getvalue())
     end method writeln;
 
+    method writesep : void #:
+      Write a separator line
+    params:
+      var chr : str = '-' #:
+        The character or characters to use for the separator
+      var width : int = 80 #:
+        Maximum indent (takes into account current indentation)
+    scope:
+      w = (width - len(self.prefix())) // len(chr)
+      self.writeln(chr * w)
+
+    test:
+    end method writesep;
+
     method truncln : any #:
       Write a line, truncating at given width.
     params:

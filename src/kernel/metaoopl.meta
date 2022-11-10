@@ -15138,7 +15138,15 @@ namespace metax.oopl scope:
             'raise NotImplementedError'
             "('%s.%s.REPLACE' % (self.__class__.__module__, self.__class__.__name__))"
           )
-          result.append(code.replace('REPLACE', executable.id()))
+          /# We replace 'REPLACE' with the name of the executable. However, if
+          /# executable is a 'receiver', we instead want the name of the
+          /# behavior it resides within.
+          if executable.kind() == 'receiver':
+            behavior = executable.parentConstruct()
+            code = code.replace('REPLACE', behavior.id() + ' (behavior)') 
+          else:
+            code = code.replace('REPLACE', executable.id())
+          result.append(code)
         if returns and not returns.isVoid():
           defval = self.defaultValue(returns)
           result.append('return %s' % defval)

@@ -55,7 +55,7 @@ highlighted using [highlight.js](https://highlightjs.org/).
 
 ### Tables
 
-One can specify a table with an optional preceeding title with:
+One can specify a table with the following syntax:
 
 Table: Fruit
 
@@ -64,6 +64,17 @@ Table: Fruit
 | Apple     |     3 |
 | Banana    |     1 |
 | Cantelope |     2 |
+
+### Panels
+
+One can specify a panel with the following syntax:
+
+Panel: Example Panel
+
+    The panel text must be indented at least four spaces so that
+    it looks like a code block or blocks.
+
+    For example, this paragraph is part of the panel too.
 
 ### Lists
 
@@ -82,20 +93,19 @@ blocks in a list, indent them.
 One can specify ordered lists with numbers:
 
  1. apple
- 
+
     - Nested lists are easy to write
-    
+
  2. banana
- 
+
     - Nested lists can have nested paragraphs
-      
+
       > and blockquotes
 
       ~~~bash
       and code blocks
       ~~~
-          
+
       and any other kind of block (table, etc.)
-      
+
  3. cantelope
- 

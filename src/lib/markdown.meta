@@ -121,14 +121,14 @@ scope:
         ('empty', re.compile(r'^\s*$'), False),
         ('html', re.compile(r'^<(?P<tag>[a-zA-Z0-9]+)[ >]'), True),
         ('section', re.compile(r'^(?P<hash>#{1,6})\s*(?P<title>.*)'), True),
-        /# TODO(wmh): When I remove the space from '^> ' in the quote re, 
+        /# TODO(wmh): When I remove the space from '^> ' in the quote re,
         /# the 'dnd sh' command hangs. Why?
         ('quote', re.compile(r'^> '), False),
         ('code', re.compile(r'^    '), True),
         ('code', re.compile(r'^(?P<code>[`~]{3,})\s*(?P<lang>\S+)?'), True),
         ('table', re.compile(r'^Table:'), True),
         /# TODO: Need to support panels in parseLines().
-        /# ('panel', re.compile(r'^Panel:'), True),
+        ('panel', re.compile(r'^Panel:'), True),
         ('hr', re.compile(r'^\s*([*+-] ?){3,}\s*$'), False),
         ('label', re.compile(
           r'^\s*\[(?P<label>[^ \t\]]+)\]:\s*(?P<url>\S+)'
@@ -206,7 +206,8 @@ scope:
       return self.parseLines(
         lines, parent=parent, path=path, debug=debug, titlere=titlere)
     test:
-      simple = test.parseMarkdown('simple_md')
+      simple = test.parseMarkdown(
+        'simple_md', parser=metax.lib.markdown.Parser())
       fp = test.fp()
       simple.show(fp=fp)
       test.contains(
@@ -525,11 +526,11 @@ scope:
         elif kind == 'table':
           /# We can consume the entire table here.
           table_start = i
-          /# We parse lines to end of table.
-          if line.startswith('Table:'):
-            /# We allow an optional empty line.
-            if not lines[i+1].strip():
-              i += 1
+          assert line.startswith('Table:')
+          /# We allow an optional empty line.
+          if not lines[i+1].strip():
+            i += 1
+
           i += 1
 
           /# Now we advance past all lines looking like table rows.
@@ -559,32 +560,39 @@ scope:
 
           /# We can consume the entire table here.
           panel_start = i
-          /# We parse lines to end of table.
           panel_title = None
-          if line.startswith('Panel:'):
-            /# We allow an optional empty line.
-            panel_title = line[6:].strip()
-            if not lines[i+1].strip():
-              i += 1
+          assert line.startswith('Panel:')
+          /# We allow an optional empty line.
+          panel_title = line[6:].strip()
+          if not lines[i+1].strip():
+            i += 1
           i += 1
+          block_start = i
 
-          /# Now we advance past all lines looking like table rows.
+          /# Now we advance past all lines looking like panel rows.
           i = self._advancePosition(
             lines, i, matcher=panel_re, category='panel' if debug else None)
 
           plines = []
-          for line in lines[panel_start+1:i]:
+          for line in lines[block_start:i]:
             m = panel_re.match(line)
             text = m.group(2)
             plines.append(text)
-          parent = metax.lib.markdown.Section(
-            None, title=panel_title, parser=self, prelines=0)
-          section = self.parseLines(plines, parent=parent)
 
-          /# THIS CODE IS NOT YET FULLY WORKING.
-          /#  - need to wrap the 'section' insstance insides a Panel and add
-          /#    at the panel to current_group.
-          /# section.show()
+          /# Eventually, we want to parse the contents of the panel into a
+          /# collection of markdown.Object instants, but for now we just keep
+          /# it a list of strings.
+          if False:
+            parent = metax.lib.markdown.Section(
+              None, title=panel_title, parser=self, prelines=0)
+            section = self.parseLines(plines, parent=parent)
+          else:
+            panel = metax.lib.markdown.Panel(
+              current_group, plines, prelines=prelines, title=panel_title)
+            current_group.addBlock(panel)
+            book = self.book()
+            if book:
+              book.registerPanel(panel, location=(path, panel_start))
 
         elif kind == 'section':
           /# We have a new section.
@@ -914,7 +922,7 @@ scope:
       return parent
 
     test:
-      md = test.md
+      md = metax.lib.markdown.Parser()
       test.maxDiff = None
 
       respath = metax.root.Object.Resource(
@@ -923,11 +931,6 @@ scope:
         content = fp.read()
 
       lines = content.split('\n')
-      if False:
-        print('#' * 80)
-        for i, line in enumerate(lines, start=1):
-          print('%4d: %s' % (i, line))
-        print('#' * 80)
       root = md.parseLines(lines, debug=False)
 
       section = root.find('A Simple Document/Blocks/Lists')
@@ -1032,6 +1035,7 @@ scope:
       section.show(fp=test.fp(), aspect='ascii')
       test.iseqtext(simple, test.out())
       /#section.show(aspect='html')
+
 
       /# Now we test a collection of paragraphs without a section start.
       parent = metax.lib.markdown.BlockGroup(None)
@@ -1219,7 +1223,7 @@ scope:
       test.iseq(1, len(book.root().children()))
     end method loadBook;
 
-    method readBook : Section #:
+    method readBook : Book #:
       Read a book from an open istream
     params:
       var ifp : istream #:
@@ -1228,13 +1232,34 @@ scope:
         The name of the book containing all the paths.
       var path : str = null #:
         The path associated with the input stream.
+      var replacements : vec<tuple<function,re,function>> = null #:
+        If present, each three-tuple represents a tester function, a regexp,
+        and a replacement function.
+         - the tester function accepts text, and returns True if the regexp
+           and replacement are to be applied to that text.
+         - the regexp matches arbitrary single-line content, and is to be
+           replaced by the return value of the 'replacement' function, which
+           accepts a single regexp match object.
     scope:
       book = Book(bookname, self, path=path)
       root = book.root()
-      lines = ifp.read().replace('\t', '    ').split('\n')
+      text = ifp.read().replace('\t', '    ')
+
+      if replacements:
+        for tester, tre, tfunc in replacements:
+          if tester(text):
+            text = tre.sub(tfunc, text)
+
+      lines = text.split('\n')
       self.parseLines(lines, parent=root, path=path)
       return book
     test:
+      bookpath = metax.root.Object.Resource(
+        'simple_md', fqn='metax.lib.markdown_test.TestCase')
+      md = metax.lib.markdown.Parser()
+      with open(bookpath, 'r') as ifp:
+        book = md.readBook(ifp)
+      test.iseq('Book', book.root().title())
     end method readBook;
 
     implicit
@@ -1314,6 +1339,10 @@ scope:
     scope:
       return self.__class__.__name__
     test:
+      test.iseq('Section', test.section.kind())
+      test.iseq('Paragraph', test.p1.kind())
+      test.iseq('Panel', test.panel2.kind())
+      test.iseq('Table', test.table2.kind())
     end method kind;
 
     method isBlock : bool scope:
@@ -1347,6 +1376,8 @@ scope:
     method isCode : bool scope:
       return False
     test:
+      test.isfalse(test.p1.isCode())
+      test.istrue(test.code.isCode())
     end method isCode;
 
     method isTable : bool scope:
@@ -1477,6 +1508,14 @@ scope:
           /# print('  Found: %s\n' % mval)
           results.append(mval)
     test:
+      results = []
+      test.subsection.searchInText(
+        re.compile('insert'),
+        results,
+        'This is the text\nto search for insert\nwithin.')
+      test.iseq(
+        ['insert'],
+        results)
     end method searchInText;
 
     static
@@ -1489,6 +1528,7 @@ scope:
         width = 80
       return width
     test:
+      test.iseq(80, metax.lib.markdown.Object.TerminalWidth())
     end method TerminalWidth;
 
   end class Object;
@@ -1510,9 +1550,10 @@ scope:
       - code currently always returns None for title(), but we can easily
         add a concept of title code ... 'Code: <code title>'?
       - blockquotes current always return None for title()
-      - tables are titled if they have a line of the form 'Table: <table title>'
-        before the header specification, separated from the header by a single
-        empty line (usually there is also an empty line before the 'Table:').
+      - tables consist of a line of the form 'Table: <title>' followed
+        by an empty line followed by the table rows (starts with '\s*|').
+      - panels consist of a line of the form 'Panel: <title>' followed
+        by an empty line followed by the panel rows (starts with 4+ spaces)
   scope:
 
     field parent : BlockGroup #:
@@ -1537,8 +1578,10 @@ scope:
     method fulltitle : str #:
       The fully qualified title of this text object.
     scope:
-      fixed_title = self.title().replace('/', '\\/')
-      return self.parent().fulltitle() + '/' + fixed_title
+      title = self.title() or ''
+      fixed_title = title.replace('/', '\\/')
+      result = '%s/%s' % (self.parent().fulltitle(), fixed_title)
+      return result
     test:
       /# Note that testing section instances here is misleading because
       /# Section overrides fulltitle ... see the tests therein for sections.
@@ -1577,6 +1620,9 @@ scope:
 
     method isPanel : bool scope:
       return False
+    test:
+      test.isfalse(test.section.isPanel())
+      test.istrue(test.panel2.isPanel())
     end method isPanel;
 
     method asStr : vec<str> #:
@@ -1594,6 +1640,10 @@ scope:
         text = text.replace('\n', ' ')
       return text
     test:
+      test.iseq(
+        'This is an example paragraph containing a few lines\n'
+        'of text including a **bold** word and _italize phrase_.',
+        test.p1.asStr())
     end method asStr;
 
     method asLines : vec<str> #:
@@ -1602,6 +1652,12 @@ scope:
     scope:
       return self.asStr().splitlines(keepends=True)
     test:
+      test.iseq(
+        [
+          'This is an example paragraph containing a few lines\n',
+          'of text including a **bold** word and _italize phrase_.',
+        ],
+        test.p1.asLines())
     end method asLines;
 
     abstract
@@ -1682,6 +1738,8 @@ scope:
       for block in self.blocks():
         result.extend(block.blobs())
       return result
+    test:
+      test.iseq([], test.section.blobs())
     end method blobs;
 
   end class BlockGroup;
@@ -2077,17 +2135,17 @@ scope:
         >|[An example link](http://www.google.com)
         >|![](http://some.site/path/to/image.jpg 200x)
         >|""")
-      test.iseqtext(
-        >|"""<a href="http://www.google.com">An example link</a>
-        >|<div class="image bgblack right">
+      test.iseqtext("""\
+        >|
+        >|<div class="image right">
         >|  <a href="http://some.site/path/to/image.jpg">
-        >|    <img src=http://some.site/path/to/image.jpg width=200>
+        >|    <img src="http://some.site/path/to/image.jpg" width="200">
         >|  </a>
         >|</div>
         >|
+        >|<a target="_blank" href="http://www.google.com">An example link</a>
         >|""",
         html)
-
     end method TextToHtml;
 
     meta
@@ -2311,6 +2369,10 @@ scope:
         text = text.replace('\n', ' ')
       return text
     test:
+      test.iseq(
+        'This is an example paragraph containing a few lines\n'
+        'of text including a **bold** word and _italize phrase_.',
+        test.p1.asStr())
     end method asStr;
 
     method clone : Paragraph #:
@@ -2320,6 +2382,9 @@ scope:
       return cls(
         None, self.text(), implicit=self.implicit(), prelines=self.prelines())
     test:
+      p1 = test.p1
+      p1b = p1.clone()
+      test.iseq(p1.blobs(), p1b.blobs())
     end method clone;
 
     method blobs : vec<str> #:
@@ -2327,6 +2392,13 @@ scope:
       in visit() and other text-based searches.
     scope:
       return [self.text()]
+    test:
+      test.iseq(
+        [
+          'This is an example paragraph containing a few lines\n'
+          'of text including a **bold** word and _italize phrase_.',
+        ],
+        test.p1.blobs())
     end method blobs;
 
   end class Paragraph;
@@ -2356,6 +2428,10 @@ scope:
       in visit() and other text-based searches.
     scope:
       return [' '.join(self.lines())]
+    test:
+      test.iseq(
+        ['this is a quote spanning two lines'],
+        test.quote.blobs())
     end method blobs;
 
   end class Quote;
@@ -2471,6 +2547,10 @@ scope:
       for item in self.items():
         result.extend(item.blobs())
       return result
+    test:
+      test.makeLists()
+      test.iseq(['Apple', 'Banana', 'Cantelope'], test.ul.blobs())
+      test.iseq(['Apple', 'Banana', 'Cantelope'], test.ol.blobs())
     end method blobs;
 
   end class List;
@@ -2531,20 +2611,16 @@ scope:
     super (parent, prelines=prelines)
     scope:
       self.linesIs(lines)
-    setup:
-      test.code = metax.lib.markdown.Code(
-        test.subsection,
-        ['if a == 1:',
-         '  return False',
-         'else:',
-         '  return True'
-        ],
-        language='python')
     end lifecycle;
 
     method isCode : bool scope:
       return True
     test:
+      test.istrue(test.code.isCode())
+      test.isfalse(test.p1.isCode())
+      test.isfalse(test.section.isCode())
+      test.isfalse(test.table2.isCode())
+      test.isfalse(test.panel2.isCode())
     end method isCode;
 
     method blobs : vec<str> #:
@@ -2552,6 +2628,10 @@ scope:
       in visit() and other text-based searches.
     scope:
       return [' '.join(self.lines())]
+    test:
+      test.iseq(
+        ['if a == 1:   return False else:   return True'],
+        test.code.blobs())
     end method blobs;
 
   end class Code;
@@ -2571,11 +2651,8 @@ scope:
         The number of empty lines found before this block started.
     super (prelines=prelines)
     scope:
-    end lifecycle;
-
-    test
-    lifecycle setup:
-      self.hr = metax.lib.markdown.HR(test.section, '* * *', prelines=1)
+    setup:
+      test.hr = metax.lib.markdown.HR(test.section, '* * *', prelines=1)
     end lifecycle;
 
     method blobs : vec<str> #:
@@ -2583,7 +2660,8 @@ scope:
       in visit() and other text-based searches.
     scope:
       return []
-
+    test:
+      test.iseq([], test.hr.blobs())
     end method blobs;
 
   end class HR;
@@ -2606,19 +2684,20 @@ scope:
     scope:
       self.linesIs(lines)
       /# print('Have HTML block with %d lines starting: %s' % (len(lines), lines[0]))
-    end lifecycle;
-
-    test
-    lifecycle setup:
-      self.html = metax.lib.markdown.HTML(
+    setup:
+      test.html = metax.lib.markdown.HTML(
         test.section, ['<p>blah</p>'])
-    end;
+    end lifecycle;
 
     method blobs : vec<str> #:
       Convert this block into a collection of strings suitable for use
       in visit() and other text-based searches.
     scope:
       return [' '.join(self.lines())]
+    test:
+      test.iseq(
+        ['<p>blah</p>'],
+        test.html.blobs())
     end method blobs;
 
   end class HTML;
@@ -2943,6 +3022,9 @@ scope:
 
     method isTable : bool scope:
       return True
+    test:
+      test.istrue(test.table2.isTable())
+      test.isfalse(test.panel2.isTable())
     end method isTable;
 
     method unwrapped : Table #:
@@ -2985,6 +3067,8 @@ scope:
         uid=uid)
       return result
     test:
+      wtbl = test.table2.unwrapped()
+      test.isinst(wtbl, metax.lib.markdown.Table)
     end method unwrapped;
 
     method blobs : vec<str> #:
@@ -2995,6 +3079,10 @@ scope:
       for row in self.rows():
         result.extend(row.blobs())
       return result
+    test:
+      test.iseq(
+        ['Apple', '3', 'Banana', '1', 'Cantelope', '2'],
+        test.table2.blobs())
     end method blobs;
 
   end class Table;
@@ -3047,13 +3135,18 @@ scope:
       in visit() and other text-based searches.
     scope:
       return self.data()
+    test:
+      test.iseq(
+        ['Alice', '25', '1.7m', 'Kiwi'],
+        test.row1.blobs())
     end method blobs;
 
   end class Row;
 
-  class Panel < BlockGroup #:
-    A collection of paragraphs (et.al.) that are placed within a box to offset
-    them from the rest of the document.
+  class Panel < Block #:
+    Currently this is treated as a block, but we will eventually want to parse
+    the contents of the panel as a collection of markdown.Object instances, at
+    which point it needs to become a subclass of BlockGroup instead of Block.
 
     See
     http://tex.stackexchange.com/questions/36524/how-to-put-a-framed-box-around-text-math-environment
@@ -3063,22 +3156,33 @@ scope:
     field title : str = null #:
       The title associated with the table
 
+    field lines : vec<str> #:
+      The lines in the panel. This field will change to something richer when
+      we parse lines into markdown.Object instances.
+
     lifecycle params:
       var parent : Section #:
         The section this list belongs to.
+      var lines : vec<str> #:
+        The lines making up the panel. No newlines in elements.
+        This will change to some richer structure when we parse the contents of
+        the panel into markdown.Object instances.
       var prelines : int = 0 #:
         The number of empty lines found before this block started.
       var title -> title = null;
     super (parent, prelines=prelines)
     scope:
-      print('**** HERE with Panel %s' % title)
+      self.linesIs(lines)
     test:
-      panel = metax.lib.markdown.Panel(test.subsection, title='Testing')
+      panel = metax.lib.markdown.Panel(test.subsection, [], title='Testing')
       test.iseq('Testing', panel.title())
     end;
 
     method isPanel : bool scope:
       return True
+    test:
+      test.istrue(test.panel2.isPanel())
+      test.isfalse(test.table2.isPanel())
     end method isPanel;
 
   end class Panel;
@@ -3124,8 +3228,8 @@ scope:
       depth 1, etc.
 
     field keys : @map<str,Object> #:
-      Maps section or text titles to Section or Text instances. Used by find()
-      and child().
+      Maps section/table/panel/paragraph titles to Section/Table/Panel/Paragraph
+      instances. Used by find() and child().
 
     field pagenum : int #:
       The page number that this section starts on
@@ -3161,6 +3265,7 @@ scope:
         result = result.parent()
       return result
     test:
+      test.iseq('TheBook', test.table2.parent().root().title())
     end method root;
 
     method addTable #:
@@ -3174,6 +3279,10 @@ scope:
         self.tablesIs(tables)
       tables[table.title()] = table
     test:
+      section = test.root.newChild(title='Section 1')
+      test.isnull(section.tables())
+      section.addTable(test.table2)
+      test.iseq(['Fruit'], sorted(section.tables()))
     end method addTable;
 
     method xtitle : str #:
@@ -3307,6 +3416,8 @@ scope:
         result = None
       return result
     test:
+      test.isinst(
+        test.section.child('SubSection A'), metax.lib.markdown.Section)
     end method child;
 
     method addChild #:
@@ -3361,6 +3472,9 @@ scope:
         result[child.title()] = child
       return result
     test:
+      test.iseq(
+        ['SubSection A', 'SubSection/B'],
+        sorted(test.section.mapChildren()))
     end method mapChildren;
 
     method newNextSection : Section #:
@@ -3458,6 +3572,7 @@ scope:
       root = self.root()
       return '%s-%d' % (root.title(), self.pagenum())
     test:
+      test.iseq('TheBook-0', test.table2.parent().source())
     end method source;
 
     method visit #:
@@ -3481,6 +3596,12 @@ scope:
         if child.isSection():
           child.visit(function, sink, opaque)
     test:
+      chars = []
+      def Add(obj):
+        chars.append(len(obj.text()))
+      test.section.visit(Add)
+      /# TODO(wmh): Why is this empty?
+      test.iseq([], chars)
     end method visit;
 
     method walk #:
@@ -3545,6 +3666,10 @@ scope:
       parser.bookIs(self)
       tables = collections.OrderedDict()
       self.tablesIs(tables)
+      panels = collections.OrderedDict()
+      self.panelsIs(panels)
+    setup:
+      test.book2 = metax.lib.markdown.Book('test', test.book.parser())
     end;
 
     method find : Object #:
@@ -3555,6 +3680,9 @@ scope:
     scope:
       return self.root().find(spec)
     test:
+      book = test.book
+      test.isinst(
+        book.find('A Simple Document/Blocks/HTML'), metax.lib.markdown.Section)
     end method find;
 
     method showToc #:
@@ -3566,6 +3694,8 @@ scope:
       root = self.root()
       /# TODO(wmh): Implement this.
     test:
+      sink = metax.io.Sink()
+      test.book.showToc(sink=sink)
     end method showToc;
 
     method registerTable #:
@@ -3584,7 +3714,39 @@ scope:
       else:
         tables[title] = table
     test:
+      book = test.book
+      book2 = test.book2
+
+      table = test.table2
+      test.iseq([], list(book2.tables()))
+      book2.registerTable(table, ('/some/path', 37))
+      test.iseq(['Fruit'], list(book2.tables()))
     end method registerTable;
+
+    method registerPanel #:
+      Add a panel to the book.
+    params:
+      var panel : Panel;
+      var location : tuple<str,int> #:
+        Path and line number of start of panel.
+    scope:
+      panels = self.panels()
+      title = panel.title()
+      if title in panels:
+        print(
+          'Found repeated panel "%s" at line %d of %s' %
+          (title, location[1], location[0]))
+      else:
+        panels[title] = panel
+    test:
+      book = test.book
+      book2 = test.book2
+
+      panel = test.panel2
+      test.iseq([], list(book2.panels()))
+      book2.registerPanel(panel, ('/some/path', 37))
+      test.iseq(['Example Panel'], list(book2.panels()))
+    end method registerPanel;
 
     method tablesMatching : vec<Table> #:
       Find a table by title.
@@ -3599,7 +3761,26 @@ scope:
           tables.append(table)
       return tables
     test:
+      test.iseq(['Fruit'], [t.title() for t in test.book.tablesMatching('Fru')])
+      test.iseq([], test.book.tablesMatching('Blah'))
     end method tablesMatching;
+
+    method panelsMatching : vec<Panel> #:
+      Find a panel by title.
+    params:
+      var title : str #:
+        A regexp to apply to panel titles.
+    scope:
+      panels = []
+      title_re = re.compile(title, re.I)
+      for title, panel in self.panels().items():
+        if title_re.search(title):
+          panels.append(panel)
+      return panels
+    test:
+      test.iseq(['Example Panel'], [t.title() for t in test.book.panelsMatching('Exam')])
+      test.iseq([], test.book.panelsMatching('Blah'))
+    end method panelsMatching;
 
     method tableNamed : Table #:
       Return unique table from regexp.
@@ -3610,7 +3791,7 @@ scope:
         What to return if the table doesn't exist. If this is False, it is a
         request to raise an exception.
     scope:
-      tables = self.tablesMatching(title)
+      tables = self.tablesMatching('^' + title + '$')
       if len(tables) > 1:
         raise Error('Found %d tables for "%s"' % (len(tables), title))
       elif not tables:
@@ -3622,7 +3803,34 @@ scope:
         result = tables[0]
       return result
     test:
+      test.isinst(test.book.tableNamed('Fruit'), metax.lib.markdown.Table)
+      test.raises(metax.lib.markdown.Error, test.book.tableNamed, 'Blah')
     end method tableNamed;
+
+    method panelNamed : Panel #:
+      Return unique panel from regexp.
+    params:
+      var title : str #:
+        A regexp to apply to panel titles.
+      var default : any = False #:
+        What to return if the panel doesn't exist. If this is False, it is a
+        request to raise an exception.
+    scope:
+      panels = self.panelsMatching('^' + title + '$')
+      if len(panels) > 1:
+        raise Error('Found %d panels for "%s"' % (len(panels), title))
+      elif not panels:
+        if default is False:
+          raise Error('Failed to find panel matching "%s"' % title)
+        else:
+          result = None
+      else:
+        result = panels[0]
+      return result
+    test:
+      test.isinst(test.book.panelNamed('Example Panel'), metax.lib.markdown.Panel)
+      test.raises(metax.lib.markdown.Error, test.book.panelNamed, 'Blah')
+    end method panelNamed;
 
   end class Book;
 
@@ -3690,6 +3898,8 @@ scope:
         If present, any to-be-printed text is first passed to this function
         (which accepts only the one arg of text and returns a client-specific
         modification of the text). The text may contain newlines.
+      ignorepre: bool = false #:
+        If true, ignore preline values (do not print n newlines before).
   scope:
 
     abstract
@@ -3717,7 +3927,7 @@ scope:
       width = kwds.get('width', -1)
       rewriter = kwds.get('rewriter', Identity)
       implicit = self.implicit()
-      prelines = self.prelines()
+      prelines = 0 if kwds.get('ignorepre', False) else self.prelines()
       rawtext = rewriter(self.text())
 
       if aspect == 'ascii':
@@ -3815,7 +4025,7 @@ scope:
       if sink:
         fp = sink.fp()
         indent = sink.prefix()
-      prelines = self.prelines()
+      prelines = 0 if kwds.get('ignorepre', False) else self.prelines()
       if aspect == 'ascii':
         if prelines:
           fp.write('\n' * prelines)
@@ -3837,6 +4047,52 @@ scope:
       test.iseqtext('> quote\n> more quote\n', fp.getvalue())
     end receiver Quote;
 
+    receiver Panel ::
+      /# TODO(wmh): When Panel becomes a BlockGroup instead of a Block, it should
+      /# be moved and restructured.
+
+      if sink:
+        fp = sink.fp()
+        indent = sink.prefix()
+      prelines = 0 if kwds.get('ignorepre', False) else self.prelines()
+      if aspect == 'ascii':
+        if prelines:
+          fp.write('\n' * prelines)
+        fp.write('%sPanel: %s\n\n' % (indent, self.title()))
+        for line in self.lines():
+          if not line:
+            fp.write('\n')
+          else:
+            fp.write(indent + '    ' + line + '\n')
+      elif aspect == 'html':
+        fp.write('%s<b>Panel: %s</b>\n' % (indent, self.title()))
+        fp.write('%s<blockquote>\n' % indent)
+        for line in self.lines():
+          fp.write(line[2:] + '\n')
+        fp.write('%s</blockquote>\n' % indent)
+      elif aspect == 'tex':
+        fp.write('Not yet handling blockquotes in tex\n')
+      else:
+        print('ERROR: Unknown aspect %s for Panel.show()' % aspect)
+    test:
+      panel = metax.lib.markdown.Panel(
+        test.section,
+        ['this is a test', 'of panel text', '', 'in two paras'],
+        title='A test panel', prelines=1)
+      fp = test.fp()
+      panel.show(fp=fp)
+      test.iseqtext("""\
+        >|
+        >|Panel: A test panel
+        >|
+        >|    this is a test
+        >|    of panel text
+        >|
+        >|    in two paras
+        >|""",
+        fp.getvalue())
+    end receiver Panel;
+
     receiver List ::
       if sink:
         fp = sink.fp()
@@ -3844,7 +4100,7 @@ scope:
       /# How much spacing before the list item indicator? In the past I've
       /# usually done one space, but I'm looking into using 0 spaces.
       pre_indicator_indent = ''
-      prelines = self.prelines()
+      prelines = 0 if kwds.get('ignorepre', False) else self.prelines()
 
       subindent = indent + '  '
       ordered = self.ordered()
@@ -3943,7 +4199,7 @@ scope:
         if mark is None: mark = ' ? '
         extra_dent = len(mark)
         subindent = indent + (' ' * extra_dent)
-        prelines = self.prelines()
+        prelines = 0 if kwds.get('ignorepre', False) else self.prelines()
         /# width 0 means do not line wrap. width <0 means use terminal width
         width = kwds.get('width', -1)
 
@@ -4004,7 +4260,7 @@ scope:
         fp = sink.fp()
         indent = sink.prefix()
       rewriter = kwds.get('rewriter', Identity)
-      prelines = self.prelines()
+      prelines = 0 if kwds.get('ignorepre', False) else self.prelines()
       lines = self.lines()
       if aspect == 'html':
         if prelines:
@@ -4083,7 +4339,7 @@ scope:
       if sink:
         fp = sink.fp()
         indent = sink.prefix()
-      prelines = self.prelines()
+      prelines = 0 if kwds.get('ignorepre', False) else self.prelines()
       if aspect == 'html':
         if prelines:
           fp.write('\n' * prelines)
@@ -4114,7 +4370,7 @@ scope:
       if sink:
         fp = sink.fp()
         indent = sink.prefix()
-      prelines = self.prelines()
+      prelines = 0 if kwds.get('ignorepre', False) else self.prelines()
       lines = self.lines()
       if aspect == 'ascii':
         if prelines:
@@ -4147,7 +4403,7 @@ scope:
       if parser is None:
         parent = self.parent()
         parser = parent.parser() if parent else None
-      prelines = self.prelines()
+      prelines = 0 if kwds.get('ignorepre', False) else self.prelines()
       max_line_width = kwds.get('width', -1)
       if max_line_width < 0:
         max_line_width = Object.TerminalWidth()
@@ -4601,7 +4857,7 @@ scope:
 
       /#print('Here with aspect=%s depth=%d d=%d' % (aspect, depth, d))
 
-      prelines = self.prelines()
+      prelines = 0 if kwds.get('ignorepre', False) else self.prelines()
       if aspect.startswith('title'):
         /# Show table-of-contents style output
         abbrev = self.abbrev()
@@ -4846,6 +5102,13 @@ scope:
 
       /# Now print out the meta-level info.
       /# ...
+    test:
+      golden = metax.root.Object.Resource(
+        'book_golden', fqn='metax.lib.markdown_test.TestCase')
+
+      sink = metax.io.Sink(fp=test.fp())
+      test.book.show(sink=sink)
+      test.iseqstrgold(test.out(), golden)
     end receiver Book;
 
   end behavior show;
@@ -5017,6 +5280,7 @@ scope:
       result = None
       anns = self._annotations
       if anns and anns[0]['s'] == 0 and anns[0]['d'] == '**':
+        /# There is a bold label at the front of the paragraph.
         result = anns[0]['v']
       return result
     test:
@@ -5077,6 +5341,7 @@ scope:
     resource simple_md path "testdata/markdown/simple.md";
     resource markdown_md path "testdata/markdown/markdown.md";
     resource simple_golden path "testdata/markdown/simple.md.golden";
+    resource book_golden path "testdata/markdown/book.golden";
     resource raw_txt_golden path "testdata/markdown/raw.txt.golden";
     resource raw_html_golden path "testdata/markdown/raw.html.golden";
   scope:
@@ -5103,8 +5368,25 @@ scope:
       test.table = metax.lib.markdown.Table(
         /# This title must escaped the / when forming fulltitle.
         test.subsection, [], [], title='Table with / in it')
+      test.quote = metax.lib.markdown.Quote(
+        test.subsection, ['this is a quote', 'spanning two lines'], prelines=1)
+      test.code = metax.lib.markdown.Code(
+        test.subsection,
+        ['if a == 1:',
+         '  return False',
+         'else:',
+         '  return True'
+        ],
+        language='python')
+
       /# NOTE: Intentionally have NOT added p1 and p2 to subsection yet,
       /# although they know they are children of subsection.
+
+      bookpath = metax.root.Object.Resource(
+        'simple_md', fqn='metax.lib.markdown_test.TestCase')
+      test.book = self.parseBook([bookpath])
+      test.table2 = test.book.find('A Simple Document/Blocks/Tables/Fruit')
+      test.panel2 = test.book.find('A Simple Document/Blocks/Panels/Example Panel')
     clsetup:
       /# TODO(wmh): Introduce a nmspsetup that performs namespace-level
       /# setup. We only need to invoke metastrap.Setup() once.
@@ -5117,10 +5399,14 @@ scope:
       var titlere : regexp = null #:
         If present, specifies how section titles should be massaged. See
         Parser.parseLines() for details.
+      var parser : metax.lib.markdown.Parser = null #:
+        If null uses self.md
     scope:
+      if parser is None:
+        parser = self.md
       respath = metax.root.Object.Resource(
         resource, fqn='metax.lib.markdown_test.TestCase')
-      result = self.md.parseFile(respath, titlere=titlere)
+      result = parser.parseFile(respath, titlere=titlere)
       return result
     end;
 

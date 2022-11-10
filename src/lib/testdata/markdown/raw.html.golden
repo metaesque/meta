@@ -24,21 +24,11 @@ line break here.</p>
   <h2>And a third HTML block</h2>
 </div>
 
-<p>Here's a pretty picture of red trees.
-<div class="image bgblack right">
-  <div class="fixedwidth">red-leaved trees in a row</div>
-  <a href="https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg">
-    <img alt=red-leaved trees in a row src=https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg>
-  </a>
-</div>
-<a href="https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg">which can be found here</a> and
-<div class="image bgblack right">
-  <div class="fixedwidth">this</div>
-  <a href="http://www.designzzz.com/wp-content/uploads/2016/02/oaks-are-beautiful-trees.jpg">
-    <img alt=this src=http://www.designzzz.com/wp-content/uploads/2016/02/oaks-are-beautiful-trees.jpg title=Beautiful sunlit tree>
-  </a>
-</div>
- is a beautiful sunlit tree (<a href="http://www.designzzz.com/wp-content/uploads/2016/02/oaks-are-beautiful-trees.jpg">it can be found here</a>)</p>
+<p><b>ERROR(EMBEDDEDURL):
+![red-leaved trees in a row](https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg):(IGNORED)
+<b>ERROR(EMBEDDEDURL):
+![this][sunlit-trees]:(IGNORED)
+Here's a pretty picture of red trees.<a target="_blank" href="https://files.brightside.me/files/news/part_0/3755/151205-R3L8T8D-880-amazing-trees-4.jpg">which can be found here</a> and is a beautiful sunlit tree (<a target="_blank" href="http://www.designzzz.com/wp-content/uploads/2016/02/oaks-are-beautiful-trees.jpg">it can be found here</a>)</p>
 
 <ul>
   <li>

@@ -6,19 +6,18 @@ This document highlights some markdown features.
 
 ### Paragraphs
 
-Paragraphs are contiguous collections of lines, and newlines are
-ignored for the purposes of formatting unless the newline is preceeded
-by two or more spaces (e.g. the line ends in two or more spaces),
-which s an explicit request  
-for a line break.
+Paragraphs are contiguous collections of lines, and newlines are ignored for the
+purposes of formatting unless the newline is preceeded by two or more spaces
+(e.g. the line ends in two or more spaces), which s an explicit request   for a
+line break.
 
-There is special syntax to create markup within a paragraph, discussed
-below in the 'Inline' section.
+There is special syntax to create markup within a paragraph, discussed below in
+the 'Inline' section.
 
 ### HTML
 
-An HTML block starts with an html tag in the first column, and ends with
-the next HTML endtag in the first column. For example:
+An HTML block starts with an html tag in the first column, and ends with the
+next HTML endtag in the first column. For example:
 
 <table border="1">
   <tr><td>Apple</td><td>1</td></tr>
@@ -34,8 +33,8 @@ You can create a blockquote by starting a line with '> '
 
 ### Code
 
-You can insert code from an artibrary programming language
-using two different syntaxes:
+You can insert code from an artibrary programming language using two different
+syntaxes:
 
 ~~~python
 class Person(Object):
@@ -51,8 +50,8 @@ or:
         self._name = name
 
 with the former being more useful because it allows one to specify which
-language the code is implemented in.  In HTML, the code is syntax
-highlighted using [highlight.js](https://highlightjs.org/).
+language the code is implemented in.  In HTML, the code is syntax highlighted
+using [highlight.js](https://highlightjs.org/).
 
 ### Tables
 
@@ -83,14 +82,11 @@ Panel: Example Panel
 One can specify unordered lists with hyphens:
 
 - this is a first point
-- here is a second point across multiple lines
-  to show how it is handled
-- a third line in which the continuation lines are not
-  indented, but is still handled properly. This only
-  works until the first empty line, which signals the
-  end of the list (like what happens with
-  the paragraph below this). If you want multiple
-  blocks in a list, indent them.
+- here is a second point across multiple lines to show how it is handled
+- a third line in which the continuation lines are not indented, but is still
+  handled properly. This only works until the first empty line, which signals
+  the end of the list (like what happens with the paragraph below this). If you
+  want multiple blocks in a list, indent them.
 
 One can specify ordered lists with numbers:
 
