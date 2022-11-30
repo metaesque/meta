@@ -55,14 +55,19 @@ scope:
 
     field width : int #:
       Maximum width of each line. If negative, truncated at abs(width),
-      else wrapped with two spaces of extra indentation for subsequent
-      lines.
+      else wrapped with 'extra' iinserted before each subsequent line
+      (default two spaces).
+
+    field extra : str #:
+      When width is set, what to insert before indented lines (in addition to
+      the text dictated by prefix().
 
     lifecycle params:
       var fp -> fp = out;
       var indent : str = '' #:
         The top-level indentation.
       var width -> width = 0;
+      var extra -> extra = '  ';
     scope:
       self.prefixes().append(indent)
       /# Important to set this to newline so that first line printed uses same
@@ -300,7 +305,7 @@ scope:
         else:
           /# wrap lines at width.
           self.widthIs(0)  # need to clear this to avoid infinite recursion
-          self.wrap(text, width=width, extra='')
+          self.wrap(text, width=width, extra=self.extra())
           self.widthIs(width)
     test:
       sink = test.sink()
@@ -454,6 +459,13 @@ scope:
       sink.pathmapIs({'/a/b': '$TEST', '/a/b/c': '$TEST2'})
       test.iseq('$TEST2/d', sink.truncate('/a/b/c/d'))
     end method truncate;
+
+    method terminalWidth : int #:
+      Current terminal width.
+    scope:
+      return os.get_terminal_size().columns
+    test:
+    end method terminalWidth;
 
     method adjWidth : int #:
       Return a width reduced by current indent.

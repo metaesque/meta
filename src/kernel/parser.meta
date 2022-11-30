@@ -6275,7 +6275,7 @@ scope:
       Every user-defined construct that is created during parsing is added to this
       dict.  Keys are construct kinds, values are lists of Construct.
 
-    field classdeps : set<str> #:
+    field classdeps : @set<str> #:
       The fully-qualified names of classes depended on within this metafile.
       Used to determine which .meta files need to be imported during importMeta.
 
@@ -6330,11 +6330,6 @@ scope:
       if not text or text[-1] != '\n':
         text += '\n'
       lines = Line.FromText(text)
-
-      /# TODO(wmh): field files of type @set is not properly initializing a set.
-      self.filesIs(set())
-      self.basefilesIs(set())
-      self.classdepsIs(set())
 
       self.linesIs(lines)
       self.textIs(text)
@@ -16241,6 +16236,14 @@ scope:
         If true, dump test results to stdout/stderr rather than capturing
         them. Useful for identifying which tests are hanging.
 
+      flag countinstances : bool = false #:
+        If true, code is inserted into each user class initializer to
+        increment a class-specific count by 1.
+
+      flag countinvocations : bool = false #:
+        If true, code is inserted into each method to record the number of times
+        it is invoked and how long it takes.
+
       named
       command canonical #:
         Canonicalize the specified meta files and report diffs.
@@ -17485,7 +17488,7 @@ scope:
                 elif len(names) > 1:
                   /# The arg is a class name, but it is ambiguous (two or
                   /# more namespaces define the same class).
-                  print('ERROR: arg "%s" can refer to %s' % (arg, ' or '.names))
+                  print('ERROR: arg "%s" can refer to %s' % (arg, ' or '.join(names)))
                   sys.exit(1)
                 else:
                   /# The arg is a class name (or class.method) within a uniquely

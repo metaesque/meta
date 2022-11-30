@@ -84,6 +84,119 @@ scope:
     explicit id is required even though this is an auto-aassigned construct. The
     selector at the end of the attribute key is confusing the auto-assign logic.
   decl<py>:
+    /# We define a global dict used for counting instances of classes.
+    ClassCount = collections.defaultdict(int)
+
+    /# Client code can invoke metax.root.ShowClassCount() in their code if
+    /# they've compiled some code with --countinstances.
+    def ShowClassCount():
+      print('')
+      print('Class Instance Counts:')
+      for fqn in sorted(ClassCount, key=lambda k: ClassCount[k], reverse=True):
+        print('%7d %s' % (ClassCount[fqn], fqn))
+
+    /# We define a global dict used for counting method calls.
+    /#  - keys are method fqns, values are lists of three numbers:
+    /#      [count, mean, M2]
+    /#    per the incremental algorithm discussed in
+    /#      https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm
+    /#  - The mean at any given time is val[1]
+    /#  - The variance is val[2] / val[0]
+    /#  - The sample variance is val[2] / (val[0] - 1)
+    MethodCount = {}
+
+    /# Client code can invoke metax.root.ShowMethodCount() in their code if
+    /# they've compiled some code with --countinvocations
+    import math
+    import re
+    def ShowMethodCount(threshus=2, ignorere=None):
+      /# threshus : int
+      /#   Do not print any method whose total microseconds is less than this.
+      /# ignorere : str or re
+      /#   If present, do not print any method whose fqn searches against this
+      mc = MethodCount
+      print('')
+      print('Method Instance Counts/Times:')
+      print(
+        '  %-50s %7s %12s %12s %12s' %
+        ('fqn (fully qualified method name)', 'count', '\u03BCs total', '\u03BCs mean', '\u03BCs stddev'))
+      print(
+        '  %-50s %7s %12s %12s %12s' %
+        ('-' * 50, '-' * 7, '-' * 12, '-' * 12, '-' * 12))
+
+      ignored = 0
+      ignored_us = 0
+      skipped = 0
+
+      if ignorere and not isinstance(ignorere, re.Pattern):
+        ignorere = re.compile(ignorere)
+
+      for fqn in sorted(mc, key=lambda n: mc[n][0] * mc[n][1], reverse=True):
+        if ignorere and not ignorere.search(fqn):
+          skipped += 1
+          continue
+
+        n, mean_ns, M2 = mc[fqn]
+
+        /# At least on my M1 macbook, time.time_ns() is only returning
+        /# resolution to the microsecond, so we don't bother showing
+        /# nanosecond level resolution.
+        mean_us = int((mean_ns / 1000) + 0.5)
+        total_us = n * mean_us
+
+        if total_us <= threshus:
+          ignored += 1
+          ignored_us += total_us
+          continue
+
+        k = len(fqn)
+        if k > 50:
+          fqn = fqn[:49] + '$'
+        variance = M2/n
+        /# TODO(wmh): Is this the proper way to convert variance in ns^2 to
+        /# stddev in microseconds?
+        stddev_us = math.sqrt(variance)/1000
+        print('  %-50s %7d %12d %12d %12.1f' % (fqn, n, total_us, mean_us, stddev_us))
+
+      if skipped:
+        print(
+          'Skipped %d methods not matching %s' % (skipped, ignorere.pattern))
+      if ignored:
+        print(
+          'Ignored %d methods whose total us was <= %d \u03BCs each, '
+          '%d \u03BCs total' % (ignored, threshus, ignored_us))
+
+    /# The metax.root.Timer class supports the following profiling idiom in
+    /# user-defined methods:
+    /#   namespace a.b scope:
+    /#     class A scope:
+    /#       method f : int scope:
+    /#         ... do some stuff
+    /#         with metax.root.Timer(__metafqn__, 'block1'):
+    /#           ... some code to be timed.
+    /#         ... untimed stuff
+    /#         with metax.root.Timer(__metafqn__, 'block2'):
+    /#           ... some more code to be timed.
+    /#       end method f;
+    /#     end class A;
+    /#   end namespace a.b;
+    /#
+    /# A subsequent invocation of metax.root.ShowMethodCount() will print out
+    /# profile details on 'a.b.A.f/block1' and 'a.b.A.f/block1' (times called,
+    /# total time spent, average time spent, stddev, etc.)
+    import time
+    class Timer(object):
+      def __init__(self, fqn, label):
+        self._label = fqn + '/' + label
+        self._ns = 0
+        self._active = True  # MetaObject._CLI.countinstances
+      def __enter__(self):
+        if self._active:
+          self._ns = time.time_ns()
+      def __exit__(self,type, value, tb):
+        if self._active:
+          Object.Welford(self._label, time.time_ns() - self._ns)
+
     /# NaN: float
     /#   The not-a-number value.
     NaN = float('nan')
@@ -121,6 +234,7 @@ scope:
   parent<cc> void
   metaparent metax.root.ObjectMetaRoot
   assocs<py>:
+    std assoc collections;
     std assoc logging;
   assocs<cc>:
     cls assoc metax.root.ObjectMetaRoot;
@@ -229,6 +343,39 @@ scope:
     test<py>:
       metax.root.Object.RegisterResource('a', '/a/b/c')
     end;
+
+    static
+    method Welford #:
+      Incrementally adjust mean and N*variance given a new invocation of a
+      method with a certain time.
+    params:
+      var fqn : str #:
+        The method fqn to adjust.
+      var ns : int #:
+        How many nanoseconds the method took to complete.
+    scope:
+      data = metax.root.MethodCount.setdefault(fqn, [0, 0, 0])
+      n, mean, M2 = data
+      n += 1
+      delta = ns - mean
+      mean += delta / n
+      delta2 = ns - mean
+      M2 += delta * delta2
+      data[0] = n
+      data[1] = mean
+      data[2] = M2
+    test:
+      mc = metax.root.MethodCount
+      test.iseq({}, mc)
+      metax.root.Object.Welford('a.b.c', 10)
+      test.iseq({'a.b.c': [1, 10.0, 0.0]}, mc)
+      metax.root.Object.Welford('a.b.c', 20)
+      test.iseq({'a.b.c': [2, 15.0, 50.0]}, mc)
+      metax.root.Object.Welford('a.b.c', 30)
+      test.iseq({'a.b.c': [3, 20.0, 200.0]}, mc)
+      metax.root.Object.Welford('a.b.c', 40)
+      test.iseq({'a.b.c': [4, 25.0, 500.0]}, mc)
+    end method Welford;
 
     meta
     method Resource : str #:
@@ -395,6 +542,10 @@ scope:
 
     lifecycle #:
       Pass the message.
+    params<py>:
+      var msg : str = null;
+    super<py> (msg)
+    scope<py>:
     params<cc>:
       var msg : str = null;
     super<cc> (msg)

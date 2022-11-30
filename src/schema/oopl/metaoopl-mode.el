@@ -1471,7 +1471,7 @@ we need its actual indentation to be reported)."
     (message (format "COMMAND: %s" command))
     (insert (shell-command-to-string command))
     (metaoopl-mode)
-    (orgstruct-mode)
+    ;(orgstruct-mode)
     (metaoopl-minor-mode 1)
     (goto-char (point-min))
     (next-line 1)

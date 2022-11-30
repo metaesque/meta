@@ -1374,6 +1374,36 @@ Meta can instrument every method's entry/exit and execute timing code
 to count invocation counts and time spent in each method, providing
 detailed profiling information.
 
+Figure: Example Meta<Python> code with explicit block profiles. [=figprof]
+
+    ```meta
+    namespace a.b scope:
+      class A scope:
+        method f : int scope:
+          ... do some stuff
+          with metax.root.Timer(__metafqn__, 'block1'):
+            ... some code to be timed.
+          ... untimed stuff
+          with metax.root.Timer(__metafqn__, 'block2'):
+            ... some more code to be timed.
+        end method f;
+
+        command doa
+        interface:
+          command profile @ prof scope:
+            metax.root.ShowMethodCounts()
+          end command profile;
+        end command doa:
+      end class A;
+    end namespace a.b;
+
+    ```
+
+Code must be compiled with --countinvocations (and --countinstances),
+at which point user code can invoke the following to obtain profile data:
+  metax.root.ShowClassCounts()    <--- number of instances of each class created
+  metax.root.ShowMethodCounts()   <--- timing info for each method invocation
+
 ##### How to perform coverage analysis
 
 Meta can instrument every branch (in statement-level code written in

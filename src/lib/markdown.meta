@@ -77,6 +77,9 @@ scope:
   class Parser #:
     A parser for wmh-flavored markdown.
   assocs:
+    std assoc time #:
+      Needed to support --countinvocations (must auto-import in Meta so we don't
+      have to do this!)
     std assoc io;
     std assoc os;
     std usertest assoc pprint;
@@ -141,6 +144,27 @@ scope:
         ('comment', re.compile('^\s*/\#\s*(?P<comment>.*)'), False),
       ]
       cls.CATMAP = {trip[0]: trip[1] for trip in cls.CATEGORIES}
+
+      /# A line representing a table row.
+      cls.Table_row_re = re.compile(r'^\s*\|')
+      /# When an html block ends.
+      cls.Html_end_re = re.compile(r'^</(?P<tag>[a-zA-Z0-9]+)>')
+      /# When we are in a block quote
+      cls.Block_quote_re = re.compile(r'^> ')
+      /# A line representing a panel line
+      cls.Panel_re = re.compile(r'^(\s{4,}|$)(.*)')
+
+      cls.Code_re = re.compile(r'^(    |$)')
+
+      cls.Amp_re = re.compile('&(?:(?P<html>[a-zA-Z]+;))?')
+
+      cls.Urlkey_re = re.compile(r'(?P<key><<<URLKEY\d+>>>)')
+
+      cls.Delim_re = re.compile(r'\s*(?:\||-\+)\s*')
+
+      cls.Abbrev_re = re.compile(r'(?P<title>.*\S)\s*\[=(?P<abbrev>.*)\]\s*$')
+
+      cls.Mark_re = re.compile(r'^(?P<mark>\s*\* |\s*\d+\. )\S')
     end lifecycle;
 
     method registerLabel : void #:
@@ -269,7 +293,7 @@ scope:
         This will be parent if it wasn't null, else a newly created Section.
     params:
       var lines : vec<str> #:
-        The lines to parse.
+        The lines to parse. No trailing newlines!
       var parent : BlockGroup = null #:
         If null, a dummy parent is implicitly created. An externally created
         BlockGroup can be passed in for situations where this file is just one
@@ -295,15 +319,19 @@ scope:
             '# Race: Golem/Clay (Clay Golem) {MM-168}'
         should be treated simple as 'Race: Golem/Clay' when registered.
     scope:
+      /# NOTE: This is one of the most expensive methods in this namespace,
+      /# at least when parsing D&D source books. As such, I've started
+      /# optmiizing various aspects of this method.
+
       /# The parsing logic is as follows:
       /# - parse each line one after another
-      /# - at any given point, we are either 'between blocks' or
-      /#   'within a block'. A block is a contiguous collection
-      /#   of non-empty lines.
-      /# - empty lines usually identify the end of a block
-      /# - we keep track of the number of consecutive empty lines seen.
-      /# - if we are not currently in a block, and we see a non-empty line,
-      /#   the first few characters determines what we do:
+      /# - at any given point, we are either 'between blocks' or 'within a
+      /#   block'. A block is a contiguous collection of non-empty lines.
+      /# - empty lines usually identify the end of a block.
+      /# - we keep track of the number of consecutive empty lines seen (so that
+      /#   we can recreate the same output as input).
+      /# - if we are not currently in a block, and we see a non-empty line, the
+      /#   first few characters determines what we do:
       /#    '<': parse an HTML block
       /#         consume all lines up to '^>'
       /#    '#': parse a section header (create a new Section)
@@ -311,12 +339,13 @@ scope:
       /#    '> ': parse a blockquote
       /#         consume all lines starting with '>' and all non-empty
       /#         lines after last such line.
-      /#    '^    ': a code block
-      /#         consume all lines that are indented 4+ spaces
-      /#         convert &, < and > to &amp; &lt; and &gt;
+      /#    '^    ': parse a code block (consume all lines that are indented
+      /#         4+ spaces. Convert &, < and > to &amp; &lt; and &gt;
       /#    '```(\S+)?': a code block in a named language (start or end)
       /#    '^Table:.*': start of table
       /#         Consume lines to end of table
+      /#    '^Panel:.*': start of panel
+      /#         Consume lines to end of panel
       /#    '^[*+-]{3,}$': a horizontal rule
       /#         How to support '* * *'?
       /#    '^\[\S+\]: (\S+)\s+\'(.*)\': Link label mapping
@@ -372,14 +401,16 @@ scope:
       errors = {}
 
       /# A line representing a table row.
-      table_row_re = re.compile(r'^\s*\|')
+      table_row_re = Parser.Table_row_re
       /# When an html block ends.
-      html_end_re = re.compile(r'^</(?P<tag>[a-zA-Z0-9]+)>')
+      html_end_re = Parser.Html_end_re
       /# When we are in a block quote
-      block_quote_re = re.compile(r'^> ')
+      block_quote_re = Parser.Block_quote_re
       /# A line representing a panel line
-      panel_re = re.compile(r'^(\s{4,}|$)(.*)')
+      panel_re = Parser.Panel_re
 
+      /# This is a debug-only function and all calls to it have been commented
+      /# out in the interests of efficiency. Delete?
       def Record(pos, msg):
         """Record status of current line."""
         if debug:
@@ -435,9 +466,11 @@ scope:
 
         /# Obtain the current line and validate it.
         line = lines[i]
-        if line and line[-1] == '\n':
-          raise Error(
-            'Expecting line %d to NOT end in newline: "%s"' % (i+1, line))
+        nc = len(line)
+
+        /# if line and line[-1] == '\n':
+        /#   raise Error(
+        /#     'Expecting line %d to NOT end in newline: "%s"' % (i+1, line))
 
         /# Establish which regexp matches
         mdata = None
@@ -479,6 +512,21 @@ scope:
               kind = nm
               break
 
+        /# We time the code in each 'kind' below, but only of this code was
+        /# compiled with --countinstances on.
+        cli = metax.root.MetaObject.CLI()
+        if not cli:
+          /# TODO(wmh): Meta should be generating code for this automatically!
+          print(
+            "***** metax.root.MetaObject.CLI() not initialized. Invoke\n"
+            "  metax.c.Compiler.Bootstrap(['metac', 'test'])"
+            "to support!")
+          dotimes = False
+        else:
+          dotimes = cli.countinstances
+        if dotimes:
+          _s = time.time_ns()
+
         /# We check for a variety of mutually exclusive possibilities.
         /#  - i represents the index of the current line.
         /#  - each elif block is reponsible for adjusting i so that when the
@@ -487,7 +535,8 @@ scope:
         if kind is None:
           /# This line does not match anything special, so we just add it to
           /# current_lines and advance.
-          Record(i, 'default')
+
+          /# Record(i, 'default')
           if not current_lines:
             /# First line ... remember prelines
             para_prelines = prelines
@@ -506,18 +555,23 @@ scope:
             /# empty line indicates we've finished parsing it.  We create
             /# a Paragraph to contain the lines.
 
-            /# CODETANGLE(add_para): This is a repeat of the code elsewhere.
-            Record(i, 'empty ... block is paragraph')
-            para = metax.lib.markdown.Paragraph(
-              current_group, '\n'.join(current_lines), prelines=para_prelines)
-            current_group.addBlock(para)
-            current_lines = []
-            prelines = 1
+            with metax.root.Timer(__metafqn__, 'empty-create'):
+              /# CODETANGLE(add_para): This is a repeat of the code elsewhere.
+
+              /# Record(i, 'empty ... block is paragraph')
+              para = metax.lib.markdown.Paragraph(
+                current_group,
+                '\n'.join(current_lines),
+                prelines=para_prelines)
+              current_group.addBlock(para)
+              current_lines = []
+              prelines = 1
 
           else:
             /# We are not currently processing a block, so we just advance
             /# the empty-line counter and advance to next line.
-            Record(i, 'empty')
+
+            /# Record(i, 'empty')
             prelines += 1
 
           /# Advance to next line
@@ -600,8 +654,8 @@ scope:
           /#    may be an aunt, great-aunt, etc.
           /#  - if current_group is a ListItem instead of a Section, it is
           /#    an error to specify a section.
-          Record(i, 'section start')
 
+          /# Record(i, 'section start')
           if current_group.isSection():
             title = mdata['title']
             if titlere:
@@ -633,7 +687,8 @@ scope:
           /#    a block, the line containing a label spec is simply ignored and
           /#    has no effect on the current_lines or prelines so it can appear
           /#    while we are parsing a block without affecting its status.
-          Record(i, 'label specification')
+
+          /# Record(i, 'label specification')
           self.registerLabel(mdata['label'], mdata['url'], title=mdata['title'])
           i += 1
 
@@ -645,7 +700,10 @@ scope:
           code_start = i
           if 'code' in mdata:
             /# We have a ``` or ~~~ block.
-            Record(i, 'start of code block')
+
+            /# Record(i, 'start of code block')
+
+            /# note that we cannot pre-compile this re ;-(
             term_re = re.compile(r'^' + mdata['code'][:3])
             reverse = True
             code_lang = mdata['lang']
@@ -661,8 +719,9 @@ scope:
             next_prelines = prelines
           else:
             /# We have an indented code block.
-            Record(i, 'start of indented code block')
-            term_re = re.compile(r'^(    |$)')
+
+            /# Record(i, 'start of indented code block')
+            term_re = Parser.Code_re
             code_lang = None
             i = self._advancePosition(
               lines, i+1, matcher=term_re, category='code' if debug else None)
@@ -684,10 +743,11 @@ scope:
           html_start = i
           if line.strip().endswith('</%s>' % tag):
             /# We have a one-line HTML block.
-            Record(i, 'one-line HTML block')
+
+            /# Record(i, 'one-line HTML block')
             i += 1
           else:
-            Record(i, 'start of HTML block')
+            /# Record(i, 'start of HTML block')
             i = self._advancePosition(
               lines, i, matcher=html_end_re, reverse=True,
               category='html' if debug else None)
@@ -727,7 +787,8 @@ scope:
 
           if current_lines:
             /# CODETANGLE(add_para): This is a repeat of the code elsewhere.
-            Record(i, 'list (implicit close of paragraph)')
+
+            /# Record(i, 'list (implicit close of paragraph)')
             para = metax.lib.markdown.Paragraph(
               current_group, '\n'.join(current_lines), prelines=para_prelines)
             current_group.addBlock(para)
@@ -735,7 +796,8 @@ scope:
             prelines = 0
 
           else:
-            Record(i, 'list')
+            /# Record(i, 'list')
+            pass
 
           listre = Parser.ListRe()
 
@@ -784,7 +846,9 @@ scope:
                 /# (and start of new list).
 
                 /# The list item is an implicit start-of-new-list.
-                Record(i, 'implicit new list (typo?)')
+
+                /# Record(i, 'implicit new list (typo?)')
+
                 /# We account for any empty lines before 'i'.
                 list_end, prelines = FindEnd(lines, i-1)
                 /# Note that by breaking, we do not increment i, so the
@@ -798,16 +862,21 @@ scope:
                 /# The new list item is indented more than the current line,
                 /# so it is part of the current list. It may be a typo, but
                 /# is probably a sub-item indented fewer than 4 spaces.
-                Record(i, 'list item cont (sub item?)')
+
+                /# Record(i, 'list item cont (sub item?)')
+                pass
 
               elif (newlkey == 'ol' and ordered) or (newlchar == lchar):
                 /# The list item is a continuation of the current list.
-                Record(i, 'list item')
+
+                /# Record(i, 'list item')
                 item_starts.append((i, m))
 
               else:
                 /# The list item is an implicit start-of-new-list.
-                Record(i, 'implicit new list')
+
+                /# Record(i, 'implicit new list')
+
                 /# We account for any empty lines before 'i'.
                 list_end, prelines = FindEnd(lines, i-1)
                 /# Note that by breaking, we do not increment i, so the
@@ -831,7 +900,9 @@ scope:
               /# This line is a continuation of the current list item (later, we
               /# will back up before this empty line if it turns out to be a
               /# blank line after the list before a different entity).
-              Record(i, 'list item cont')
+
+              /# Record(i, 'list item cont')
+              pass
 
             i += 1
 
@@ -886,19 +957,23 @@ scope:
 
         elif kind == 'hr':
           /# We have an HR line
-          Record(i, 'horizontal ruler')
+
+          /# Record(i, 'horizontal ruler')
+
           hr = HR(current_group, line, prelines=prelines)
           current_group.addBlock(hr)
           i += 1
 
         elif kind == 'comment':
           /# We have a comment.
-          Record(i, 'comment')
+
+          /# Record(i, 'comment')
           i += 1
 
         elif kind == 'page':
           /# We have an explicit page break.
-          Record(i, 'page break')
+
+          /# Record(i, 'page break')
           pagenum = int(mdata['page'])
           i += 1
 
@@ -912,6 +987,10 @@ scope:
           print(line)
           print('#' * 70)
           raise Error('How did we get here?')
+
+        if dotimes:
+          metax.root.Object.Welford(
+            'metax.lib.markdown.Parser.parseLines/%s' % kind, time.time_ns() - _s)
 
         if kind != 'empty' and not keep_prelines:
           /# The current line isn't empty, so we reset the empty line counter.
@@ -1768,6 +1847,11 @@ scope:
     field annotations : vec<map> #:
       Details on bold, italic, and strike-thru elements.
       Each element contains the start, end, delim and text of the markup.
+    scope:
+      accessor get lazy:
+        res = metax.lib.markdown.Paragraph.ExtractAnnotations(self.text())
+        -> res
+    end field annotations;
 
     field implicit : bool = false #:
       If True, this collection of lines should not be delineated as a
@@ -1786,7 +1870,6 @@ scope:
           'WARNING: Paragraphs should not pass in a trailing newline (%s)' %
           parent.fulltitle())
         text = text.rstrip()
-      self.annotationsIs(metax.lib.markdown.Paragraph.ExtractAnnotations(text))
     clinit:
       /# TODO(wmh): The original markdown specification says
       /#    But if you surround an `*` or `_` with spaces, it'll be treated as a
@@ -2096,7 +2179,7 @@ scope:
         else:
           result = '&amp;'
         return result
-      amp_re = re.compile('&(?:(?P<html>[a-zA-Z]+;))?')
+      amp_re = Parser.Amp_re
       text = amp_re.sub(ReplaceAmpersand, text)
 
       /# Handle < and > escapes.
@@ -2105,7 +2188,7 @@ scope:
         pass
 
       /# Now replace the html keys with actual html.
-      keyre = re.compile(r'(?P<key><<<URLKEY\d+>>>)')
+      keyre = Parser.Urlkey_re
       def KeyRepl(m):
         return urlmap[m.group('key')]
       text = keyre.sub(KeyRepl, text)
@@ -2285,7 +2368,7 @@ scope:
         The parser instance.
     scope:
       /# TODO(wmh): Use the extract annotations instead of doing it here.
-      r = cls.AnnRe()
+      r = cls._AnnRe
       while True:
         m = r.search(text)
         if m:
@@ -2308,14 +2391,14 @@ scope:
     end method TextToTex;
 
     meta
-    method ExtractAnnotations : map #:
+    method ExtractAnnotations : vec<map> #:
       Find emphasis indicators within specified text.
     params:
       var text : str;
     scope:
       result = []
       special = '`'
-      r = cls.AnnRe()
+      r = cls._AnnRe
       while True:
         m = r.search(text)
         if m:
@@ -2766,6 +2849,10 @@ scope:
 
       self.rowsIs(rows)
       self.indicesIs(indices)
+    clinit:
+      cls.TableReIs(re.compile(r'^[-<|:+ ]{5,}$'))
+      cls.ColReIs(re.compile(
+        r'^\s*(?P<all>(?P<left>:)?-+(?P<right>:)?(?P<maxw><)?)\s*$'))
     end lifecycle;
 
     meta
@@ -2773,13 +2860,6 @@ scope:
 
     meta
     field ColRe : regexp;
-
-    meta
-    lifecycle scope:
-      cls.TableReIs(re.compile(r'^[-<|:+ ]{5,}$'))
-      cls.ColReIs(re.compile(
-        r'^\s*(?P<all>(?P<left>:)?-+(?P<right>:)?(?P<maxw><)?)\s*$'))
-    end lifecycle;
 
     meta
     method New : Table #:
@@ -2818,8 +2898,9 @@ scope:
       /# this spec is in.
       m = None
       spec = None
+      tablere = cls.TableRe()
       for i in range(header_start, min(10, len(lines))):
-        m = cls.TableRe().match(lines[i])
+        m = tablere.match(lines[i])
         if m:
           spec = lines[i]
           break
@@ -2831,7 +2912,7 @@ scope:
       if m:
         columns = []
         /# Column delimiters are either '|' or '-+'
-        delim_re = re.compile(r'\s*(?:\||-\+)\s*')
+        delim_re = Parser.Delim_re
         /# TODO(wmh): The ignore string is used to specify which chars to
         /# remove from the front and back of each table row. Having '|'
         /# in this list makes it convenient when splitting so that we don't
@@ -2857,8 +2938,9 @@ scope:
 
         /# Parse the column specification
         xspec = spec.strip()
+        colre = cls.ColRe()
         for colspec in delim_re.split(xspec)[1:-1]:
-          m = cls.ColRe().match(colspec)
+          m = colre.match(colspec)
           if m:
             align = ''
             if m.group('left'):
@@ -3185,6 +3267,47 @@ scope:
       test.isfalse(test.table2.isPanel())
     end method isPanel;
 
+    method blobs : vec<str> #:
+      Convert this block into a collection of strings suitable for use
+      in visit() and other text-based searches.
+    scope:
+      result = []
+
+      para = []
+      for line in self.lines():
+        if not line.strip():
+          /# empty line.
+          if para:
+            result.append(' '.join(para))
+            para = []
+        else:
+          para.append(line)
+      if para:
+        result.append(' '.join(para))
+
+      return result
+    test:
+      panel = metax.lib.markdown.Panel(
+        test.subsection,
+        lines=[
+          'This is a panel',
+          'with short small first paragraph.',
+          '',
+          '',
+          'And a shorter second paragraph.',
+        ],
+        title='Testing')
+
+      test.iseq('Testing', panel.title())
+
+      test.iseq(
+        [
+          'This is a panel with short small first paragraph.',
+          'And a shorter second paragraph.'
+        ],
+        panel.blobs())
+    end method blobs;
+
   end class Panel;
 
   class Section < BlockGroup #:
@@ -3318,15 +3441,18 @@ scope:
       title = obj.title()
       if title is not None:
         keys[title] = obj
-      abbrev = obj.abbrev()
 
-      if abbrev:
-        keys[abbrev] = obj
-        /# print('title=%s abbrev=%s' % (title, abbrev))
-      elif title:
-        canonical = re.sub(self.__class__.AbbrevRe(), '', title.lower())
-        /# print('title=%s canonical=%s' % (title, canonical))
-        keys[canonical] = obj
+      if False:
+        /# Expeirmenting with phasing abbrev support out in interests of
+        /# parsing efficiency.
+        abbrev = obj.abbrev()
+        if abbrev:
+          keys[abbrev] = obj
+          /# print('title=%s abbrev=%s' % (title, abbrev))
+        elif title:
+          canonical = re.sub(self.__class__._AbbrevRe, '', title.lower())
+          /# print('title=%s canonical=%s' % (title, canonical))
+          keys[canonical] = obj
     test:
       section = test.subsection
       test.iseq(0, len(section.keys()))
@@ -3380,8 +3506,11 @@ scope:
     params:
       var block : Block;
     scope:
-      if self.title():
-        self.blocks().append(block)
+      /# accessors optimized away because profiling says this method is
+      /# surprisingly expensive. Avoiding title() and blocks() took the
+      /# cost from 6us to 4us per call.
+      if self._title:
+        self._blocks.append(block)
         self.register(block)
       else:
         print('**** PROBLEM: %s' % self.fulltitle())
@@ -3496,13 +3625,18 @@ scope:
       current_depth = self.depth()
       current_section = self
       /# are: title/abbrev portion of a section header
-      are = re.compile(r'(?P<title>.*\S)\s*\[=(?P<abbrev>.*)\]\s*$')
+      are = Parser.Abbrev_re
 
+      assert '[=' not in title, title
       abbrev = None
-      am = are.match(title)
-      if am:
-        title = am.group('title')
-        abbrev = am.group('abbrev')
+      if False:
+        /# I have not been using this, and this is an expensive method so I'm
+        /# optimizing abbrev support away.
+        am = are.match(title)
+        if am:
+          abbrev = am.group('abbrev')
+          print('Found abbrev "%s" in title %s' % (abbrev, title))
+          title = am.group('title')
 
       /# We need to establish the parent section of the new section, which
       /# we'll call the target.
@@ -3570,9 +3704,10 @@ scope:
       Returns the source page and page number of this section.
     scope:
       root = self.root()
-      return '%s-%d' % (root.title(), self.pagenum())
+      pstr = ('%3d' % self.pagenum()).replace(' ', '-')
+      return '%s-%s' % (root.title(), pstr)
     test:
-      test.iseq('TheBook-0', test.table2.parent().source())
+      test.iseq('TheBook---0', test.table2.parent().source())
     end method source;
 
     method visit #:
@@ -4414,10 +4549,10 @@ scope:
       left_delim = '| '
       right_delim = ' |'
 
+      spre = Parser.Mark_re
+
       /# Checks whether the text of a column looks like a list item, and if
       /# so, indents wrapped lines accordingly.
-      spre = re.compile(r'^(?P<mark>\s*\* |\s*\d+\. )\S')
-
       def WriteRow(fp, row, aligns, widths, target_widths, truncate=False):
         N = len(row)
 
@@ -5278,14 +5413,17 @@ scope:
 
     receiver Paragraph ::
       result = None
-      anns = self._annotations
-      if anns and anns[0]['s'] == 0 and anns[0]['d'] == '**':
-        /# There is a bold label at the front of the paragraph.
-        result = anns[0]['v']
+      text = self.text()
+      if text and text[0] == '*' and text[1] == '*':
+        /# We avoid calling annotations() as it is more expensive than we need.
+        idx = text.find('**', 2)
+        if idx > 0:
+          result = text[2:idx]
       return result
     test:
       test.isnull(test.p1.title())
       test.iseq('Some Title', test.p2.title())
+    end receiver Paragraph;
 
     receiver Quote ::
       return None

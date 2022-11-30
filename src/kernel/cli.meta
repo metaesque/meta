@@ -1597,6 +1597,7 @@ scope:
     var mode : str = 'help' #:
       How much details to show.  Possible values are:
         summary: provide a one-line summary
+        hlp: provide one line for part
         help: provide help for the part
         helpfull: provide detailed help for the part.
   scope:
@@ -1604,6 +1605,7 @@ scope:
       indent = u'' + indent
       subindent = indent + '  '
       full = 'ful' in mode
+      oneline = mode == 'hlp'
 
       if mode == 'summary':
         /# One line summary (no flags, no args, no long-winded description)
@@ -1614,26 +1616,30 @@ scope:
       else:
         /# Multi-line help
         aliases = '|'.join(self.aliases())
-        fp.write('\n')
-        fp.write('%s%s%s:\n' % (indent, self.name(), '' if not aliases else '|' + aliases))
+        fullname = self.name() + ('' if not aliases else '|' + aliases)
         summary = self.summary()
-        if summary:
-          fp.write(u'%s  %s\n' % (indent, summary))
+        if oneline:
+          fp.write('%s%-25s %s\n' % (indent, fullname, summary))
+        else:
+          fp.write('\n')
+          fp.write('%s%s:\n' % (indent, fullname))
+          if summary:
+            fp.write(u'%s  %s\n' % (indent, summary))
         if full:
           desc = self.desc()
           if desc:
             for line in desc.split('\n'):
               fp.write(u'%s  %s\n' % (indent, line))
 
-        parts = self.allParts() if full else self.parts()
-
-        for flagname in sorted(parts):
-          part = parts[flagname]
-          if part.name() != flagname: continue   # skip aliases
-          /# flags and args are both recorded in parts, but we only want to
-          /# show flags here.
-          if part.isFlag():
-            part.show(fp=fp, indent=subindent, mode=mode)
+        if not oneline:
+          parts = self.allParts() if full else self.parts()
+          for flagname in sorted(parts):
+            part = parts[flagname]
+            if part.name() != flagname: continue   # skip aliases
+            /# flags and args are both recorded in parts, but we only want to
+            /# show flags here.
+            if part.isFlag():
+              part.show(fp=fp, indent=subindent, mode=mode)
 
         /# Intentionally listing in order instead of alphabetically, in case
         /# the order is important (user can order them alphabetically if
@@ -1643,9 +1649,10 @@ scope:
             fp.write(u'\n')
           command.show(fp=fp, indent=subindent, mode=mode)
 
-        for arg in self.args():
-          if 'help' not in mode or not arg.ismulti or full:
-            arg.show(fp=fp, indent=subindent, mode=mode)
+        if not oneline:
+          for arg in self.args():
+            if 'help' not in mode or not arg.ismulti or full:
+              arg.show(fp=fp, indent=subindent, mode=mode)
     test<py>:
       fp = test.fp()
       test.command.show(fp=fp, mode='help')
@@ -1742,7 +1749,7 @@ scope:
             fp.write('%s  %s\n' % (indent, line))
 
       else:
-        fp.write('%sERROR: Unknown mode %s\n' % (indent, summary))
+        fp.write('%sERROR: Unknown mode %s\n' % (indent, mode))
     test<py>:
       fp = test.fp()
       test.baselang.show(fp=fp, mode='summary')

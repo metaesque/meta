@@ -3765,7 +3765,7 @@ namespace metax.oopl scope:
         elif (
           /# It is common for test classes to not have initializers and to
           /# instead have 'setup' blocks.
-          self.myclass().variant() == 'user'
+          myclass.variant() == 'user'
         ):
           if metac.cli().implicit_scopes:
             /# If --implicit_scopes is specified, we are to generate a dummy
@@ -3781,7 +3781,7 @@ namespace metax.oopl scope:
         /# This is needed because BaseFile() expects final content to never
         /# have blank lines at the end, and raises an exception if found.
         scope_lines = baselang.simpleToBase(
-          scope_attr, strip_empty=True, replace_receiver=True)
+          scope_attr, strip_empty=True, replace_receiver=True, fqn=self.fqn())
       else:
         /# TODO(wmh): Compile the meta-level statement constructs.
         scope_lines = []
@@ -3827,6 +3827,16 @@ namespace metax.oopl scope:
             /# We do NOT invoke baselang.initCode() here because we need to do
             /# formatParams() first, as it may add code to 'preamble' to define
             /# a new receiver variable (one that is used in initCode()).
+
+            /# We conditionally insert a counter for this instance creation,
+            /# so the user can see how many objects of each class are being
+            /# created.
+            /#  - do we instead maintain a set of ids so we can delete in
+            /#    finalizer with confidence?
+            if myclass.variant() == 'user':
+              flags = metax.root.MetaObject.CLI()
+              if flags.countinstances:
+                preamble.append("metax.root.ClassCount['%s'] += 1" % myclass.fqn())
         else:
           /# TODO(wmh): Check whether the super method has a void return
           /# value (in which case return_var should be null).
@@ -7563,7 +7573,7 @@ namespace metax.oopl scope:
               "%sif cli.rest and cli.rest[0].startswith('help'):" % indent)
             command_body.append(
               '%s  meta__command.help'
-              "(mode='helpfull' if 'ful' in cli.rest[0] else 'help', commands=cli.rest[1:])" % indent)
+              "(mode='helpfull' if 'ful' in cli.rest[0] else ('hlp' if 'sh' in cli.rest[0] else 'help'), commands=cli.rest[1:])" % indent)
           elif default_encountered:
             /# We previously encountered the special default command, which
             /# must occur after all other commands, so the current one is
@@ -8607,7 +8617,7 @@ namespace metax.oopl scope:
         segments = myclass.streamNamed('current-body', clear=True)
         /# Every nested block in the method is represented by a BaseSegment, and
         /# sub-constructs add to the last segment found in current-body. This
-        /# allos us to handle arbitrary levels of indentation, as long as
+        /# allows us to handle arbitrary levels of indentation, as long as
         /# the order of lines in the meta source correspond to order of lines
         /# in baselang.
         segment = metax.c.BaseSegment(scope_attr, indent='')
@@ -8657,6 +8667,28 @@ namespace metax.oopl scope:
 
         /# Establish baselang syntax for method return type.
         return_str = baselang.typeToBase(returntype, class_construct=myclass)
+
+        if (
+          /# User invoked metac with --countinvocations
+          metax.root.MetaObject.CLI().countinvocations
+          /# Until we are confident this code isn't going to break some subtle
+          /# edge case, we do not instrument the meta compiler itself.
+          and not re.match(
+            r'^metax\.(attr|cli|fs|io|logs|doc|meta|oopl|c|root|test)\.', self.fqn())
+        ):
+          /# We wrap the scope_lines in a try...finally block so we can time
+          /# the method and invoke Object.Welford.
+          myclass.addDependency('time', 'std', 'needed by autogened profile code')
+          newlines = []
+          newlines.append('try:')
+          newlines.append('  __meta__ns = time.time_ns()')
+          for line in scope_lines:
+            newlines.append('  ' + line)
+          newlines.append('finally:')
+          newlines.append(
+            "  metax.root.Object.Welford('%s', time.time_ns() - __meta__ns)" %
+            self.fqn())
+          scope_lines = newlines
 
         /# Create the VarSet of variables.
         varset = metax.c.VarSet()
@@ -11750,6 +11782,8 @@ namespace metax.oopl scope:
         If true, replace meta-level receiver variables with baselang version.
       var cdent : str = '' #:
         Indentation to insert after comment before code (after an initial ' ').
+      var fqn : str = null #:
+        If present, we replace '__meta' + 'fqn__' with this value.
     scope:
       if output is None:
         output = []
@@ -11766,12 +11800,19 @@ namespace metax.oopl scope:
             output.append(rem)
       else:
         parent = simple.parent()
+
         metafile = parent.metafile()
         metapath = metafile.path()
         metafile_str = "'" + metapath + "'"
+
         didx = metapath.rfind('/')
         metadir = metapath[:didx] if didx > -1 else '.'
         metadir_str = "'" + metadir + "'"
+
+        fqn_str = None
+        if fqn:
+          fqn_str = "'" + fqn + "'"
+
         comre = BaseLanguageOopl.CommentRE()
         lines = simple.value()
 
@@ -11804,6 +11845,8 @@ namespace metax.oopl scope:
           line = lines[i]
           line = line.replace('__meta' + 'file__', metafile_str)
           line = line.replace('__meta' + 'dir__', metadir_str)
+          if fqn:
+            line = line.replace('__meta' + 'fqn__', fqn_str)
           m = comre.match(line)
           if m:
             infix = '' if strip_comments else m.group(2)
