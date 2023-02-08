@@ -1,3 +1,5 @@
+{1}
+
 # A Simple Document
 
 This document highlights some markdown features.
@@ -53,6 +55,8 @@ with the former being more useful because it allows one to specify which
 language the code is implemented in.  In HTML, the code is syntax
 highlighted using [highlight.js](https://highlightjs.org/).
 
+{2}
+
 ### Tables
 
 One can specify a table with the following syntax:
@@ -65,6 +69,8 @@ Table: Fruit
 | Banana    |     1 |
 | Cantelope |     2 |
 
+
+
 ### Panels
 
 One can specify a panel with the following syntax:
@@ -75,6 +81,7 @@ Panel: Example Panel
     it looks like a code block or blocks.
 
     For example, this paragraph is part of the panel too.
+
 
 ### Lists
 
@@ -89,7 +96,7 @@ works until the first empty line, which signals the
 end of the list (like what happens with
 the paragraph below this). If you want multiple
 blocks in a list, indent them.
- 
+
 One can specify ordered lists with numbers:
 
  1. apple
@@ -109,3 +116,58 @@ One can specify ordered lists with numbers:
       and any other kind of block (table, etc.)
 
  3. cantelope
+
+This verifies that unindented paragraphs terminate the list, and the following
+shows that list items do not need empty lines before them.
+
+ * Apple
+ * Banana
+ * Cantelope
+
+## A Second Level-2 Section
+
+To test parsing of upper sections.
+
+
+
+
+
+### A subsubsection
+
+Another section.
+
+## Titled Blocks
+
+It is sometimes useful to parse a section by title blocks,
+as in this example.
+
+**Light Green**: This is an initial titled paragraph
+
+With a second untitled paragraph afterward.
+
+**Red**. And this is another titled paragraph.
+
+With a second paragraph and third list.
+
+* **Light**: simple para.
+
+* **Dark**: another simple
+
+  With second para
+
+* **Medium**: third.
+
+* list item with no title.
+
+## Final thoughts
+
+How is this?
+
+#### A level 4 within a level 2
+
+Is this handled properly?
+
+# And another top-level section
+
+Does this get parsed too?
+DO NOT ADD MORE SECTIONS BELOW THIS (test code relies on this being the last section)

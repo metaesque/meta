@@ -298,7 +298,8 @@ scope:
           /# fp = self.fp()
           self.newline()
       else:
-        text = text % args
+        if args:
+          text = text % args
         if width < 0:
           /# truncate at width
           self.truncln(text, width=abs(width))

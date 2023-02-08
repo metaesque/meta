@@ -12,7 +12,7 @@
 ;;;        <ATTRIBUTE-KEYS-HERE> with the list of non-primary attribute keys (each key delimited by "")
 ;;;        <FEATURE-VALUES-HERE> with the list of feature values (each value delimited by "")
 ;;;   2) Replace 'metalang' with the appropriate language-specific name
-;;;      (for example, 'meta' or 'metaoopl' for Meta(Oopl), 'metadoc' for Meta(Doc),
+;;;      (for example, 'metaoopl' for Meta(Oopl), 'metadoc' for Meta(Doc),
 ;;;      metainstall for 'Meta(Install)', etc.
 ;;;
 ;;; IMPORTANT:
@@ -25,50 +25,49 @@
 ;;; Due to the structure of Meta, a basic major-mode is very easy to create,
 ;;; having few rules:
 ;;;
-;;;   1) Each line is indented a certain number of spaces further
-;;;      than the closest previous line that ends with '{'.
+;;;   1) Each line is indented a certain number of spaces further than the
+;;;      closest previous line that ends with ':' (may also support '{' in
+;;;      future).
 ;;;
-;;;   2) Since every construct consists of key/value pairs,
-;;;      and we know the strings that represent keys (and, in the case
-;;;      of feature attributes, the strings that represent values),
-;;;      we can easily provide coloring of the various syntactic elements.
+;;;   2) Since every construct consists of key/value pairs, and we know the
+;;;      strings that represent keys (and, in the case of feature attributes,
+;;;      the strings that represent values), we can easily provide coloring of
+;;;      the various syntactic elements.
 ;;;
-;;;   3) Text within simple blocks becomes somewhat more difficult to
-;;;      deal with.  For example, METHOD SCOPE blocks should be using
-;;;      the statement-level code from the appropriate base-language
-;;;      major-mode, while COMMENT blocks should be colored in the
-;;;      comment color, etc.
+;;;   3) Text within simple blocks becomes somewhat more difficult to deal with.
+;;;      For example, METHOD SCOPE blocks should be using the statement-level
+;;;      code from the appropriate base-language major-mode, while COMMENT
+;;;      blocks should be colored in the comment color, etc.
 ;;;
 ;;; With respect to indentation, a simple algorithm is:
 ;;;   1) If we are at the beginning of the buffer, indent to column 0.
-;;;   2) If we are currently at a line starting with '}', then
-;;;      de-indent relative to the previous line.  However, if the
-;;;      previous line starts a block, indent to the same level.
-;;;   3) If we first see a line ending with '{' then we need to increase
+;;;   2) If we are currently at a line starting with 'end' (may support '}' in
+;;;      future), then de-indent relative to the previous line.  However, if
+;;;      the previous line starts a block, indent to the same level.
+;;;   3) If we first see a line ending with ':' then we need to increase
 ;;;      our indentation relative to that line.
-;;;   4) If we first see an '}' line before our current line, then we should
-;;;      indent our current line to the same indentation as the '}' line.
+;;;   4) If we first see an 'end' line before our current line, then we should
+;;;      indent our current line to the same indentation as the 'end' line.
 ;;;      NOTE: It is important to check for rule 3 before rule 4 (and the
 ;;;            ordered is reversed from the tutorial) because in Meta
 ;;;            it is possible to end one block and start another on the same
 ;;;            line.
 ;;;   5) If none of the above apply, then do not indent at all.
 ;;;
-;;;   However, the above algorithm really is too simple.  To make it
-;;;   more powerful, the algorithm should be extended to recognize
-;;;   which block-valued attribute the current line is contained
-;;;   within, and only perform the above indentation of that attribute
-;;;   value is complex.  If simple, each line should be indented at
-;;;   least metaoopl-indent-offset more than the start-of-block line, but
-;;;   if the line already has more indentation than that, it should be
-;;;   left as-is.
+;;;   However, the above algorithm really is too simple. To make it more
+;;;   powerful, the algorithm should be extended to recognize which block-valued
+;;;   attribute the current line is contained within, and only perform the above
+;;;   indentation of that attribute value is complex. If simple, each line
+;;;   should be indented at least metaoopl-indent-offset more than the
+;;;   start-of-block line, but if the line already has more indentation than
+;;;   that, it should be left as-is.
 ;;;
 ;;; With respect to coloring, a simple set of rules is:
 ;;;   1) All construct names are colored with font-lock-metaoopl-construct-face
 ;;;   2) All attribute keys are colored with font-lock-metaoopl-attribute-key-face
 ;;;   3) All feature values are colored with font-lock-metaoopl-feature-value-face
 ;;;
-;;;   However, this must be extended significantly.
+;;;   However, this must be extended in a few ways:
 ;;;
 ;;;     - must handle COMMENT { ... } sequences, and the tutorial
 ;;;       doesn't address the issue of comment sequences longer than
@@ -91,27 +90,26 @@
 ;;;   Emacs and XEmacs provide some truly powerful mechanisms for providing
 ;;;   hierarchial views of programs that are very well suited to Meta syntax.
 ;;;
-;;;   In particular, Emacs provides the concept of overlays, which
-;;;   allows one to associated textual properties with a range of
-;;;   characters.  This includes assigning colors and fonts, making
-;;;   the text invisible, providing an overriding or extending keymap,
-;;;   etc. etc.  I suspect that this support is provided at a very low
-;;;   level and is thus very efficient, and it opens the door to some
-;;;   truly wonderful capabilities.  XEmacs provides similar support,
-;;;   but unfortunately uses a different mechanism (not overlays, but
-;;;   rather extents).  It sounds like extents are probably more
-;;;   powerful than overlays (combining in one environment both Emacs
-;;;   overlays and Emacs text properties).  There are also claims that
-;;;   XEmacs supports the Emacs overlay interface (and implements the
-;;;   interface using extents).  However, this does not appear to be true
-;;;   in XEmacs 21.4 (the various overlay-related functions do not exist).
-;;;   I did encounter an abstraction API that introduces the concept of a 'span'
-;;;   and implements a common span interface using either overlays (for Emacs)
-;;;   or extents (for XEmacs).  See http://proofgeneral.inf.ed.ac.uk/components.
-;;;   I may reimplement the following code to use span.el, but this would require
-;;;   that we provide span.el in Meta.  Hopefully there is a cleaner approach
-;;;   (if we can find out how to provide the overlay interface in XEmacs).  For
-;;;   now, this code does not work in XEmacs.
+;;;   In particular, Emacs provides the concept of overlays, which allows one to
+;;;   associated textual properties with a range of characters. This includes
+;;;   assigning colors and fonts, making the text invisible, providing an
+;;;   overriding or extending keymap, etc. etc. I suspect that this support is
+;;;   provided at a very low level and is thus very efficient, and it opens the
+;;;   door to some truly wonderful capabilities. XEmacs provides similar
+;;;   support, but unfortunately uses a different mechanism (not overlays, but
+;;;   rather extents). It sounds like extents are probably more powerful than
+;;;   overlays (combining in one environment both Emacs overlays and Emacs text
+;;;   properties). There are also claims that XEmacs supports the Emacs overlay
+;;;   interface (and implements the interface using extents). However, this does
+;;;   not appear to be true in XEmacs 21.4 (the various overlay-related
+;;;   functions do not exist). I did encounter an abstraction API that
+;;;   introduces the concept of a 'span' and implements a common span interface
+;;;   using either overlays (for Emacs) or extents (for XEmacs). See
+;;;   http://proofgeneral.inf.ed.ac.uk/components. I may reimplement the
+;;;   following code to use span.el, but this would require that we provide
+;;;   span.el in Meta. Hopefully there is a cleaner approach (if we can find out
+;;;   how to provide the overlay interface in XEmacs). For now, this code does
+;;;   not work in XEmacs.
 ;;;
 ;;;   The idea behind the overlay implementation is to create an overlay
 ;;;   for every meta-level block.  These overlays can be used for various
@@ -125,16 +123,17 @@
 ;;;    - When the region marked by an overlay is made invisible, by default
 ;;;      the text is still visible to cursor movement commands (but not searching
 ;;;      commands).
-;;;       - searching commands ignore invisible text (by default, or did I do something?)
-;;;       - line movement commands can be told to ignore invisible text
-;;;         by setting the 'line-move-ignore-invisible variable to true.
+;;;       - searching commands ignore invisible text (by default, or did I do
+;;;         something?)
+;;;       - line movement commands can be told to ignore invisible text by
+;;;         setting the 'line-move-ignore-invisible variable to true.
 ;;;       - cursor movement commands cannot be ignored like line-movement
-;;;         commands, but overlays can have a keymap associated with them,
-;;;         so the meta overlay code provides a keymap that redefines
-;;;         C-f and C-b so that they jump to the end and start of the invisible
-;;;         region respectively.
-;;;    - When text is made invisible, it is possible to insert arbitrary
-;;;      visual text at the start and/or end of the region
+;;;         commands, but overlays can have a keymap associated with them, so
+;;;         the meta overlay code provides a keymap that redefines C-f and C-b
+;;;         so that they jump to the end and start of the invisible region
+;;;         respectively.
+;;;    - When text is made invisible, it is possible to insert arbitrary visual
+;;;      text at the start and/or end of the region
 ;;;       - this text is not "real", does not affect searches, movement,
 ;;;         column counts, etc.  - it is solely a visual cue.
 ;;;       - initial implementations of the invisibility code made an overlay
@@ -143,24 +142,27 @@
 ;;;         is problematic because searches for '{' or '}' then ignore the
 ;;;         entire block (remember that marker text is not real, so the '{'
 ;;;         and '}' in the '{...}' marker text is not seen by searches).
-;;;       - a better approach creates an overlay for the region from one character
-;;;         after the '{' to one character before the '}' and provides marker
-;;;         text '...'.
+;;;       - a better approach creates an overlay for the region from one
+;;;         character after the '{' to one character before the '}' and provides
+;;;         marker text '...'.
 ;;;           - the disadvantage of this strategy is that an individual can
 ;;;             move to a '{' containing subsequent invisible text, move
 ;;;             forward one character (so the cursor is now "inside" the invisible
 ;;;             text, but not yet using the overlay keymap...
+;;;       - upon moving away from from using '{' and '}' to delimit blocks
+;;;         (to instead using ':' and optional 'end '), the above had to change
+;;;         somewhat.
 
 ;;; **************************************************************
 ;;; Meta Language Specific variables
 ;;;   - The values of these variables differ for each particular Meta language
 ;;;     (but not each Meta sub-language)
 
-;(defconst metaoopl-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
+; (defconst metaoopl-default-font "-*-Courier New-normal-normal-normal-*-11-*-*-*-m-0-iso10646-1")
 (defconst metaoopl-default-font "-*-PT Mono-normal-normal-normal-*-10-*-*-*-m-0-iso10646-1")
 
-(defconst metaoopl-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "accessor" "arg" "assoc" "behavior" "block" "call" "case" "category" "class" "command" "field" "flag" "if" "lifecycle" "loop" "method" "namespace" "native" "receiver" "remark" "resource" "switch" "testx" "var"))
-(defconst metaoopl-attribute-keys '("#" "##" "##<*>" "#<*>" "->" "->" "-><*>" "-><*>" ":<*>" "<" "<*>" "<<" "<<*>" "<<<" "<<<*>" "<<<<*>" "=" "=<*>" "@" "@<*>" "access" "accessors" "alias" "alias<*>" "aliases" "aliases<*>" "associations" "associations<*>" "assocs" "assocs<*>" "autogen" "autokey" "autokey<*>" "binary" "binary<*>" "by" "by<*>" "children" "children<*>" "clinit" "clinit<*>" "clsetup" "clsetup<*>" "clsname" "clsname<*>" "clteardown" "clteardown<*>" "color" "color<*>" "comment" "comment<*>" "compilation" "compile" "compile<*>" "config" "config<*>" "decl" "decl<*>" "default" "default<*>" "defn" "defn<*>" "delim" "delim<*>" "dispatch" "else" "else<*>" "expand" "expand<*>" "expr" "expr<*>" "extensibility" "finalize" "finalize<*>" "flags" "flags<*>" "from" "from<*>" "icomment" "icomment<*>" "import" "import<*>" "inheritance" "init" "init<*>" "interface" "interface<*>" "is" "is<*>" "key" "kind" "lazy" "lazy<*>" "level" "location" "metafinalize" "metafinalize<*>" "metainit" "metainit<*>" "metaparent" "metaparent<*>" "multiplicity" "mutability" "name" "name<*>" "nmsp" "nmsp<*>" "on" "on<*>" "optimization" "over" "over<*>" "ownership" "pack" "pack<*>" "params" "params<*>" "parent" "parent<*>" "path" "path<*>" "pclsname" "pclsname<*>" "position" "postamble" "postamble<*>" "posts" "posts<*>" "preamble" "preamble<*>" "preports" "preports<*>" "pres" "pres<*>" "presence" "provides" "provides<*>" "replacer" "replacer<*>" "returns" "returns" "returns<*>" "returns<*>" "role" "role<*>" "scope" "scope<*>" "setup" "setup<*>" "span" "status" "suffixes" "suffixes<*>" "super" "super<*>" "target" "target<*>" "teardown" "teardown<*>" "test" "test<*>" "testparent" "testparent<*>" "testpreports" "testpreports<*>" "tests" "tests<*>" "testsuite" "testsuite<*>" "to" "to<*>" "toplevel" "toplevel<*>" "translate" "translate<*>" "type" "type<*>" "until" "until<*>" "value" "visibility" "while" "while<*>"))
+(defconst metaoopl-constructs     '("Attribute" "BaseLanguage" "Construct" "FeatureValue" "File" "MetaLanguage" "Template" "accessor" "arg" "assoc" "behavior" "block" "call" "case" "category" "class" "command" "field" "flag" "if" "lifecycle" "loop" "method" "namespace" "native" "receiver" "remark" "resource" "set" "switch" "testx" "var"))
+(defconst metaoopl-attribute-keys '("#" "##" "##<*>" "#<*>" "->" "->" "-><*>" "-><*>" ":<*>" "<" "<*>" "<<" "<<*>" "<<<" "<<<*>" "<<<<*>" "=" "=<*>" "@" "@<*>" "access" "accessors" "alias" "alias<*>" "aliases" "aliases<*>" "associations" "associations<*>" "assocs" "assocs<*>" "autogen" "autokey" "autokey<*>" "binary" "binary<*>" "by" "by<*>" "children" "children<*>" "clinit" "clinit<*>" "clsetup" "clsetup<*>" "clsname" "clsname<*>" "clteardown" "clteardown<*>" "color" "color<*>" "comment" "comment<*>" "compilation" "compile" "compile<*>" "config" "config<*>" "decl" "decl<*>" "default" "default<*>" "defn" "defn<*>" "delim" "delim<*>" "dispatch" "else" "else<*>" "expand" "expand<*>" "expr" "expr<*>" "extensibility" "finalize" "finalize<*>" "flags" "flags<*>" "from" "from<*>" "icomment" "icomment<*>" "import" "import<*>" "inheritance" "init" "init<*>" "interface" "interface<*>" "is" "is<*>" "key" "kind" "lazy" "lazy<*>" "level" "location" "metafinalize" "metafinalize<*>" "metainit" "metainit<*>" "metaparent" "metaparent<*>" "multiplicity" "mutability" "name" "name<*>" "nmsp" "nmsp<*>" "on" "on<*>" "optimization" "over" "over<*>" "ownership" "pack" "pack<*>" "params" "params<*>" "parent" "parent<*>" "path" "path<*>" "pclsname" "pclsname<*>" "position" "postamble" "postamble<*>" "postrec" "postrec<*>" "posts" "posts<*>" "preamble" "preamble<*>" "preports" "preports<*>" "prerec" "prerec<*>" "pres" "pres<*>" "presence" "provides" "provides<*>" "replacer" "replacer<*>" "returns" "returns" "returns<*>" "returns<*>" "role" "role<*>" "scope" "scope<*>" "setup" "setup<*>" "span" "status" "suffixes" "suffixes<*>" "super" "super<*>" "target" "target<*>" "teardown" "teardown<*>" "test" "test<*>" "testparent" "testparent<*>" "testpreports" "testpreports<*>" "tests" "tests<*>" "testsuite" "testsuite<*>" "to" "to<*>" "toplevel" "toplevel<*>" "translate" "translate<*>" "type" "type<*>" "until" "until<*>" "value" "value<*>" "varname" "varname<*>" "visibility" "while" "while<*>"))
 (defconst metaoopl-feature-values '("<^([!+#~-][rwxa@])+$>" "<concrete" "abstract" "aliaskey" "autodispatch" "child" "closure" "cls" "concrete" "const" "decl" "def" "explicit" "extendable" "feature" "final" "finalizer" "general" "immutable" "implicit" "initializer" "inline" "instance" "lib" "meta" "multi" "mutable" "named" "new" "nmsp" "nokey" "nometa" "nometanotest" "nonvirtual" "normal" "notest" "noval" "optional" "outline" "override" "owned" "package" "post" "postx" "pre" "prex" "primary" "private" "protected" "public" "raw" "required" "ro" "rw" "rwx" "scoped" "secondary" "showkey" "showval" "specific" "static" "std" "superx" "test" "tmpprivate" "tmppublic" "undef" "unowned" "user" "usertest" "userval" "virtual"))
 (defconst metaoopl-keywords       '("complex" "enum" "expr" "id" "num" "simple" "str" "type" "word" "xid"))
 (defconst metaoopl-basewords      '("alignas" "alignof" "and" "and_eq" "as" "asm" "assert" "auto" "bitand" "bitor" "bool" "break" "case" "catch" "char" "char16_t" "char32_t" "class" "compl" "const" "const_cast" "constexpr" "continue" "debugger" "decltype" "def" "default" "del" "delete" "do" "double" "dynamic_cast" "elif" "else" "enum" "except" "exec" "explicit" "export" "extends" "extern" "false" "finally" "float" "for" "friend" "from" "function" "global" "goto" "if" "implements" "import" "in" "inline" "instanceof" "int" "interface" "is" "lambda" "let" "long" "mutable" "namespace" "new" "noexcept" "not" "not_eq" "nullptr" "operator" "or" "or_eq" "package" "pass" "print" "private" "protected" "public" "raise" "register" "reinterpret_cast" "return" "short" "signed" "sizeof" "static" "static_assert" "static_cast" "struct" "super" "switch" "template" "this" "thread_local" "throw" "true" "try" "typedef" "typeid" "typename" "typeof" "union" "unsigned" "using" "var" "virtual" "void" "volatile" "wchar_t" "while" "with" "xor" "xor_eq" "yield"))
@@ -224,6 +226,8 @@
 (puthash 'metaoopl-remark-line (concat (gethash 'metaoopl-remark-kv RE) "\\(remark\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-resource-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '("location" "meta" "test" "user" "usertest")) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-resource-line (concat (gethash 'metaoopl-resource-kv RE) "\\(resource\\)[ \t]+\\([^ \t]+\\)") RE)
+(puthash 'metaoopl-set-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
+(puthash 'metaoopl-set-line (concat (gethash 'metaoopl-set-kv RE) "\\(set\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-switch-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
 (puthash 'metaoopl-switch-line (concat (gethash 'metaoopl-switch-kv RE) "\\(switch\\)[ \t]+\\([^ \t]+\\)") RE)
 (puthash 'metaoopl-testx-kv (concat "\n\\([ \t]*\\)\\(" (regexp-opt '()) "\[ \t\]\\)*") RE)
@@ -239,7 +243,7 @@
 ; Various methods set these variables
 (setq metaoopl-current-construct-kind nil)
 (if (not (boundp 'metaoopl-meta-binary))
-  (setq metaoopl-meta-binary "metac"))
+  (setq metaoopl-meta-binary "meta2"))
 
 (defun metaoopl-goto-construct-line (&optional target-dent)
   ;; Find the line defining the construct within which the current line
@@ -285,8 +289,8 @@
         )
     ;; check if we are currently on a construct line.
     (if (looking-at cons-re) (setq done t))
-    ;; We search upward, ignoring any line that has indentation
-    ;; greater than indent.
+    ;; We search upward, ignoring any line that has indentation greater than
+    ;; indent.
     (while (not done)
       (forward-line -1)
       (setq c (+ c 1))
@@ -564,6 +568,16 @@
         (delete-overlay overlay))
       (setq overlays (cdr overlays)))))
 
+(defun metaoopl-show-overlays ()
+  (interactive)
+  ; Show all overlays at (point)
+  ;  - note that in the current implementation (2022-12-10), overlays are only
+  ;    added in metaoopl-toggle-block (and are deleted there too), so this
+  ;    method currently almost never shows any overlays.
+  ;  - if we decide to introduce overlays for every construct, it will become
+  ;    more meaningful
+  (message (format "%s" (overlays-at (point)))))
+
 (defun metaoopl-next-construct (kind &optional backward)
   ;; Find the start/end of the next construct of give kind
   (if (null kind) (setq kind "construct"))
@@ -671,7 +685,7 @@
       (let ((data (metaoopl-next-construct kind 'backward)))
         (widen)
         (narrow-to-region
-         (assoc-default 'start data) 
+         (assoc-default 'start data)
          (assoc-default 'end data))
         (goto-char (point-min))
      ))
@@ -805,7 +819,7 @@ end namespace %s;
     scope:
       accessor get lazy:
         res = 1
-        -> rest
+        -> res
     end field %s;
 " field_name field_type field_name)))
 
@@ -997,7 +1011,7 @@ such newline-indentation is provided.")
       ;; Color multi-line comment blocks
       '("\\(?:comment\\|#\\):\n\\([ \t]+\\)\\(.*\n\\(\\1.*\n\\|\n\\)*\\)" 2 font-lock-comment-face)
       ;; Color the "end" token.
-      '("end\\( [-a-zA-Z0-9_. ]+\\)?;" . font-lock-metaoopl-end-face)
+      '("end\\( [a-zA-Z0-9_. ]+\\)?;" . font-lock-metaoopl-end-face)
       ;; Color literal strings.
       (cons "'[^'\n]*'" font-lock-string-face)
       ;'("#:\n\\([ \t]*.*\\)" 1 font-lock-comment-face)
@@ -1153,7 +1167,7 @@ such newline-indentation is provided.")
              )
              (if (< cur-indent 0) (setq cur-indent 0)))
            )
-         
+
          ( (looking-at "^[ \t]*end[; \t]") ; Check for rule 2c
            (save-excursion
              (message "Rule 2c")
@@ -1239,9 +1253,9 @@ such newline-indentation is provided.")
                 ;; Check for rule 7
                 ((looking-at "end[; ]")
                  (message "Rule 6")
-                 
+
                  )
-                
+
                 ;; Check for rule 7
                 (t
                  (setq cur-indent (meta-current-indentation))
@@ -1338,7 +1352,7 @@ such newline-indentation is provided.")
   ;; a longer min/max value.
   (make-local-variable 'font-lock-extend-region-functions)
   (add-hook 'font-lock-extend-region-functions 'metaoopl-font-lock-extend-region)
-  
+
   ;; This sets up comment info
   (set (make-local-variable 'comment-start) "/#")
   (set (make-local-variable 'comment-style) 'multi-line)
@@ -1349,7 +1363,9 @@ such newline-indentation is provided.")
 )
 
 (defun meta-current-indentation ()
-  "The 'current-indentation function does not handle indentation of invisible
+  "Establish the number of initial whitespace characters on current line.
+
+NOTE: The 'current-indentation function does not handle indentation of invisible
 text the way we need to (the indentation of such lines is reported as 0, when
 we need its actual indentation to be reported)."
   (save-excursion
@@ -1358,24 +1374,106 @@ we need its actual indentation to be reported)."
       (forward-to-indentation 0)
       (- (point) bol))))
 
+(defun metaoopl-closest-preceeding-block-attribute (limit)
+  (let
+    ((p (point)))
+    (cond
+      ( ;; if
+        (re-search-backward
+          (concat "\n\\( \\{0,6\\}\\)[^\n]*" metaoopl-attribute-keys-re ":\n")
+          ;; minimum point to search back to
+          (- p limit)
+          ;; do not raise error on failure
+          t
+        )
+        ;; then
+        (let
+          ((ws (match-string 1))
+           (attr (match-string 2)))
+          (message (format "ws='%s' attr=%s" ws attr))
+          ;; return the start of the matched regexp, since we are using this
+          ;; to determine what font-lock-beg should be.
+          (match-beginning 0)
+        )
+      )
+    )
+    (goto-char p)
+  )
+)
+
 ;; This method helps support multi-line comment syntax highlight.
 ;; See
 ;;   https://www.gnu.org/software/emacs/manual/html_node/elisp/Multiline-Font-Lock.html
-;; and 
+;; and
 ;;   https://www.emacswiki.org/emacs/MultilineFontLock
 (defun metaoopl-font-lock-extend-region ()
   ; (message "Here in metaoopl-font-lock-extend-region")
   (save-excursion
-    (goto-char font-lock-beg)
-    (let* ((back-limit (- font-lock-beg 2000))
-           (future-limit (+ font-lock-beg 2000))
-           (found-point (re-search-backward metaoopl-comment-start-re back-limit t)))
-      (if found-point
-          (let ((last-point (re-search-forward metaoopl-comment-re future-limit t)))
+    ;; NOTE: The variables 'font-lock-beg' and 'font-lock-end' are
+    ;; dynamically bound by the emacs infrastructure that invokes
+    ;; this function (via the font-lock-extend-region-functions
+    ;; variable, whose docstr discusses this).
+
+    ;; NOTE(wmh): The back/forward limits were changed from 2000 to
+    ;; 5000 on 2022-12-10. If this causes slowdown, change them back.
+    ;;
+    ;; In shell
+    ;;  % metac emacs oopl
+    ;; In emacs, while in a buffer containing a .meta file
+    ;;  Ctrl-Space m r o   # to reload the generated metaoopl-mode.el
+    ;;  Ctrl-Space m e o   # to edit that file
+
+    ;; POSSIBLE IMPROVEMENTS
+    ;;  - since this function is invoked *many* times, it is best for it to be
+    ;;    as fast as possible
+    ;;  - for our purposes, we only need to extend font-lock-beg and/or
+    ;;    font-lock-end if font-lock-beg is currently inside a comment
+    ;;    (that is, the nearest preceeding occurrence of ':\n' is
+    ;;    preceeded by comment or #).
+    ;;  - if we start creating overlays for every construct (or if we decided
+    ;;    to just make overlays for every comment block), we could ask for
+    ;;      (overlays-at font-lock-beg)
+    ;;    to obtain them (and return immediately with nill if no such overlays
+    ;;    are found).
+    ;;  - the current implementation extends the region too far sometimes
+    ;;    (it searches backword for 'comment:\n' or '#:\n' instead of just
+    ;;    ':\n'), and doesn't extend it enough sometimes (it limits its search
+    ;;    to 5000 chars in both directions)
+    (let
+      (
+        (current (point))
+      )
+      (goto-char font-lock-beg)
+      (let*
+        (
+          (back-limit (- font-lock-beg 5000))
+          (future-limit (+ font-lock-beg 5000))
+          ;; TODO(wmh): This is not remotely the correct thing to search for.
+          ;;  - We are really looking for the closest preceeding line that starts
+          ;;    with exactly two spaces less indentation than the current line
+          ;;    that ends with 'comment:\n' or '#:\n'.
+          ;;  - remember that we only need to do this extension if we are in a
+          ;;    comment block, and the current implementation extends in way more
+          ;;    situations than it needs to.
+          ;;  - REPLACE THIS CODE with something like
+          ;;    (metaoopl-closest-preceeding-block-attribute)
+          (found-point (re-search-backward metaoopl-comment-start-re back-limit t))
+        )
+        (if found-point
+          (let
+            (
+             ;; TODO(wmh): This is searching for the wrong thing. We should be
+             ;; looking for the next line whose indentation is less than that of
+             ;; the current line, not another comment block!
+             (last-point (re-search-forward metaoopl-comment-re future-limit t))
+            )
+            ;(message (format "metaoopl-font-lock-extend-region: orig=%d beg=%d end=%d found=%d last=%d" current font-lock-beg font-lock-end found-point last-point))
             (if (and last-point (> last-point font-lock-end))
                 (progn
+                  (message (format "metaoopl-font-lock-extend-region: extending font-lock-end from %d to %d" font-lock-end last-point))
                   (setq font-lock-end last-point)))
-            (setq font-lock-beg found-point))))))
+            ;(message (format "metaoopl-font-lock-extend-region: extending font-lock-beg from %d to %d" font-lock-beg found-point))
+            (setq font-lock-beg found-point)))))))
 
 (provide 'metaoopl-mode)
 
@@ -1411,7 +1509,7 @@ we need its actual indentation to be reported)."
     (message line)
     (cond
       ((string-match "^ *\\([0-9]+\\)\\|\\[\\([0-9]+\\)\\]\n" line)
-         (setq lnum 
+         (setq lnum
           (string-to-number (or (match-string 1 line) (match-string 2 line))))
          (message (format "found lnum %d" lnum))
          (goto-char (point-min))
@@ -1446,7 +1544,7 @@ we need its actual indentation to be reported)."
 
 (defun metaoopl-create-index-private (filter usenum)
   "Create an index.
-   
+
    Args:
      filter: str
        A regexp to filter summary lines by
@@ -1455,7 +1553,7 @@ we need its actual indentation to be reported)."
   "
   (let ((command
          (concat
-          metaoopl-meta-binary 
+          metaoopl-meta-binary
           " index "
           (if usenum
               "--kind=num --min=1 --adj=-1 "

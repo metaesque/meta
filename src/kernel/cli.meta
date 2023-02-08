@@ -501,7 +501,7 @@ scope:
             command = subcmd
           else:
             /# Invalid subcommand ... print out from this level
-            print(u'WARNING: Unknown command "%s"' % nora)
+            print('WARNING: Unknown command "%s"' % nora)
             break
 
       /# Print self
@@ -968,7 +968,7 @@ scope:
         nextitem = argv[index+1] if index < nm1 else None
         if debug:
           print('Working on index=%d item="%s" next="%s"' % (index, item, nextitem))
-        if item[0] == '-' and not negnumre.match(item):
+        if item and item[0] == '-' and not negnumre.match(item):
           /# We are parsing a flag.
           m = fre.match(item)
           flagmark = m.group(1)
@@ -1602,7 +1602,7 @@ scope:
         helpfull: provide detailed help for the part.
   scope:
     receiver Command scope<py>:
-      indent = u'' + indent
+      indent = '' + indent
       subindent = indent + '  '
       full = 'ful' in mode
       oneline = mode == 'hlp'
@@ -1611,7 +1611,7 @@ scope:
         /# One line summary (no flags, no args, no long-winded description)
         /# CODETANGLE(help_width) in src/kernel/shell.meta (not
         /# lib/kernel/shell.meta)
-        fp.write(u'%s%-15s: %s\n' % (indent, self.name(), self.summary()))
+        fp.write('%s%-15s: %s\n' % (indent, self.name(), self.summary()))
 
       else:
         /# Multi-line help
@@ -1624,12 +1624,12 @@ scope:
           fp.write('\n')
           fp.write('%s%s:\n' % (indent, fullname))
           if summary:
-            fp.write(u'%s  %s\n' % (indent, summary))
+            fp.write('%s  %s\n' % (indent, summary))
         if full:
           desc = self.desc()
           if desc:
             for line in desc.split('\n'):
-              fp.write(u'%s  %s\n' % (indent, line))
+              fp.write('%s  %s\n' % (indent, line))
 
         if not oneline:
           parts = self.allParts() if full else self.parts()
@@ -1646,7 +1646,7 @@ scope:
         /# order isn't important).
         for command in self.order():
           if full:
-            fp.write(u'\n')
+            fp.write('\n')
           command.show(fp=fp, indent=subindent, mode=mode)
 
         if not oneline:
@@ -1693,7 +1693,7 @@ scope:
         dval = '=' if str(default) == valstr else Trunc(str(default), 10)
 
         fp.write(
-          u'%s--%-20s %-30s %-10s %-10s\n' %
+          '%s--%-20s %-30s %-10s %-10s\n' %
           (indent, self.name(), valstr, sval, dval))
 
       elif 'help' in mode:
@@ -1703,17 +1703,17 @@ scope:
         if mytype == 'str':
           default = '"%s"' % default
         fp.write(
-          u'%s--%s : %s = %s\n' % (indent, symbols, mytype,default))
+          '%s--%s : %s = %s\n' % (indent, symbols, mytype,default))
         summary = self.summary()
         if summary:
-          fp.write(u'%s  %s\n' % (indent, summary))
+          fp.write('%s  %s\n' % (indent, summary))
         desc = self.desc()
         if desc and 'ful' in mode:
           for line in desc.split('\n'):
-            fp.write(u'%s  %s\n' % (indent, line))
+            fp.write('%s  %s\n' % (indent, line))
 
       else:
-        fp.write(u'%sERROR: Unknown mode %s\n' % (indent, summary))
+        fp.write('%sERROR: Unknown mode %s\n' % (indent, mode))
     test<py>:
       fp = test.fp()
       test.baselang.show(fp=fp, mode='summary')

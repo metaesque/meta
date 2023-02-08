@@ -113,6 +113,8 @@ scope:
       var quiet -> quiet = false;
     scope:
     clinit:
+      cls.SectionRe = re.compile(r'^(?P<hash>#{1,6})\s*(?P<title>.*)')
+
       cls.ListReIs(re.compile(
         r'^(?P<indent> {0,3})'
         r'(?:(?P<ul>[+*-])|(?P<ol>\d+)\.)'
@@ -130,7 +132,6 @@ scope:
         ('code', re.compile(r'^    '), True),
         ('code', re.compile(r'^(?P<code>[`~]{3,})\s*(?P<lang>\S+)?'), True),
         ('table', re.compile(r'^Table:'), True),
-        /# TODO: Need to support panels in parseLines().
         ('panel', re.compile(r'^Panel:'), True),
         ('hr', re.compile(r'^\s*([*+-] ?){3,}\s*$'), False),
         ('label', re.compile(
@@ -214,7 +215,7 @@ scope:
     params:
       var path : str #:
         Path to file to parse.
-      var parent : *Section = null #:
+      var parent : Section = null #:
         If null, a dummy parent is implicitly created. An externally created
         Section can be passed in for situations where this file is just one
         section among many within a multi-file book.
@@ -258,6 +259,9 @@ scope:
         If true, continue while matcher is false, and end when it is first true.
         Normally, we continue while matcher is true, and end when it is first
         false.
+      var backempty : bool = false #:
+        If true, once matcher finds termination index adjust it back past empty
+        lines.
       var category : str = null #:
         If present, we are to print out each consumed line in a specific format
         (useful for debugging).
@@ -277,6 +281,11 @@ scope:
           ln = line[:49] + '$' if len(line) > 50 else line
           print('%4d:%-50s  %1s %s' % (j+1, ln, ' ', category))
         j += 1
+
+      if backempty:
+        while not lines[j-1]:
+          j -= 1
+
       return j
     test:
       p = test.md
@@ -284,6 +293,283 @@ scope:
         p._advancePosition(
           ['here', '  abc', '  def', 'hgi'], 1, re.compile(r'^  ')))
     end method _advancePosition;
+
+    method parseSections : vec<Section> #:
+      Parse an entire file of lines
+    params:
+      var parent : metax.io.Section #:
+        The parent section. Only null for top-level.
+      var lines : vec<str> #:
+        The entire list of lines in the book
+      var book : Book #:
+        Book being parsed (for registering tables/panels)
+    scope:
+      result = []
+      pagenum = 1
+      n = len(lines)
+
+      /# Scan up to first non-empty non-pagenum line (which must be a secionn)
+      /#  - capture initial page number
+      /#  - capture prelines before section.
+      start = 0
+      prelines = 0
+      while start < n:
+        l = lines[start]
+        if l:
+          if l[0] == '':
+            /# l is of form '{<num>}'
+            assert l[-1] == '}'
+            pagenum = int(l[2:-1])
+            prelines = 0
+          else:
+            break
+        else:
+          /# Empty line
+          prelines += 1
+        start += 1
+      if lines[start][0] != '#':
+        raise Error('Invalid input (line %d of %s): %s' % (start, book.name(), lines[start]))
+
+      while start < n:
+        child, start, pagenum = self.parseSection(
+          parent, lines, start, pagenum, prelines, book)
+        parent.addChild(child)
+        result.append(child)
+        /# count number of empty lines before lines[start]
+        prelines = 0
+        k = start - 1
+        while not lines[k]:
+          k -= 1
+          prelines += 1
+      return result
+    test:
+      bookpath = metax.root.Object.Resource(
+        'simple_md', fqn='metax.lib.markdown_test.TestCase')
+
+      md = metax.lib.markdown.Parser()
+      with open(bookpath, 'r') as ifp:
+        lines = ifp.read().split('\n')
+
+      book = metax.lib.markdown.Book('Dummy', md, path=bookpath)
+      root = metax.lib.markdown.Section(None, title='Testing', parser=md)
+      sections = md.parseSections(root, lines, book)
+      test.iseq(
+        ['A Simple Document', 'And another top-level section'],
+        [s.title() for s in sections])
+      test.iseq(
+        ['A Simple Document', 'And another top-level section'],
+        [s.title() for s in root.children()])
+    end method parseSections;
+
+    method parseSection : tuple<Section,int,int> #:
+      Parse a section into preamble and child Sections, without fully
+      parsing details.
+
+      This is a much faster parser than parseLines(), with just-in-time
+      parsing of blocks when Section.blocks() is invoked.
+
+      Returns:
+       0. Section instance representing data from lines[start] onward
+       1. index into lines of the section that is NOT part of the section
+          returned.
+       2. pagenumber at end of parsed portion
+    params:
+      var parent : metax.io.Section #:
+        The parent section. Only null for top-level.
+      var lines : vec<str> #:
+        The entire list of lines in the book
+      var start : int #:
+        The index within lines at which the section being parsed is defined.
+      var pagenum : int #:
+        The page number of lines[start]
+      var prelines : int #:
+        The number of empty lines before the start of the section being parsed.
+      var book : str #:
+        Book being parsed (for debugging)
+    scope:
+      first = lines[start]
+
+      if True:
+        m = Parser.SectionRe.match(first)
+        if not m:
+          raise Error(
+            'expecting "%s" (line %d of %s) to define a section' % (first, start+1, book.name()))
+        depth = len(m.group('hash'))
+        title = m.group('title')
+      else:
+        depth = first.find(' ')
+        i = depth + 1
+        while first[i] == ' ':
+          i += 1
+        title = first[i:]
+
+      /# print('creating section "%s" with prelines %d' % (title, prelines))
+
+      /# Create the Section instance.
+      result = Section(
+        parent,
+        title,
+        parser=self,
+        prelines=prelines,
+        pagenum=pagenum,
+        linenum=start+1,
+        /# This is initialized below!
+        delayed=None)
+
+      /# We mark the blocks field as null instead of the empty list, so that we
+      /# can tell when a Section has been created via Parser.parseSection (not
+      /# always fully initialized) and Parser.parseLines() (always fully
+      /# initialized).
+      result.blocksIs(None)
+
+      /# number of contiguous empty lines seen since last non-empty line.
+      empty = 0
+      delayed = None
+
+      n = len(lines)
+      i = start + 1
+      while i < n:
+        line = lines[i]
+        nc = len(line)
+        if nc == 0:
+          /# Empty line
+          empty += 1
+          /# print('Line %d is empty: %d' % ((i+1), empty))
+        else:
+          /# Non-empty line
+          if line[0] == '#':
+            if not delayed:
+              /# We have discovered the first section *after* the section we
+              /# are creating.
+              /#  - we initailze result.delayed() with the information needed
+              /#    to just-in-time parse blocks
+              delayed = (lines, start, i)
+              result.delayedIs(delayed)
+
+            m = Parser.SectionRe.match(line)
+            if not m:
+              raise Error(
+                'expecting sub "%s" (line %d) to define a section' % line, i+1)
+            d = len(m.group('hash'))
+            if d > depth:
+              /# Create shams as needed
+              numsham = d - depth - 1
+              if numsham == 0:
+                /# We have a child section that we need to recurse on.
+                child, j, pagenum = self.parseSection(
+                  result, lines, i, pagenum, empty, book)
+              elif numsham == 1:
+                /# We need to insert a sham section
+                /#  - we hack this by literally inserting the sham into
+                /#    lines temporarily
+                /#  - we adjusst various fields to match with how the non-jit
+                /#    parser sets things up.
+                prev = lines[i-1]
+                lines[i-1] = ('#' * (depth + 1)) + ' SHAM'
+                child, j, pagenum = self.parseSection(
+                  result, lines, i-1, pagenum, empty, book)
+
+                /# Sham sections should have empty title ''
+                child.titleIs('')
+
+                /# Sham sections are not alloewd to have any blocks, so we can
+                /# remove delayed.
+                child.delayedIs(None)
+                child.blocksIs([])
+
+                /# Parser.parseLines() does not properly initialize the pagenum
+                /# or linenum of sham sections, so we make this version match
+                /# parseLines() for now. TODO(wmh): Fix this in both places!
+                /# Ensure Parser.readBook unit test passes for both.
+                child.pagenumIs(0)
+                child.linenumIs(0)
+                subs = child.children()
+                if subs:
+                  /# The first child section of 'child' needs its prelines updated.
+                  subs[0].prelinesIs(empty)
+                lines[i-1] = prev
+              else:
+                raise Error(
+                  'Not supporting need for %d shams in line %d of %s' %
+                  (numsham, i+1, book.name()))
+
+              if child:
+                result.addChild(child)
+                /# Count emptylines before j
+                prelines = 0
+                while not lines[j-1]:
+                  prelines += 1
+                  j -= 1
+                /# adjust i: so that when we add 1 below, we get back to j
+                i = j - 1
+              else:
+                /# There is nothing more to parse
+                break
+            else:
+              /# We have a sibling or upper section, which means we are finished
+              /# parsing this section.
+              break
+            empty = 0
+          else:
+            /# Non-empty but not a section indicator
+            empty = 0
+            /# print('Line %d clearing empty' % (i+1))
+            if line[0] == '':
+              assert line[-1] == '}'
+              pagenum = int(line[2:-1])
+
+            elif nc > 6 and line[5] == ':':
+              /# We want to capture Table: and Panel: lines, but we also want to
+              /# have parsing be as fast as possible. Conveniently, both Table
+              /# and Panel entities have an initial line in which line[5] is a
+              /# colon.
+              tpkind = line[0:5].lower()
+              tptitle = line[7:]
+              if tpkind == 'table':
+                /# By storing a Section into the table map, we are indicating
+                /# to the 'tablesMatching' method that just-in-time block
+                /# parsing and table searching is required.
+                book.tables()[tptitle] = result
+              elif tpkind == 'panel':
+                /# Same logic as above for table.
+                book.panels()[tptitle] = result
+        i += 1
+
+      if not delayed:
+        /# We have discovered the first section *after* the section we
+        /# are creating.
+        /#  - we initailze result.delayed() with the information needed
+        /#    to just-in-time parse blocks
+        delayed = (lines, start, i)
+        result.delayedIs(delayed)
+
+      return result, i, pagenum
+    test:
+      bookpath = metax.root.Object.Resource(
+        'simple_md', fqn='metax.lib.markdown_test.TestCase')
+      with open(bookpath, 'r') as ifp:
+        lines = ifp.read().split('\n')
+      start = 0
+      while not lines[start] or lines[start][0] != '#':
+        start += 1
+      md = metax.lib.markdown.Parser()
+      book = metax.lib.markdown.Book('Dummy', md, path=bookpath)
+      pagenum = 1
+      prelines = 1
+      section, next, pagenum = md.parseSection(
+        None, lines, start, pagenum, prelines, book)
+      test.iseq('A Simple Document', section.title())
+      /# test.iseq(169, next)
+      test.iseq(2, pagenum)
+      test.iseq(
+        [
+          'Blocks', 'A Second Level-2 Section', 'Titled Blocks',
+          'Final thoughts',
+        ],
+        [child.title() for child in section.children()])
+
+      test.iseq('/A Simple Document', section.fqn())
+    end method parseSection;
 
     method parseLines : Section #:
       Parse a collection of lines as markdown.
@@ -318,6 +604,11 @@ scope:
         at the end of section titles starting race definitions. For example
             '# Race: Golem/Clay (Clay Golem) {MM-168}'
         should be treated simple as 'Race: Golem/Clay' when registered.
+      var line_start : int = 0 #:
+        Index within lines to start at
+      var line_end : int = -1 #:
+        Index within lines to end at (stop before it). If negative, use
+        len(lines).
     scope:
       /# NOTE: This is one of the most expensive methods in this namespace,
       /# at least when parsing D&D source books. As such, I've started
@@ -332,10 +623,10 @@ scope:
       /#   we can recreate the same output as input).
       /# - if we are not currently in a block, and we see a non-empty line, the
       /#   first few characters determines what we do:
-      /#    '<': parse an HTML block
-      /#         consume all lines up to '^>'
       /#    '#': parse a section header (create a new Section)
       /#         affects only the current line (but prelines reset)
+      /#    '<': parse an HTML block
+      /#         consume all lines up to '^>'
       /#    '> ': parse a blockquote
       /#         consume all lines starting with '>' and all non-empty
       /#         lines after last such line.
@@ -451,10 +742,13 @@ scope:
       prelines = 0
 
       /# Which line we are currently processing.
-      i = 0
+      i = line_start
 
       /# We are done when i reaches this value.
       N = len(lines)
+      if line_end > -1:
+        N = line_end
+        /# print('Ending at index %d' % N)
 
       pagenum = 0
       iters = 0
@@ -551,6 +845,7 @@ scope:
           /#    so that when the block is created we remember how many
           /#    empty lines preceeded it.
           if current_lines:
+
             /# We have been accumulating a block of text, and the current
             /# empty line indicates we've finished parsing it.  We create
             /# a Paragraph to contain the lines.
@@ -608,11 +903,8 @@ scope:
               book.registerTable(table, location=(path, table_start))
 
         elif kind == 'panel':
-          /# TODO(wmh): This code is not currently executed because 'panel'
-          /# is commented out in Parse.CATEGORIES. Uncomment to continue
-          /# developing this code.
-
-          /# We can consume the entire table here.
+          /# We can consume the entire panel here (all lines with four spaces
+          /# of indentation).
           panel_start = i
           panel_title = None
           assert line.startswith('Panel:')
@@ -625,7 +917,13 @@ scope:
 
           /# Now we advance past all lines looking like panel rows.
           i = self._advancePosition(
-            lines, i, matcher=panel_re, category='panel' if debug else None)
+            lines, i,
+            matcher=panel_re, category='panel' if debug else None,
+            /# The panel_re needs to accept empty lines (they can appear within
+            /# the panel), but we do not want it to include the empty lines
+            /# after the panel before the next object, so we set backempty true.
+            backempty=True,
+          )
 
           plines = []
           for line in lines[block_start:i]:
@@ -654,6 +952,10 @@ scope:
           /#    may be an aunt, great-aunt, etc.
           /#  - if current_group is a ListItem instead of a Section, it is
           /#    an error to specify a section.
+          /#
+          /# Note that if we are invoking Parser.parseLines() from within
+          /# Section.jitBlocks(), this should never be encountered (we only
+          /# parse text within a section in that method).
 
           /# Record(i, 'section start')
           if current_group.isSection():
@@ -671,7 +973,7 @@ scope:
 
             current_group = current_group.newNextSection(
               len(mdata['hash']), title, prelines=prelines,
-              pagenum=pagenum)
+              pagenum=pagenum, linenum=i+1)
           else:
             /# TODO(wmh): We should never get here, because we specify
             /# illegals=['section'] in the recursive call to parseLines()
@@ -1012,6 +1314,7 @@ scope:
       lines = content.split('\n')
       root = md.parseLines(lines, debug=False)
 
+      /# Do some list verification
       section = root.find('A Simple Document/Blocks/Lists')
       listblock = section.block(3)
       test.istrue(listblock.isList())
@@ -1110,11 +1413,17 @@ scope:
         >|+ Cantelope
         >|"""
 
-      section = md.parseLines(simple.split('\n'))
+      psection = md.parseLines(simple.split('\n'))
+      section = psection.child('Header 1')
+      test.iseq(['List'], [block.kind() for block in section.blocks()])
+      list = section.blocks()[0]
+      test.iseq(
+        ['ListItem', 'ListItem', 'ListItem'],
+        [li.kind() for li in list.items()])
+
       section.show(fp=test.fp(), aspect='ascii')
       test.iseqtext(simple, test.out())
       /#section.show(aspect='html')
-
 
       /# Now we test a collection of paragraphs without a section start.
       parent = metax.lib.markdown.BlockGroup(None)
@@ -1289,6 +1598,7 @@ scope:
     scope:
       book = Book(bookname, self)
       root = book.root()
+
       /# metax.lib.markdown.Section(None, title=bookname, parser=self)
       for path in paths:
         if os.path.exists(path):
@@ -1299,7 +1609,7 @@ scope:
     test:
       /# NOTE: test.parseBook() invokes test.md.loadBook()
       book = test.parseBook(['metax.lib.markdown_test.TestCase.simple_md'])
-      test.iseq(1, len(book.root().children()))
+      test.iseq(2, len(book.root().children()))
     end method loadBook;
 
     method readBook : Book #:
@@ -1311,34 +1621,58 @@ scope:
         The name of the book containing all the paths.
       var path : str = null #:
         The path associated with the input stream.
-      var replacements : vec<tuple<function,re,function>> = null #:
-        If present, each three-tuple represents a tester function, a regexp,
-        and a replacement function.
-         - the tester function accepts text, and returns True if the regexp
-           and replacement are to be applied to that text.
-         - the regexp matches arbitrary single-line content, and is to be
-           replaced by the return value of the 'replacement' function, which
-           accepts a single regexp match object.
+      var fast : bool = false #:
+        If true, perform fast parse (with JIT parsing of sections later).
     scope:
       book = Book(bookname, self, path=path)
       root = book.root()
       text = ifp.read().replace('\t', '    ')
 
-      if replacements:
-        for tester, tre, tfunc in replacements:
-          if tester(text):
-            text = tre.sub(tfunc, text)
-
       lines = text.split('\n')
-      self.parseLines(lines, parent=root, path=path)
+      n = len(lines)
+
+      if fast:
+        self.parseSections(root, lines, book)
+      else:
+        self.parseLines(lines, parent=root, path=path)
+
       return book
     test:
       bookpath = metax.root.Object.Resource(
         'simple_md', fqn='metax.lib.markdown_test.TestCase')
+
+      def Accumulate(section, sink, opaque):
+        opaque.append(
+          '%d %3d %3d %3d %s' %
+          (section.depth(), section.pagenum(), section.linenum(), section.prelines(), section.title()))
+
       md = metax.lib.markdown.Parser()
       with open(bookpath, 'r') as ifp:
-        book = md.readBook(ifp)
-      test.iseq('Book', book.root().title())
+        book1 = md.readBook(ifp)
+      test.iseq('Book', book1.root().title())
+      test.iseq(
+        '/Book/A Simple Document',
+        book1.root().children()[0].fqn())
+      slist1 = []
+      book1.root().visit(sfunction=Accumulate, opaque=slist1)
+
+      md = metax.lib.markdown.Parser()
+      with open(bookpath, 'r') as ifp:
+        book2 = md.readBook(ifp, fast=True)
+      test.iseq('Book', book2.root().title())
+      test.iseq(
+        '/Book/A Simple Document',
+        book2.root().children()[0].fqn())
+      slist2 = []
+      book2.root().visit(sfunction=Accumulate, opaque=slist2)
+
+      /# By checking slist1 and slist2 against one another we verify that
+      /# both slow and fast parsing are providng the same structure.
+      if False:
+        pprint.pprint(slist1)
+        pprint.pprint(slist2)
+      else:
+        test.iseqvec(slist1, slist2)
     end method readBook;
 
     implicit
@@ -1539,12 +1873,21 @@ scope:
         /# Exact match ... there can only be one possible result.
         part = part.replace('\/', '/')
         keys = obj.keys()
+
         if part in keys:
           obj = keys[part]
         else:
-          /# print('Failed to find child "%s" of "%s"' % (part, obj.title()))
-          obj = None
-          break
+          if obj.isSection():
+            /# If 'key' references a titled Block an as-yet-unparsed Section, it
+            /# will appear missing. We ensure the section is parsed and recheck.
+            _ = obj.blocks()
+            obj = obj.keys().get(part, None)
+            if obj is None:
+              break
+          else:
+            /# print('Failed to find child "%s" of "%s"' % (part, obj.title()))
+            obj = None
+            break
       return obj
     test:
       root = test.root
@@ -1552,6 +1895,22 @@ scope:
       test.issame(test.section, section)
       subsection = root.find('Section 1/SubSection A')
       test.issame(test.subsection, subsection)
+
+      /# Now we load a fast-parsed book and verify the jit loading works.
+      bookpath = metax.root.Object.Resource(
+        'simple_md', fqn='metax.lib.markdown_test.TestCase')
+      md = metax.lib.markdown.Parser()
+      with open(bookpath, 'r') as ifp:
+        book = md.readBook(ifp, fast=True)
+      root = book.root()
+      tsection = root.find('A Simple Document/Blocks/Tables')
+      /# We verify the section containing table 'Fruit' is not yet parsed.
+      test.isnull(tsection._blocks)
+      /# We ask for the Fruit table
+      table = root.find('A Simple Document/Blocks/Tables/Fruit')
+      /# Verify the section was implicitly parsed and table was found
+      test.notnull(tsection._blocks)
+      test.iseq('Fruit', table.title())
     end method find;
 
     method searchInText : vec<str> #:
@@ -1751,7 +2110,13 @@ scope:
     A collection of Block instances that can be treated as a Block.
   scope:
 
-    field blocks : @vec<Block>;
+    field blocks : @vec<Block> #:
+      It is critically important that this be marked as @vec rather than vec,
+      as the Section subclass relies on this. In particular, it sets blocks
+      to null when parsed via Parser.parseSection(), as a means of detecting
+      when just-in-time parsing of blocks is needed. That said, there is
+      another way Sections can detect this (whether field 'delayed' is
+      initialized or not).
 
     lifecycle params:
       var parent : Object #:
@@ -2458,6 +2823,57 @@ scope:
         test.p1.asStr())
     end method asStr;
 
+    method titleAndText : tuple<str,str> #:
+      Obtain title (may be null) and text of this paragraph
+    params:
+      var tdelim : str = '**' #:
+        What appears before and after the title.
+      var tsep : str = '[:.]\s*' #:
+        What appears after the title before the text
+      var raw : bool = false #:
+        If true, newlines replaces with spaces in text.
+    scope:
+      tdelim = re.escape(tdelim)
+      tre = re.compile(
+        tdelim + '(?P<title>.*?)' + tdelim + tsep + '(?P<text>.*)', re.DOTALL)
+      text = self.text()
+      if raw:
+        text = text.replace('\n', ' ')
+      title = None
+      m = tre.match(text)
+      if m:
+        title = m.group('title')
+        text = m.group('text')
+      return (title, text)
+    test:
+      p1 = metax.lib.markdown.Paragraph(
+        None, 'A first paragraph\nwith two lines')
+      test.iseq(
+        (None, 'A first paragraph\nwith two lines'),
+        p1.titleAndText())
+      test.iseq(
+        (None, 'A first paragraph with two lines'),
+        p1.titleAndText(raw=True))
+
+      p2 = metax.lib.markdown.Paragraph(
+        None, '**Innate Talent**: Can jump twice as high\nand far.')
+      test.iseq(
+        ('Innate Talent', 'Can jump twice as high\nand far.'),
+        p2.titleAndText())
+      test.iseq(
+        ('Innate Talent', 'Can jump twice as high and far.'),
+        p2.titleAndText(raw=True))
+
+      p3 = metax.lib.markdown.Paragraph(
+        None, '_Innate Talent_. Can jump twice as high\nand far.')
+      test.iseq(
+        ('Innate Talent', 'Can jump twice as high\nand far.'),
+        p3.titleAndText(tdelim='_', tsep='\.\s+'))
+      test.iseq(
+        ('Innate Talent', 'Can jump twice as high and far.'),
+        p3.titleAndText(tdelim='_', tsep='\.\s+', raw=True))
+    end method titleAndText;
+
     method clone : Paragraph #:
       Make a copy of myself (NOT attached to any parent).
     scope:
@@ -2474,11 +2890,11 @@ scope:
       Convert this block into a collection of strings suitable for use
       in visit() and other text-based searches.
     scope:
-      return [self.text()]
+      return [self.text().replace('\n', ' ')]
     test:
       test.iseq(
         [
-          'This is an example paragraph containing a few lines\n'
+          'This is an example paragraph containing a few lines '
           'of text including a **bold** word and _italize phrase_.',
         ],
         test.p1.blobs())
@@ -2523,6 +2939,7 @@ scope:
     A list (ordered or unordered).
   assocs:
     std assoc math;
+    std usertest assoc collections;
   scope:
 
     field ordered : bool #:
@@ -2539,7 +2956,8 @@ scope:
       The collection of items making up the list.  Each item consists
       of one or more blocks.
       TODO(wmh): Should List inherit from BlockGroup so we can use blocks
-      instead of items?
+      instead of items? Probably not, since blocks expect Block instances
+      but ListItem instances are BlockGroups not Blocks.
 
     lifecycle params:
       var parent : Object #:
@@ -2551,6 +2969,17 @@ scope:
         The number of empty lines found before this block started.
     super (parent, prelines=prelines)
     scope:
+    test:
+      simple = test.parseMarkdown(
+        'simple_md', parser=metax.lib.markdown.Parser())
+      section = simple.find('A Simple Document/Blocks/Lists')
+      test.iseq(
+        ['Paragraph', 'List', 'Paragraph', 'List', 'Paragraph', 'List'],
+        [block.kind() for block in section.blocks()])
+      alist = section.blocks()[-1]
+      test.iseq(
+        ['ListItem', 'ListItem', 'ListItem'],
+        [li.kind() for li in alist.items()])
     end;
 
     method isList : bool scope:
@@ -2635,6 +3064,86 @@ scope:
       test.iseq(['Apple', 'Banana', 'Cantelope'], test.ul.blobs())
       test.iseq(['Apple', 'Banana', 'Cantelope'], test.ol.blobs())
     end method blobs;
+
+    method blocksByTitle : omap #:
+      Partition all blocks of this section into groups based on which Paragraph
+      elements have titles.
+
+      Returns:
+        ordered map from paragraph title to
+         - list of Block (if raw is false)
+         - list of str (if raw is true)
+        if there are blocks before the first one with a title, they are added
+        under key '__pre__' unless nopre is true
+    params:
+      var raw : bool = false #:
+        If true, each value returned is a vec<str> not vec<Block>. The strings
+        represent text with newlines replaced with spaces.
+      var nopre : bool = false #:
+        If true, do not put a __pre__ key in the result for the initial
+        collection of untitled blocks
+      var tdelim : str = '**' #:
+        What appears before and after the title.
+      var tsep : str = '[:.]\s*' #:
+        What appears after the title before the text
+    scope:
+      result = collections.OrderedDict()
+
+      untitled = 0
+
+      /# Lists are handled diffently than Sections wrt this method:
+      /#  - every listitem represents a partition (if the first element is not
+      /#    a paragraph with a title, we assign a special untitled title).
+      for litem in self.items():
+
+        blocks = litem.blocks()
+        n = len(blocks)
+        first = blocks[0]
+
+        title = None
+        if isinstance(first, Paragraph):
+          title, text = first.titleAndText(tdelim=tdelim, tsep=tsep, raw=raw)
+        else:
+          raise Error(
+            'It is possible to have a non-Paragraph first element in a List?')
+        if title is None and not nopre:
+          untitled += 1
+          title = '__pre%d__' % untitled
+
+        if not title:
+          /# We do not recording this listitem
+          continue
+
+        /# We create a new partition for each listitem
+        current = []
+        result[title] = current
+
+        if raw:
+          current.append(text)
+          bi = 1
+          while bi < n:
+            current.append(blocks[bi].asStr(raw=raw))
+            bi += 1
+
+        else:
+          /# TODO(wmh): Handle nested lists by recursing!
+          current.extend(blocks)
+
+      return result
+    test:
+      simple = test.parseMarkdown(
+        'simple_md', parser=metax.lib.markdown.Parser())
+      section = simple.find('A Simple Document/Titled Blocks')
+      alist = section.blocks()[-1]
+      test.iseq(
+        collections.OrderedDict([
+          ('Light', ['simple para.']),
+          ('Dark', ['another simple', 'With second para']),
+          ('Medium', ['third.']),
+          ('__pre1__', ['list item with no title.']),
+        ]),
+        alist.blocksByTitle(raw=True))
+    end method blocksByTitle;
 
   end class List;
 
@@ -3318,7 +3827,17 @@ scope:
      - one or zero parent section
 
     A Section instance with empty title is treated specially (it is not
-    allowed to have any block elements, but can have child sections).
+    allowed to have any block elements, but can have child sections). This
+    allows us to use such sections as shams when the text has a '#### section'
+    below a '## section' (we insert a '###' sham with empty title).
+
+    Parsing the entire document to completion can sometimes be slower than
+    a client might want. An alternative version that involves parsing
+    a section into children but delaying parsing of pre-child blocks is
+    available. If self.blocks() is null (as opposed to the empty list), it
+    indicates the section is not fully parsed. Certain code detects this
+    and invokes just-in-time block parsing (in particular, the blocks()
+    method).
   assocs:
     std assoc collections;
     std assoc io;
@@ -3357,8 +3876,33 @@ scope:
     field pagenum : int #:
       The page number that this section starts on
 
+    field linenum : int #:
+      The line within the source file at which this section is defined.
+      Starts at 1 (not 0!). A value of 0 means uninitialized.
+
     field tables : map #:
       Maps table titles to Table instances.
+    scope:
+      accessor get lazy:
+        /# We invoke blocks() to trigger jit parsing of blocks, which will
+        /# populate tables() if there are any.
+        self.blocks()
+        tables = self._tables or {}
+        -> tables
+    end field tables;
+
+    field delayed : tuple<list,int,int> #:
+      Information supporting delayed parsing of block-level details within the
+      Section. If it exists, it consists of:
+       0. lines : vec<str>
+            All the lines in the book being parsed
+       1. start : int
+            Index with parser.lines() that this section is defined at
+       2. cstart : int
+            Index within parser.lines() of last line before another section
+            (whether it is a child, sibling or higher section). The lines
+            between start and cstart represent the lines that need to be
+            parsed into blocks.
 
     lifecycle params:
       var parent : Section #:
@@ -3370,15 +3914,88 @@ scope:
       var prelines : int = 1 #:
         The number of empty lines found before this block started.
       var pagenum -> pagenum = 0;
+      var linenum -> linenum = 0;
+      var delayed -> delayed = null;
     super (parent, prelines=prelines)
     scope:
-      self.uidIs(abbrev)   # TODO(wmh): Replace abbrev with uid in params and use super to initialize
+      /# TODO(wmh): Replace abbrev with uid in params and use super to initialize
+      /# TODO(wmh): Remove uid/abbrev entirely?
+      self.uidIs(abbrev)
       self.depthIs(0 if not parent else parent.depth() + 1)
     test:
       test.iseq(2, test.subsection.depth())
     clinit:
       cls.AbbrevReIs(re.compile(r'[^a-z]'))
     end lifecycle;
+
+    override
+    method blocks : vec<Block> #:
+      Obtain my blocks.
+    scope:
+      /# Inherited from BlockGroup.blocks(), a field declared as @vec<Block>,
+      /# which indicates it should never be null. HOWEVER, Parser.parseSection()
+      /# intentionally sets the block field to null to indicate that
+      /# just-in-time parsing is needed.
+      blocks = self._blocks
+      if blocks is None:
+        if not self.delayed():
+          raise Error('blocks() and delayed() should not both be null!')
+        blocks = []
+        self.blocksIs(blocks)  # parseLines expects blocks to be initialized!
+        parser = self.parser()
+        lines, start, end = self.delayed()
+        /# We expect both lines[start] and lines[end] to represent sections
+        assert lines[start][0] == '#', 'Parser.parseSection not properly initializing Section.delayed: %s' % lines[start]
+        assert end >= len(lines) or lines[end][0] == '#', 'Parser.parseSection not properly initializing Section.delayed: %s' % lines[end]
+        /# We invoke parser.parseLines
+        parser.parseLines(lines, parent=self, line_start=start+1, line_end=end)
+      return blocks
+    test:
+      bookpath = metax.root.Object.Resource(
+        'simple_md', fqn='metax.lib.markdown_test.TestCase')
+      md = metax.lib.markdown.Parser()
+      with open(bookpath, 'r') as ifp:
+        book = md.readBook(ifp, fast=True)
+
+      section = book.root().children()[0]
+      test.iseq('A Simple Document', section.title())
+      test.isnull(section._blocks)
+
+      blocks = section.blocks()
+      test.iseq(1, len(blocks))
+      bsec = section.children()[0]
+      test.iseq('Blocks', bsec.title())
+      tmap = {}
+      for child in bsec.children():
+        blocks = child.blocks()
+        tmap[child.title()] = [b.__class__.__name__ for b in blocks]
+      test.iseq(
+        {
+          'Paragraphs': ['Paragraph', 'Paragraph'],
+          'HTML': ['Paragraph', 'HTML'],
+          'Blockquote': ['Paragraph', 'Quote'],
+          'Code': ['Paragraph', 'Code', 'Paragraph', 'Code', 'Paragraph'],
+          'Tables': ['Paragraph', 'Table'],
+          'Panels': ['Paragraph', 'Panel'],
+          'Lists': ['Paragraph', 'List', 'Paragraph', 'List', 'Paragraph', 'List'],
+        },
+        tmap)
+
+      /# We obtain the very last section in the page, and ensure blocks() works
+      /# for it.
+      /#  - fragile test code ... if I add a new subsection to simple.md then
+      /#    this won't test what it intends to (and obtaining the true last
+      /#    section is a bit complicated (but is easy with visit() I suppose.
+      section2 = book.root().children()[1]
+      test.iseq('And another top-level section', section2.title())
+      test.iseq(
+        [
+          'Does this get parsed too?\n'
+          'DO NOT ADD MORE SECTIONS BELOW THIS '
+          '(test code relies on this being the last section)'
+        ],
+        [b.asStr() for b in section2.blocks()])
+    end method blocks;
 
     method root : Section #:
       Obtain the ancestor section without a parent.
@@ -3403,7 +4020,7 @@ scope:
       tables[table.title()] = table
     test:
       section = test.root.newChild(title='Section 1')
-      test.isnull(section.tables())
+      test.iseq({}, section.tables())
       section.addTable(test.table2)
       test.iseq(['Fruit'], sorted(section.tables()))
     end method addTable;
@@ -3440,7 +4057,23 @@ scope:
       keys = self.keys()
       title = obj.title()
       if title is not None:
-        keys[title] = obj
+        if title in keys:
+          /# NOTE: A Section contains zero or more blocks, and then zero or more
+          /# children. Blocks can have titles (added to self.keys()), and
+          /# child sections obvious have titles. It is possible for there to be
+          /# a block and child with the same title, so the order in which we
+          /# process them determines which is grabbed.
+          /#  - we prioritize child sections over titled blocks.
+          if not obj.isSection() and keys[title].isSection():
+            /# We prioritize child sections over title blocks
+            pass
+          else:
+            print(
+              'WARNING: Found "%s" as %s being replaced with %s in %s' % (
+                title, keys[title].__class__.__name__, obj.__class__.__name__, self.source()))
+            keys[title] = obj
+        else:
+          keys[title] = obj
 
       if False:
         /# Expeirmenting with phasing abbrev support out in interests of
@@ -3464,7 +4097,7 @@ scope:
 
       /# Explicitly registering works.
       section.register(sec)
-      test.iseqvec(['A New Beginning', 'sec1'], sorted(section.keys()))
+      test.iseqvec(['A New Beginning'], sorted(section.keys()))
     end method register;
 
     method isSection : bool scope:
@@ -3580,10 +4213,12 @@ scope:
         The number of prelines before the to-be-created section.
       var pagenum : int = 0 #:
         Page number of the start of the child
+      var linenum : int = 0 #:
+        Line number (starting from 1) of start of the child within source file
     scope:
       child = metax.lib.markdown.Section(
         self, title=title, abbrev=abbrev, parser=self.parser(),
-        prelines=prelines, pagenum=pagenum)
+        prelines=prelines, pagenum=pagenum, linenum=linenum)
       self.addChild(child)
       return child
     test:
@@ -3606,6 +4241,94 @@ scope:
         sorted(test.section.mapChildren()))
     end method mapChildren;
 
+    method blocksByTitle : omap #:
+      Partition all blocks of this section into groups based on which Paragraph
+      elements have titles.
+
+      Returns:
+        ordered map from paragraph title to
+         - list of Block (if raw is false)
+         - list of str (if raw is true)
+        if there are blocks before the first one with a title, they are added
+        under key '__pre__' unless nopre is true
+    params:
+      var raw : bool = false #:
+        If true, each value returned is a vec<str> not vec<Block>. The strings
+        represent text with newlines replaced with spaces.
+      var nopre : bool = false #:
+        If true, do not put a __pre__ key in the result for the initial
+        collection of untitled blocks
+      var tdelim : str = '**' #:
+        What appears before and after the title.
+      var tsep : str = '[:.]\s*' #:
+        What appears after the title before the text
+    scope:
+      key = '__pre__'
+      current = []
+      result = collections.OrderedDict()
+      result[key] = current
+      for block in self.blocks():
+        if isinstance(block, Paragraph):
+          title, text = block.titleAndText(tdelim=tdelim, tsep=tsep, raw=raw)
+          if title:
+            key = title
+            current = []
+            if key in result:
+              print('WARNING: "%s" repeats' % key)
+            result[key] = current
+
+          if raw:
+            /# We are to add a raw value to current, not a Block
+            current.append(text)
+          else:
+            current.append(block)
+
+        elif isinstance(block, List):
+          /# We add an ordered dict to current, representing a grouping of
+          /# list items by those that contain titles.
+          current.append(
+            block.blocksByTitle(
+              raw=raw, nopre=nopre, tdelim=tdelim, tsep=tsep))
+
+        else:
+          if raw:
+            /# We ignore blocks that aren't Paragraph or List in raw mode
+            pass
+          else:
+            current.append(block)
+
+      if nopre:
+        result.pop('__pre__', None)
+
+      return result
+    test:
+      simple = test.parseMarkdown(
+        'simple_md', parser=metax.lib.markdown.Parser())
+      section = simple.find('A Simple Document/Titled Blocks')
+
+      test.iseq(
+        collections.OrderedDict([
+          ('__pre__', [
+           'It is sometimes useful to parse a section by title blocks, as in this example.',
+          ]),
+          ('Light Green', [
+           'This is an initial titled paragraph',
+           'With a second untitled paragraph afterward.',
+          ]),
+          ('Red', [
+            'And this is another titled paragraph.',
+            'With a second paragraph and third list.',
+             collections.OrderedDict([
+               ('Light', ['simple para.']),
+               ('Dark', ['another simple', 'With second para']),
+               ('Medium', ['third.']),
+               ('__pre1__', ['list item with no title.'])
+             ]),
+          ]),
+        ]),
+        section.blocksByTitle(raw=True))
+    end method blocksByTitle;
+
     method newNextSection : Section #:
       Create a Section to represent text after this section.  The result
       may or may not be a child of self, depending on 'depth'.
@@ -3621,6 +4344,7 @@ scope:
         The number of prelines before the to-be-created section.
       var pagenum : int = 0 #:
         The page number of the start of the new section.
+      var linenum -> linenum = 0;
     scope:
       current_depth = self.depth()
       current_section = self
@@ -3670,7 +4394,8 @@ scope:
           (lnum, target, abbrev, title))
 
       current_section = target.newChild(
-        title, abbrev=abbrev, prelines=prelines, pagenum=pagenum)
+        title, abbrev=abbrev, prelines=prelines,
+        pagenum=pagenum, linenum=linenum)
       assert current_section.depth() == depth
       return current_section
 
@@ -3707,29 +4432,36 @@ scope:
       pstr = ('%3d' % self.pagenum()).replace(' ', '-')
       return '%s-%s' % (root.title(), pstr)
     test:
-      test.iseq('TheBook---0', test.table2.parent().source())
+      test.iseq('TheBook---2', test.table2.parent().source())
     end method source;
 
     method visit #:
       Visit every leaf block in this section depth-first and apply the given
       function to each block.
     params:
-      var function : function #:
-        The function to apply. It accepts a Block, a Sink, and an arbitrary
-        opaque object.
+      var function : function = null #:
+        The function to apply to blocks. It accepts a block index, Block, Sink,
+        and an arbitrary opaque object.
+      var sfunction : function = null #:
+        The function to apply to sections. It accepts a Section, Sink, and an
+        arbitrary opaque object.
       var sink : metax.io.Sink = sout #:
         Where to write info.
       var opaque : any = null #:
         Arbitrary object useable within the function.
     scope:
-      for bi, block in enumerate(self.blocks()):
-        assert block.parent() is self
-        /# NOTE: Added 'bi' as a first arg on 2020-11-26, which will break
-        /# any clients using this method.
-        function(bi, block, sink, opaque)
+      if sfunction:
+        sfunction(self, sink, opaque)
+      if function:
+        for bi, block in enumerate(self.blocks()):
+          assert block.parent() is self
+          /# NOTE: Added 'bi' as a first arg on 2020-11-26, which will break
+          /# any clients using this method.
+          function(bi, block, sink, opaque)
       for child in self.children():
         if child.isSection():
-          child.visit(function, sink, opaque)
+          child.visit(
+            function=function, sfunction=sfunction, sink=sink, opaque=opaque)
     test:
       chars = []
       def Add(obj):
@@ -3775,7 +4507,13 @@ scope:
     std assoc collections;
   scope:
 
-    field root : Section;
+    field root : Section #:
+      The top-level section in the book. This has the book name as its title.
+      It is critically important that we NOT remove this section unless we
+      provide some other way for an arbitrary child section to establish
+      the book it belongs to. Currently, any Section can invoke
+      self.root().title(), which searches up to this root section and returns
+      its title (the name of the book).
 
     field name : str #:
       The name of the book.
@@ -3785,7 +4523,7 @@ scope:
     field tables : map #:
       Mapping from table title to Table instance.
 
-    field panels : @map #:
+    field panels : map #:
       Mapping from panel title to Panel instance.
 
     field path : str #:
@@ -3842,12 +4580,17 @@ scope:
     scope:
       tables = self.tables()
       title = table.title()
-      if title in tables:
-        print(
-          'Found repeated table "%s" at line %d of %s' %
-          (title, location[1], location[0]))
-      else:
-        tables[title] = table
+      current = tables.get(title, None)
+      if current:
+        if isinstance(current, Section):
+          /# An indication that the table needs to be parsed. This method is
+          /# updating the Section to a Table, so no warning is printed.
+          pass
+        else:
+          print(
+            'Found repeated table "%s" at line %d of %s' %
+            (title, location[1], location[0]))
+      tables[title] = table
     test:
       book = test.book
       book2 = test.book2
@@ -3867,12 +4610,17 @@ scope:
     scope:
       panels = self.panels()
       title = panel.title()
-      if title in panels:
-        print(
-          'Found repeated panel "%s" at line %d of %s' %
-          (title, location[1], location[0]))
-      else:
-        panels[title] = panel
+      current = panels.get(title, None)
+      if current:
+        if isinstance(current, Section):
+          /# An indication that the table needs to be parsed. This method is
+          /# updating the Section to a Table, so no warning is printed.
+          pass
+        else:
+          print(
+            'Found repeated panel "%s" at line %d of %s' %
+            (title, location[1], location[0]))
+      panels[title] = panel
     test:
       book = test.book
       book2 = test.book2
@@ -3886,35 +4634,75 @@ scope:
     method tablesMatching : vec<Table> #:
       Find a table by title.
     params:
-      var title : str #:
+      var title_restr : str #:
         A regexp to apply to table titles.
     scope:
-      tables = []
-      title_re = re.compile(title, re.I)
-      for title, table in self.tables().items():
+      result = []
+      title_re = re.compile(title_restr, re.I)
+      tables = self.tables()
+      for title, table in tables.items():
         if title_re.search(title):
-          tables.append(table)
-      return tables
+          if isinstance(table, Section):
+            /# We need to just-in-time parse the section, which will register
+            /# the table into tables properly.
+            blocks = table.blocks()
+            table = tables[title]
+            assert isinstance(table, Table)
+          result.append(table)
+      return result
     test:
       test.iseq(['Fruit'], [t.title() for t in test.book.tablesMatching('Fru')])
       test.iseq([], test.book.tablesMatching('Blah'))
+
+      /# Now we do delayed parsing and see if just-in-time resolution of tables
+      /# works.
+      bookpath = metax.root.Object.Resource(
+        'simple_md', fqn='metax.lib.markdown_test.TestCase')
+      md = metax.lib.markdown.Parser()
+      with open(bookpath, 'r') as ifp:
+        book = md.readBook(ifp, fast=True)
+      test.iseq(['Fruit'], sorted(book.tables()))
+      test.isinst(book.tables()['Fruit'], metax.lib.markdown.Section)
+      tables = book.tablesMatching(r'^Fru')
+      test.iseq(['Fruit'], [t.title() for t in tables])
+      test.isinst(book.tables()['Fruit'], metax.lib.markdown.Table)
     end method tablesMatching;
 
     method panelsMatching : vec<Panel> #:
       Find a panel by title.
     params:
-      var title : str #:
+      var title_restr : str #:
         A regexp to apply to panel titles.
     scope:
-      panels = []
-      title_re = re.compile(title, re.I)
-      for title, panel in self.panels().items():
+      result = []
+      title_re = re.compile(title_restr, re.I)
+      panels = self.panels()
+      for title, panel in panels.items():
         if title_re.search(title):
-          panels.append(panel)
-      return panels
+          if isinstance(panel, Section):
+            /# We need to just-in-time parse the section, which will register
+            /# the panel into panels properly.
+            blocks = panel.blocks()
+            panel = panels[title]
+            assert isinstance(panel, Panel)
+          result.append(panel)
+      return result
     test:
       test.iseq(['Example Panel'], [t.title() for t in test.book.panelsMatching('Exam')])
       test.iseq([], test.book.panelsMatching('Blah'))
+
+      /# Now we do delayed parsing and see if just-in-time resolution of tables
+      /# works.
+      bookpath = metax.root.Object.Resource(
+        'simple_md', fqn='metax.lib.markdown_test.TestCase')
+      md = metax.lib.markdown.Parser()
+      with open(bookpath, 'r') as ifp:
+        book = md.readBook(ifp, fast=True)
+      test.iseq(['Example Panel'], sorted(book.panels()))
+      test.isinst(book.panels()['Example Panel'], metax.lib.markdown.Section)
+      panels = book.panelsMatching(r'nel$')
+      test.iseq(['Example Panel'], [t.title() for t in panels])
+      test.isinst(book.panels()['Example Panel'], metax.lib.markdown.Panel)
     end method panelsMatching;
 
     method tableNamed : Table #:
@@ -4035,6 +4823,7 @@ scope:
         modification of the text). The text may contain newlines.
       ignorepre: bool = false #:
         If true, ignore preline values (do not print n newlines before).
+      ignorepre
   scope:
 
     abstract
@@ -4990,7 +5779,7 @@ scope:
 
       d = self.depth()
 
-      /#print('Here with aspect=%s depth=%d d=%d' % (aspect, depth, d))
+      /# print('Here with aspect=%s depth=%d d=%d' % (aspect, depth, d))
 
       prelines = 0 if kwds.get('ignorepre', False) else self.prelines()
       if aspect.startswith('title'):
@@ -5410,6 +6199,7 @@ scope:
     test:
       group = test.group
       test.isnull(group.title())
+    end receiver BlockGroup;
 
     receiver Paragraph ::
       result = None
@@ -5426,18 +6216,23 @@ scope:
     end receiver Paragraph;
 
     receiver Quote ::
+      /# TODO(wmh): Should the title be the author of the quote?
       return None
     test:
       quote = metax.lib.markdown.Quote(test.section, ['> quote'])
       test.isnull(quote.title())
+    end receiver Quote;
 
     receiver List ::
       /# For now, we don't have a concept of titled lists, but we may want to
-      /# add such a concept.
+      /# add such a concept. Note that individual ListItem instances are
+      /# subclasses of BlockGroup, contain a list of Block, and each Block may
+      /# or may not have a title.
       return None
     test:
       test.makeLists()
       test.isnull(test.ul.title())
+    end receiver List;
 
     receiver Code ::
       /# For now, we don't have a concept of titled code blocks, but we may want to
@@ -5445,6 +6240,7 @@ scope:
       return None
     test:
       test.isnull(test.code.title())
+    end receiver Code;
 
     receiver HR ::
       /# For now, we don't have a concept of titled code blocks, but we may want to
@@ -5452,6 +6248,7 @@ scope:
       return None
     test:
       test.isnull(test.hr.title())
+    end receiver HR;
 
     receiver HTML ::
       /# For now, we don't have a concept of titled code blocks, but we may want
@@ -5459,6 +6256,7 @@ scope:
       return None
     test:
       test.isnull(test.html.title())
+    end receiver HTML;
 
     receiver Row ::
       /# The value of the column within the table representing a unique key.
@@ -5466,6 +6264,7 @@ scope:
     test:
       test.iseq('Alice', test.row1.title())
       test.iseq('Bob', test.row2.title())
+    end receiver Row;
 
   end behavior title;
 
@@ -5529,9 +6328,13 @@ scope:
       /# TODO(wmh): Introduce a nmspsetup that performs namespace-level
       /# setup. We only need to invoke metastrap.Setup() once.
       metastrap.Setup()
+    clinit:
+      /# TODO(wmh): Fix this hackery!!
+      import metax.c
+      metax.c.Compiler.Bootstrap(['metac', 'test'])
     end lifecycle;
 
-    method parseMarkdown params:
+    method parseMarkdown : Setion params:
       var resource : str #:
         The resource (defined here in this class) containing a markdown file.
       var titlere : regexp = null #:

@@ -9827,7 +9827,7 @@ namespace metax.oopl scope:
 
       cls.CommentREIs(
         re.compile(
-          r'^( *)%s( ?)(.*)' % re.escape(metax.c.Context.Tokens()['remark'])))
+          r'^( *|.*?\S {2,})%s( ?)(.*)' % re.escape(metax.c.Context.Tokens()['remark'])))
 
       cls.InterpolateREIs(
         re.compile(
@@ -11831,7 +11831,7 @@ namespace metax.oopl scope:
         /#    that the __meta file__ is found within.
         /#  - replace __meta dir__ with the absolute path of the directory
         /#    within which the .meta file that the __meta dir__ is found within.
-        /#  - do NOT replace replace '^ *>|' with '' (occurs in ...)
+        /#  - do NOT replace '^ *>|' with '' (occurs in ...)
         /#  - do NOT perform pseudovar rewriting (e.g. 'meta' to 'self',
         /#    'test' to 'self', etc.). Instead, in methodInfo() we add a
         /#    local variable called 'test' or 'meta' (assigned to 'self').
@@ -11860,10 +11860,15 @@ namespace metax.oopl scope:
         block = metax.attr.SimpleBlock(
           method, 'scope:', [
             '/# Some C++',
+            '  /# Indented C++',
             'int a = 1;',
           ])
         test.iseq(
-          ['// Some C++', 'int a = 1;'],
+          [
+            '// Some C++',
+            '  // Indented C++',
+            'int a = 1;',
+          ],
           test.baselang.simpleToBase(block))
 
         block2 = metax.attr.SimpleBlock(
@@ -11882,21 +11887,35 @@ namespace metax.oopl scope:
         block = metax.attr.SimpleBlock(
           method, 'scope:', [
             '/# Some Javascript',
+            '  /# Indented Javascript',
             'let a = 1;',
           ])
         test.iseq(
-          ['// Some Javascript', 'let a = 1;'],
+          [
+            '// Some Javascript',
+            '  // Indented Javascript',
+            'let a = 1;',
+          ],
           test.baselang.simpleToBase(block))
+
       testx py ::
         test.tpy()
         method = test.method
         block = metax.attr.SimpleBlock(
           method, 'scope:', [
-            '/# Some Python',
-            'a = 1',
+            /# It is important to separate the '/' and '#', otherwise the code
+            /# being tested will replace the meta-level comment with baselang
+            /# comment!
+            '/' + '# Some Python',
+            '  /' + '# Indented Python',
+            'a = 1  /' + '# eol comment',
           ])
         test.iseq(
-          ['# Some Python', 'a = 1'],
+          [
+            '# Some Python',
+            '  # Indented Python',
+            'a = 1  # eol comment',
+          ],
           test.baselang.simpleToBase(block))
     end method simpleToBase;
 
@@ -15625,8 +15644,7 @@ namespace metax.oopl scope:
 
   end behavior formatClassType;
 
-  behavior formatComment : vec<str>
-  #:
+  behavior formatComment : vec<str> #:
     Format a list of strings representing a comment into syntax valid
     in this baselang.
 

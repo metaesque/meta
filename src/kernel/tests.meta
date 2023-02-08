@@ -142,6 +142,7 @@ scope:
     std usertest assoc metastrap #:
       /# TODO(wmh): This is not actually std, but rather lib ... we need to
       /# establish an appropriate build target for it.
+    cls assoc metax.lib.Sink;
 
     resource cipherfile path "testdata/testing/cipherfile";
     resource entry_mre path "testdata/testing/entry.mre";
@@ -371,6 +372,7 @@ scope:
     finalize<py>:
       self.deblog(
         'Invoking %s finalizer for %s' % (self.name(), self.methname()))
+      /# metax.io.Sink.Null().fp().close()
     setup<py>:
       self.deblog('Invoking %s setUp for %s' % (self.name(), self.methname()));
       testname = '%s.%s' % (self.name(), self.methname())
@@ -1018,7 +1020,15 @@ scope:
     end method newMox;
 
     new
-    method fp : *strstream #:
+    method sinkfp : metax.io.Sink #:
+      Return a metax.lib.Sink with fp=test.fp()
+    scope:
+      return metax.io.Sink(fp=self.fp())
+    test:
+    end method sinkfp;
+
+    new
+    method fp : strstream #:
       Create a new string stream for use anywhere a istream or
       ostream is required.
     params:
@@ -1056,7 +1066,9 @@ scope:
     scope<py>:
       strstreams = self.strstreams()
       if strstreams:
-        result = strstreams[-1].getvalue()
+        fp = strstreams[-1]
+        result = fp.getvalue()
+        fp.close()
       else:
         result = None
       return result
