@@ -1321,6 +1321,7 @@ config:
       (except those marked abstract). This is an alternative way of sharing
       code (compared with inheritance, beta-style subreplacement, etc.)
       TODO(wmh): This is not yet implemented ... experimental.
+      TODO(wmh): Is this different from prerec?
 
     secondary
     Attribute postamble: : simplex = <empty> #:
@@ -1328,6 +1329,7 @@ config:
       (except those marked abstract). This is an alternative way of sharing
       code (compared with inheritance, beta-style subreplacement, etc.)
       TODO(wmh): This is not yet implemented ... experimental.
+      TODO(wmh): Is this different from postrec?
 
     Attribute comment:;
     Attribute icomment:;
