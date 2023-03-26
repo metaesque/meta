@@ -110,6 +110,18 @@ scope:
     clinit<py>:
       cls.RegexpClass = re.compile('.').__class__
       cls.InvalidValue = object()
+      cls.TimeUnits = {
+        /# How many seconds in the given time unit
+        's': 1,
+        'm': 60,
+        'h': 3600,
+        'd': 86400,
+        'w': 604800,
+        /# We intentionally do not provide units for month or year because
+        /# the number of seconds in a month or year varies.
+      }
+
+      cls.NegNumRe = re.compile('^-(?:\d*\.\d+|\d+(\.\d+)?)')
     end lifecycle;
 
     method typecheck : any #:
@@ -174,43 +186,59 @@ scope:
 
       elif mytype == 'date':
         m = re.match(
-          '^(?:to)?(?P<kind>minute|hour|day|week|month|year)'
-          '(?:(?P<sign>[-+])(?P<adj>\d+))?', value)
+          '^(?:to)?(?P<kind>now|sec|min(?:ute)?|hr|hour|day|week|mon(?:th)?|yr|year)'
+          '(?:(?P<sign>[-+])(?P<adj>\d+)(?P<unit>[smhdw])?)?', value)
         if m:
           now = datetime.datetime.now()
           onesec = datetime.timedelta(seconds=1)
           kind = m.group('kind')
           sign = m.group('sign') or ''
+          unit = m.group('unit')  /# This may be null, in which case defunit is used
+          defunit = None  /# initialized below
+
           adj = int(m.group('adj') or 0)
           if sign == '-':
             adj = -adj
-          if kind == 'sec':
+          if kind in {'sec', 'now'}:
             result = now.replace(microsecond=0)
-            result += onesec * adj
-          elif kind == 'min':
+            defunit = 's'
+            /# result += onesec * adj
+          elif kind.startswith('min'):
             result = now.replace(second=0, microsecond=0)
-            result += onesec * adj * 60
-          elif kind == 'hour':
+            defunit = 'm'
+            /# result += onesec * adj * 60
+          elif kind in {'hour', 'hr'}:
             result = now.replace(minute=0, second=0, microsecond=0)
-            result += onesec * adj * 60 * 60
+            defunit = 'h'
+            /# result += onesec * adj * 60 * 60
           elif kind == 'day':
             result = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            result += onesec * adj * 60 * 60 * 24
-          elif kind == 'month':
+            defunit = 'd'
+            /# result += onesec * adj * 60 * 60 * 24
+          elif kind.startswith('mon'):
             result = now.replace(
               day=1, hour=0, minute=0, second=0, microsecond=0)
-            oneday = datetime.timedelta(days=1)
-            if sign == '-': oneday = oneday * -1
+            /# oneday = datetime.timedelta(days=1)
+            /# if sign == '-': oneday = oneday * -1
             /# TODO(wmh): Fix me!
             result += onesec * adj * 60 * 60 * 24 * 30
-          elif kind == 'year':
+            unit = None
+          elif kind in {'year', 'yr'}:
             result = now.replace(
               month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
             /# TODO(wmh): Fix this ... this does not properly return the
             /# first of a year!
             result += onesec * adj * 60 * 60 * 24 * 365
+            unit = None
           else:
             raise Error('Invalid kind "%s"' % kind)
+
+          /# The code above has established a unit for adj. We increment
+          /# result accordingly
+          if unit is None:
+            unit = defunit
+          if unit is not None:
+            result += onesec * adj * Part.TimeUnits[unit]
         else:
           val = re.sub(r'[-/@:T ]', '', value)
           n = len(val)
@@ -224,8 +252,9 @@ scope:
             result = datetime.datetime.strptime(val, '%Y%m%d%H%M')
           elif n == 14:
             result = datetime.datetime.strptime(val, '%Y%m%d%H%M%S')
-          elif val == 'now':
-            result = datetime.datetime.now()
+          else:
+            /# TODO(wmh): Handle this more gracefully
+            raise Error('Invalid date "%s"' % value)
 
       elif mytype == 're':
         if value == '':
@@ -326,8 +355,8 @@ scope:
     test<py>:
       test.iseq('metac', test.command.fqn())
       test.iseq('metac_canonical', test.subcommand.fqn())
-      test.iseq('deps', test.intflag.fqn())
-      test.iseq('length', test.arg2.fqn())
+      test.iseq('faux_deps', test.intflag.fqn())
+      test.iseq('faux_image_length', test.arg2.fqn())
     end method fqn;
 
     method isCommand : bool scope<py>:
@@ -389,7 +418,7 @@ scope:
       unlike 'commands', which has entries for every alias as well.
 
     field commands : @map<str,Command> #:
-      Maps command names anad aliases to Command instances.
+      Maps sub-command names and aliases to Command instances.
 
     field parts : @map<str,Part> #:
       Maps flag names and aliases to Flag instances, and arg names, aliases
@@ -513,6 +542,7 @@ scope:
       test.command.help(fp=fp, mode='helpful')
       test.iseqtext("""\
         >|metac          : None
+        >|
         >|metac:
         >|  --baselang|b : str = "<special>"
         >|    The baselang to compile into.
@@ -523,7 +553,8 @@ scope:
         >|  --metalang|L : str = "oopl"
         >|    The metalang the code is defined in.
         >|
-        >|  canonical:
+        >|
+        >|  canonical|can:
         >|    Canonicalize the specified meta files and report diffs.
         >|    --baselang|b : str = "<special>"
         >|      The baselang to compile into.
@@ -554,7 +585,7 @@ scope:
     end method findCommand;
 
     method registerCommand #:
-      Register this command.
+      Register a sub-command within this command.
     params:
       var command : Command #:
         docstr
@@ -788,7 +819,7 @@ scope:
       /#if default is None:
       /#  raise Error('Flag --%s : %s needs a default value' % (name, mytype))
       result = Flag(
-        name, mytype=mytype, default=default, aliases=aliases,
+        name, parent=self, mytype=mytype, default=default, aliases=aliases,
         summary=summary, desc=desc)
       self.registerPart(result)
       return result
@@ -860,7 +891,7 @@ scope:
           mytype = 'list<' + mytype + '>'
         default = []
       result = Arg(
-        name, mytype=mytype, default=default, aliases=aliases,
+        name, parent=self, mytype=mytype, default=default, aliases=aliases,
         summary=summary, desc=desc)
       self.registerPart(result)
       return result
@@ -916,11 +947,11 @@ scope:
         args or a subcommand. If a subcommand is found, this method is
         recursively invoked to identify the subcommand.
       var parent : Command = null #:
-        The parent command, relevant when parsing a subcommand.  When
-        passing command line arguments to this method, this is null.
-        Be careful about passing in parent=null in other situations ... the
-        name field is tromped if parent is null, which can be a subtle
-        source of errors.
+        The parent command, relevant when parsing a subcommand, and
+        for flags/args. When passing command line arguments to this
+        method, this is null. Be careful about passing in parent=null
+        in other situations ... the name field is tromped if parent is
+        null, which can be a subtle source of errors.
       var start : bool = false #:
         True if argv represents command line arguments.  If true, the
         'start' field of Flag and Arg instances are initialized during
@@ -955,8 +986,7 @@ scope:
             "Invocation of command '%s' when seeing command '%s'" %
             (self.name(), argv[0]))
 
-      fre = re.compile(r'^(-{1,2})([^= ]+)(?:=(.*))?')
-      negnumre = re.compile('^-(?:\d*\.\d+|\d+(\.\d+)?)')
+      negnumre = Part.NegNumRe
 
       /# Now parse flags/args/subcommands.
       index = 1
@@ -968,86 +998,18 @@ scope:
         nextitem = argv[index+1] if index < nm1 else None
         if debug:
           print('Working on index=%d item="%s" next="%s"' % (index, item, nextitem))
+
         if item and item[0] == '-' and not negnumre.match(item):
           /# We are parsing a flag.
-          m = fre.match(item)
-          flagmark = m.group(1)
-          flagname = m.group(2)
-          flagval = m.group(3)
-          if flagmark == '-':
-            /# Only single-letter flags can be specified with '-', and
-            /# multiple can be merged together. Only the last one can have
-            /# a value (all others must be of type bool
-            if flagval is not None:
-              errors.append('Cannot inline assign to short flags (%s)' % item)
-              break
-            shorts = list(flagname)
-            sn = len(shorts)
-            for si, short in enumerate(shorts):
-              flag = result.findPart(short)
-              if flag:
-                flagtype = flag.mytype()
-                if si < sn - 1:
-                  /# There are other short flags after this one, so this flag
-                  /# must be boolean.
-                  if flagtype != 'bool':
-                    errors.append(
-                      'Using -%s in %s which must be boolean but --%s is %s' %
-                      (short, item, flag.name(), flagtype))
-                    break
-                /# Set the value.
-                res = flag.instantiate(short, None, nextitem)
-                if res is None:
-                  /# We failed to set the flag.
-                  errors.append(
-                    '%s cannot have value "%s"' %
-                    (flag.title(), flagval or nextitem))
-                else:
-                  /# We successfully set the flag
-                  if res is True:
-                    /# We consumed nextitem
-                    index += 1
-                  if start:
-                    flag.startIs(flag.value())
-                  if debug:
-                    print('DEBUG: item "%s" sets flag "--%s" to "%s"' % (
-                      item, flag.name(), flag.value()))
-              else:
-                errors.append(
-                  'Command %s does not recognize flag -%s' %
-                  (result.name(), short))
-            if errors:
-              break
-          else:
-            /# We have a longform flag.
-            flag = result.findPart(flagname)
-            if not flag and flagname.startswith('no'):
-              flag = result.findPart(flagname[2:])
-            if flag:
-              /# The flag is legal. Obtain the value and typecheck.
-              flagtype = flag.mytype()
-              res = flag.instantiate(flagname, flagval, nextitem)
-              if res is None:
-                /# We failed to set the flag.
-                errors.append(
-                  '%s cannot have value "%s"' % (flag.title(), flagval))
-                break
-              else:
-                /# We succeeded in setting the flag.
-                if res:
-                  /# The next arg was consumed.
-                  index += 1
-                if start:
-                  flag.startIs(flag.value())
-                if debug:
-                  print(
-                    'DEBUG: item "%s" sets flag "--%s" to "%s"' %
-                    (item, flagname, flag.value()))
-            else:
-              errors.append(
-                'Command %s does not recognize flag --%s' %
-                (result.name(), flagname))
-              break
+          flag_adv, flag_err = result._parseFlag(
+            item, nextitem, errors, start=start, debug=debug)
+          if flag_adv:
+            /# the flag consumes nextitem
+            index += 1
+          if flag_err:
+            /# an error occurred during flag parsing (details in errors)
+            break
+
         else:
           /# This item is either a subcommand or a positional arg.
           command = result.findCommand(item)
@@ -1060,6 +1022,7 @@ scope:
             /# The recursive call consumes all args, so we are done.
             index = argc
             break
+
           else:
             /# This must be an argument. We see if one is defined for arg
             /# index 'current_arg_index'.
@@ -1068,7 +1031,7 @@ scope:
               if debug:
                 print('DEBUG: Identified arg %s at position %d' % (arg.name(), current_arg_index))
 
-              next_index = arg.instantiate(argv, index)
+              next_index = arg.instantiate(argv, index, self)
               if next_index > -1:
                 /# We have a valid arg.
                 if debug:
@@ -1158,6 +1121,7 @@ scope:
         test.iseqvec(['./person', 'image'], res.names())
 
         test.iseqtext("""\
+          >|
           >|faux:
           >|  A command with a flag and arg of each type.
           >|  --deps : int = 0
@@ -1174,14 +1138,17 @@ scope:
           >|    Misc. trilean flag
           >|  --version|r : re = |<
           >|    Version to use.
+          >|
           >|  image:
           >|    Image processing.
-          >|  list:
+          >|
+          >|  list|dir:
           >|    Image listing
           >|""",
           before)
 
         test.iseqtext("""\
+          >|
           >|image:
           >|  Image processing.
           >|""",
@@ -1191,7 +1158,8 @@ scope:
         res.show(fp=test.fp(), mode='helpful')
 
         test.iseqtext("""\
-          >|list:
+          >|
+          >|list|dir:
           >|  Image listing
           >|  --deps : int = 0
           >|    Number of dependents.
@@ -1231,11 +1199,14 @@ scope:
           summary='The public interface to the Meta compiler.')
         hierarchy_command = command.newCommand(
           'hierarchy', aliases='hier', summary='Print hierarchy')
+        hierarchy_command.newFlag(
+          'mode', aliases='m', mytype='str', default='default')
         hierarchy_command.newArg(
           'rest', multi=True, summary='Leftover args.')
         res = command.instantiate(
-          ['dummy', 'hierarchy', 'a.b'], start=True, debug=False)
+          ['dummy', 'hierarchy', '--mode=normal', 'a.b', '-m', 'special'], start=True, debug=False)
         test.iseq('hierarchy', res.name())
+        test.iseq('special', res.findPart('mode').value())
         test.iseq(['a.b'], res.findPart('rest').value())
 
       testx t2 scope<py>:
@@ -1254,6 +1225,124 @@ scope:
         test.isapprox(1.87, values.height)
         test.isapprox(190, values.weight)
     end method instantiate;
+
+    method _parseFlag : tuple<bool,bool> #:
+      Process a command line argument that denotes a flag.
+
+      Returns:
+        0. nextitem_consumed : bool
+             true if nextitem is consumed by this flag
+        1. error : bool
+             true if an error occurred during parsing.
+    params:
+      var item : str #:
+        The command line arg representing a flag
+      var nextitem : str #:
+        The command line arg after the flag, which may or may not be the arg
+        for the flag, depending on its type.
+      var out_errors : vec<str> #:
+        Where errors are written
+      var start : bool = false #:
+        True if argv represents command line arguments.  If true, the
+        'start' field of Flag and Arg instances are initialized during
+        instantiation. If false, they are not initialized.
+      var debug : bool = false #:
+        If true, turn on debugging output. Useful in tracking down esoteric
+        errors, which are easy to create if one is careless about passing
+        in the wrong combination of argv and parent.
+    scope:
+      local_errors = []
+      fre = re.compile(r'^(-{1,2})([^= ]+)(?:=(.*))?')
+      m = fre.match(item)
+      if not m:
+        out_errors.append('Expecting flag, found "%s"' % item)
+        return False, True
+      /# print(f'{item=} {nextitem=} {m=!s}')
+      flagmark = m.group(1)
+      flagname = m.group(2)
+      flagval = m.group(3)
+      flagarg = False
+      if flagmark == '-':
+        /# Only single-letter flags can be specified with '-', and
+        /# multiple can be merged together. Only the last one can have
+        /# a value (all others must be of type bool
+        if flagval is not None:
+          local_errors.append('Cannot inline assign to short flags (%s)' % item)
+
+        else:
+          shorts = list(flagname)
+          sn = len(shorts)
+          for si, short in enumerate(shorts):
+            flag = self.findPart(short)
+            if flag:
+              flagtype = flag.mytype()
+              if si < sn - 1:
+                /# There are other short flags after this one, so this flag
+                /# must be boolean.
+                if flagtype != 'bool':
+                  local_errors.append(
+                    'Using -%s in %s which must be boolean but --%s is %s' %
+                    (short, item, flag.name(), flagtype))
+                  break
+              /# Set the value.
+              res = flag.instantiate(short, None, nextitem)
+              if res is None:
+                /# We failed to set the flag.
+                local_errors.append(
+                  '%s cannot have value "%s"' %
+                  (flag.title(), flagval or nextitem))
+              else:
+                /# We successfully set the flag
+                if res is True:
+                  /# We consumed nextitem
+                  flagarg = True
+                  /# index += 1
+                if start:
+                  flag.startIs(flag.value())
+                if debug:
+                  print('DEBUG: item "%s" sets flag "--%s" to "%s"' % (
+                    item, flag.name(), flag.value()))
+            else:
+              local_errors.append(
+                'Command %s does not recognize flag -%s' %
+                (self.name(), short))
+      else:
+        /# We have a longform flag.
+        flag = self.findPart(flagname)
+        if not flag and flagname.startswith('no'):
+          flag = self.findPart(flagname[2:])
+        if flag:
+          /# The flag is legal. Obtain the value and typecheck.
+          flagtype = flag.mytype()
+          res = flag.instantiate(flagname, flagval, nextitem)
+          if res is None:
+            /# We failed to set the flag.
+            local_errors.append(
+              '%s cannot have value "%s"' % (flag.title(), flagval))
+          else:
+            /# We succeeded in setting the flag.
+            if res:
+              /# The next arg was consumed.
+              flagarg = True
+              /# index += 1
+            if start:
+              flag.startIs(flag.value())
+            if debug:
+              print(
+                'DEBUG: item "%s" sets flag "--%s" to "%s"' %
+                (item, flagname, flag.value()))
+        else:
+          local_errors.append(
+            'Command %s does not recognize flag --%s' %
+            (self.name(), flagname))
+
+      err = False
+      if local_errors:
+        out_errors.extend(local_errors)
+        err = True
+      return flagarg, err
+    test:
+    end method _parseFlag;
 
     method findValue : any #:
       Obtain the value of a flag or arg defined within this command.
@@ -1358,12 +1447,13 @@ scope:
 
     lifecycle params:
       var name : str;
+      var parent : Command = null;
       var mytype -> mytype = 'str';
       var default -> default = null;
       var aliases : str = null;
       var summary : str = null;
       var desc : str = null;
-    super (name, aliases=aliases, summary=summary, desc=desc)
+    super (name, parent=parent, aliases=aliases, summary=summary, desc=desc)
     scope<py>:
       default = self.default()
       if default is None:
@@ -1505,11 +1595,76 @@ scope:
         The values being processed.
       var index : int #:
         The index within values corresponding to this arg.
+      var command : Command #:
+        The command performing the instantiation. Added 2023-03-26 to support
+        end-of-command-line parsing of flags within this method. We cannot
+        rely on self.parent() always being the Command instance invoking this
+        method (self.parent() represents the Command where the arg is defined,
+        but a sub-command may be invoking it).
     scope<py>:
       error = None
       if self.ismulti():
         /# This is a multi-valued arg (i.e. type 'list<...>')
         value_list = values[index:]
+
+        process_flags = False
+        if self.name() == 'rest':
+          /# For the special "catch-all" arg 'rest', we support the use-case
+          /# where command flags exist at the end of the arg list.
+          /#  - we do NOT currently support flags being arbitrarily mixed with
+          /#    the arg list, only at the end.
+          /#  - the special item '--' means "do not process the arg list for
+          /#    flags" (and is removed from the final list)
+          /#  - the first value in value_list that looks like a flag ends the
+          /#    value_list, and all subsequent elements must be fully parsed
+          /#    as flags.
+          try:
+            idx = value_list.index('--')
+          except ValueError:
+            /# There is no '--', so flag processing is to be performed
+            process_flags = True
+          else:
+            /# Found -- in value_list, so we are NOT doing flag processing.
+            /# We remove '--' from the list.
+            value_list.pop(idx)
+
+        if process_flags:
+          /# We are to process flags within value_list (but only at the end). We
+          /# find the first index starting with '-' that isn't a number.
+          negnumre = Part.NegNumRe
+          flagidx = None
+          for i, v in enumerate(value_list):
+            if v[0] == '-' and not negnumre.match(v):
+              flagidx = i
+          if flagidx is not None:
+            flag_list = value_list[flagidx:]
+            value_list = value_list[:flagidx]
+            /# print('FLAGS: %s' % str(flag_list))
+            errors = []
+
+            /# Note that we do NOT use self.parent(), but instead rely on the
+            /# passed in 'command' argument. See docstr for details on why.
+            if command:
+              n = len(flag_list)
+              i = 0
+              while i < n:
+                item = flag_list[i]
+                nextitem = flag_list[i+1] if i+1<n else None
+                flag_adv, flag_err = command._parseFlag(
+                  item, nextitem, errors, start=False, debug=False)
+                i += 1
+                if flag_adv:
+                  i += 1
+                if flag_err:
+                  break
+              if errors:
+                for error in errors:
+                  print('ERROR: ' + error)
+                /# NOTE: raising an exception here leads to confusing output,
+                /# because there is another catch higher up the call change
+                /# that reinvokes this method in a different way.
+                /# raise Error('Flag parsing problem (handle this better!)')
+
         realval = self.typecheck(value_list)
 
         if realval is Part.InvalidValue:
@@ -1548,7 +1703,7 @@ scope:
       test.isnull(arg1.value())
 
       def Chk(arg, values, index, expected_index, expected_value):
-        test.iseq(expected_index, arg.instantiate(values, index))
+        test.iseq(expected_index, arg.instantiate(values, index, None))
         test.iseq(expected_value, arg.value())
 
       Chk(arg1, values, 1, 2, 500)
@@ -1657,6 +1812,7 @@ scope:
       fp = test.fp()
       test.command.show(fp=fp, mode='help')
       test.iseqtext("""\
+        >|
         >|metac:
         >|  --baselang|b : str = "<special>"
         >|    The baselang to compile into.
@@ -1664,7 +1820,8 @@ scope:
         >|    The subdir to write code to.
         >|  --metalang|L : str = "oopl"
         >|    The metalang the code is defined in.
-        >|  canonical:
+        >|
+        >|  canonical|can:
         >|    Canonicalize the specified meta files and report diffs.
         >|    --expand|e : bool = False
         >|      If true, invoke expandMeta() before canonicalizing

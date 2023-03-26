@@ -12910,9 +12910,9 @@ scope:
         /# raw testing.
         'python': {
           /# 'default': 'python',
-          'default': 'python3',
+          'default': 'python3.10',
           'old': 'python2',
-          'new': 'python3',
+          'new': 'python3.10',
         }
       }
       if basebinary and basebinary[0] == '/' and fs.exists(basebinary):

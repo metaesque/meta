@@ -340,10 +340,11 @@ scope:
         The character or characters to use for the separator
       var width : int = 80 #:
         Maximum indent (takes into account current indentation)
+      var indent : str = '' #:
+        Insert this in front of separator (in addition to existing prefix)
     scope:
-      w = (width - len(self.prefix())) // len(chr)
-      self.writeln(chr * w)
-
+      w = (width - len(self.prefix()) - len(indent)) // len(chr)
+      self.writeln(indent + (chr * w))
     test:
     end method writesep;
 
