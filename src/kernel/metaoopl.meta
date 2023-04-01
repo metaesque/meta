@@ -1442,8 +1442,9 @@ namespace metax.oopl scope:
           new_lines = []
           new_lines.append('try:')
           new_lines.append('  import ' + fqn)
-          new_lines.append('except ImportError:')
-          new_lines.append('  pass')
+          new_lines.append('except ImportError as e:')
+          new_lines.append(
+            "  print('ERROR: (while importing %s) %%s' %% str(e))" % fqn)
 
           if special:
             parent_nmsp, base_nmsp = fqn.rsplit('.', 1)

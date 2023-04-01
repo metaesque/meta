@@ -12956,45 +12956,7 @@ scope:
                 newfqns.append(fqn_prefix + mname)
           fqns = newfqns
 
-      tester_map = {}
-      raw_commands = []
-      for fqn in fqns:
-        /# Establish target info for the specified fqn.
-        newdata = baselang.fqnToTarget(fqn)
-
-        /# Validate fqn
-        error = newdata.get('error', None)
-        if error:
-          print('ERROR: %s' % error)
-          continue
-        /# pprint.pprint(newdata)
-        test_target = newdata['test_target']
-        test_arg = newdata.get('test_arg', None)
-
-        /# Establish the command to execute.
-        if rawtests:
-          /# Do not use bazel
-          /#  - TODO(wmh): Should BaseLanguageOopl.fqnToTarget(fqn) compute
-          /#    command?
-          command = [rawexec, newdata['test_path']]
-          if test_arg:
-            command.append(test_arg)
-        else:
-          /# DO use bazel
-          command = [
-            Compiler.CONFIG['bazel'],
-            'test',
-            /#'--explain',
-            /#'--verbose_explanations',
-          ]
-          if flags.write_goldens:
-            /# https://docs.bazel.build/versions/master/user-manual.html#flag--test_env
-            command.append('--test_env=WRITE_GOLDENS=true')
-          if test_arg:
-            command.append('--test_arg=' + test_arg)
-          command.append('--test_output=summary')
-          command.append(test_target)
-
+      def ExecuteCommand(command):
         /# Print out the command being executed.
         if verbose:
           print(' %% cd %s' % cwd)
@@ -13011,12 +12973,49 @@ scope:
         /# Execute the command
         stdpipe = None if dump else subprocess.PIPE
         p = subprocess.Popen(
-          command, cwd=cwd, env=env,
-          stdout=stdpipe, stderr=stdpipe)
+          command, cwd=cwd, env=env, stdout=stdpipe, stderr=stdpipe)
+        return p
 
-        /# Process the result
-        if rawtests:
+      /# Establish target information
+      targets = []
+      common_map = {}
+      for fqn in fqns:
+        /# Establish target info for the specified fqn.
+        target_data = baselang.fqnToTarget(fqn)
+
+        /# Validate fqn
+        error = target_data.get('error', None)
+        if error:
+          print('ERROR: %s' % error)
+          continue
+        targets.append(target_data)
+        /# We group all targets sharing same path and namespace together
+        pkey = target_data['test_path'] + ':' + target_data['namespace']
+        common_map.setdefault(pkey, []).append(target_data)
+
+      if rawtests:
+        /# Do not use bazel
+
+        /# We know that common_map contains lists of targets that share
+        /# the same test path and namespace. We can execute a single test
+        /# command for each such grouping.
+        for target_list in common_map.values():
+          test_path = target_list[0]['test_path']
+          namespace  = target_list[0]['namespace']
+
+          /# Establish the command to execute.
+          command = [rawexec, test_path]
+          for target_data in target_list:
+            test_arg = target_data.get('test_arg', None)
+            if test_arg:
+              command.append(test_arg)
+
+          /# Execute command
+          p = ExecuteCommand(command)
+
+          /# Parse output
           stdout, stderr = p.communicate()
+          namespace = target_data['namespace']
 
           if False:
             print('#' * 80)
@@ -13026,7 +13025,7 @@ scope:
             print(stderr)
             print('-' * 80)
             print('cwd = %s' % cwd)
-            print('namespace = %s' % newdata['namespace'])
+            print('namespace = %s' % namespace)
             print('nofilt = %s' % flags.raw)
             print('#' * 80)
 
@@ -13038,11 +13037,33 @@ scope:
             verbosity = 1 if verbose else 0
             timestamp = time.time()
             baselang.processTestOutput(
-              stdout, stderr, cwd, newdata['namespace'],
+              stdout, stderr, cwd, namespace,
               nofilt=flags.raw, timestamp=timestamp,
               verbosity=verbosity)
 
-        else:
+      else:
+        /# DO use bazel
+        for target_data in targets:
+          test_arg = target_data.get('test_arg', None)
+          test_target = target_data['test_target']
+          command = [
+            Compiler.CONFIG['bazel'],
+            'test',
+            /#'--explain',
+            /#'--verbose_explanations',
+          ]
+          if flags.write_goldens:
+            /# https://docs.bazel.build/versions/master/user-manual.html#flag--test_env
+            command.append('--test_env=WRITE_GOLDENS=true')
+          if test_arg:
+            command.append('--test_arg=' + test_arg)
+          command.append('--test_output=summary')
+          command.append(test_target)
+
+          /# Execute command
+          p = ExecuteCommand(command)
+
+          /# Process the result
           try:
             tests = self.parseBazelOutput(
               stdout=p.stdout, stderr=p.stderr, debug=debug)
