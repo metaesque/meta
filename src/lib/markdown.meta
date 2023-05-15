@@ -1801,6 +1801,14 @@ scope:
       test.istrue(test.table.isTable())
     end method isTable;
 
+    method isQuote : bool scope:
+      return False
+    test:
+      test.isfalse(test.section.isQuote())
+      test.isfalse(test.p1.isQuote())
+      test.istrue(test.quote.isQuote())
+    end method isQuote;
+
     method isList : bool scope:
       return False
     test:
@@ -2921,6 +2929,14 @@ scope:
       /# the caller to do so.
       self.linesIs(lines)
     end lifecycle;
+
+    method isQuote : bool scope:
+      return True
+    test:
+      test.isfalse(test.section.isQuote())
+      test.isfalse(test.p1.isQuote())
+      test.istrue(test.quote.isQuote())
+    end method isQuote;
 
     method blobs : vec<str> #:
       Convert this block into a collection of strings suitable for use

@@ -787,7 +787,7 @@ end namespace %s;
 (defun metaoopl-insert-method-template (method_name method_type)
   (interactive "sMethod Name: \nsMethod Type: ")
   (insert (format "
-    method %s : %s #:
+    method %s%s #:
       docstr
     params:
       var a : int #:
@@ -795,7 +795,10 @@ end namespace %s;
     scope:
     test:
     end method %s;
-" method_name method_type method_name)))
+"
+   method_name
+   (if (string= "" method_type) "" (concat " : " method_type))
+   method_name)))
 
 ;*****************************************
 ;* Construct field
@@ -1327,6 +1330,13 @@ such newline-indentation is provided.")
 )
 
 ;; The mode method
+;;  - PROBLEMS TO FIX:
+;;     - when in a comment block, pressing tab should indent to first character
+;;       in block
+;;        - however, when there is an unmatch parenthesis, indentation instead
+;;          goes to that paren.
+;;        - possible solutions:
+;;           https://www.gnu.org/software/emacs/manual/html_node/elisp/Mode_002dSpecific-Indent.html
 (defun metaoopl-mode ()
   "Major mode for editing Meta(Oopl) language files"
   (interactive)

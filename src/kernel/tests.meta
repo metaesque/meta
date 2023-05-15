@@ -1970,8 +1970,8 @@ scope:
       else:
         if not member in container:
           self.fail(
-            'Failed to find\n  "%s"\nin\n  %s\n%s' %
-            (member, container.replace('\n', '\n  ') if isinstance(container, str) else container, msg or ''))
+            'Failed to find\n  "%s"\nin\n  |%s\n%s' %
+            (member, container.replace('\n', '\n  |') if isinstance(container, str) else container, msg or ''))
     test<py>:
       tc = self._tc
       tc.setUp()
@@ -2090,30 +2090,30 @@ scope:
     params:
       var item : any;
       var expected : any = MISSING;
-      var message : str = null;
+      var msg : str = null;
     scope<py>:
       if expected is MISSING:
         /# This is a request to print out the item, rather than compare against
         /# expected.
-        print(u'iseq: %s' % str(item))
+        print('iseq: %s%s' % (str(item), ' [%s]' % msg if msg else ''))
       else:
-        if message is None:
+        if msg is None:
           sitem = str(item)
           if '\n' in sitem:
             aval = sitem.replace('\n', '\\n')
             eval = str(expected).replace('\n', '\\n')
-            message = u'"%s" != "%s"' % (eval, aval)
-        self.assertEqual(item, expected, message)
+            msg = u'"%s" != "%s"' % (eval, aval)
+        self.assertEqual(item, expected, msg)
     test<py>:
       tc = self._tc
       tc.setUp()
       tc.iseq(1, 1)
       tc.raises(AssertionError, tc.iseq, 1, 2)
     scope<js>:
-      if (message == null) {
+      if (msg == null) {
         assertEquals(expected, item);
       } else {
-        assertEquals(message, expected, item);
+        assertEquals(msg, expected, item);
       }
     scope<cc>:
       throw metax::root::Error("TestCase.iseq() not yet implemented");
@@ -2128,26 +2128,26 @@ scope:
     params:
       var item : int;
       var expected : int = MISSING_INT;
-      var message : any = null;
+      var msg : any = null;
     scope<py>:
-      if message is None:
+      if msg is None:
         eval = str(expected).replace('\n', '\\n')
         aval = str(item).replace('\n', '\\n')
-        message = '"%s" != "%s"' % (eval, aval)
+        msg = '"%s" != "%s"' % (eval, aval)
       if expected is MISSING_INT:
         print(u'iseqint: %d' % item)
       else:
-        self.assertEqual(expected, item, message)
+        self.assertEqual(expected, item, msg)
     test<py>:
       tc = self._tc
       tc.setUp()
       tc.iseqint(1, 1)
       tc.raises(AssertionError, tc.iseqint, 1, 2)
     scope<js>:
-      if (message == null) {
+      if (msg == null) {
         assertEquals(expected, item);
       } else {
-        assertEquals(message, expected, item);
+        assertEquals(msg, expected, item);
       }
     scope<cc>:
       throw metax::root::Error("TestCase.iseq() not yet implemented");
@@ -2161,24 +2161,24 @@ scope:
     params:
       var item : any;
       var expected : any = MISSING;
-      var message : str = null;
+      var msg : str = null;
     scope<py>:
-      if message is None:
-        message = '%s == %s' % (str(expected), str(item))
+      if msg is None:
+        msg = '%s == %s' % (str(expected), str(item))
       if expected is MISSING:
         print('noteq: %s' % item)
       else:
-        self.assertNotEqual(expected, item, message)
+        self.assertNotEqual(expected, item, msg)
     test<py>:
       tc = self._tc
       tc.setUp()
       tc.noteq('abc', 'def')
       tc.raises(AssertionError, tc.noteq, 'abc', 'abc')
     scope<js>:
-      if (message == null) {
+      if (msg == null) {
         assertNotEquals(expected, item);
       } else {
-        assertNotEquals(message, expected, item);
+        assertNotEquals(msg, expected, item);
       }
     scope<cc>:
       throw metax::root::Error("TestCase.noteq() not yet implemented");
@@ -2193,28 +2193,28 @@ scope:
     params:
       var item : str;
       var expected : str = MISSING_STR;
-      var message : str = null;
+      var msg : str = null;
     scope<py>:
-      if message is None:
-        message = '%s != %s' % (expected, item)
+      if msg is None:
+        msg = '%s != %s' % (expected, item)
       if expected is MISSING_STR:
         print('iseqstr: %s' % item)
       else:
-        self.assertEqual(expected, item, message)
+        self.assertEqual(expected, item, msg)
     test<py>:
       tc = self._tc
       tc.setUp()
       tc.iseqstr('abc', 'abc')
       tc.raises(AssertionError, tc.iseqstr, 'abc', 'def')
     scope<js>:
-      if (message == null) {
+      if (msg == null) {
         assertEquals(expected, item);
       } else {
-        assertEquals(message, expected, item);
+        assertEquals(msg, expected, item);
       }
     scope<cc>:
       throw metax::root::Error("TestCase.iseq() not yet implemented");
-      if (message == metax::NullStr()) {
+      if (msg == metax::NullStr()) {
       } else {
       }
     end method iseqstr;
@@ -2224,25 +2224,25 @@ scope:
     params:
       var expected : str;
       var item : str;
-      var message : str = null;
+      var msg : str = null;
     scope<py>:
-      if message is None:
-        message = '%s == %s' % (expected, item)
-      self.assertNotEqual(expected, item, message)
+      if msg is None:
+        msg = '%s == %s' % (expected, item)
+      self.assertNotEqual(expected, item, msg)
     test<py>:
       tc = self._tc
       tc.setUp()
       tc.noteqstr('abc', 'def')
       tc.raises(AssertionError, tc.noteqstr, 'abc', 'abc')
     scope<js>:
-      if (message == null) {
+      if (msg == null) {
         assertNotEquals(expected, item);
       } else {
-        assertNotEquals(message, expected, item);
+        assertNotEquals(msg, expected, item);
       }
     scope<cc>:
       throw metax::root::Error("TestCase.iseq() not yet implemented");
-      if (message == metax::NullStr()) {
+      if (msg == metax::NullStr()) {
       } else {
       }
     end method noteqstr;
@@ -2250,7 +2250,7 @@ scope:
     method iseqvec params:
       var items : vec;
       var expected : vec = MISSING_VEC;
-      var message : str = null;
+      var msg : str = null;
     scope<py>:
       if expected is MISSING_VEC:
         print('iseqvec: %s' % str(items))
@@ -2273,17 +2273,17 @@ scope:
             lines.append('  %4s  %1s  %s' % ('', 'a', valstr))
         if diffs:
           print('\n'.join(lines))
-          self.fail(message)
+          self.fail(msg)
     test<py>:
       tc = self._tc
       tc.setUp()
       tc.istrue(True)
       tc.raises(AssertionError, tc.istrue, False)
     scope<js>:
-      if (message == null) {
+      if (msg == null) {
         assertElementsEquals(expected, items);
       } else {
-        assertElementsEquals(message, expected, items);
+        assertElementsEquals(msg, expected, items);
       }
     scope<cc>:
       throw metax::root::Error("TestCase.iseqvec() not yet implemented");
@@ -2438,17 +2438,37 @@ scope:
     method isapprox #:
       Compare two float values for closeness.
     params:
-      var f1 : double;
-      var f2 : double = MISSING_FLOAT;
-      var delta : double = 0.00001;
+      var f1 : any;
+      var f2 : any = MISSING_FLOAT;
+      var delta : float = 0.00001;
       var msg : str = null;
     scope<cc>:
       throw metax::root::Error("TestCase.isapprox() not yet implemented");
     scope<py>:
       if f2 is MISSING_FLOAT:
-        print('isapprox: %f' % f1)
+        msgfix = ' [%s]' % msg if msg else ''
+        if isinstance(f1, (list, tuple)):
+          n1 = [int(0.5 + v/delta) * delta if isinstance(v, float) else v for v in f1]
+          print('isapprox: %s%s' % (n1, msgfix))
+        elif isinstance(f1, dict):
+          n1 = {k: int(0.5 + v/delta) * delta if isinstance(v, float) else v for (k, v) in f1.items()}
+          print('isapprox: %s%s' % (repr(n1), msgfix))
+        else:
+          print('isapprox: %s%s' % ((int(0.5 + f1/delta) * delta), msgfix))
       else:
-        self.assertAlmostEqual(f1, f2, delta=delta, msg=msg)
+        if (
+          (isinstance(f1, list) and isinstance(f2, list))
+          or (isinstance(f1, tuple) and isinstance(f2, tuple))
+        ):
+          n1 = [int(0.5 + v/delta) * delta if isinstance(v, float) else v for v in f1]
+          n2 = [int(0.5 + v/delta) * delta if isinstance(v, float) else v for v in f2]
+          self.assertEqual(n1, n2)
+        elif isinstance(f1, dict) and isinstance(f2, dict):
+          n1 = {k: int(0.5 + v/delta) * delta if isinstance(v, float) else v for (k, v) in f1.items()}
+          n2 = {k: int(0.5 + v/delta) * delta if isinstance(v, float) else v for (k, v) in f2.items()}
+          self.assertEqual(n1, n2)
+        else:
+          self.assertAlmostEqual(f1, f2, delta=delta, msg=msg)
     test<py>:
       tc = self._tc
       tc.setUp()
@@ -2498,24 +2518,24 @@ scope:
     method islt params:
       var item : any;
       var expected : any = MISSING;
-      var message : any = null;
+      var msg : any = null;
     scope<py>:
       if expected is MISSING:
         print('islt: %s' % item)
       else:
-        if message is None:
-          message = '%s >= %s' % (str(expected), str(item))
-        self.assertLess(item, expected, message)
+        if msg is None:
+          msg = '%s >= %s' % (str(expected), str(item))
+        self.assertLess(item, expected, msg)
     test<py>:
       tc = self._tc
       tc.setUp()
       tc.islt(1, 2)
       tc.raises(AssertionError, tc.islt, 2, 1)
     scope<js>:
-      if (message == null) {
-        message = '' + expected + ' >= ' + item;
+      if (msg == null) {
+        msg = '' + expected + ' >= ' + item;
       }
-      assertTrue(message, expected < item);
+      assertTrue(msg, expected < item);
     scope<cc>:
       throw metax::root::Error("TestCase.islt() not yet implemented");
     end method islt;
@@ -2523,24 +2543,24 @@ scope:
     method isle params:
       var item : any;
       var expected : any = MISSING;
-      var message : any = null;
+      var msg : any = null;
     scope<py>:
       if expected is MISSING:
         print('isle: %s' % item)
       else:
-        if message is None:
-          message = '%s > %s' % (str(expected), str(item))
-        self.assertLessEqual(item, expected, message)
+        if msg is None:
+          msg = '%s > %s' % (str(expected), str(item))
+        self.assertLessEqual(item, expected, msg)
     test<py>:
       tc = self._tc
       tc.setUp()
       tc.isle(1, 1)
       tc.raises(AssertionError, tc.isle, 2, 1)
     scope<js>:
-      if (message == null) {
-        message = '' + expected + ' > ' + item;
+      if (msg == null) {
+        msg = '' + expected + ' > ' + item;
       }
-      assertTrue(message, expected <= item);
+      assertTrue(msg, expected <= item);
     scope<cc>:
       throw metax::root::Error("TestCase.isle() not yet implemented");
     end method isle;
@@ -2548,24 +2568,24 @@ scope:
     method isgt params:
       var item : any;
       var expected : any = MISSING;
-      var message : any = null;
+      var msg : any = null;
     scope<py>:
       if expected is MISSING:
         print('isle: %s' % item)
       else:
-        if message is None:
-          message = '%s <= %s' % (str(expected), str(item))
-        self.assertGreater(item, expected, message)
+        if msg is None:
+          msg = '%s <= %s' % (str(expected), str(item))
+        self.assertGreater(item, expected, msg)
     test<py>:
       tc = self._tc
       tc.setUp()
       tc.isgt(2, 1)
       tc.raises(AssertionError, tc.isgt, 1, 2)
     scope<js>:
-      if (message == null) {
-        message = '' + expected + ' <= ' + item;
+      if (msg == null) {
+        msg = '' + expected + ' <= ' + item;
       }
-      assertTrue(message, expected > item);
+      assertTrue(msg, expected > item);
     scope<cc>:
       throw metax::root::Error("TestCase.isgt() not yet implemented");
     end method isgt;
@@ -2573,24 +2593,24 @@ scope:
     method isge params:
       var item : any;
       var expected : any = MISSING;
-      var message : any = null;
+      var msg : any = null;
     scope<py>:
       if expected is MISSING:
         print('isle: %s' % item)
       else:
-        if message is None:
-          message = '%s < %s' % (str(expected), str(item))
-        self.assertGreaterEqual(item, expected, message)
+        if msg is None:
+          msg = '%s < %s' % (str(expected), str(item))
+        self.assertGreaterEqual(item, expected, msg)
     test<py>:
       tc = self._tc
       tc.setUp()
       tc.isge(2, 2)
       tc.raises(AssertionError, tc.isge, 1, 2)
     scope<js>:
-      if (message == null) {
-        message = '' + expected + ' < ' + item;
+      if (msg == null) {
+        msg = '' + expected + ' < ' + item;
       }
-      assertTrue(message, expected >= item);
+      assertTrue(msg, expected >= item);
     scope<cc>:
       throw metax::root::Error("TestCase.isge() not yet implemented");
     end method isge;
@@ -2757,7 +2777,7 @@ scope:
       var path : str #:
         A path to verify exists.
       var msg : str = null #:
-        The message to print on failure.
+        The msg to print on failure.
     scope<cc>:
       throw metax::root::Error(
         "TestCase.exists() not yet implemented");
@@ -2778,7 +2798,7 @@ scope:
       var path : str #:
         A path to verify does not exist.
       var msg : str = null #:
-        The message to print on failure.
+        The msg to print on failure.
     scope<cc>:
       throw metax::root::Error(
         "TestCase.notexists() not yet implemented");

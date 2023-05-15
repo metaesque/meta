@@ -6580,8 +6580,8 @@ namespace metax.oopl scope:
             voidtype = metax.c.Type.Instance('void')
 
             if (
-              variant == 'meta'
-              or kind == 'initializer'
+              /# variant == 'meta'
+              kind == 'initializer'
             ):
               /# For meta classes, initializer, and abstract methods, we do
               /# not produce a warning message.
@@ -7567,14 +7567,16 @@ namespace metax.oopl scope:
 
         elif kind == 'command':
           if len(subcmds) == 0:
-            /# This is the first subcommand ... insert an initial block that
-            /# handles help requests.
-            command_body.append('')
-            command_body.append(
-              "%sif cli.rest and cli.rest[0].startswith('help'):" % indent)
-            command_body.append(
-              '%s  meta__command.help'
-              "(mode='helpfull' if 'ful' in cli.rest[0] else ('hlp' if 'sh' in cli.rest[0] else 'help'), commands=cli.rest[1:])" % indent)
+            /# This is the first subcommand. We used to insert an initial block
+            /# that handles help requests, but that has been moved up into
+            /# preamble,so now it is a noop placeholder.
+            command_body.append("%sif False:" % indent)
+            command_body.append('%s  pass' % indent)
+            /#command_body.append(
+            /#  "%sif cli.rest and cli.rest[0].startswith('help'):" % indent)
+            /#command_body.append(
+            /#  '%s  meta__command.help'
+            /#  "(mode='helpfull' if 'ful' in cli.rest[0] else ('hlp' if 'sh' in cli.rest[0] else 'help'), commands=cli.rest[1:])" % indent)
           elif default_encountered:
             /# We previously encountered the special default command, which
             /# must occur after all other commands, so the current one is
@@ -7703,6 +7705,13 @@ namespace metax.oopl scope:
         command_preamble.append('if meta__command is None:')
         command_preamble.append('  return')
         command_preamble.append('meta__names = meta__command.names()')
+        command_preamble.append(
+          "if cli.rest and cli.rest[0].startswith('help'):")
+        command_preamble.append(
+          '  meta__command.help'
+          "(mode='helpfull' if 'ful' in cli.rest[0] else ('hlp' if 'sh' in cli.rest[0] else 'help'), commands=cli.rest[1:])")
+        command_preamble.append('  return')
+
         /# TODO(wmh): Add metax.c as a dependency so it is imported early and
         /# will therefore work in bazel.
         if False:
