@@ -926,7 +926,7 @@ scope:
       multi var kwds : map #:
         Keywords to pass to the Mock constructor
     comment:
-      Return a new mox.Mox, optionally stubbing out various entities.
+      Return a new mox.MagicMock.
     scope<py>:
       /# TODO(wmh): Add support to Meta for performing conditional
       /# assoc imports.

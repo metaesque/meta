@@ -286,7 +286,7 @@ scope:
     field ResourceMap : @map<@str,@str> #:
       Maps fully qualified resource names to explicit paths. The
       Object.Resource() method looks in this map before performing its
-      default logic. Initialized by Object.Initialize().
+      default logic. Initialized by Object.Init().
 
     static
     method Init #:
@@ -482,11 +482,12 @@ scope:
         /# CODETANGLE(resource_name): In metax.c (parser.meta).
         parts.append('%s_%s' % (clsname, resource_id))
         path = '/'.join(parts)
+
         /# NOTE: Although I used to return the non-realpath version, allowing
         /# the caller to decide how to proceed, there was never a time where I
         /# wanted the non-realpath version, so I've decided to always convert.
-        /# This does introduce an inconsistency though, because paths that do not
-        /# exist will stay in non-realpath format.
+        /# This does introduce an inconsistency though, because paths that do
+        /# not exist will stay in non-realpath format.
         /# TODO(wmh): How to avoid using baselang I/O commands here??
         result = os.path.realpath(path)
       return result

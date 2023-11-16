@@ -284,9 +284,9 @@ scope:
             if result == -1:
               result = value
 
-      elif mytype.startswith('list<'):
+      elif re.match(r'\^?list<', mytype):
 
-        m = re.match('^list<(.*)>', mytype)
+        m = re.match(r'\^?list<(.*)>', mytype)
         if m:
           subtype = m.group(1)
           if not isinstance(value, list):
@@ -305,7 +305,7 @@ scope:
           if error:
             result = Part.InvalidValue
         else:
-          raise Error('Unknown type "%s"' % mytype)
+          raise Error('1Unknown type "%s"' % mytype)
       else:
         raise Error('Unknown type "%s"' % mytype)
 
@@ -1304,7 +1304,7 @@ scope:
                     item, flag.name(), flag.value()))
             else:
               local_errors.append(
-                'Command %s does not recognize flag -%s' %
+                'Command %s does not recognize flag -%s (1)' %
                 (self.name(), short))
       else:
         /# We have a longform flag.
@@ -1333,7 +1333,7 @@ scope:
                 (item, flagname, flag.value()))
         else:
           local_errors.append(
-            'Command %s does not recognize flag --%s' %
+            'Command %s does not recognize flag --%s (2)' %
             (self.name(), flagname))
 
       err = False

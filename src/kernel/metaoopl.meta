@@ -7693,6 +7693,7 @@ namespace metax.oopl scope:
             ('#:', ['Create Command instance for %s.' % klass.fqn()]),
             ('params:', cmd_params),
             ('scope:', command_init),
+            ('test:', ['# noop', 'pass']),
           ])
         cmd_method.myclassIs(klass)
 

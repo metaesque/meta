@@ -3897,7 +3897,7 @@ scope:
       Starts at 1 (not 0!). A value of 0 means uninitialized.
 
     field tables : map #:
-      Maps table titles to Table instances.
+      Maps table titles to Table instances in this section.
     scope:
       accessor get lazy:
         /# We invoke blocks() to trigger jit parsing of blocks, which will
@@ -4624,13 +4624,14 @@ scope:
       var location : tuple<str,int> #:
         Path and line number of start of panel.
     scope:
+      assert isinstance(panel, Panel)
       panels = self.panels()
       title = panel.title()
       current = panels.get(title, None)
       if current:
         if isinstance(current, Section):
-          /# An indication that the table needs to be parsed. This method is
-          /# updating the Section to a Table, so no warning is printed.
+          /# An indication that the panel needs to be parsed. This method is
+          /# updating the Section to a Panel, so no warning is printed.
           pass
         else:
           print(

@@ -16385,7 +16385,6 @@ scope:
       scope:
         /# TODO(wmh): Get aliases working on primary keys so we can
         /# implement 'arg'!
-        /# arg args : list<str>;
         flags = self.cli()
         argmap = self._parseArgs(flags.rest, implicit=True)
 
@@ -17438,6 +17437,16 @@ scope:
         else:
           print('Must provide metafile(s) to generate uml for')
       end command uml;
+
+      named
+      command units #:
+        Convert a value in one unit to another unit
+      scope:
+        cli = self.cli()
+        for spec in cli.rest:
+          value = metax.units.Quantity.New(spec)
+          print(value)
+      end command units;
 
       named
       command verify_bazel #:
