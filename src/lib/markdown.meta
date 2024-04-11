@@ -3,18 +3,14 @@ namespace metax.lib.markdown #:
   of the official markdown syntax.
 
   Markdown descriptions:
-    Basics: https://daringfireball.net/projects/markdown/syntax
-    Github Flavored Markdown: https://guides.github.com/features/mastering-markdown/
-    Markdown Extra: https://en.wikipedia.org/wiki/Markdown_Extra
+    Basics:
+      https://www.markdownguide.org/basic-syntax/
+      https://daringfireball.net/projects/markdown/syntax
+    Extended:
+      https://www.markdownguide.org/extended-syntax/
+      https://guides.github.com/features/mastering-markdown/
 
-  Sites using:
-    Wordpress: (PHP Markdown Extra)
-       https://en.support.wordpress.com/markdown/
-       https://en.support.wordpress.com/markdown-quick-reference/
-    Doxygen: GFM and PHP Markdown Extra
-       https://www.stack.nl/~dimitri/doxygen/manual/markdown.html
-
-  Planned extensions
+  Planned extensions (of my own)
    - The syntax {text} is an indication that 'text' should be surrounded
      with HTML markup (usually <span> or <code>, etc.) with some set of
      classes.
@@ -25,10 +21,9 @@ namespace metax.lib.markdown #:
 
   | Concept   | Sub      | How                       | Orig | GFM | PHP  | WMD  |
   | --------  | ---      | ---                       | :-:  | :-: | :-:- | :-:  |
-
   | Paragraph |          | separate with empty line  | Y    | Y   | Y    | Y    |
   | Style     | text     | {text}[css]               | N    | N   | N    | TODO |
-  | Emphasis  | italic   | *i* _i_                   | Y    | Y   | Y    | Y    |
+  | Emphasis  | italic   | *i*   _i_                 | Y    | Y   | Y    | Y    |
   |           | bold     | **b** __b__               | Y    | Y   | Y    | Y    |
   | Link      | inline   | [text](url \"title\")     | Y    | Y   | Y    | TODO |
   |           | ref      | [title][name]             | Y    | Y   | Y    | TODO |
@@ -38,7 +33,7 @@ namespace metax.lib.markdown #:
   |           |          | [name]: url \"title\"     | .    | .   | .    | .    |
   |           | linked   | [![title](imgurl)](url)]  | Y    | Y   | Y    | TODO |
   | Footnote  |          | [^name]                   | ?    | ?   | Y    | TODO |
-  |           |          | [^name]: text             | .    | .   | .    | .    |
+  |           |          | [^name]: text             | .    | .   | .    | TODO |
   | Line      | breaks   | end line with 2+ spaces   | Y    | ?   | N    | TODO |
   | Lists     | bullet   | * item                    | Y    | Y   | Y    | Y    |
   |           |          | - item                    | Y    | Y   | Y    | Y    |
@@ -140,9 +135,9 @@ scope:
         ('list', cls.ListRe(), None),
         /# TODO(wmh): Consider allow whitespace before the  to support
         /# pagebreaks inside code blocks (indented 4 spaces), etc.
-        ('page', re.compile(r'^\{(?P<page>\d+)\}'), False),
+        ('page', re.compile(r'^\{(?P<page>[ivx0-9]+)\}'), False),
         ('newcol', re.compile(r'^'), False),
-        ('comment', re.compile('^\s*/\#\s*(?P<comment>.*)'), False),
+        ('comment', re.compile(r'^\s*/\#\s*(?P<comment>.*)'), False),
       ]
       cls.CATMAP = {trip[0]: trip[1] for trip in cls.CATEGORIES}
 
@@ -166,6 +161,31 @@ scope:
       cls.Abbrev_re = re.compile(r'(?P<title>.*\S)\s*\[=(?P<abbrev>.*)\]\s*$')
 
       cls.Mark_re = re.compile(r'^(?P<mark>\s*\* |\s*\d+\. )\S')
+
+      cls.RomanNumeral = {
+        'i'     : 1,
+        'ii'    : 2,
+        'iii'   : 3,
+        'iv'    : 4,
+        'v'     : 5,
+        'vi'    : 6,
+        'vii'   : 7,
+        'viii'  : 8,
+        'ix'    : 9,
+        'x'     : 10,
+        'xi'    : 11,
+        'xii'   : 12,
+        'xiii'  : 13,
+        'xiv'   : 14,
+        'xv'    : 15,
+        'xvi'   : 16,
+        'xvii'  : 17,
+        'xviii' : 18,
+        'xix'   : 19,
+        'xx'    : 20,
+      }
+
+      cls.KaplanIds = []
     end lifecycle;
 
     method registerLabel : void #:
@@ -1276,7 +1296,10 @@ scope:
           /# We have an explicit page break.
 
           /# Record(i, 'page break')
-          pagenum = int(mdata['page'])
+          if mdata['page'].isdigit():
+            pagenum = int(mdata['page'])
+          else:
+            pagenum = -Parser.RomanNumeral[mdata['page']]
           i += 1
 
         elif kind == 'newcol':
@@ -1689,11 +1712,15 @@ scope:
         Consider changing the type, or provide some other mechanism for being
         able to specify an enum type like:
           enum<title|title*|ascii|text|canonical|html>
+      flag subaspect @ A : str = null #:
+        If --aspect is html, use --subaspect=kaplan to get scrollable version.
       flag debug : bool = false #:
         If true, print out a summary of each parsed file.
-
-      command __default__ #:
+      command compile #:
         Compile markdown into html.
+      interface:
+        flag bookid @ b : str = null #:
+          Provides a bookid (needed if --aspect=html and --subaspect=kaplan
       scope:
         def FilterFiles(filelist):
           mds = []
@@ -1710,20 +1737,42 @@ scope:
           return mds, others
 
         mds, others = FilterFiles(cli.rest)
+
         aspect = cli.aspect
+        subaspect = cli.subaspect
+        bookid = cli.bookid
+        if aspect == 'html' and subaspect == 'kaplan' and not bookid:
+          print('ERROR: Must provide --bookid for --subaspect=kaplan')
+          sys.exit(1)
+
         suffix = '.html' if aspect == 'html' else '.txt'
         parser = metax.lib.markdown.Parser()
         for spec in mds:
-          mdfile = parser.parseFile(spec['path'], debug=cli.debug)
+          with open(spec['path'], 'r') as ifp:
+            book = parser.readBook(ifp, path=spec['path'], fast=False)
+          book.uidIs(bookid)
+          # mdfile = parser.parseFile(spec['path'], debug=cli.debug)
           if cli.debug:
-            mdfile.show(aspect='title*')
+            book.show(aspect='title*')
           base = spec['base']
           mddir = cli.destdir or spec['dir']
           outpath = os.path.join(mddir, spec['base'] + suffix)
           with open(outpath, 'w') as fp:
-            mdfile.show(aspect=aspect, fp=fp)
-            print('Wrote ' + outpath)
-      end;
+            book.show(aspect=aspect, subaspect=subaspect, fp=fp)
+          print('Wrote ' + outpath)
+          if subaspect == 'kaplan':
+            # The special javascript variable IdList is currently initialized
+            # to the placeholder ${IdList}, which needs to be replaced with
+            # the contents of Parser.KaplanIds.
+            tmp = outpath + '.tmp'
+            os.rename(outpath, tmp)
+            with open(tmp, 'r') as ifp:
+              with open(outpath, 'w') as ofp:
+                idliststr = str(Parser.KaplanIds)
+                for line in ifp:
+                  ofp.write(line.replace('${IdList}', idliststr))
+            os.unlink(tmp)
+      end command compile;
 
     end command;
   end class Parser;
@@ -1735,12 +1784,41 @@ scope:
   abstract
   class Object #:
     Abstract superclass of Section and Block.
+  assocs:
+    std assoc hashlib;
   scope:
 
     field prelines : int #:
       The number of empty lines found before this block started.
       Used to establish how much spacing is desired in formatted output,
       and to properly re-render the markdown itself.
+
+    field md5 : str #:
+      The md5 encoding of the blobs() of this Object. Often null.
+    scope:
+      accessor get lazy:
+        blobs = self.blobs()
+        if not blobs:
+          if self.kind() == 'Section':
+            title = self.title()
+            if not title:
+              # This happens when an implicit section has been added to account
+              # for a header going from level K to K+2.
+              pass
+            else:
+              # This happens when we have a section
+              print('EMPTY below %s' % self.parent().title())
+          else:
+            # If we encounter problems, add additional special casing to
+            # handle them.
+            raise Error('Request for md5 on %s with empty blobs' % self.kind())
+
+          blobs = ['fixme']
+
+        res = hashlib.md5(' '.join(blobs).encode('utf8')).hexdigest()
+        -> res
+      end accessor get;
+    end field md5;
 
     lifecycle params:
       var prelines -> prelines = 0;
@@ -1879,7 +1957,7 @@ scope:
 
       for part in parts:
         /# Exact match ... there can only be one possible result.
-        part = part.replace('\/', '/')
+        part = part.replace(r'\/', '/')
         keys = obj.keys()
 
         if part in keys:
@@ -1976,6 +2054,19 @@ scope:
     test:
       test.iseq(80, metax.lib.markdown.Object.TerminalWidth())
     end method TerminalWidth;
+
+    method genId #:
+      Return an id (suitable for use in CSS) to represent this object. Record
+      id in Parser.KaplanIds.
+
+      NOTE: Currently this will add the same id multiple times if called on
+      the same object multiple times. It does, however, use the same id for the
+      same object as long as its blobs() content has not changed between calls.
+    scope:
+      result = self.md5()
+      Parser.KaplanIds.append(result)
+      return result
+    end method genId;
 
   end class Object;
 
@@ -2106,12 +2197,6 @@ scope:
         test.p1.asLines())
     end method asLines;
 
-    abstract
-    method blobs : vec<str> #:
-      Convert this block into a collection of strings suitable for use
-      in visit() and other text-based searches.
-    end method blobs;
-
   end class Block;
 
   class BlockGroup < Block #:
@@ -2181,18 +2266,6 @@ scope:
       group = test.group
       test.iseq(2, len(group.blocks()))
     end method addBlock;
-
-    method blobs : vec<str> #:
-      Convert this block into a collection of strings suitable for use
-      in visit() and other text-based searches.
-    scope:
-      result = []
-      for block in self.blocks():
-        result.extend(block.blobs())
-      return result
-    test:
-      test.iseq([], test.section.blobs())
-    end method blobs;
 
   end class BlockGroup;
 
@@ -2836,11 +2909,13 @@ scope:
     params:
       var tdelim : str = '**' #:
         What appears before and after the title.
-      var tsep : str = '[:.]\s*' #:
-        What appears after the title before the text
+      var tsep : str = null #:
+        What appears after the title before the text. If null, default used.
       var raw : bool = false #:
         If true, newlines replaces with spaces in text.
     scope:
+      if tsep is None:
+        tsep = r'[:.]\s*'
       tdelim = re.escape(tdelim)
       tre = re.compile(
         tdelim + '(?P<title>.*?)' + tdelim + tsep + '(?P<text>.*)', re.DOTALL)
@@ -2894,28 +2969,19 @@ scope:
       test.iseq(p1.blobs(), p1b.blobs())
     end method clone;
 
-    method blobs : vec<str> #:
-      Convert this block into a collection of strings suitable for use
-      in visit() and other text-based searches.
-    scope:
-      return [self.text().replace('\n', ' ')]
-    test:
-      test.iseq(
-        [
-          'This is an example paragraph containing a few lines '
-          'of text including a **bold** word and _italize phrase_.',
-        ],
-        test.p1.blobs())
-    end method blobs;
-
   end class Paragraph;
 
   class Quote < Block #:
     A block quote.
+
+    TODO(wmh): This should be a subclass of BlockGroup, similar to Panel.
   scope:
 
     field lines : vec<str> #:
       The lines making up the block quote. No newlines in elements.
+
+    field author : str #:
+      The author, if specified after '<ws>--<ws>' on last line.
 
     lifecycle params:
       var parent : Section #:
@@ -2928,6 +2994,16 @@ scope:
       /# TODO(wmh): Either strip the '> ' from each line here, or require
       /# the caller to do so.
       self.linesIs(lines)
+
+      /# Identify author
+      last = lines[-1]
+      m = Quote.AuthorRe.match(last)
+      if m:
+        lines.pop()
+        author = m.group('author')
+        self.authorIs(author)
+    clinit:
+      cls.AuthorRe = re.compile(r'^>\s+--\s+(?P<author>.+\S)')
     end lifecycle;
 
     method isQuote : bool scope:
@@ -2937,17 +3013,6 @@ scope:
       test.isfalse(test.p1.isQuote())
       test.istrue(test.quote.isQuote())
     end method isQuote;
-
-    method blobs : vec<str> #:
-      Convert this block into a collection of strings suitable for use
-      in visit() and other text-based searches.
-    scope:
-      return [' '.join(self.lines())]
-    test:
-      test.iseq(
-        ['this is a quote spanning two lines'],
-        test.quote.blobs())
-    end method blobs;
 
   end class Quote;
 
@@ -3067,22 +3132,8 @@ scope:
       test.iseq(3, len(test.ul.items()))
     end method newItem;
 
-    method blobs : vec<str> #:
-      Convert this block into a collection of strings suitable for use
-      in visit() and other text-based searches.
-    scope:
-      result = []
-      for item in self.items():
-        result.extend(item.blobs())
-      return result
-    test:
-      test.makeLists()
-      test.iseq(['Apple', 'Banana', 'Cantelope'], test.ul.blobs())
-      test.iseq(['Apple', 'Banana', 'Cantelope'], test.ol.blobs())
-    end method blobs;
-
     method blocksByTitle : omap #:
-      Partition all blocks of this section into groups based on which Paragraph
+      Partition all blocks of this List into groups based on which Paragraph
       elements have titles.
 
       Returns:
@@ -3231,17 +3282,6 @@ scope:
       test.isfalse(test.panel2.isCode())
     end method isCode;
 
-    method blobs : vec<str> #:
-      Convert this block into a collection of strings suitable for use
-      in visit() and other text-based searches.
-    scope:
-      return [' '.join(self.lines())]
-    test:
-      test.iseq(
-        ['if a == 1:   return False else:   return True'],
-        test.code.blobs())
-    end method blobs;
-
   end class Code;
 
   class HR < Object #:
@@ -3262,15 +3302,6 @@ scope:
     setup:
       test.hr = metax.lib.markdown.HR(test.section, '* * *', prelines=1)
     end lifecycle;
-
-    method blobs : vec<str> #:
-      Convert this block into a collection of strings suitable for use
-      in visit() and other text-based searches.
-    scope:
-      return []
-    test:
-      test.iseq([], test.hr.blobs())
-    end method blobs;
 
   end class HR;
 
@@ -3296,17 +3327,6 @@ scope:
       test.html = metax.lib.markdown.HTML(
         test.section, ['<p>blah</p>'])
     end lifecycle;
-
-    method blobs : vec<str> #:
-      Convert this block into a collection of strings suitable for use
-      in visit() and other text-based searches.
-    scope:
-      return [' '.join(self.lines())]
-    test:
-      test.iseq(
-        ['<p>blah</p>'],
-        test.html.blobs())
-    end method blobs;
 
   end class HTML;
 
@@ -3342,8 +3362,8 @@ scope:
     field indices : map #:
       Maps column header values to integers (first column is 0, second is 1, etc).
 
-    field rows : @vec<vec<str>> #:
-      The data rows of the table. Each element is a list of strings
+    field rows : @vec<Row> #:
+      The data rows of the table. Each element is a list of Row
       (size equal to the size of 'columns') representing the values
       of each column within the row.
 
@@ -3491,7 +3511,7 @@ scope:
         if True:
           title = lines[0].strip()
           m = re.match(
-            '^Table: (?P<title>[^\[\]]+)(?:\s*\[(?P<class>.*)\])?', title)
+            r'^Table: (?P<title>[^\[\]]+)(?:\s*\[(?P<class>.*)\])?', title)
           if m:
             title = m.group('title')
             csscls = m.group('class')
@@ -3678,20 +3698,6 @@ scope:
       test.isinst(wtbl, metax.lib.markdown.Table)
     end method unwrapped;
 
-    method blobs : vec<str> #:
-      Convert this block into a collection of strings suitable for use
-      in visit() and other text-based searches.
-    scope:
-      result = []
-      for row in self.rows():
-        result.extend(row.blobs())
-      return result
-    test:
-      test.iseq(
-        ['Apple', '3', 'Banana', '1', 'Cantelope', '2'],
-        test.table2.blobs())
-    end method blobs;
-
   end class Table;
 
   class Row < Block #:
@@ -3722,7 +3728,9 @@ scope:
     scope:
       data = self.data()
       indices = self.parent().indices()
-      result = {k: data[indices[k]] for k in indices}
+      result = collections.OrderedDict()
+      for k in indices:
+        result[k] = data[indices[k]]
       return result
     test:
       test.iseq(
@@ -3737,17 +3745,6 @@ scope:
       self.row2 = self.table.rows()[1]
     end lifecycle;
 
-    method blobs : vec<str> #:
-      Convert this block into a collection of strings suitable for use
-      in visit() and other text-based searches.
-    scope:
-      return self.data()
-    test:
-      test.iseq(
-        ['Alice', '25', '1.7m', 'Kiwi'],
-        test.row1.blobs())
-    end method blobs;
-
   end class Row;
 
   class Panel < Block #:
@@ -3755,9 +3752,8 @@ scope:
     the contents of the panel as a collection of markdown.Object instances, at
     which point it needs to become a subclass of BlockGroup instead of Block.
 
-    See
-    http://tex.stackexchange.com/questions/36524/how-to-put-a-framed-box-around-text-math-environment
-    for how to add a box around text in Latex.
+    For how to add a box around text in Latex, see
+      http://tex.stackexchange.com/questions/36524/how-to-put-a-framed-box-around-text-math-environment
   scope:
 
     field title : str = null #:
@@ -3791,47 +3787,6 @@ scope:
       test.istrue(test.panel2.isPanel())
       test.isfalse(test.table2.isPanel())
     end method isPanel;
-
-    method blobs : vec<str> #:
-      Convert this block into a collection of strings suitable for use
-      in visit() and other text-based searches.
-    scope:
-      result = []
-
-      para = []
-      for line in self.lines():
-        if not line.strip():
-          /# empty line.
-          if para:
-            result.append(' '.join(para))
-            para = []
-        else:
-          para.append(line)
-      if para:
-        result.append(' '.join(para))
-
-      return result
-    test:
-      panel = metax.lib.markdown.Panel(
-        test.subsection,
-        lines=[
-          'This is a panel',
-          'with short small first paragraph.',
-          '',
-          '',
-          'And a shorter second paragraph.',
-        ],
-        title='Testing')
-
-      test.iseq('Testing', panel.title())
-
-      test.iseq(
-        [
-          'This is a panel with short small first paragraph.',
-          'And a shorter second paragraph.'
-        ],
-        panel.blobs())
-    end method blobs;
 
   end class Panel;
 
@@ -4534,6 +4489,10 @@ scope:
     field name : str #:
       The name of the book.
 
+    field uid : str #:
+      The uid of the book. Only needed if support for logging readable elements
+      is desired. The https://metaxy.appspot.com/qs/book app sends ajax
+
     field parser : Parser;
 
     field tables : map #:
@@ -4549,6 +4508,7 @@ scope:
       var name -> name;
       var parser -> parser;
       var path -> path = null;
+      var uid -> uid = null;
     scope:
       root = Section(None, title=name, parser=parser)
       self.rootIs(root)
@@ -4557,6 +4517,168 @@ scope:
       self.tablesIs(tables)
       panels = collections.OrderedDict()
       self.panelsIs(panels)
+    clinit:
+      cls.KaplanStyle = """\
+        >|<style>
+        >|  .kaplan_book {
+        >|    width: 800px;
+        >|    border: 1px solid black;
+        >|    margin-left: auto;
+        >|    margin-right: auto;
+        >|    padding: 0px 10px;
+        >|    background-color: #eee;
+        >|  }
+        >|  .kaplan_reading {
+        >|    border: 1px solid blue;
+        >|    font-size: 130%;
+        >|    background-color: white;
+        >|    padding: 10px;
+        >|  }
+        >|</style>
+        >|"""
+
+      cls.KaplanScript = """\
+        >|<script>
+        >|  document.onkeydown = checkKey;
+        >|
+        >|  // We need a unique identifier for the person reading the book if
+        >|  // we want to log reading events, notes, etc. For now, this
+        >|  // identifier comes from the 'pid' param of the url (but will change
+        >|  // when we have the ability to establish who is currently logged in)
+        >|  // For info on parsing url, see:
+        >|  //  - https://developer.mozilla.org/en-US/docs/Web/API/Location
+        >|  //  -  https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams
+        >|  var usp = new URLSearchParams(window.location.search.substring(1));
+        >|  var PersonId = usp.get('pid');
+        >|  if (!PersonId) {
+        >|     PersonId = prompt('Reader ID: ');
+        >|  }
+        >|
+        >|  // The Google Book Id of the book being read
+        >|  var BookId = '${BookId}';
+        >|
+        >|  // The webapp to send RPCs to
+        >|  var WebApp = 'https://metaxy.appspot.com/qs/book';
+        >|
+        >|  // The HTML ids of elements we can scroll through.
+        >|  var IdList = ${IdList};
+        >|  var N = IdList.length;
+        >|
+        >|  // Current index within IdList
+        >|  var Index = 0;
+        >|
+        >|  // Current pending record-index-if-there-for-awhile
+        >|  var PendingEventLogger = null;
+        >|
+        >|  // Generic method for sending data to http://metaxy.appspot.com/qs/book
+        >|  function SendRPC(action, params) {
+        >|    // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest/send
+        >|    let url = WebApp + '/' + action;
+        >|    let xhr = new XMLHttpRequest();
+        >|    xhr.open('POST', url, true);
+        >|    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        >|    xhr.onreadystatechange = () => {
+        >|      // Call a function when the state changes.
+        >|      if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+        >|        // Request finished. Do processing here.
+        >|      } else {
+        >|        console.log('Here with state ' + xhr.readyState + ' and status ' + xhr.status);
+        >|      }
+        >|    };
+        >|    params['pid'] = PersonId;
+        >|    params['bid'] = BookId;
+        >|    let usp = new URLSearchParams(params);
+        >|    let uspstr = usp.toString();
+        >|    console.log('Sending RPC: ' + url + '?' + uspstr);
+        >|    // TODO(wmh): Get the WebApp set up so it can accept ajax sends.
+        >|    // xhr.send(uspstr);
+        >|  }
+        >|
+        >|  // Send to server a 'reading <eid>' event
+        >|  function RecordReadable() {
+        >|    let eid = IdList[Index];
+        >|    // Make an ajax call to
+        >|    //   https://metaxy.appspot.com/qs/book/read?id=<BookId>&eid=<eid>
+        >|    SendRPC('reading', {eid: eid});
+        >|  }
+        >|
+        >|  // How to advance (or go back) one displayable element
+        >|  function Move(delta, confirmed) {
+        >|    // We are to advance forward (delta > 0) or backward (delta < 0)
+        >|    // in the list of readable elements.
+        >|    //   delta : int
+        >|    //     how far to advance (almost always 1 or -1)
+        >|    //   confirmed : bool
+        >|    //     if true, the current readable was definitely read.
+        >|
+        >|    // If there is a pending event logger, we clear it, as the
+        >|    // reader has moved on from that previous readable element
+        >|    // too quickly to be considered a real read.
+        >|    if (PendingEventLogger) {
+        >|      // https://developer.mozilla.org/en-US/docs/Web/API/clearTimeout
+        >|      clearTimeout(PendingEventLogger);
+        >|      PendingEventLogger = null;
+        >|    }
+        >|
+        >|    // Adjust current element
+        >|    var cid = IdList[Index];
+        >|    var current = document.getElementById(cid);
+        >|    if (!current) {
+        >|      alert('Failed to find ' + cid);
+        >|      return;
+        >|    }
+        >|    current.classList.remove('kaplan_reading');
+        >|    if (confirmed) {
+        >|      // TODO(wmh): Do we send a 'read' (vs 'reading') RPC?
+        >|      // SendRPC('read', {eid: cid});
+        >|      console.log('confirmed read of ' + cid);
+        >|    }
+        >|
+        >|    // delta is integer adjustment relative to current index
+        >|    Index = (((Index + delta) % N) + N) % N;
+        >|    let id = IdList[Index];
+        >|    let elem = document.getElementById(id);
+        >|    elem.classList.add('kaplan_reading');
+        >|    elem.scrollIntoView({
+        >|      // https://developer.mozilla.org/en-US/docs/Web/API/Element/scrollIntoView#parameters
+        >|      behavior: 'instant',
+        >|      block: 'start',
+        >|      inline: 'nearest',
+        >|    });
+        >|    window.scrollBy(0, -200);
+        >|
+        >|    // Schedule the logging of a read event for 5 seconds in the future
+        >|    //  - https://developer.mozilla.org/en-US/docs/Web/API/setTimeout
+        >|    PendingEventLogger = setTimeout(RecordReadable, 5000);
+        >|  }
+        >|
+        >|  function checkKey(e) {
+        >|    e = e || window.event;
+        >|    var key = e.key;
+        >|    if (key == 'j') {
+        >|      // console.log('next');
+        >|      Move(1);
+        >|    } else if (key == ' ') {
+        >|      // space is like next but is also an explicit indication that
+        >|      // the readable element was read and processed.
+        >|      Move(1);
+        >|      e.preventDefault();
+        >|    } else if (key == 'k') {
+        >|      // console.log('prev');
+        >|      Move(-1);
+        >|    } else if (key == '.') {
+        >|      let note = prompt('Summary: ');
+        >|      let eid = IdList[Index];
+        >|      // Send this note to
+        >|      //   https://metaxy.appspot.com/qs/book/summarize?id=<BookId>&pos=<eid>&note=<note>
+        >|      SendRPC('summarize', {eid: eid, note: note});
+        >|    } else if (key == 'Enter') {
+        >|      // console.log('enter');
+        >|    } else {
+        >|    }
+        >|  }
+        >|</script>
+        >|"""
     setup:
       test.book2 = metax.lib.markdown.Book('test', test.book.parser())
     end;
@@ -4774,6 +4896,147 @@ scope:
 
   end class Book;
 
+  behavior blobs : vec<str> #:
+    Convert this block into a collection of strings suitable for use
+    in visit() and other text-based searches.
+  scope:
+
+    abstract
+    receiver Block;
+
+    receiver BlockGroup ::
+      result = []
+      for block in self.blocks():
+        result.extend(block.blobs())
+      return result
+    test:
+      test.iseq([], test.section.blobs())
+    end receiver BlockGroup;
+
+    receiver Paragraph ::
+      return [self.text().replace('\n', ' ')]
+    test:
+      test.iseq(
+        [
+          'This is an example paragraph containing a few lines '
+          'of text including a **bold** word and _italize phrase_.',
+        ],
+        test.p1.blobs())
+    end receiver Paragraph;
+
+    receiver Quote ::
+      return [' '.join(self.lines())]
+    test:
+      test.iseq(
+        ['this is a quote spanning two lines'],
+        test.quote.blobs())
+    end receiver Quote;
+
+    receiver List ::
+      result = []
+      for item in self.items():
+        result.extend(item.blobs())
+      return result
+    test:
+      test.makeLists()
+      test.iseq(['Apple', 'Banana', 'Cantelope'], test.ul.blobs())
+      test.iseq(['Apple', 'Banana', 'Cantelope'], test.ol.blobs())
+    end receiver List;
+
+    receiver Code ::
+      return [' '.join(self.lines())]
+    test:
+      test.iseq(
+        ['if a == 1:   return False else:   return True'],
+        test.code.blobs())
+    end receiver Code;
+
+    receiver HR ::
+      return []
+    test:
+      test.iseq([], test.hr.blobs())
+    end receiver HR;
+
+    receiver HTML ::
+      return [' '.join(self.lines())]
+    test:
+      test.iseq(
+        ['<p>blah</p>'],
+        test.html.blobs())
+    end receiver HTML;
+
+    receiver Table ::
+      result = []
+      title = self.title()
+      if title:
+        result.append(title)
+      for row in self.rows():
+        result.extend(row.blobs())
+      return result
+    test:
+      test.iseq(
+        ['Apple', '3', 'Banana', '1', 'Cantelope', '2'],
+        test.table2.blobs())
+    end receiver Table;
+
+    receiver Row ::
+      return self.data()
+    test:
+      test.iseq(
+        ['Alice', '25', '1.7m', 'Kiwi'],
+        test.row1.blobs())
+    end receiver Row;
+
+    receiver Panel ::
+      result = []
+
+      para = []
+      for line in self.lines():
+        if not line.strip():
+          /# empty line.
+          if para:
+            result.append(' '.join(para))
+            para = []
+        else:
+          para.append(line)
+      if para:
+        result.append(' '.join(para))
+
+      return result
+    test:
+      panel = metax.lib.markdown.Panel(
+        test.subsection,
+        lines=[
+          'This is a panel',
+          'with short small first paragraph.',
+          '',
+          '',
+          'And a shorter second paragraph.',
+        ],
+        title='Testing')
+
+      test.iseq('Testing', panel.title())
+
+      test.iseq(
+        [
+          'This is a panel with short small first paragraph.',
+          'And a shorter second paragraph.'
+        ],
+        panel.blobs())
+    end receiver Panel;
+
+    receiver Section ::
+      result = []
+      title = self.title()
+      if title:
+        result.append(title)
+      for block in self.blocks():
+        result.extend(block.blobs())
+      return result
+    end receiver Section;
+
+  end behavior blobs;
+
   behavior show #:
     Write an object.
   params:
@@ -4794,6 +5057,14 @@ scope:
         tex: render into latex
         titles: show only titles (indented by level)
         markdown: recreate the markdown text
+    var subaspect : str = null #:
+      Introduced 2023-12-30 to support a special form of html (divs around
+      each readable element with support for scrolling/annotating elements),
+      but will be useful in other contexts too.  Depends on value of 'aspect':
+        if 'html':
+          kaplan:
+            we are to wrap all readable elements in <div id=id> elements
+            and provide scrolling/annotating support.
     var parser : Parser = null #:
       The parser instance to use.
     var depth : int = 10000 #:
@@ -4854,7 +5125,7 @@ scope:
         indent = sink.prefix()
       for block in self.blocks():
         block.show(
-          fp=fp, indent=indent, aspect=aspect, parser=parser)
+          fp=fp, indent=indent, aspect=aspect, subaspect=subaspect, parser=parser)
     test:
       fp = test.fp()
       test.group.show(fp=fp)
@@ -4925,10 +5196,17 @@ scope:
         sep = '\n' + indent
         if prelines:
           fp.write('\n' * prelines)
+
+        if subaspect == 'kaplan':
+          fp.write(indent + '<div id="%s">\n' % self.genId())
+
         if implicit:
           fp.write(indent + text.replace('\n', sep) + '\n')
         else:
           fp.write(indent + '<p>' + text.replace('\n', sep) + '</p>\n')
+
+        if subaspect == 'kaplan':
+          fp.write(indent + '</div>\n')
 
       elif aspect == 'tex':
         text = self.__class__.TextToTex(rawtext)
@@ -4963,6 +5241,7 @@ scope:
     end receiver Paragraph;
 
     receiver Quote ::
+      author = self.author()
       if sink:
         fp = sink.fp()
         indent = sink.prefix()
@@ -4972,11 +5251,19 @@ scope:
           fp.write('\n' * prelines)
         for line in self.lines():
           fp.write(indent + line + '\n')
+        if author:
+          fp.write(indent + '  -- ' + author + '\n')
       elif aspect == 'html':
-        fp.write('%s<blockquote>\n' % indent)
+        if subaspect == 'kaplan':
+          fp.write('\n%s<div id="%s">\n' % (indent, self.genId()))
+        fp.write('%s<blockquote><em>\n' % indent)
         for line in self.lines():
           fp.write(line[2:] + '\n')
-        fp.write('%s</blockquote>\n' % indent)
+        fp.write(
+          '%s</em>%s</blockquote>\n' %
+          (indent, '\n<br>&nbsp;&nbsp;&nbsp;-- %s\n' % author if author else ''))
+        if subaspect == 'kaplan':
+          fp.write('%s</div>\n' % indent)
       elif aspect == 'tex':
         fp.write('Not yet handling blockquotes in tex\n')
       else:
@@ -5006,11 +5293,16 @@ scope:
           else:
             fp.write(indent + '    ' + line + '\n')
       elif aspect == 'html':
+        if subaspect == 'kaplan':
+          fp.write('\n%s<div id="%s">\n' % (indent, self.genId()))
         fp.write('%s<b>Panel: %s</b>\n' % (indent, self.title()))
         fp.write('%s<blockquote>\n' % indent)
         for line in self.lines():
           fp.write(line[2:] + '\n')
         fp.write('%s</blockquote>\n' % indent)
+        if subaspect == 'kaplan':
+          fp.write('%s</div>\n' % indent)
+
       elif aspect == 'tex':
         fp.write('Not yet handling blockquotes in tex\n')
       else:
@@ -5051,7 +5343,7 @@ scope:
           fp.write('\n' * prelines)
         fp.write('%s<%s>\n' % (indent, tag))
         for item in self.items():
-          item.show(fp=fp, indent=subindent, aspect=aspect, **kwds)
+          item.show(fp=fp, indent=subindent, aspect=aspect, subaspect=subaspect, **kwds)
         fp.write('%s</%s>\n' % (indent, tag))
       elif aspect == 'ascii':
         /# For ascii, the amount of extra indentation (beyond 'indent') is
@@ -5094,7 +5386,7 @@ scope:
           else:
             mark = mark_format
           kwds['mark'] = mark
-          item.show(fp=fp, indent=indent, aspect=aspect, **kwds)
+          item.show(fp=fp, indent=indent, aspect=aspect, subaspect=subaspect, **kwds)
       elif aspect == 'tex':
         fp.write('List.show() not implemented for aspect=%s\n' % aspect)
       elif aspect == 'markdown':
@@ -5158,15 +5450,18 @@ scope:
             else:
               fp.write(indent + mark)
               block.show(
-                fp=fp, indent=subindent, aspect=aspect, nofirst=True, **kwds)
+                fp=fp, indent=subindent, aspect=aspect, subaspect=subaspect, nofirst=True, **kwds)
           else:
-            block.show(fp=fp, indent=subindent, aspect=aspect, **kwds)
+            block.show(fp=fp, indent=subindent, aspect=aspect, subaspect=subaspect, **kwds)
 
       elif aspect == 'tex':
         fp.write('ListItem.show() for aspect text not yet implemented\n')
 
       elif aspect == 'html':
-        fp.write('%s<li>\n' % indent)
+        liattrs = ''
+        if subaspect == 'kaplan':
+          liattrs = ' id="%s"' % self.genId()
+        fp.write('%s<li%s>\n' % (indent, liattrs))
         blocks = self.blocks()
         if len(blocks) == 1:
           block = blocks[0]
@@ -5176,7 +5471,7 @@ scope:
           block.show(**kwds)
         else:
           for block in blocks:
-            block.show(fp=fp, indent=indent, aspect=aspect, **kwds)
+            block.show(fp=fp, indent=indent, aspect=aspect, subaspect=subaspect, **kwds)
         fp.write('%s</li>\n' % indent)
 
       elif aspect == 'markdown':
@@ -5206,6 +5501,10 @@ scope:
       if aspect == 'html':
         if prelines:
           fp.write('\n' * prelines)
+
+        if subaspect == 'kaplan':
+          fp.write('\n%s<div id="%s">\n' % (indent, self.genId()))
+
         lang = self.language()
         if lang is None:
           /# The indented form
@@ -5227,6 +5526,10 @@ scope:
             codeline = rewriter(line).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             fp.write(codeline + '\n')
         fp.write('</code></pre>\n')
+
+        if subaspect == 'kaplan':
+          fp.write('%s</div>\n' % indent)
+
       elif aspect == 'ascii':
         if prelines:
           fp.write('\n' * prelines)
@@ -5321,8 +5624,14 @@ scope:
       elif aspect == 'html':
         if prelines:
           fp.write('\n' * prelines)
+
+        if subaspect == 'kaplan':
+          fp.write('\n%s<div id="%s">\n' % (indent, self.genId()))
         for line in lines:
           fp.write('%s%s\n' % (indent, line))
+        if subaspect == 'kaplan':
+          fp.write('%s</div>\n' % indent)
+
       elif aspect == 'tex':
         fp.write('%s\\begin{comment}\n' % indent)
         for line in lines:
@@ -5663,6 +5972,10 @@ scope:
         fp.write('\\end{%s}\n' % table_type)
 
       elif aspect == 'html':
+
+        if subaspect == 'kaplan':
+          fp.write('\n%s<div id="%s">\n' % (indent, self.genId()))
+
         csscls = self.csscls()
         cssclsstr = ' class="%s"' % csscls if csscls else ''
         uid = self.uid()
@@ -5677,6 +5990,9 @@ scope:
              for cell in row.data()])
           fp.write(line)
         fp.write('</table>\n')
+
+        if subaspect == 'kaplan':
+          fp.write('%s</div>\n' % indent)
 
       else:
         print('ERROR: Unknown aspect %s for Table.show()' % aspect)
@@ -5825,7 +6141,7 @@ scope:
         if depth > 0:
           for child in self.children():
             child.show(
-              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser,
+              fp=fp, indent=indent, aspect=aspect, subaspect=subaspect, depth=depth-1, parser=parser,
               **kwds)
 
       elif aspect == 'ascii':
@@ -5845,13 +6161,13 @@ scope:
               (indent, '#' * d, self.title()))
             for block in self.blocks():
               /# print(type(block))
-              block.show(fp=fp, indent=indent, aspect=aspect, parser=parser, **kwds)
+              block.show(fp=fp, indent=indent, aspect=aspect, subaspect=subaspect, parser=parser, **kwds)
 
         /# Now handle children
         if depth > 0:
           for child in self.children():
             child.show(
-              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser,
+              fp=fp, indent=indent, aspect=aspect, subaspect=subaspect, depth=depth-1, parser=parser,
               **kwds)
 
       elif aspect == 'html':
@@ -5864,14 +6180,36 @@ scope:
           if nohead:
             pass
           else:
-            /# Root level.
+            special_style = ''
+            special_script = ''
+            if subaspect == 'kaplan':
+              # From
+              #   https://developer.mozilla.org/en-US/docs/Web/HTML/Element/style
+              # one can have multiple <style> elements, and they are applied
+              # in order. We add the kaplan-specific elements BEFORE adding
+              # those from kwds['style']
+              book = self.parser().book()
+              bookuid = book.uid() or 'MISSING_BOOK_ID';
+              special_style = Book.KaplanStyle
+              special_script = Book.KaplanScript.replace('${BookId}', bookuid)
+
+            # Root level.
             fp.write(
               >|u"""<html>
               >|  <head>
-              >|%(csslib)s
+              >|%(special_style)s
+              >|%(caller_style)s
+              >|%(special_script)s
               >|  </head>
               >|  <body>
-              >|""" % {'csslib': style or ''})
+              >|""" % {
+                'caller_style': style or '',
+                'special_style': special_style,
+                'special_script': special_script,
+              })
+            if subaspect == 'kaplan':
+              fp.write('<div class="kaplan_book">\n')
+
             if preamble:
               fp.write(preamble)
         else:
@@ -5881,33 +6219,49 @@ scope:
             3: {'tag': 'h3'},
             4: {'tag': 'h4'},
             5: {'tag': 'h5'},
+            6: {'tag': 'h6'},
           }[d]
           tag = kdata['tag']
           abbrev = self.abbrev()
           idstr = ' id="%s" title="%s"' % (abbrev, abbrev) if abbrev else ''
-          fp.write('\n')
+          fp.write('\n\n')
+          if subaspect == 'kaplan':
+            fp.write('%s<div id="%s">\n' % (indent, self.genId()))
           fp.write(
-            '\n<%s%s>%s</%s>\n' % (
+            '<%s%s>%s</%s>\n' % (
               tag, idstr,
               metax.lib.markdown.Paragraph.TextToHtml(
                 title, parser=self.parser(), indent=indent),
               tag))
+          if subaspect == 'kaplan':
+            fp.write('%s</div>\n' % indent)
 
         /# Print out any block objects.
         for block in self.blocks():
-          block.show(fp=fp, aspect=aspect, parser=parser, **kwds)
+          block.show(fp=fp, aspect=aspect, subaspect=subaspect, parser=parser, **kwds)
 
         /# Now handle children
         if depth > 0:
           for child in self.children():
             child.show(
-              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser,
+              fp=fp, indent=indent, aspect=aspect, subaspect=subaspect, depth=depth-1, parser=parser,
               **kwds)
 
         /# Perform any wrap-up needed.
         if d == 0 and not nohead:
           if postamble:
             fp.write(postamble)
+
+          if subaspect == 'kaplan':
+            fp.write("""
+              >|</div>  <!-- kaplan_book -->
+              >|
+              >|<script>
+              >|Index = 1;
+              >|Move(-1);
+              >|</script>
+              >|""")
+
           fp.write('  </body>\n</html>\n')
 
       elif aspect == 'tex':
@@ -5983,13 +6337,13 @@ scope:
 
         /# Print out any block objects.
         for block in self.blocks():
-          block.show(fp=fp, aspect=aspect, parser=parser, **kwds)
+          block.show(fp=fp, aspect=aspect, subaspect=subaspect, parser=parser, **kwds)
 
         /# Now handle children
         if depth > 0:
           for child in self.children():
             child.show(
-              fp=fp, indent=indent, aspect=aspect, depth=depth-1, parser=parser,
+              fp=fp, indent=indent, aspect=aspect, subaspect=subaspect, depth=depth-1, parser=parser,
               **kwds)
 
         /# Perform any wrap-up needed.
@@ -6038,7 +6392,7 @@ scope:
           sink.writeln('%-40s in %s' % (table.title(), section.fulltitle()))
       else:
         self.root().show(
-          fp=fp, indent=indent, aspect=aspect, parser=parser, depth=depth,
+          fp=fp, indent=indent, aspect=aspect, subaspect=subaspect, parser=parser, depth=depth,
           **kwds)
 
       /# Now print out the meta-level info.
