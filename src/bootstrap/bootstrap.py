@@ -165,6 +165,11 @@ def InstallBazel():
   install_dir = os.path.expandvars(
     input('Path [%s]: ' % default_install_dir) or default_install_dir)
 
+  executable = os.path.join(install_dir, 'bazel')
+
+  if os.path.exists(executable):
+    return executable
+
   # Download the releases page
   github_bazel_releases = 'https://github.com/bazelbuild/bazel/releases'
   r = requests.get(github_bazel_releases)
@@ -290,7 +295,7 @@ def ExtractCode(src_root):
     print('TRUE: %s exists' % cdir)
   else:
     # We require link to start with 'v' and end with '.00'
-    assert link.startswith('v') and link.endswith('.00'), 'link=%s' % link
+    assert link.startswith('v') and link.endswith('.00'), 'link=%s (%s)' % (link, cdir)
     # Obtain the .tgz file (strip off .00)
     tgzpath = cdir[:-3] + '.tgz'
     if not os.path.exists(tgzpath):
@@ -314,7 +319,7 @@ def ExtractCode(src_root):
 
 def BuildMeta(src_root):
   os.system('pip install future')
-  os.system('pip3 install future')
+  # os.system('pip3 install future')
   kdir = os.path.join(src_root, 'src', 'kernel')
 
   # Execute metac a first time (lots of warnings/errors are printed as various
