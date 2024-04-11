@@ -1,0 +1,69 @@
+On 2023-12-01, I realized that Meta's existing bazel support (which still needs
+lots of work) was limited by having a separate WORKSPACE for each language
+supported by Meta.
+
+This directory explores a new approach in which there is a single WORKSPACE
+across ALL languages. Inspired by the following very useful tutorials:
+ - [[https://github.com/sayrer/bazel-lesson-1][C++ & Java code sharing]]
+ - [[https://github.com/sayrer/bazel-lesson-2][C++, Go & Rust code sharing]]
+
+Another incredibly useful resource is a curated list of bazel
+rules/tooling/resources (which languages are supported, etc. etc.)
+ - [[https://github.com/jin/awesome-bazel][Awesome Bazel]]
+and the ones supported by Bazel itself are in
+ - [[https://github.com/orgs/bazelbuild/repositories?q=&type=all&language=&sort=][all bazelbuild repos]]
+ - [[https://github.com/orgs/bazelbuild/repositories?q=rules_&type=all&language=&sort=][bazel build repos starting with rules_*]]
+    - Languages (as of 2023-12-01)
+       - [[https://github.com/bazelbuild/rules_cc][C++]] (and [[https://github.com/bazelbuild/rules_foreign_cc][non-bazel C++]])
+       - [[https://github.com/bazelbuild/rules_d][D (dlang)]]
+       - [[https://github.com/bazelbuild/rules_go][Go]]
+       - [[https://github.com/bazelbuild/rules_groovy][Groovy]]
+       - [[https://github.com/bazelbuild/rules_java][Java]] (and [[https://github.com/bazelbuild/rules_jvm_external][JVM external for Maven]])
+       - [[https://github.com/bazelbuild/rules_nodejs][Javascript]]
+       - [[https://github.com/bazelbuild/rules_kotlin][Kotlin]]
+       - [[https://github.com/bazelbuild/rules_perl][Perl]]
+       - [[https://github.com/bazelbuild/rules_python][Python]]
+       - [[https://github.com/bazelbuild/rules_rust][Rust]]
+       - [[https://github.com/bazelbuild/rules_scala][Scala]]
+       - [[https://github.com/bazelbuild/rules_swift][Swift]]
+       - [[https://github.com/bazelbuild/rules_typescript][Typescript]]
+    - Testing
+       - [[https://github.com/bazelbuild/rules_testing][Starlark Testing]]
+       - [[https://github.com/bazelbuild/rules_webtesting][Web testing]]
+    - Platforms
+       - [[https://github.com/bazelbuild/rules_android][Android]]
+       - [[https://github.com/bazelbuild/rules_apple][Apple]]
+       - [[https://github.com/bazelbuild/rules_appengine][Google App Engine]]
+       - [[https://github.com/bazelbuild/rules_docker][Docker]]
+       - [[https://github.com/bazelbuild/rules_dotnet][.NET]]
+       - [[https://github.com/bazelbuild/rules_k8s][Kubernetes]]
+    - Libraries
+       - [[https://github.com/bazelbuild/rules_gwt][GWT]] (Google-provided Java to Javascript environment)
+       - [[https://github.com/bazelbuild/rules_closure][Closure]] (Google-provided Javascript library of libraries)
+       - [[https://github.com/bazelbuild/rules_jsonnet][Jsonnet]]
+       - [[https://github.com/bazelbuild/rules_pkg][pkg]] (creating .zip, .tar, .rpm, .deb, etc)
+       - [[https://github.com/bazelbuild/rules_postcss][Post CSS]]
+       - [[https://github.com/bazelbuild/rules_proto][Protobufs]]
+       - [[https://github.com/bazelbuild/rules_sass][Sass]]
+
+
+Here are some language-specific bazel resources
+ - C++
+    - https://bazel.build/start/cpp
+    - https://github.com/sayrer/bazel-lesson-1
+    - https://github.com/sayrer/bazel-lesson-2
+    - https://github.com/google/googletest
+       - https://github.com/google/googletest/releases
+ - Python
+    - 
+ - Javascript
+    - https://bazel.build/docs/bazel-and-javascript
+ - Java
+    - https://bazel.build/docs/bazel-and-java
+    - https://bazel.build/start/java
+    - https://github.com/sayrer/bazel-lesson-1
+ - Go
+    - https://github.com/bazelbuild/rules_go/commit/cb279cd9855fd82ebb92e3cd19b96fd6bf6f9346
+    - https://github.com/sayrer/bazel-lesson-2
+ - Rust
+    - https://github.com/sayrer/bazel-lesson-2

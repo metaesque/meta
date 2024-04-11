@@ -1088,7 +1088,7 @@ scope:
         How many digits to use to represent the numeric portion.
       var unicode : bool = false #:
         If true, express result in unicde.
-      var form : str = '%1.5f' #:a
+      var form : str = '%1.5f' #:
         Format of numeric portion
       var nosuffix : bool = false #:
         If true, do not add suffix.

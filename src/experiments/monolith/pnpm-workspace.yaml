@@ -1,0 +1,11 @@
+# https://pnpm.io/pnpm-workspace_yaml
+packages:
+  # all packages in direct subdirs of javascript/
+  #  - TODO(wmh): Do we want ** instead of *? There will be a deep hierarchy
+  #    below ./javascript for all Meta namespaces. Is each subdir considered
+  #    a pnpm package, or only the leaf dirs?
+  - 'javascript/*'
+  # all packages in subdirs of fixme/
+  - 'fixme/**'
+  # exclude packages that are inside test directories
+  - '!**/test/**'

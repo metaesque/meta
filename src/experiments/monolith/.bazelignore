@@ -1,0 +1,26 @@
+# TODO(wmh): Resolve following concerns:
+#  - some examples show this file having entries like
+#      <subdir>/node_modules
+#    while others have entry
+#      node_modules
+#    I am not clear whether all node_modules directories need to be ignored,
+#    or just some of them.
+#
+#  - 2023-12-17
+#     % bazel clean --expunge
+#     % bazel info
+#     |...
+#     |ERROR: in verify_node_modules_ignored:
+#     |pnpm install will create nested node_modules, but not all of them are ignored by Bazel.
+#     |We recommend that all node_modules folders in the source tree be ignored,
+#     |to avoid Bazel printing confusing error messages.
+#     |
+#     |Either add line(s) to @@//:.bazelignore:
+#     |
+#     |node_modules
+#     |
+#     |or disable this check by setting `verify_node_modules_ignored = None` in `npm_translate_lock(name = "npm")`
+#     |...
+#     # Looks like we definitely should have node_modules in this file!
+
+node_modules

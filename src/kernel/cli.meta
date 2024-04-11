@@ -121,7 +121,7 @@ scope:
         /# the number of seconds in a month or year varies.
       }
 
-      cls.NegNumRe = re.compile('^-(?:\d*\.\d+|\d+(\.\d+)?)')
+      cls.NegNumRe = re.compile(r'^-(?:\d*\.\d+|\d+(\.\d+)?)')
     end lifecycle;
 
     method typecheck : any #:
@@ -186,8 +186,8 @@ scope:
 
       elif mytype == 'date':
         m = re.match(
-          '^(?:to)?(?P<kind>now|sec|min(?:ute)?|hr|hour|day|week|mon(?:th)?|yr|year)'
-          '(?:(?P<sign>[-+])(?P<adj>\d+)(?P<unit>[smhdw])?)?', value)
+          r'^(?:to)?(?P<kind>now|sec|min(?:ute)?|hr|hour|day|week|mon(?:th)?|yr|year)'
+          r'(?:(?P<sign>[-+])(?P<adj>\d+)(?P<unit>[smhdw])?)?', value)
         if m:
           now = datetime.datetime.now()
           onesec = datetime.timedelta(seconds=1)
@@ -292,7 +292,7 @@ scope:
           if not isinstance(value, list):
             /# TODO(wmh): Do we want to support splitting on chars other than
             /# comma?
-            value = re.split('\s*,\s*', value)
+            value = re.split(r'\s*,\s*', value)
           /# Now typecheck each element.
           result = []
           error = False

@@ -142,7 +142,7 @@ scope:
     std usertest assoc metastrap #:
       /# TODO(wmh): This is not actually std, but rather lib ... we need to
       /# establish an appropriate build target for it.
-    cls assoc metax.lib.Sink;
+    cls usertest assoc metax.io.Sink;
 
     resource cipherfile path "testdata/testing/cipherfile";
     resource entry_mre path "testdata/testing/entry.mre";
@@ -434,6 +434,13 @@ scope:
       seconds = time.time() - self._start
       self.deblog('Invoking %s tearDown for %s' % (self.name(), self.methname()))
       status = self.status()
+
+      /# TODO(wmh): The code in OoplPython.processTestOutput is now using
+      /# the proper micron symbol (\u00B5) instead of 'us'. I could update
+      /# this code as well so that -rvD output uses it.
+      /#  - need to update the timere variable in OoplPython.processTestOutput.
+      us = 'us'  /# '\u00B5s'  /# '\u00B5s'
+
       if not self.silent():
         conditional = self.conditional()
         /# We could display all the conditions causing the test not to be run,
@@ -442,12 +449,16 @@ scope:
         if conditional:
           /# If a test is disabled, status should always be null, but just in
           /# case, we distinguish.
+          cond = conditional[0]
+          opt = cond['option']
+          if len(opt) > 10:
+            opt = opt[:9] + '$'
           status = (
             /# TODO(wmh): Why am I doing this?
             '???' if status
             /# User must remember to set partial=True when self.enabled() is called)
-            else ('PARTIAL' if conditional[0]['partial'] else 'DISABLED'))
-        sys.stdout.write('%9d us  %s\n' % (seconds * 1000000, status or '.'))
+            else ('PARTIAL' if cond['partial'] else opt))
+        sys.stdout.write('%9d %s  %s\n' % (seconds * 1000000, us, status or '.'))
 
       /# Clean up moxes
       self.clearMoxes()
@@ -586,6 +597,14 @@ scope:
         env = 'META_' + option
       if os.getenv(env, 'false') == value:
         self.enable(option)
+      /# New mechanism 2023-12-29
+      /#  - instead of META_<var> for every <var> we want to guard test code
+      /#    with, we also allow METAT=<var>[','<var>]...
+      metat = os.getenv('METAT', '')
+      if metat:
+        vars = set(metat.split(','))
+        if option in vars:
+          self.enable(option)
     end method enableEnv;
 
     new
@@ -662,9 +681,14 @@ scope:
 
       if hasattr(self, '_outcome'):
         /# Python 3.4+
-        result = self.defaultTestResult()
-        if self._outcome:
+        /# https://stackoverflow.com/questions/4414234/getting-pythons-unittest-results-in-a-teardown-method
+        if hasattr(self._outcome, 'errors'):
+          /# Python 3.4 - 3.10  (These two methods have no side effects)
+          result = self.defaultTestResult()
           self._feedErrorsToResult(result, self._outcome.errors)
+        else:
+          /# Python 3.11+
+          result = self._outcome.result
       else:
         /# Python 3.2 - 3.3 or 3.0 - 3.1 and 2.7
         result = getattr(
@@ -1018,6 +1042,30 @@ scope:
       /# Important to clean up tc here!
       tc.tearDown()
     end method newMox;
+
+    new
+    method tmpsink : SinkHolder #:
+      For use in the following idiom within a test: block
+        obj = test.somemethod()
+        with test.tmpsink(obj)):
+          ... do stuff that uses obj.sink() ...
+          ... this will use a string-based Sink object from test.sinkfp() ...
+        The output will be available in test.out()
+
+        Alternatively:
+          obj = test.somemethod()
+          sink = metax.io.Sink.Null()   # any sink object
+          with test.tmpsink(obj, sink)):
+            ... do stuff that uses obj.sink() ...
+            ... this will use the passed in |sink| param to tmpsink ...
+    params:
+      var obj : any;
+      var sink : metax.io.Sink = null;
+    scope:
+      holder = SinkHolder(self, obj, sink=sink)
+      return holder
+    test:
+    end method tmpsink;
 
     new
     method sinkfp : metax.io.Sink #:
@@ -2445,13 +2493,40 @@ scope:
     scope<cc>:
       throw metax::root::Error("TestCase.isapprox() not yet implemented");
     scope<py>:
+      def ApproxDict(data):
+        /# Convert float values in dict to approx values.
+        result = {}
+        for k, v in data.items():
+          if isinstance(v, dict):
+            result[k] = ApproxDict(v)
+          elif isinstance(v, (list, tuple)):
+            result[k] = ApproxList(v)
+          elif isinstance(v, float):
+            result[k] = int(0.5 + v/delta) * delta
+          else:
+            result[k] = v
+        return result
+
+      def ApproxList(data):
+        result = []
+        for v in data:
+          if isinstance(v, dict):
+            result.append(ApproxDict(v))
+          elif isinstance(v, (list, tuple)):
+            result.append(ApproxList(v))
+          elif isinstance(v, float):
+            result.append(int(0.5 + v/delta) * delta)
+          else:
+            result.append(v)
+        return result
+
       if f2 is MISSING_FLOAT:
         msgfix = ' [%s]' % msg if msg else ''
         if isinstance(f1, (list, tuple)):
-          n1 = [int(0.5 + v/delta) * delta if isinstance(v, float) else v for v in f1]
+          n1 = ApproxList(f1)
           print('isapprox: %s%s' % (n1, msgfix))
         elif isinstance(f1, dict):
-          n1 = {k: int(0.5 + v/delta) * delta if isinstance(v, float) else v for (k, v) in f1.items()}
+          n1 = ApproxDict(f1)
           print('isapprox: %s%s' % (repr(n1), msgfix))
         else:
           print('isapprox: %s%s' % ((int(0.5 + f1/delta) * delta), msgfix))
@@ -2460,12 +2535,12 @@ scope:
           (isinstance(f1, list) and isinstance(f2, list))
           or (isinstance(f1, tuple) and isinstance(f2, tuple))
         ):
-          n1 = [int(0.5 + v/delta) * delta if isinstance(v, float) else v for v in f1]
-          n2 = [int(0.5 + v/delta) * delta if isinstance(v, float) else v for v in f2]
+          n1 = ApproxList(f1)
+          n2 = ApproxList(f2)
           self.assertEqual(n1, n2)
         elif isinstance(f1, dict) and isinstance(f2, dict):
-          n1 = {k: int(0.5 + v/delta) * delta if isinstance(v, float) else v for (k, v) in f1.items()}
-          n2 = {k: int(0.5 + v/delta) * delta if isinstance(v, float) else v for (k, v) in f2.items()}
+          n1 = ApproxDict(f1)
+          n2 = ApproxDict(f2)
           self.assertEqual(n1, n2)
         else:
           self.assertAlmostEqual(f1, f2, delta=delta, msg=msg)
@@ -2925,6 +3000,50 @@ scope:
   end class FakeFcntl;
 
   specific
+  class SinkHolder parent<py> ^object #:
+    Allows use of the following idiom in tests:
+      obj = test.somemethod()
+      with test.tmpsink(obj):
+        ... do stuff that uses obj.sink() ...
+        ... this will use a string-based Sink object from test.sinkfp() ...
+      The output will be available in test.out()
+  scope<py>:
+
+    lifecycle params:
+      var testcase : metax.test.TestCase;
+      var obj : any;
+      var sink : metax.io.Sink = null;
+    scope:
+      self.testcase = testcase
+      self.obj = obj
+      self.origsink = obj.sink()
+
+      if sink is None:
+        sink = testcase.sinkfp()
+      self.tmpsink = sink
+      obj.sinkIs(sink)
+    end;
+
+    method __enter__ scope:
+    end method __enter__;
+
+    method __exit__ : any #:
+      Replace sink
+    params:
+      var type : class #:
+        Some subclass of Exception
+      var value : ^Exception #:
+        Some instance of the class type defined by 'type'.
+      var traceback : types.TracebackType #:
+        A traceback object.
+    scope:
+      obj = self.obj
+      obj.sinkIs(self.origsink)
+    end method __exit__;
+
+  end class SinkHolder;
+
+  specific
   class StubHolder parent<py> ^object
   comment:
     Support class for stubbing methods out for unit testing.
@@ -3144,11 +3263,27 @@ scope:
       else:
         /# This code IS being executed via bazel
         pass
+
       /# By passing verbosity=0, we disable unittest.TextTestRunner's default
       /# behavior of printing out a '.' (or 'E' or 'F') for each test. Meta
       /# provides its own output.
       kwds['verbosity'] = 0
-      return unittest.main(**kwds)
+
+      /# By passing exit=False, we disable unittest.main's default behavior
+      /# of invoking sys.exit.
+      /#  - https://docs.python.org/3/library/unittest.html#unittest.main
+      kwds['exit'] = False
+
+      result = unittest.main(**kwds)
+
+      /# Perform some cleanup
+      /#  - TODO(wmh): This is hacky. If not done, warnings are printed about
+      /#    an unclosed file handle, but we need a better, more general,
+      /#    solution
+      if metax.io.Sink._Null:
+        metax.io.Sink._Null.fp().close()
+
+      return result
   end native;
 
 end namespace metax.test;

@@ -243,7 +243,7 @@
 ; Various methods set these variables
 (setq metaoopl-current-construct-kind nil)
 (if (not (boundp 'metaoopl-meta-binary))
-  (setq metaoopl-meta-binary "meta2"))
+  (setq metaoopl-meta-binary "metac"))
 
 (defun metaoopl-goto-construct-line (&optional target-dent)
   ;; Find the line defining the construct within which the current line

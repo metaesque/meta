@@ -450,6 +450,22 @@ config:
     end Template python_test;
 
     Template javascript #:
+      How to define javascript classes using ES6 classes.
+    scope:
+      >|${overview}
+      >|${imports}
+      >|${preclass}
+      >|
+      >|${comment}
+      >|class ${class}${parentspec} {
+      >|  ${preamble}
+      >|  ${scope}
+      >|  ${postamble}
+      >|}
+      >|${postclass}
+    end Template javascript;
+
+    Template javascript_closure #:
       How to define javascript classes using ES2015 class sytnax and goog.module().
       https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes
       https://github.com/google/closure-library/wiki/goog.module:-an-ES6-module-like-alternative-to-goog.provide
@@ -467,9 +483,25 @@ config:
       >|  ${postamble}
       >|}
       >|${postclass}
-    end Template javascript;
+    end Template javascript_closure;
 
     Template javascript_test #:
+      How to define javascript test classes using ES6 modules.
+    scope:
+      >|${overview}
+      >|${imports}
+      >|${preclass}
+      >|
+      >|${comment}
+      >|class ${class}${parentspec} {
+      >|  ${preamble}
+      >|  ${scope}
+      >|  ${postamble}
+      >|}
+      >|${postclass}
+    end Template javascript_test;
+
+    Template javascript_closure_test #:
       How to define javascript test classes using ES2015 class sytnax.
     scope:
       >|${overview}
@@ -486,7 +518,7 @@ config:
       >|  ${postamble}
       >|}
       >|${postclass}
-    end Template javascript_test;
+    end Template javascript_closure_test;
 
     Template cpp_decl scope:
       >|#ifndef ${namespace_under}_${class}_h

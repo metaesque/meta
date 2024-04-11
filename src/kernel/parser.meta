@@ -231,6 +231,10 @@ scope:
     INTERPOLATION_RE = re.compile(r'\$\{\"(?P<varstr>[^\"]+)\"\}')
     VAR_RE = re.compile(r'\$\{(?P<var>[^\}]+)\}')
 
+    META_KNOWN = 'META_KNOWN'
+
+    TEST_LOG_FILE = 'LOG'
+
     /# Must be something that cannot conflict with a sub-namespace or class.
     /# IMPORTANT: This is hardcoded in root.meta! CODETANGLE(resource_dir)
     RESOURCES_SUBDIR = '.__resources'
@@ -266,7 +270,7 @@ scope:
     /#         file.metaooplpy
     /#         file.metadochtml
     SUFFIX_RE = re.compile(
-      '(?P<base>(?:\S+/)?[^.]+)\.meta(?P<metasuffix>[a-z]*)$')
+      r'(?P<base>(?:\S+/)?[^.]+)\.meta(?P<metasuffix>[a-z]*)$')
 
     /# TODO(wmh): Move this someplace better!
     def PathFromMeta(metapath, suffix):
@@ -3182,7 +3186,7 @@ scope:
       self.chunksIs(chunks)
     clinit:
       cls.TMPL_RE = re.compile(
-        '((?:^|\n) *)?\$\{([a-zA-Z0-9_-]+)(?:\?([^\}]*))?\}')
+        r'((?:^|\n) *)?\$\{([a-zA-Z0-9_-]+)(?:\?([^\}]*))?\}')
     setup:
       context = metax.c.Context(None, None, None, None)
       fauxcons = metax.meta.FileConstruct('f', None, context)
@@ -4932,7 +4936,7 @@ scope:
     params:
       var id : str;
     scope:
-      return bool(re.match('^Meta__(\d+)__$', id))
+      return bool(re.match(r'^Meta__(\d+)__$', id))
     test:
       test.istrue(metax.c.Context.IsAutoId('Meta__39__'))
       test.isfalse(metax.c.Context.IsAutoId('foo'))
@@ -5254,7 +5258,7 @@ scope:
 
     Legal type prefixes are:
       @#?
-      &?(#?[usw]?\*)*#?
+      &?(#?[usw]?[*])*#?
 
     How to type a variable V.
      - Establish the base type T
@@ -10123,6 +10127,14 @@ scope:
       Maps strings (merged arg lists) to maps as returned from _parseArgs.
       An optimization to avoid invoking _parseArgs() multiple times.
 
+    field repometa : @map #:
+      TODO(wmh): Should define a Repository class to represent the on-disk
+      repository of all Meta-generated files. The methods parseRepository,
+      parseRepositoryNamespace, parseRepositoryFile, and maybe others can be
+      moved to that class, and can maintain state separate from Compiler.
+      This field should also be moved into that class, as it is initialized
+      by parseRepository.
+
     lifecycle params:
       var metal : str = 'oopl';
       var basel : str = null;
@@ -10610,6 +10622,10 @@ scope:
         /# on explicit test-classes provided by users.
         'metatestclass': False,
       }
+
+      cls.RepoFileRe = re.compile(
+        r'^(?:BUILD|README|META_KNOWN|[.]?bazel|\.[a-z]+rc|WORKSPACE|CROSSTOOL.*|.*\.yaml$)'
+      )
     setup:
       /# Each test should invoke some variant of
       /#    _, _, _, metac = test.cachedInfo(metal='oopl', basel='python')
@@ -12910,9 +12926,10 @@ scope:
         /# raw testing.
         'python': {
           /# 'default': 'python',
-          'default': 'python3.10',
+          'default': '/Users/wmh/src/wmh/lib/python/env/bin/python',
           'old': 'python2',
-          'new': 'python3.10',
+          /# 'new': 'python3.12',
+          'new': '/Users/wmh/src/wmh/lib/python/env/bin/python',
         }
       }
       if basebinary and basebinary[0] == '/' and fs.exists(basebinary):
@@ -14200,7 +14217,7 @@ scope:
       proceed = not dryrun
       if prompt and proceed:
         while True:
-          ans = raw_input('Execute (Y/n)? ').strip().lower()
+          ans = input('Execute (Y/n)? ').strip().lower()
           if not ans or ans[0] == 'y':
             proceed = True
             break
@@ -14263,40 +14280,28 @@ scope:
       /#     The map file
       /#   bazel: str
       /#     The file containing the BUILD snippet for the class.
+      result = {}
 
-      top_re = re.compile(
-        r'^(?:BUILD|README|bazel-|WORKSPACE|CROSSTOOL.*|metastrap|__init__\.py|\.meta__stub).*')
+      top_re = Compiler.RepoFileRe
       odir = fs.join(repopath, 'oopl')
       for basel in fs.listdir(odir):
         if basel == 'meta':
           /# Special-case directory
           /# TODO(wmh): Perform special parsing of this dir.
           continue
+        if top_re.match(basel):
+          continue
 
+        /# TODO(wmh): Ignore basel if it isn't a legal baselang for metaoopl.
         if basel != 'python':
           fp.write(u'WARNING: Not yet handling parseRepository on %s\n' % basel)
           continue
 
-        /# TODO(wmh): Ignore basel if it isn't a legal baselang for metaoopl.
-        topdir = fs.join(odir, basel)
-        for base in fs.listdir(topdir):
-          m = top_re.match(base)
-          if m:
-            /# a bazel-related file
-            pass
-          else:
-            path = fs.join(topdir, base)
-            if fs.isdir(path):
-              /# Presumably a namespace.
-              if base.endswith('_test'):
-                /# Ignored here, as it will be handled by the non-test code.
-                pass
-              else:
-                /# print path
-                self.parseRepositoryNamespace(base, path, fp=fp)
-            else:
-              /# We do not expect any other top-level files.
-              fp.write(u'ERROR: %s is unexpected\n' % path)
+        basedir = fs.join(odir, basel)
+        basel_data, metas = self.parseRepositoryBase(basedir, fp=fp)
+        result[basel] = basel_data
+
+      return result
     test:
       _, _, _, metaoopl = test.cachedInfo()
       metaoopl.parseRepository(fp=test.fp())
@@ -14305,6 +14310,66 @@ scope:
       /# print out
     end method parseRepository;
 
+    method parseRepositoryBase : map #:
+      Parse a baselang within the repository.
+
+      Returns:
+        Mapping from namespace id to namespace data.
+    params:
+      var basedir : str #:
+        A path to a baselang repo dir.
+      var fp : ostream = out #:
+        Where output is sent.
+    scope:
+      result = {}
+      top_re = Compiler.RepoFileRe
+      fs = self.fs()
+
+      for base in fs.listdir(basedir):
+        m = top_re.match(base)
+        if m:
+          /# a bazel-related file
+          pass
+        else:
+          path = fs.join(basedir, base)
+          if fs.isdir(path):
+            /# Presumably a namespace.
+            if base.endswith('_test'):
+              /# Ignored here, as it will be handled by the non-test code.
+              pass
+            else:
+              /# print path
+              self.parseRepositoryNamespace(base, path, result, fp=fp)
+          else:
+            /# We do not expect any other top-level files.
+            fp.write(u'ERROR: %s is unexpected\n' % path)
+
+      /# Now obtain the list of all .meta files that participated in creating
+      /# the content in basedir
+      metas = set()
+      for nmsp in sorted(result):
+        nmspdata = result[nmsp]['user']
+        if 'classes' not in nmspdata:
+          /# This is a namespace with sub-namespaces instead of classes
+          continue
+
+        classesdata = nmspdata['classes']
+        for clsname in sorted(classesdata):
+          clsdata = classesdata[clsname]
+          if 'user' in clsdata:
+            if 'metapath' in clsdata['user']:
+              metas.add(clsdata['user']['metapath'])
+      known_path = fs.join(basedir, META_KNOWN)
+      with fs.open(known_path, 'w') as ofp:
+        for metapath in sorted(metas):
+          ofp.write(metapath)
+          ofp.write('\n')
+      /# print('NOTE: Wrote %d paths to %s' % (len(metas), known_path))
+
+      return result, metas
+    test:
+    end method parseRepositoryBase;
+
     method parseRepositoryNamespace : map #:
       Parse a directory representing a namespace.
     params:
@@ -14312,6 +14377,10 @@ scope:
         The fully qualified name of the namespace
       var path : str #:
         The repository path to parse as a namespace.
+      var output : map #:
+        This dict is modified by adding the parsed fully-qualified namespace
+        name as a key, and a rich data-structure describing the namespaces as
+        a value.
       var fp : ostream = out #:
         Where output is sent.
     scope:
@@ -14323,11 +14392,12 @@ scope:
         'py': 'defn',
         'py.map': 'map',
         'bld': 'bld',
+        'log': 'log',  /# added 2023-12-22 with little remembrance of creating this code (may be incorrect)
       }
       /# TODO(wmh): The following should be baselang-specific too.
       /# Be careful with how many things are ignored ... we want the repo
       /# hierarchy to stay clean.
-      ignore_re = re.compile('^__init__\.pyc|~$')
+      ignore_re = re.compile(r'^__init__\.pyc|~$')
 
       /# Obtain the files in the associated test path.
       testpath = metax.oopl.NamespaceConstruct.TestifyName(path)
@@ -14360,12 +14430,13 @@ scope:
           /#   test: map
           /#     same structure as user
           /#   meta: map
-          /#p     same structure as user
+          /#     same structure as user
           'classes': {},
           /# child namespaces
           'namespaces': {},
         },
         'test': {
+          'name': name + '_test',
           'path': testpath,
           /# classes has same structure as above for user_nmsp['classes']
           'classes': {},
@@ -14373,7 +14444,7 @@ scope:
         }
       }
 
-      for base in fs.listdir(path):
+      for base in sorted(fs.listdir(path)):
         subpath = fs.join(path, base)
         if base == 'BUILD':
           /# BUILD (process test BUILD too)
@@ -14389,6 +14460,14 @@ scope:
         elif ignore_re.search(base):
           /# This file is explicitly to be ignored.
           pass
+        elif base == TEST_LOG_FILE:
+          /# TODO(wmh): Remind myself about files of the form
+          /#   .../meta/oopl/python/nm/sp/.<class>/<method>/{LOG,t<num>.log}
+          /# which I do not remember anything about. I should maybe be ignoring
+          /# these dirs entirely during validation, but for now we explicitly
+          /# ignore TEST_LOG_FILE (aka 'LOG') files, and .log files are ignored
+          /# by adding them to suffixes.
+          pass
         elif fs.islink(subpath):
           /# A symlink ... ignored?
           fp.write(u'SKIPPING link %s\n' % subpath)
@@ -14396,7 +14475,7 @@ scope:
           /# This is either a class file, executable, or an error.
           self.parseRepositoryFile(
             base, suffixes, errors, result['user'], testnmspmap=result['test'],
-            fp=fp)
+            fp=fp, output=output)
 
       /# testdata contains all unprocessed files in the test namespace
       /# directory associated with this namespace directory.
@@ -14404,7 +14483,7 @@ scope:
       /#    the test namespace result.
       for testbase in list(testdata.keys()):
         if self.parseRepositoryFile(
-          testbase, suffixes, errors, result['test'], fp=fp
+          testbase, suffixes, errors, result['test'], fp=fp, output=output,
         ):
           del testdata[testbase]
 
@@ -14430,13 +14509,17 @@ scope:
           fp.write(u'    %s\n' % errors[subpath])
         fp.write(u'#' * 80 + '\n')
 
+      assert name not in output, name
+      output[name] = result
+
       return result
     test:
       _, _, _, metaoopl = test.cachedInfo()
       root = metaoopl.repositoryPath()
       fs = metaoopl.fs()
       path = fs.join(root, 'oopl', 'python', 'metax', 'root')
-      res = metaoopl.parseRepositoryNamespace('metax.root', path)
+      output = {}
+      res = metaoopl.parseRepositoryNamespace('metax.root', path, output)
       homedir = fs.getenv('HOME')
       test.iseqmap(
         {
@@ -14498,7 +14581,8 @@ scope:
         res, width=160)
 
       path2 = fs.join(root, 'oopl', 'python', 'metax', 'test')
-      res2 = metaoopl.parseRepositoryNamespace('metax.test', path2)
+      output2 = {}
+      res2 = metaoopl.parseRepositoryNamespace('metax.test', path2, output2)
       errors = res2.get('errors', None)
       test.isnull(errors)
       test.iseqmap(
@@ -14576,7 +14660,9 @@ scope:
         res2, width=160)
 
       path3 = fs.join(root, 'oopl', 'python', 'metax')
-      res3 = metaoopl.parseRepositoryNamespace('metax', path3, fp=test.fp())
+      output3 = {}
+      res3 = metaoopl.parseRepositoryNamespace(
+        'metax', path3, output3, fp=test.fp())
       test.isfalse('errors' in res3)
       out = test.out()
     end method parseRepositoryNamespace;
@@ -14591,7 +14677,7 @@ scope:
         true if file parsed, false if not recognized.
     params:
       var base : str #:
-        is a file within the namespace directory being parsed
+        A file within the namespace directory being parsed
       var suffixes : map #:
         The legal suffixes for current namespace and baselang.
       var errors : map #:
@@ -14601,6 +14687,9 @@ scope:
         user data or test data depending on where it is called from.
       var testnmspmap : map = null #:
         the test namespace (if we are processing user namespace) or null.
+      var output : map = null #:
+        See the |output| var in parseRepositoryNamespace. Needed to handle
+        child namespaces.
       var fp : ostream = out #:
         Where output is sent.
     scope:
@@ -14610,6 +14699,10 @@ scope:
       fullpath = fs.join(path, base)
       testdirmap = testnmspmap['basemap'] if testnmspmap else None
 
+      /# This currently only matches bases consisting of
+      /#   [.] <name> '.' <suffix>
+      /# (and thus does NOT match file 'LOG' aka TEST_LOG_FILE (which should be
+      /# renamed to have a suffix)
       m = Compiler.NamespaceFileRE.match(base)
 
       if fs.isdir(fullpath):
@@ -14635,14 +14728,28 @@ scope:
               result = True
             else:
               errors[fs.join(base, resbase)] = 'Unknown resource file'
+
         elif base == SPECIAL_CHILD_DIR:
           /# We've found a '.meta' file .. that is broken!
           errors[base] = 'Should not appear in repo!'
+
         elif base == PYCACHE:
           /# Ignore __pycache__: https://www.python.org/dev/peps/pep-3147/
           result = True
+
+        elif base[0] == '.':
+          /# TODO(wmh): This subdir is presumably of the form '.<class>', and
+          /# contains subdirs representing methods that contain LOG and
+          /# 't<num>.log' files. Verify this code is correct.
+          tentativeclsname = base[1:]
+          /# TODO(wmh): Verify it is a class. Either by looking in
+          /# nmspmap['classes'] (if classes are guaranteed to be processed by
+          /# now), or checking if '<class>.<baselangsuffix>' and
+          /# '<class>.<baselangsuffix>.map' also exist.
+          pass
+
         else:
-            /# We assume this is a recursive namespace
+          /# We assume this is a recursive namespace
           if base.endswith('_test') or not testnmspmap:
             /# If we are in a test namespace, we do not call
             /# parseRepositoryNamespace().
@@ -14653,7 +14760,8 @@ scope:
           else:
             subname = nmspmap['name'] + '.' + base
             nmspmap['namespaces'][base] = self.parseRepositoryNamespace(
-              subname, fullpath, fp=fp)
+              subname, fullpath, output, fp=fp)
+
       elif m:
         data = m.groupdict()
 
@@ -14724,7 +14832,8 @@ scope:
 
       /# Note that parseRepositoryNamespace() invokes parseRepositoryFile()
       /# for each file found in the namespace dir.
-      nmspmaps = metaoopl.parseRepositoryNamespace('metax.root', path)
+      output = {}
+      nmspmaps = metaoopl.parseRepositoryNamespace('metax.root', path, output)
       nmspmap = nmspmaps['user']
 
       /# Parse .NewClass.py, which should add an entry to nmspmap['classes']
@@ -14732,7 +14841,7 @@ scope:
         ['Error', 'InternalError', 'Object', 'ObjectMetaRoot'],
         sorted(nmspmap['classes'].keys()))
       res = metaoopl.parseRepositoryFile(
-        '.NewClass.py', suffixes, errors, nmspmap)
+        '.NewClass.py', suffixes, errors, nmspmap, output=output)
       test.iseq(
         ['Error', 'InternalError', 'NewClass', 'Object', 'ObjectMetaRoot'],
         sorted(nmspmap['classes'].keys()))
@@ -15213,7 +15322,7 @@ scope:
             if fields or methods:
               fp.write(
                 /# NOTE(wmh): It is apparently necessary to end the fields and
-                /# mehods lists with a \l so that the last field doesn't get
+                /# method lists with a \l so that the last field doesn't get
                 /# centered instead of left-justified.  This is probably a bug in
                 /# graphviz that will get fixed ... consider testing this later
                 /# (2016/08/28).
@@ -15391,7 +15500,7 @@ scope:
       if bazel_links:
         print('WARNING: Found bazel-* links.')
         print(bazel_links)
-        ans = raw_input('Remove (yes|no)? ').strip()
+        ans = input('Remove (yes|no)? ').strip()
         if ans.lower() == 'yes':
           for path in bazel_links.strip().split('\n'):
             fs.unlink(path)
@@ -16166,7 +16275,14 @@ scope:
       /# Create the Compiler instance.
       metac = metax.c.Compiler(metal=cli.metalang, basel=basel)
       metax.c.Compiler.CurrentIs(metac)
+
       /# Ensure that the repository directory exists.
+      /#  - TODO(wmh): Is the .meta file even used in this code-base? Or was it
+      /#    just created as a convenience for the user? Consider removing this!
+      /#    Or at the very least, add logic that does NOT create the .meta file
+      /#    if there are no .meta files in the current directory! (too many
+      /#    problems occur because I accidentaly invoke metac in a non-meta
+      /#    directory, resulting in spurious .meta symlinks).
       if not metac.verifyDirectory(metadir='.meta'):
         sys.exit(1)
 
@@ -16529,8 +16645,9 @@ scope:
         Search for regexps in specific places
 
         Useful variants:
-         - every method scope
-         - every comment
+         - every .meta file in repo (parsed as files, not meta files)
+         - every method scope (parsed as .meta files)
+         - every comment (parsed as .meta files)
          - ...
       interface:
         flag usercode : bool = true #:
@@ -16547,96 +16664,119 @@ scope:
         testcode = cli.testcode
         restr = cli.restr
         lre = re.compile(restr)
-        args = self.cli().rest
+        args = cli.rest
         sink = metax.io.Sink()
 
-        /# Compile all specified metafiles.
-        argmap = self._parseArgs(args, implicit=True)
-        metafile_paths = argmap['metafiles']
-        try:
-          metafiles, errors, warnings = self.getMetas(metafile_paths)
-        except Exception as e:
-          self.handleCompilationException(e)
-          sys.exit(1)
-        self.writeSummary(metafiles, groups=argmap['groups'])
-
-        def MatchesLocation(construct):
+        if not args:
+          print('Obtaining all .meta files in the repository...')
+          fs = self.fs()
+          basedir = fs.join(
+            self.repositoryPath(), 'oopl', self.baselang().id())
+          data, metas = self.parseRepositoryBase(basedir)
+          for metapath in sorted(metas):
+            if fs.exists(metapath):
+              matches = []
+              with open(metapath, 'r') as ifp:
+                ln = 0
+                for line in ifp:
+                  ln += 1
+                  if lre.search(line):
+                    matches.append('%4d: %s' % (ln, line))
+              stdout = sys.stdout
+              if matches:
+                stdout.write('\n' + metapath + '\n')
+                for line in matches:
+                  stdout.write(line)
+            else:
+              print('ERROR: %s does not exist' % metapath)
+        else:
+          /# Compile all specified metafiles.
+          argmap = self._parseArgs(args, implicit=True)
+          metafile_paths = argmap['metafiles']
           try:
-            location = construct.attrval('location')
-          except metax.c.Error:
-            if verbose:
-              sink.writeln('Skipping %s (no location)' % construct.kindfqn())
-            return False
+            metafiles, errors, warnings = self.getMetas(metafile_paths)
+          except Exception as e:
+            self.handleCompilationException(e)
+            sys.exit(1)
+          self.writeSummary(metafiles, groups=argmap['groups'])
 
-          if usercode and 'user' not in location:
-            if verbose:
-              sink.writeln(
-                'Skipping %s (%s not user location)' %
-                (construct.kindfqn(), location))
-            return False
-          if testcode and 'test' not in location:
-            if verbose:
-              sink.writeln(
-                'Skipping %s (%s not test location)' %
-                (construct.kindfqn(), location))
-            return False
-          return True
+          def MatchesLocation(construct):
+            try:
+              location = construct.attrval('location')
+            except metax.c.Error:
+              if verbose:
+                sink.writeln('Skipping %s (no location)' % construct.kindfqn())
+              return False
 
-        /# For every metafile, for every namespace, for every construct within
-        /# the namespace, for every construct within that subconstruct,
-        /# performing relevant searches.
-        for metafile in metafiles:
-          header_printed = False
-          for namespace in metafile.construct().attrval('scope:', default=EMPTY):
-            nscope = namespace.attr('scope:', default=None)
+            if usercode and 'user' not in location:
+              if verbose:
+                sink.writeln(
+                  'Skipping %s (%s not user location)' %
+                  (construct.kindfqn(), location))
+              return False
+            if testcode and 'test' not in location:
+              if verbose:
+                sink.writeln(
+                  'Skipping %s (%s not test location)' %
+                  (construct.kindfqn(), location))
+              return False
+            return True
 
-            if nscope:
-              for nmsp_construct in nscope.value():
-                /# mostly classes and behaviors
-                if not MatchesLocation(nmsp_construct):
-                  continue
-                cscope = nmsp_construct.attr('scope:', default=None)
-                if cscope and cscope.isComplexBlock():
-                  for construct in cscope.value():
-                    /# methods/fields for classes, receivers for behaviors
-                    if not MatchesLocation(construct):
-                      continue
+          /# For every metafile, for every namespace, for every construct within
+          /# the namespace, for every construct within that subconstruct,
+          /# performing relevant searches.
+          for metafile in metafiles:
+            header_printed = False
+            for namespace in metafile.construct().attrval('scope:', default=EMPTY):
+              nscope = namespace.attr('scope:', default=None)
 
-                    scope = construct.attr('scope:', default=None)
-                    if scope:
-                      if scope.isSimpleBlock():
-                        matches = 0
-                        start = scope.line()
-                        if start <= 0:
-                          /# We don't have line numbers. This can happen for
-                          /# example with auto-generated methods like
-                          /# 'sizeMeta', etc. We ignore them.
-                          continue
-                        for i, line in enumerate(scope.value()):
-                          m = lre.search(line)
-                          if m:
-                            if not header_printed:
-                              sink.writeln('')
-                              sink.writeln('#' * 80)
-                              sink.writeln(metafile.path())
-                              sink.writeln('=' * 40)
-                              header_printed = True
+              if nscope:
+                for nmsp_construct in nscope.value():
+                  /# mostly classes and behaviors
+                  if not MatchesLocation(nmsp_construct):
+                    continue
+                  cscope = nmsp_construct.attr('scope:', default=None)
+                  if cscope and cscope.isComplexBlock():
+                    for construct in cscope.value():
+                      /# methods/fields for classes, receivers for behaviors
+                      if not MatchesLocation(construct):
+                        continue
 
-                            if not matches:
-                              sink.writeln('')
-                              sink.writeln(construct.kindfqn())
+                      scope = construct.attr('scope:', default=None)
+                      if scope:
+                        if scope.isSimpleBlock():
+                          matches = 0
+                          start = scope.line()
+                          if start <= 0:
+                            /# We don't have line numbers. This can happen for
+                            /# example with auto-generated methods like
+                            /# 'sizeMeta', etc. We ignore them.
+                            continue
+                          for i, line in enumerate(scope.value()):
+                            m = lre.search(line)
+                            if m:
+                              if not header_printed:
+                                sink.writeln('')
+                                sink.writeln('#' * 80)
+                                sink.writeln(metafile.path())
+                                sink.writeln('=' * 40)
+                                header_printed = True
 
-                            /# start is the line that 'scope:' appears on, so we
-                            /# need to advance by 1 for first line of content,
-                            /# and advance by 1 to get 1-indexed line-numbers
-                            /# instead of 0-indexed.
-                            sink.writeln('  %4d: %s' % (start + 2 + i, line))
-                      else:
-                        if construct.kind() != 'field':
-                          /# field scopes are always complex. We will want to
-                          /# search them at some point, but for now we don't
-                          /# print warnings for such a common case.
-                          print('NOTE: Not yet searching complex %s' % construct.kindfqn())
+                              if not matches:
+                                sink.writeln('')
+                                sink.writeln(construct.kindfqn())
+
+                              /# start is the line that 'scope:' appears on, so we
+                              /# need to advance by 1 for first line of content,
+                              /# and advance by 1 to get 1-indexed line-numbers
+                              /# instead of 0-indexed.
+                              sink.writeln('  %4d: %s' % (start + 2 + i, line))
+                        else:
+                          if construct.kind() != 'field':
+                            /# field scopes are always complex. We will want to
+                            /# search them at some point, but for now we don't
+                            /# print warnings for such a common case.
+                            print('NOTE: Not yet searching complex %s' % construct.kindfqn())
       end command grep;
 
       command html #:
@@ -17227,7 +17367,7 @@ scope:
             given_ans = None
           else:
             try:
-              ans = raw_input(prompt)
+              ans = input(prompt)
             except EOFError:
               print
               break
@@ -17694,8 +17834,8 @@ scope:
         The github username attempting to create the issue. By default, this
         is self.owner(). Must be someone with read/write access to the repo!
       var token : str = null #:
-        A token to use for authentication.
-        https://developer.github.com/v3/oauth_authorizations/\#create-a-new-authorization
+        /# A token to use for authentication.
+        /# https://developer.github.com/v3/oauth_authorizations/#create-a-new-authorization
       var password : str = null #:
         The password to use for authentication.
         One of token or password must be provided.
