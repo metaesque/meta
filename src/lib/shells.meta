@@ -183,8 +183,8 @@ scope:
           if not path.endswith('/'):
             path = path + '/'
           family = value.familyPath()
-          var_re = re.compile('<([^>\s]+)>')
-          family_str = var_re.sub('(?P<\\1>[^\/]+)', family)
+          var_re = re.compile(r'<([^>\s]+)>')
+          family_str = var_re.sub(r'(?P<\1>[^/]+)', family)
           try:
             path_re = re.compile(family_str)
           except re.error as e:
@@ -305,7 +305,7 @@ scope:
         return width
       cls.Hack = Hack
 
-      cls.HISTORY_RE = re.compile('^\s*!(-?\d+|!)\s*$')
+      cls.HISTORY_RE = re.compile(r'^\s*!(-?\d+|!)\s*$')
 
       def Bool(v):
         vv = v.lower()
@@ -364,7 +364,7 @@ scope:
     scope:
       raise Error('Is this code dead?')
       freshold = 10
-      spec_re = re.compile('^<(\S+?)(?::(\S+?)(?:\@(\d+))?)?>')
+      spec_re = re.compile(r'^<(\S+?)(?::(\S+?)(?:\@(\d+))?)?>')
       parts = genspec.split('/')
       if parts[0] == '':
         parts.pop(0)
