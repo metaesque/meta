@@ -1,0 +1,50 @@
+namespace metax.ex1 #:
+  Examples #1
+scope:
+
+  class Shape #:
+    Abstract superclass of various concrete shape classes.
+  scope:
+
+    abstract
+    method area : float #:
+      The area of this shape.
+    end method area;
+
+  end class Shape;
+
+  class Rectangle #:
+    A polygon with 4 vertices at right angles to one another.
+  scope:
+
+    field width : float;
+    field height : float;
+
+    lifecycle params:
+      var width -> width;
+      var height -> height;
+    scope:
+    end;
+
+    method area : float #:
+      The area of this shape.
+
+      TODO(wmh): Allow scope<*>: to appear along with scope<bl>:
+      TODO(wmh): Define 'var', 'call' and 'return' constructs.
+
+      scope<*>:
+        var w : float =:
+          @ self . width;
+        var h : float = @self.height;
+        return @w*h;
+    scope<py>:
+      return self.width() * self.height()
+    scope<js>:
+      return this.width() * this.height();
+    scope<cc>:
+      return this->width() * this.height();
+    end method area;
+
+  end class Rectangle;
+
+end namespace metax.ex1;

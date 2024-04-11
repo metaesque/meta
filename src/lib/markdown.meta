@@ -1751,7 +1751,7 @@ scope:
           with open(spec['path'], 'r') as ifp:
             book = parser.readBook(ifp, path=spec['path'], fast=False)
           book.uidIs(bookid)
-          # mdfile = parser.parseFile(spec['path'], debug=cli.debug)
+          /# mdfile = parser.parseFile(spec['path'], debug=cli.debug)
           if cli.debug:
             book.show(aspect='title*')
           base = spec['base']
@@ -1761,9 +1761,9 @@ scope:
             book.show(aspect=aspect, subaspect=subaspect, fp=fp)
           print('Wrote ' + outpath)
           if subaspect == 'kaplan':
-            # The special javascript variable IdList is currently initialized
-            # to the placeholder ${IdList}, which needs to be replaced with
-            # the contents of Parser.KaplanIds.
+            /# The special javascript variable IdList is currently initialized
+            /# to the placeholder ${IdList}, which needs to be replaced with
+            /# the contents of Parser.KaplanIds.
             tmp = outpath + '.tmp'
             os.rename(outpath, tmp)
             with open(tmp, 'r') as ifp:
@@ -1774,7 +1774,7 @@ scope:
             os.unlink(tmp)
       end command compile;
 
-    end command;
+    end command wmd;
   end class Parser;
 
   native scope:
@@ -1802,15 +1802,15 @@ scope:
           if self.kind() == 'Section':
             title = self.title()
             if not title:
-              # This happens when an implicit section has been added to account
-              # for a header going from level K to K+2.
+              /# This happens when an implicit section has been added to account
+              /# for a header going from level K to K+2.
               pass
             else:
-              # This happens when we have a section
+              /# This happens when we have a section
               print('EMPTY below %s' % self.parent().title())
           else:
-            # If we encounter problems, add additional special casing to
-            # handle them.
+            /# If we encounter problems, add additional special casing to
+            /# handle them.
             raise Error('Request for md5 on %s with empty blobs' % self.kind())
 
           blobs = ['fixme']
@@ -2055,7 +2055,7 @@ scope:
       test.iseq(80, metax.lib.markdown.Object.TerminalWidth())
     end method TerminalWidth;
 
-    method genId #:
+    method genId : str #:
       Return an id (suitable for use in CSS) to represent this object. Record
       id in Parser.KaplanIds.
 
@@ -2066,6 +2066,12 @@ scope:
       result = self.md5()
       Parser.KaplanIds.append(result)
       return result
+    test:
+      test.iseq('bb13c75900c224fece0da7131c79b135', test.p1.md5())
+      /# test.iseq(test.table.md5())
+      test.iseq('00f1b6ee0783b386e0b7b8ea51758de7', test.quote.md5())
+      test.iseq('82a0805a732b59884dce7da82261b6ca', test.section.md5())
+      test.iseq('64766af99203dbf9e3e52d7bbae3cf5d', test.subsection.md5())
     end method genId;
 
   end class Object;
@@ -2951,10 +2957,10 @@ scope:
         None, '_Innate Talent_. Can jump twice as high\nand far.')
       test.iseq(
         ('Innate Talent', 'Can jump twice as high\nand far.'),
-        p3.titleAndText(tdelim='_', tsep='\.\s+'))
+        p3.titleAndText(tdelim='_', tsep=r'\.\s+'))
       test.iseq(
         ('Innate Talent', 'Can jump twice as high and far.'),
-        p3.titleAndText(tdelim='_', tsep='\.\s+', raw=True))
+        p3.titleAndText(tdelim='_', tsep=r'\.\s+', raw=True))
     end method titleAndText;
 
     method clone : Paragraph #:
@@ -3151,7 +3157,7 @@ scope:
         collection of untitled blocks
       var tdelim : str = '**' #:
         What appears before and after the title.
-      var tsep : str = '[:.]\s*' #:
+      var tsep : str = '[:.]\\s*' #:
         What appears after the title before the text
     scope:
       result = collections.OrderedDict()
@@ -3735,7 +3741,7 @@ scope:
     test:
       test.iseq(
         {'Age': '25', 'Fruit': 'Kiwi', 'Name': 'Alice', 'Height': '1.7m'},
-        test.row1.keys())
+        dict(test.row1.keys()))
     end method keys;
 
     test
@@ -4231,7 +4237,7 @@ scope:
         collection of untitled blocks
       var tdelim : str = '**' #:
         What appears before and after the title.
-      var tsep : str = '[:.]\s*' #:
+      var tsep : str = '[:.]\\s*' #:
         What appears after the title before the text
     scope:
       key = '__pre__'
@@ -4910,7 +4916,7 @@ scope:
         result.extend(block.blobs())
       return result
     test:
-      test.iseq([], test.section.blobs())
+      test.iseq(['Section 1'], test.section.blobs())
     end receiver BlockGroup;
 
     receiver Paragraph ::
@@ -4975,7 +4981,7 @@ scope:
       return result
     test:
       test.iseq(
-        ['Apple', '3', 'Banana', '1', 'Cantelope', '2'],
+        ['Fruit', 'Apple', '3', 'Banana', '1', 'Cantelope', '2'],
         test.table2.blobs())
     end receiver Table;
 
@@ -6183,17 +6189,17 @@ scope:
             special_style = ''
             special_script = ''
             if subaspect == 'kaplan':
-              # From
-              #   https://developer.mozilla.org/en-US/docs/Web/HTML/Element/style
-              # one can have multiple <style> elements, and they are applied
-              # in order. We add the kaplan-specific elements BEFORE adding
-              # those from kwds['style']
+              /# From
+              /#   https://developer.mozilla.org/en-US/docs/Web/HTML/Element/style
+              /# one can have multiple <style> elements, and they are applied
+              /# in order. We add the kaplan-specific elements BEFORE adding
+              /# those from kwds['style']
               book = self.parser().book()
               bookuid = book.uid() or 'MISSING_BOOK_ID';
               special_style = Book.KaplanStyle
               special_script = Book.KaplanScript.replace('${BookId}', bookuid)
 
-            # Root level.
+            /# Root level.
             fp.write(
               >|u"""<html>
               >|  <head>
@@ -6761,7 +6767,7 @@ scope:
       return table, errors
     end method newTable;
 
-    method makeLists : List #:
+    method makeLists #:
       Generate a list useful for testing.
     scope:
       self.ul = metax.lib.markdown.List(self.subsection)

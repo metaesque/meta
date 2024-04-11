@@ -1,3 +1,42 @@
+2023-12-03
+ - I have a renewed interest in getting Meta working for Python, C++, and
+   Javascript, including Meta*
+ - Need to get bazel working in all three languages
+    - See $METAROOT/src/examples/ex1.meta, which is a good starting point
+    - Remember that *all* meta requires root.meta and tests.meta. Any time
+      changes are made to the compiler that affect source code or BUILD files,
+      remember to rebuild them:
+        % cd $METAROOT/src/kernel
+        % metac root.meta tests.meta
+    - See also $METAROOT/src/experiments/monolith, which captures a working
+      bazel WORKSPACE spanning ALL baselangs (rather than a separate workspace
+      for each baselang).
+       % cd $METAROOT/src/experiments/monolith
+       % blaze run //python/wmh/ex:area
+       % blaze run //cpp/wmh/ex:area
+       % blaze run //javascript/wmh/ex:area
+
+       % blaze test --test_output=all //python/wmh/ex_test
+       % blaze test --test_output=all //cpp/wmh/ex_test
+       % blaze test --test_output=all //javascript/wmh/ex_test
+
+ - Next actions:
+    - Get javascript tests working. The following succeeds but isn't actually
+      using jest (or any other test harness) yet.
+       % cd $METAROOT/src/experiments/monolith/javascript/wmh/ex
+       % blaze test :RectangleTest
+
+    - Have a class depend on an npm module within javascript
+       - e.g. imagemagick from https://www.npmjs.com/package/imagemagick
+    - Have a class depend on a pip package within python
+       - e.g. ImageMagick from https://pypi.org/project/ImageMagic/
+    - Have a class depend on a thirdparty library within C++
+       - e.g. ImageMagick++ at https://imagemagick.org/script/magick++.php
+       - anything from https://github.com/fffaraz/awesome-cpp
+
+    - Get $METAROOT/src/examples/ex1.meta working in all three languages
+      (compiles, runs, and tests)
+
 2021-01-17
   The following is problematic because the access for test1() gets
   interpreted as a test method. Need to disallow methods and fields

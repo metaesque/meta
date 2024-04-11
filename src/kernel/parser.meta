@@ -14315,7 +14315,7 @@ scope:
       /# print out
     end method parseRepository;
 
-    method parseRepositoryBase #:
+    method parseRepositoryBase : map #:
       Parse a baselang within the repository.
 
       Returns:
@@ -14372,6 +14372,7 @@ scope:
       /# print('NOTE: Wrote %d paths to %s' % (len(metas), known_path))
 
       return result, metas
+    test:
     end method parseRepositoryBase;
 
     method parseRepositoryNamespace : map #:
@@ -14396,7 +14397,7 @@ scope:
         'py': 'defn',
         'py.map': 'map',
         'bld': 'bld',
-        'log': 'log',  # added 2023-12-22 with little remembrance of creating this code (may be incorrect)
+        'log': 'log',  /# added 2023-12-22 with little remembrance of creating this code (may be incorrect)
       }
       /# TODO(wmh): The following should be baselang-specific too.
       /# Be careful with how many things are ignored ... we want the repo
@@ -14522,7 +14523,8 @@ scope:
       root = metaoopl.repositoryPath()
       fs = metaoopl.fs()
       path = fs.join(root, 'oopl', 'python', 'metax', 'root')
-      res = metaoopl.parseRepositoryNamespace('metax.root', path)
+      output = {}
+      res = metaoopl.parseRepositoryNamespace('metax.root', path, output)
       homedir = fs.getenv('HOME')
       test.iseqmap(
         {
@@ -14584,7 +14586,8 @@ scope:
         res, width=160)
 
       path2 = fs.join(root, 'oopl', 'python', 'metax', 'test')
-      res2 = metaoopl.parseRepositoryNamespace('metax.test', path2)
+      output2 = {}
+      res2 = metaoopl.parseRepositoryNamespace('metax.test', path2, output2)
       errors = res2.get('errors', None)
       test.isnull(errors)
       test.iseqmap(
@@ -14662,7 +14665,9 @@ scope:
         res2, width=160)
 
       path3 = fs.join(root, 'oopl', 'python', 'metax')
-      res3 = metaoopl.parseRepositoryNamespace('metax', path3, fp=test.fp())
+      output3 = {}
+      res3 = metaoopl.parseRepositoryNamespace(
+        'metax', path3, output3, fp=test.fp())
       test.isfalse('errors' in res3)
       out = test.out()
     end method parseRepositoryNamespace;
@@ -14761,6 +14766,7 @@ scope:
             subname = nmspmap['name'] + '.' + base
             nmspmap['namespaces'][base] = self.parseRepositoryNamespace(
               subname, fullpath, output, fp=fp)
+
       elif m:
         data = m.groupdict()
 
@@ -14831,7 +14837,8 @@ scope:
 
       /# Note that parseRepositoryNamespace() invokes parseRepositoryFile()
       /# for each file found in the namespace dir.
-      nmspmaps = metaoopl.parseRepositoryNamespace('metax.root', path)
+      output = {}
+      nmspmaps = metaoopl.parseRepositoryNamespace('metax.root', path, output)
       nmspmap = nmspmaps['user']
 
       /# Parse .NewClass.py, which should add an entry to nmspmap['classes']
@@ -14839,7 +14846,7 @@ scope:
         ['Error', 'InternalError', 'Object', 'ObjectMetaRoot'],
         sorted(nmspmap['classes'].keys()))
       res = metaoopl.parseRepositoryFile(
-        '.NewClass.py', suffixes, errors, nmspmap)
+        '.NewClass.py', suffixes, errors, nmspmap, output=output)
       test.iseq(
         ['Error', 'InternalError', 'NewClass', 'Object', 'ObjectMetaRoot'],
         sorted(nmspmap['classes'].keys()))
@@ -16645,7 +16652,7 @@ scope:
         Search for regexps in specific places
 
         Useful variants:
-         - very .meta file in repo (parsed as files, not meta files)
+         - every .meta file in repo (parsed as files, not meta files)
          - every method scope (parsed as .meta files)
          - every comment (parsed as .meta files)
          - ...

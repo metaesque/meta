@@ -142,8 +142,7 @@ scope:
     std usertest assoc metastrap #:
       /# TODO(wmh): This is not actually std, but rather lib ... we need to
       /# establish an appropriate build target for it.
-    cls assoc metax.io.Sink;
-
+    cls usertest assoc metax.io.Sink;
     resource cipherfile path "testdata/testing/cipherfile";
     resource entry_mre path "testdata/testing/entry.mre";
 
@@ -456,7 +455,7 @@ scope:
           status = (
             # TODO(wmh): Why am I doing this?
             '???' if status
-            # User must remember to set partial=True when self.enabled() is called)
+            /# User must remember to set partial=True when self.enabled() is called)
             else ('PARTIAL' if cond['partial'] else opt))
         sys.stdout.write('%9d %s  %s\n' % (seconds * 1000000, us, status or '.'))
 
@@ -597,9 +596,9 @@ scope:
         env = 'META_' + option
       if os.getenv(env, 'false') == value:
         self.enable(option)
-      # New mechanism 2023-12-29
-      #  - instead of META_<var> for every <var> we want to guard test code
-      #    with, we also allow METAT=<var>[','<var>]...
+      /# New mechanism 2023-12-29
+      /#  - instead of META_<var> for every <var> we want to guard test code
+      /#    with, we also allow METAT=<var>[','<var>]...
       metat = os.getenv('METAT', '')
       if metat:
         vars = set(metat.split(','))
@@ -1043,7 +1042,8 @@ scope:
       tc.tearDown()
     end method newMox;
 
-    method tmpsink #:
+    new
+    method tmpsink : SinkHolder #:
       For use in the following idiom within a test: block
         obj = test.somemethod()
         with test.tmpsink(obj)):
@@ -1063,6 +1063,7 @@ scope:
     scope:
       holder = SinkHolder(self, obj, sink=sink)
       return holder
+    test:
     end method tmpsink;
 
     new
@@ -2492,7 +2493,7 @@ scope:
       throw metax::root::Error("TestCase.isapprox() not yet implemented");
     scope<py>:
       def ApproxDict(data):
-        # Convert float values in dict to approx values.
+        /# Convert float values in dict to approx values.
         result = {}
         for k, v in data.items():
           if isinstance(v, dict):
@@ -2997,6 +2998,7 @@ scope:
     end method lockf;
   end class FakeFcntl;
 
+  specific
   class SinkHolder parent<py> ^object #:
     Allows use of the following idiom in tests:
       obj = test.somemethod()
@@ -3004,7 +3006,7 @@ scope:
         ... do stuff that uses obj.sink() ...
         ... this will use a string-based Sink object from test.sinkfp() ...
       The output will be available in test.out()
-  scope:
+  scope<py>:
 
     lifecycle params:
       var testcase : metax.test.TestCase;
@@ -3019,12 +3021,12 @@ scope:
         sink = testcase.sinkfp()
       self.tmpsink = sink
       obj.sinkIs(sink)
-    end lifecycle;
+    end;
 
     method __enter__ scope:
-      pass
+    end method __enter__;
 
-    method __exit__ #:
+    method __exit__ : any #:
       Replace sink
     params:
       var type : class #:

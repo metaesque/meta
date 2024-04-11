@@ -1,0 +1,92 @@
+# Documentation for WORKSPACE
+#  - https://bazel.build/reference/be/workspace
+#     - bind : create aliases for targets (NOT recommended)
+#     - local_repository: allows targets from a local directory to be bound
+#     - new_local_repository: allows local directory to be turned into Bazel repo
+#
+#  - Baselisk: https://github.com/bazelbuild/bazelisk
+#
+# IMPORTANT:
+#  - The WORKSPACE file is read-only, but can be updated by:
+#     - updating one or more of the WORKSPACE.* files
+#     - then executing:
+#         % cd cd $METAROOT/src/experiments/monolith
+#         % make ws
+#  - To keep the version info in WORKSPACE up-to-date:
+#     - run the following regularly
+#         % cd $METAROOT/src/experiments/monolith
+#         % web ws WORKSPACE
+#     - The most common MISMATCHes will be in http_archive keyword values,
+#       when a new version of an archive is released. Update the appropriate
+#       WORKSPACE.<suffix> file based on the diffs reported.
+#     - There is a discrepancy between how npm_translate_lock is loaded and
+#       invoked between rules_js and rules_jest that results in
+#       @aspect_rules_js//npm:npm_import.bzl being reported missing (this can be
+#       ignored).
+#
+#  - The directory representing the root of the bazel hierarchy must
+#    contain all of the following files:
+#     - WORKSPACE (this file)
+#     - BUILD (can be empty, but @npm fails without it)
+#     - .bazelignore (to ignore node_modules) ... required by
+#       npm_translate_lock below.
+#     - .bazelrc ... to config bazel
+#     - .nmprc ... referenced by npm_translate_lock below.
+#     - pnpm-lock.yaml (to populate javascript modules). Something like
+#       the following is sufficient:
+#         |lockfileVersion: '6.0'
+#         |
+#         |settings:
+#         |  autoInstallPeers: true
+#         |  excludeLinksFromLockfile: false
+
+# QUESTIONS:
+#  - what bazel command do I invoke to verify an http_archive
+#  - where are these files cached locally?
+
+# NOTES:
+#  - considering using a prelude file (tools/build_rules/prelude_bazel)
+#    to avoid having to load nodejs_binary in every Javascript rule
+#     - https://groups.google.com/g/bazel-discuss/c/sG5G5eMFYYA
+
+# TODO:
+#  - read up on pnpm
+#     - what does 'pnpm setup' do?
+#     - what is this supposed to do?
+#        % pnpm add -g pnpm
+#        |Nothing to stop. No server is running for the store at
+#        |/Users/wmh/Library/pnpm/store/v3
+#        | ERR_PNPM_NO_GLOBAL_BIN_DIR  Unable to find the global bin directory
+#        |
+#        |Run "pnpm setup" to create it automatically, or set the
+#        |global-bin-dir setting, or the PNPM_HOME env variable. The global bin
+#        |directory should be in the PATH.
+
+workspace(
+  # https://docs.bazel.build/versions/main/skylark/deploying.html#workspace
+  name="meta_workspace",
+  # Javascript: managed_directories has been deprecated
+  # managed_directories = {"@npm": ["node_modules"]},
+)
+
+# Bazel infrastructure
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
+
+# skylib
+#  - Rust depends on this, but we place it here in the general bazel
+#    infrastructure section because other languages may find it useful too.
+#  - installation instructions:
+#      https://github.com/bazelbuild/bazel-skylib/releases
+
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "cd55a062e763b9349921f0f5db8c3933288dc8ba4f76dd9416aac68acee3cb94",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.5.0/bazel-skylib-1.5.0.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.5.0/bazel-skylib-1.5.0.tar.gz",
+    ],
+)
+
+load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
+bazel_skylib_workspace()

@@ -1,0 +1,322 @@
+# Documentation for WORKSPACE
+#  - https://bazel.build/reference/be/workspace
+#     - bind : create aliases for targets (NOT recommended)
+#     - local_repository: allows targets from a local directory to be bound
+#     - new_local_repository: allows local directory to be turned into Bazel repo
+#
+#  - Baselisk: https://github.com/bazelbuild/bazelisk
+#
+# IMPORTANT:
+#  - The WORKSPACE file is read-only, but can be updated by:
+#     - updating one or more of the WORKSPACE.* files
+#     - then executing:
+#         % cd cd $METAROOT/src/experiments/monolith
+#         % make ws
+#  - To keep the version info in WORKSPACE up-to-date:
+#     - run the following regularly
+#         % cd $METAROOT/src/experiments/monolith
+#         % web ws WORKSPACE
+#     - The most common MISMATCHes will be in http_archive keyword values,
+#       when a new version of an archive is released. Update the appropriate
+#       WORKSPACE.<suffix> file based on the diffs reported.
+#     - There is a discrepancy between how npm_translate_lock is loaded and
+#       invoked between rules_js and rules_jest that results in
+#       @aspect_rules_js//npm:npm_import.bzl being reported missing (this can be
+#       ignored).
+#
+#  - The directory representing the root of the bazel hierarchy must
+#    contain all of the following files:
+#     - WORKSPACE (this file)
+#     - BUILD (can be empty, but @npm fails without it)
+#     - .bazelignore (to ignore node_modules) ... required by
+#       npm_translate_lock below.
+#     - .bazelrc ... to config bazel
+#     - .nmprc ... referenced by npm_translate_lock below.
+#     - pnpm-lock.yaml (to populate javascript modules). Something like
+#       the following is sufficient:
+#         |lockfileVersion: '6.0'
+#         |
+#         |settings:
+#         |  autoInstallPeers: true
+#         |  excludeLinksFromLockfile: false
+
+# QUESTIONS:
+#  - what bazel command do I invoke to verify an http_archive
+#  - where are these files cached locally?
+
+# NOTES:
+#  - considering using a prelude file (tools/build_rules/prelude_bazel)
+#    to avoid having to load nodejs_binary in every Javascript rule
+#     - https://groups.google.com/g/bazel-discuss/c/sG5G5eMFYYA
+
+workspace(
+  name="meta_workspace",
+  # Javascript: managed_directories has been deprecated
+  # managed_directories = {"@npm": ["node_modules"]},
+)
+
+# Bazel infrastructure
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
+
+# skylib
+#  - Rust depends on this, but we place it here in the general bazel
+#    infrastructure section because other languages may find it useful too.
+#  - installation instructions:
+#      https://github.com/bazelbuild/bazel-skylib/releases
+
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "cd55a062e763b9349921f0f5db8c3933288dc8ba4f76dd9416aac68acee3cb94",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.5.0/bazel-skylib-1.5.0.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.5.0/bazel-skylib-1.5.0.tar.gz",
+    ],
+)
+
+load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
+bazel_skylib_workspace()
+
+######################################
+# Language: C++
+######################################
+# - releases: https://github.com/bazelbuild/rules_cc/releases
+# - questions
+#    - how do I specify g++ instead of clang?
+
+# https://bazel.build/docs/cc-toolchain-config-reference
+#   GCC
+#    http_archive(
+#        name = "aspect_gcc_toolchain",
+#        sha256 = "3341394b1376fb96a87ac3ca01c582f7f18e7dc5e16e8cf40880a31dd7ac0e1e",
+#        strip_prefix = "gcc-toolchain-0.4.2",
+#        urls = [
+#            "https://github.com/aspect-build/gcc-toolchain/archive/refs/tags/0.4.2.tar.gz",
+#        ],
+#    )
+#
+#    load("@aspect_gcc_toolchain//toolchain:repositories.bzl", "gcc_toolchain_dependencies")
+#    gcc_toolchain_dependencies()
+#    load("@aspect_gcc_toolchain//toolchain:defs.bzl", "gcc_register_toolchain", "ARCHS")
+#    gcc_register_toolchain(
+#        name = "gcc_toolchain_x86_64",
+#        target_arch = ARCHS.x86_64,
+#    )
+
+# Unit Testing in C++
+#  - https://google.github.io/googletest/quickstart-bazel.html
+#  - https://google.github.io/googletest/primer.html
+#  - TODO(wmh): How do I establish the sha256 value?
+http_archive(
+    name = "gtest",
+    url = "https://github.com/google/googletest/archive/release-1.12.0.zip",
+    #sha256 = "b58cb7547a28b2c718d1e38aee18a3659c9e3ff52440297e965f5edffe34b6d0",
+    #build_file = "gtest.BUILD",
+    strip_prefix = "googletest-release-1.12.0",
+)
+
+######################################
+# Language: Javascript
+######################################
+# - installation: https://github.com/aspect-build/rules_js
+# - releases: https://github.com/aspect-build/rules_js/releases
+# - docs: https://github.com/aspect-build/rules_js/tree/main/docs
+# - parsers for Javascript syntax:
+#    - https://www.npmjs.com/package/acorn
+#    - https://esprima.org/
+
+# NOTE: Before aspect_rules_js existed, there was
+# build_bazel_rules_nodejs
+#  - referenced in lots of documentation
+#  - no longer being maintained
+#  - DO NOT USE
+#  - example usage:
+#     - https://levelup.gitconnected.com/build-and-run-your-first-node-js-application-with-bazel-898e1a92fac5
+
+# Using aspect_rules_js:
+#  - I had to perform the following one-time setup to get things working:
+#     % npm install -g pnpm
+#     % pnpm add three  # to create a pnpm-lock.yaml file
+#     % echo -e 'node_modules' > .bazelignore
+#     % bazel run -- @pnpm//:pnpm --dir $PWD install --lockfile-only
+#     % bazel fetch @npm//...
+#  - NOTE: The 'bazel run' command above may need to be executed anytime
+#      % bazel clean --expunge
+#    is invoked
+#
+#  - Further reading on pnpm:
+#     - https://refine.dev/blog/how-to-use-pnpm/#how-to-use-pnpm
+#
+# WORKSPACE: https://github.com/aspect-build/rules_js/releases "Paste this snippet into your WORKSPACE file:"
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+http_archive(
+    name = "aspect_rules_js",
+    sha256 = "76a04ef2120ee00231d85d1ff012ede23963733339ad8db81f590791a031f643",
+    strip_prefix = "rules_js-1.34.1",
+    url = "https://github.com/aspect-build/rules_js/releases/download/v1.34.1/rules_js-v1.34.1.tar.gz",
+)
+
+load("@aspect_rules_js//js:repositories.bzl", "rules_js_dependencies")
+rules_js_dependencies()
+
+load("@rules_nodejs//nodejs:repositories.bzl", "DEFAULT_NODE_VERSION", "nodejs_register_toolchains")
+nodejs_register_toolchains(
+    name = "nodejs",
+    node_version = DEFAULT_NODE_VERSION,
+)
+
+# For convenience, npm_translate_lock does this call automatically.
+# Uncomment if you don't call npm_translate_lock at all.
+#load("@bazel_features//:deps.bzl", "bazel_features_deps")
+#bazel_features_deps()
+
+# TODO(wmh): The instructions in
+#   https://github.com/aspect-build/rules_js/releases
+# differ slightly from those in
+#   https://github.com/aspect-build/rules_jest/releases
+# WRT npm_translate_lock (different src, and latter adds npmrc attr)
+
+load("@aspect_rules_js//npm:repositories.bzl", "npm_translate_lock")
+npm_translate_lock(
+    name = "npm",
+    npmrc = "//:.npmrc",
+    pnpm_lock = "//:pnpm-lock.yaml",
+    verify_node_modules_ignored = "//:.bazelignore",
+)
+
+load("@npm//:repositories.bzl", "npm_repositories")
+npm_repositories()
+
+####
+# Unit Testing in Javascript using Jest
+#  - docs:
+#     - https://github.com/aspect-build/rules_jest/blob/main/docs/jest_test.md
+#     - https://jestjs.io/docs/setup-teardown
+#  - releases: https://github.com/aspect-build/rules_jest/releases
+#
+# WORKSPACE: https://github.com/aspect-build/rules_jest/releases  "WORKSPACE snippet:"
+
+http_archive(
+    name = "aspect_rules_jest",
+    sha256 = "cae44cf7862b71f30c2ba6df6473bc8021c7a6c92c7d1771a58ebf5c99eb5776",
+    strip_prefix = "rules_jest-0.19.6",
+    url = "https://github.com/aspect-build/rules_jest/releases/download/v0.19.6/rules_jest-v0.19.6.tar.gz",
+)
+
+# aspect_rules_jest setup
+#  - Fetches the aspect_rules_jest dependencies.
+#  - If you want to have a different version of some dependency,
+#    you should fetch it *before* calling this.
+#  - Alternatively, you can skip calling this function, so long as
+#    you've already fetched all the dependencies.
+load("@aspect_rules_jest//jest:dependencies.bzl", "rules_jest_dependencies")
+rules_jest_dependencies()
+
+####
+# Using npm packages in Bazel
+#  - https://github.com/aspect-build/rules_js/tree/main/docs#fetch-third-party-packages-from-npm
+#  - https://github.com/aspect-build/rules_js/tree/main/docs#link-the-node_modules
+#  - https://github.com/aspect-build/rules_js/blob/main/docs/npm_import.md
+#  - in BUILD:
+#      load("@aspect_rules_js//npm:repositories.bzl", "npm_import")
+#      npm_import(
+#        name = "npm__at_types_node__15.12.2",
+#        package = "@types/node",
+#        version = "15.12.2",
+#        integrity = "sha512-zjQ69G564OCIWIOHSXyQEEDpdpGl+G348RAKY0XXy9Z5kU9Vzv1GMNnkar/ZJ8dzXB3COzD9Mo9NtRZ4xfgUww==",
+#      )
+
+######################################
+# Language: Python
+######################################
+# - releases: https://github.com/bazelbuild/rules_python/releases
+# - tutorials
+#    - https://earthly.dev/blog/build-and-deploy-pyapp-with-bazel/
+# - python parsers
+#    - https://docs.python.org/3.9/library/parser.html
+#    - https://github.com/lark-parser/lark
+
+# WORKSPACE: https://github.com/bazelbuild/rules_python/releases "Paste this snippet into your WORKSPACE file:"
+
+http_archive(
+    name = "rules_python",
+    sha256 = "e85ae30de33625a63eca7fc40a94fea845e641888e52f32b6beea91e8b1b2793",
+    # sha256 = "9acc0944c94adb23fba1c9988b48768b1bacc6583b52a2586895c5b7491e2e31",
+    strip_prefix = "rules_python-0.27.1",
+    url = "https://github.com/bazelbuild/rules_python/releases/download/0.27.1/rules_python-0.27.1.tar.gz",
+    # url = "https://github.com/bazelbuild/rules_python/releases/download/0.27.0/rules_python-0.27.0.tar.gz",
+)
+
+load("@rules_python//python:repositories.bzl", "py_repositories")
+py_repositories()
+
+######################################
+# Language: Go
+######################################
+
+# Go Rules
+#   http_archive(
+#       name = "io_bazel_rules_go",
+#       url = "https://github.com/bazelbuild/rules_go/releases/download/0.18.3/rules_go-0.18.3.tar.gz",
+#       sha256 = "86ae934bd4c43b99893fc64be9d9fc684b81461581df7ea8fc291c816f5ee8c5",
+#   )
+#
+#   load("@io_bazel_rules_go//go:deps.bzl", "go_rules_dependencies", "go_register_toolchains")
+#   go_rules_dependencies()
+#   go_register_toolchains()
+
+# Gazelle (creates Bazel rules from standard Go builds)
+#   http_archive(
+#       name = "bazel_gazelle",
+#       urls = ["https://github.com/bazelbuild/bazel-gazelle/releases/download/0.17.0/bazel-gazelle-0.17.0.tar.gz"],
+#       sha256 = "3c681998538231a2d24d0c07ed5a7658cb72bfb5fd4bf9911157c0e9ac6a2687",
+#   )
+#   load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies", "go_repository")
+#   gazelle_dependencies()
+
+# Go libraries
+#   go_repository(
+#       name = "io_rsc_quote",
+#       importpath = "rsc.io/quote",
+#       tag = "v1.5.2",
+#   )
+#
+#   go_repository(
+#       name = "io_rsc_sampler",
+#       importpath = "rsc.io/sampler",
+#       tag = "v1.3.0",
+#   )
+#
+#   go_repository(
+#       name = "org_golang_x_text",
+#       commit = "14c0d48ead0c",
+#       importpath = "golang.org/x/text",
+#   )
+
+######################################
+# Language: Rust
+######################################
+
+# Rust Rules
+#   git_repository(
+#       name = "io_bazel_rules_rust",
+#       commit = "d28b121396974a628b9cdb29b6ed7f4e370edb4e",
+#       remote = "https://github.com/bazelbuild/rules_rust",
+#       shallow_since = "1557167838 -0400",
+#   )
+#
+#   load("@io_bazel_rules_rust//rust:repositories.bzl", "rust_repositories")
+#   rust_repositories()
+#
+#   load("@io_bazel_rules_rust//:workspace.bzl", "bazel_version")
+#   bazel_version(name = "bazel_version")
+
+# FFI for Rust
+#   new_git_repository(
+#       name = "libc",
+#       build_file = "libc.BUILD",
+#       remote = "https://github.com/rust-lang/libc",
+#       commit = "6ec4f81a3852797410b80296d3afd61f2b255a36",
+#       shallow_since = "1484672371 +0000"
+#   )

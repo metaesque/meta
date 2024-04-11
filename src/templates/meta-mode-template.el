@@ -181,7 +181,7 @@
 ; Various methods set these variables
 (setq metalang-current-construct-kind nil)
 (if (not (boundp 'metalang-meta-binary))
-  (setq metalang-meta-binary "meta2"))
+  (setq metalang-meta-binary "metac"))
 
 (defun metalang-goto-construct-line (&optional target-dent)
   ;; Find the line defining the construct within which the current line

@@ -15740,9 +15740,9 @@ namespace metax.oopl scope:
     test:
       baselang = test.baselang
       comment = baselang.formatComment(['This is a test'])
-      test.iseqvec(['\"\"\"This is a test\"\"\"'], comment)
+      test.iseqvec(['r\"\"\"This is a test\"\"\"'], comment)
       comment = baselang.formatComment(['This is a test', 'of two lines'])
-      test.iseqvec(['\"\"\"This is a test', 'of two lines', '\"\"\"'], comment)
+      test.iseqvec(['r\"\"\"This is a test', 'of two lines', '\"\"\"'], comment)
     end receiver OoplPython;
 
     receiver OoplJavascript scope:
@@ -18569,14 +18569,14 @@ namespace metax.oopl scope:
       test.baselang.processTestOutput(
         /# stdout
         """\
-         >|OoplPython.OoplPython                    ...   73735 us
+         >|OoplPython.OoplPython                    ...   73735 \u00B5s
          >|OoplPython.augmentVarset                 ...behavior metax.oopl.augmentVarset (for OoplPython) does not yet have a unittest
-         >|    1211 us
-         >|OoplPython.autogenPrint                  ...   32229 us
+         >|    1211 \u00B5s
+         >|OoplPython.autogenPrint                  ...   32229 \u00B5s
          >|OoplPython.autogenSize                   ...behavior metax.oopl.autogenSize (for OoplPython) does not yet have a unittest
-         >|    1362 us
-         >|OoplPython.repl                          ...    1299 us
-         >|OoplPython.superCode                     ...    2055 us
+         >|    1362 \u00B5s
+         >|OoplPython.repl                          ...    1299 \u00B5s
+         >|OoplPython.superCode                     ...    2055 \u00B5s
          >|""",
         /# stderr
         """\
