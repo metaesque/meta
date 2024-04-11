@@ -1444,7 +1444,7 @@ namespace metax.oopl scope:
           new_lines.append('  import ' + fqn)
           new_lines.append('except ImportError as e:')
           new_lines.append(
-            "  print('ERROR: (while importing %s) %%s' %% str(e))" % fqn)
+            "  print('Warning: Failed to import optional %s: %%s' %% str(e))" % fqn)
 
           if special:
             parent_nmsp, base_nmsp = fqn.rsplit('.', 1)
@@ -2733,12 +2733,11 @@ namespace metax.oopl scope:
     end method autogenInfo;
 
     method suppressInfo : tuple<vec<str>,vec<str>> #:
-      Parses the suppress() map to identifies two sets of suppression
-      lists, local and global.  The local list is suitable for inclusion
-      in (for example, using javascript, @fileoverview @suppress), while
-      the global list is suitable for inclusion in a BUILD target rule
-      (for example, using javascript, in the 'suppress' attribute of a
-      closure_js_library target).
+      Parses the suppress() map to identify two sets of suppression lists, local
+      and global. The local list is suitable for inclusion in (for example,
+      using javascript, @fileoverview @suppress), while the global list is
+      suitable for inclusion in a BUILD target rule (for example, using
+      javascript, in the 'suppress' attribute of a closure_js_library target).
     scope:
       suppress = self.suppress() or {}
       local_list = []
@@ -4409,8 +4408,8 @@ namespace metax.oopl scope:
         output.append("%s  desc=(" % indent)
         last = lines.pop()
         for line in lines:
-          output.append("%s    '%s\\n'" % (indent, line.replace("'", "\\'")))
-        output.append("%s    '%s'))" % (indent, last.replace("'", "\\'")))
+          output.append("%s    r'%s\\n'" % (indent, line.replace("'", "\\'")))
+        output.append("%s    r'%s'))" % (indent, last.replace("'", "\\'")))
     test:
       output = []
       test.sub.generatePython('cmd', 'pcmd', output)
@@ -5703,12 +5702,12 @@ namespace metax.oopl scope:
 
         if initializer:
           if basel == 'javascript':
-            use_es2015_classes = baselang.config('use_es2015', False)
-            if not use_es2015_classes:
+            use_modules = baselang.config('use_modules', False)
+            if not use_modules:
               /# In Javascript, if one is defining classes by explict function
               /# definition, the initializer needs to be the first construct
-              /# generated.  However, if ES2015 classes are used, it does not
-              /# need to be first.
+              /# generated. However, if modules are used, it does not need to be
+              /# first.
               for i, child in enumerate(list(children)):
                 if child is initializer:
                   if i != 0:
@@ -12508,7 +12507,23 @@ namespace metax.oopl scope:
         'clteardown': {'name': 'tearDownPage', 'level': 'instance'},
 
         /# specific to this baselang.
-        'use_es2015': True,
+        /#  - use_modules controls whether javascript classes are treated as
+        /#    modules as introduced in ECMAScript 2015 (aka ES6), or to use
+        /#    old-school classes-as-functions. TODO(wmh): We can remove support
+        /#    for classes-as-functions and always assume classes-as-modules.
+        /#  - bazelenv controls what javascript bazel environment is being
+        /#    used. Legal options are:
+        /#      aspect : use aspect_rules_js
+        /#      closure : to use Google Closure
+        /#       - Closure is dead
+        /#           - https://effectivetypescript.com/2023/09/27/closure-compiler/
+        /#           - although Closure added type-safety and minification, it
+        /#             is subsumed by TypeScript and has had no new release in
+        /#             2+ years, with no action in
+        /#               https://groups.google.com/g/closure-rules-discuss.
+        /#           - move away from Closure to @aspect_rules_js.
+        'use_modules': True,
+        'bazelenv': False,
 
         /# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/\
         /#   Statements/switch
@@ -13771,7 +13786,7 @@ namespace metax.oopl scope:
 
     receiver OoplJavascript scope:
       kind = construct.kind()
-      use_es2015_classes = self.config('use_es2015')
+      use_modules = self.config('use_modules')
 
       if kind == 'class':
         namespace = construct.namespace()
@@ -13790,7 +13805,7 @@ namespace metax.oopl scope:
         overview = '/**\n' + '\n'.join(overview_lines) + '\n */\n'
         varset.addVar('overview', overview)
 
-        if construct.isTest() and not use_es2015_classes:
+        if construct.isTest() and not use_modules:
           varset.addVar('test_method_restr', '')
           /# We currently are not producing a 'goog.provide' statement in test
           /# classes (because this disables some implicit testing we currently
@@ -13817,7 +13832,7 @@ namespace metax.oopl scope:
                 '/** @type {?Object} */ %s;  // find cleaner way' % npref)
               imports.append('%s = %s || {};' % (npref, npref))
 
-        if use_es2015_classes:
+        if use_modules:
           assert clsname == varset.getValue('class')
           underclass = construct.underclass()
           postclass = varset.getValue('postclass')
@@ -13906,7 +13921,7 @@ namespace metax.oopl scope:
           method_prefix = dot.join(myclass.fqn().split(dot)[:-1])
 
           /# postmethod stores the invocation of the goog.inherits()
-          if not use_es2015_classes:
+          if not use_modules:
             parentinfo = myclass.parentclasses()[0]
             varset.getValue('postmethod').append(
               'goog.inherits(%s, %s);' % (myclass.fqn(), parentinfo['fqn']))
@@ -14528,11 +14543,17 @@ namespace metax.oopl scope:
     end receiver OoplCpp;
 
     receiver OoplJavascript scope:
-      return (
-        >|"""load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library")
-        >|load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_binary")
-        >|load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_test")
-        >|""")
+      bazelenv = self.config('bazelenv')
+      use_closure = bazelenv == 'closure'
+      if use_closure:
+        result = (
+          >|"""load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library")
+          >|load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_binary")
+          >|load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_test")
+          >|""")
+      else:
+        result = 'load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_library", "js_test")\n'
+      return result
     test:
       test.contains('io_bazel_rules_closure', test.baselang.buildPreambleText())
     end receiver OoplJavascript;
@@ -14814,6 +14835,9 @@ namespace metax.oopl scope:
     receiver OoplJavascript scope:
       kind = construct.kind()
 
+      bazelenv = self.config('bazelenv')
+      use_closure = bazelenv == 'closure'
+
       if kind == 'class':
         /# TODO(wmh): Need to add this to the BUILD file:
         /#   load("//closure:defs.bzl", "closure_js_library")
@@ -14823,8 +14847,17 @@ namespace metax.oopl scope:
         baselang = construct.baselang()
         variant = construct.variant()
 
-        _, suppress_list = construct.suppressInfo()
-        suppress_set = set(suppress_list)
+        /# TODO(wmh): The suppress set was initially added to deal with
+        /# suppressing Google Closures many pedantic warnings/errors. Since
+        /# moving to aspect_rules_js, this may be completely unneeded, but
+        /# we leave the infrastructure in place incase there are things that
+        /# can be supressed in whatever javascript toolchain we are using.
+        suppress_set = set()
+        if use_closure:
+          /# Currently this suppress semantics is only relevant for closure_js,
+          /# but aspect_rules_js may have similar capabilities...
+          _, suppress_list = construct.suppressInfo()
+          suppress_set.update(suppress_list)
 
         if name is None:
           name = construct.id()
@@ -14833,12 +14866,20 @@ namespace metax.oopl scope:
           src = fs.basename(class_subpath)
         if test:
           /# assert ClassConstruct.IsTestName(name)
-          rule = 'closure_js_test'
-          test_dep = '@io_bazel_rules_closure//closure/library:testing'
+          if use_closure:
+            rule = 'closure_js_test'
+            test_dep = '@io_bazel_rules_closure//closure/library:testing'
+          else:
+            rule = 'js_test'
+            test_dep = '@fixme...what_dep_is_needed_for_js_test?'
           if test_dep not in targets:
             targets.append(test_dep)
         else:
-          rule = 'closure_js_library'
+          if use_closure:
+            rule = 'closure_js_library'
+          else:
+            rule = 'js_library'
+
         build = {
           'name': name,
           'srcs': [src],
@@ -14846,16 +14887,20 @@ namespace metax.oopl scope:
           'visibility': ['//visibility:public'],
         }
 
-        /# We always disable extra requires because ...
-        suppress_set.add('JSC_EXTRA_REQUIRE_WARNING')
-        /# We always disable nuulable returns ... just because the current
-        /# program always uses a non-null value doesn't mean it won't change
-        /# in the future.
-        suppress_set.add('JSC_NULLABLE_RETURN_WITH_NAME')
+        if use_closure:
+          /# These were needed for js_closure. For rules_js things will be
+          /# different.
+
+          /# We always disable extra requires because ...
+          suppress_set.add('JSC_EXTRA_REQUIRE_WARNING')
+          /# We always disable nuulable returns ... just because the current
+          /# program always uses a non-null value doesn't mean it won't change
+          /# in the future.
+          suppress_set.add('JSC_NULLABLE_RETURN_WITH_NAME')
 
         if test:
           build['size'] = 'small'
-          build['testonly'] = 1
+
           /# For user-provided class C, the auto-generated test class CTest
           /# implicitly includes class C (because tests for C must rely on C,
           /# and it is cumbersome for the user to specify something that is
@@ -14887,8 +14932,11 @@ namespace metax.oopl scope:
             /# producing errors.
             'high': 'SIMPLE',
             'max': 'ADVANCED'}
-          build['compilation_level'] = optmap[cli.optimize_level]
-          build['entry_points'] = [construct.fqn()]
+
+          if use_closure:
+            build['testonly'] = 1
+            build['compilation_level'] = optmap[cli.optimize_level]
+            build['entry_points'] = [construct.fqn()]
 
         elif name == 'TestCase':
           /# Special case ... we assume the TestCase class inherits from
@@ -14896,8 +14944,10 @@ namespace metax.oopl scope:
           /# relies on
           /#   @io_bazel_rules_closure//closure/library:testing
           /# Any class that relies on a testonly target must also be testonly.
-          build['testonly'] = 1
-          suppress_set.add('JSC_NULLABLE_RETURN_WITH_NAME')
+
+          if use_closure:
+            build['testonly'] = 1
+            suppress_set.add('JSC_NULLABLE_RETURN_WITH_NAME')
 
         elif variant == 'meta':
           /# A auto-generated meta class.
@@ -14906,10 +14956,11 @@ namespace metax.oopl scope:
           /#    alphabetically after the instance-of-metaclass variable also
           /#    provided by this file, so we disable JSC_PROVIDES_NOT_SORTED.
 
-          /# TODO(wmh): Verify these are still needed.
-          /# suppress_set.add('JSC_NULLABLE_RETURN_WITH_NAME')
-          /# suppress_set.add('JSC_PROVIDES_NOT_SORTED')
-          pass
+          if use_closure:
+            /# TODO(wmh): Verify these are still needed.
+            /# suppress_set.add('JSC_NULLABLE_RETURN_WITH_NAME')
+            /# suppress_set.add('JSC_PROVIDES_NOT_SORTED')
+            pass
 
         else:
           /# The code prefers to reference classes by long name (since some
@@ -15349,7 +15400,7 @@ namespace metax.oopl scope:
 
     receiver OoplJavascript scope:
       result = self.id()
-      if not self.config('user_es2015', False):
+      if not self.config('use_modules', False):
         /# TODO(wmh): Add support for using oldstyle template if we are not
         /# generating ES2015 classes
         pass
@@ -15681,9 +15732,9 @@ namespace metax.oopl scope:
       if ncom == 0:
         result = []
       elif ncom == 1:
-        result[0] = '\"\"\"' + result[0] + '\"\"\"'
+        result[0] = 'r\"\"\"' + result[0] + '\"\"\"'
       else:
-        result[0] = '\"\"\"' + result[0]
+        result[0] = 'r\"\"\"' + result[0]
         result.append('\"\"\"')
       return result
     test:
@@ -15893,6 +15944,7 @@ namespace metax.oopl scope:
       info = deps[fqn]
       kind = info['kind']
       target = info['target']
+      use_closure = (self.config('bazelenv') == 'closure')
 
       /# TODO(wmh): If the base name of the class occurs multiple times amongst
       /# all triples, we will need to use alternative names or not produce
@@ -15909,7 +15961,11 @@ namespace metax.oopl scope:
           /# A request to import nm.sp.FooMeta.
           /#   const {FooMeta} = goog.require('nm.sp.FooMeta')
           parts = fqn.split('.')
-          import_str = "const {%s} = goog.require('%s');" % (parts[-1], fqn)
+          if use_closure:
+            import_str = "const {%s} = goog.require('%s');" % (parts[-1], fqn)
+          else:
+            deppath = fqn.replace('.', '/') + '.mjs'
+            import_str = "import {%s} from '%s';" % (parts[-1], deppath)
         elif metax.oopl.ClassConstruct.IsMetaInstName(fqn):
           /# A request to import nm.sp.MetaFoo
           /#   const {MetaFoo} = goog.require('nm.sp.FooMeta')
@@ -16137,9 +16193,14 @@ namespace metax.oopl scope:
               basedef = tmplcode % {'A1': litstr}
 
           /# Sanity check.
-          print(
-            'NOTE: In formatFieldDefinition, default type %s vs %s' %
-            (mtype, mtype2))
+          if False:
+            /# As of 2023-12-22, generated code looks fine for the two examples
+            /# available.
+            print('TODO: Verify handling of static field explicit default values')
+            field.write()
+            print(
+              'NOTE: In formatFieldDefinition, default type %s vs %s' %
+              (mtype, mtype2))
         result = ['%s = %s' % (field.rawfield(), basedef)]
       else:
         result = []
@@ -17061,7 +17122,7 @@ namespace metax.oopl scope:
     end receiver OoplPython;
 
     receiver OoplJavascript scope:
-      if self.config('use_es2015'):
+      if self.config('use_modules'):
         /# In javascript using ES2015 class definitions, the initializer is
         /# always 'constructor.  See
         /# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/\
@@ -18300,7 +18361,7 @@ namespace metax.oopl scope:
       timere = re.compile(
         r'^(?P<head>.*?)\s+(?P<us>\d+) us  (?:(?P<status>.*))?$')
       failre = re.compile(
-        r'^(?P<status>FAIL|ERROR): test_(?P<method>\S+) \(\S+\.(?P<class>\S+)Test\)')
+        r'^(?P<status>FAIL|ERROR): test_(?P<method>\S+) \(\S+\.(?P<class>\S+)Test(?:\.(?P<method2>\S+))?\)')
       sepre = re.compile('^(?P<c>[=-])(?P=c){60,}')
       ranre = re.compile(r'^Ran (?P<numtests>\d+) tests? in (?P<seconds>\S+)s')
 
@@ -18468,7 +18529,7 @@ namespace metax.oopl scope:
         if special or verbosity:
           prefix = '%3d) ' % i if show_nums else ''
           fp.write(
-            '%s%-40s ... %7d us   %s\n' %
+            '%s%-40s ... %7d \u00B5s   %s\n' %
             (prefix, item['fqn'], item['time'] or -1, item['status']))
           PrintStripped(out, ' |')
           PrintStripped(err, 'E|')
@@ -18477,7 +18538,7 @@ namespace metax.oopl scope:
         if timestamp > 0:
           fullfqn = namespace + '.' + item['fqn']
           testlogdir = self.testLogDir(fullfqn, create=True)
-          testidxpath = fs.join(testlogdir, 'LOG')
+          testidxpath = fs.join(testlogdir, metax.c.TEST_LOG_FILE)
           with open(testidxpath, 'a') as ofp:
             ofp.write(
               '%13.3f %7dus %s\n' %
@@ -19235,21 +19296,21 @@ namespace metax.oopl scope:
       class_name = myclass.id()
       method_name = method.id()
 
-      use_es2015_classes = self.config('use_es2015')
+      use_modules = self.config('use_modules')
 
       args = []
 
-      if use_es2015_classes:
+      if use_modules:
         super_method = 'super'
       else:
         super_method = '%s.base' % myclass.fqn()
         args.append(recstr)
 
       if kind == 'initializer':
-        if not use_es2015_classes:
+        if not use_modules:
           args.append("'constructor'")
       else:
-        if use_es2015_classes:
+        if use_modules:
           super_method += '.' + method.id()
         else:
           args.append("'%s'" % method.id())

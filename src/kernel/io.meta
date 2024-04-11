@@ -17,6 +17,12 @@ scope:
     static
     field Null : Sink #:
       An instance of Sink that writes to /dev/null.
+    scope:
+      accessor get lazy:
+        dfp = open(os.devnull, 'w')
+        sink = Sink(fp=dfp)
+        -> sink
+    end field Null;
 
     static
     field Out : Sink #:
@@ -55,7 +61,7 @@ scope:
 
     field width : int #:
       Maximum width of each line. If negative, truncated at abs(width),
-      else wrapped with 'extra' iinserted before each subsequent line
+      else wrapped with 'extra' inserted before each subsequent line
       (default two spaces).
 
     field extra : str #:
@@ -76,8 +82,6 @@ scope:
     clinit:
       cls.OutIs(Sink(fp=sys.stdout))
       cls.ErrIs(Sink(fp=sys.stderr))
-      dfp = open(os.devnull, 'w')
-      cls.NullIs(Sink(fp=dfp))
     setup:
       sink = metax.io.Sink(io.StringIO(), indent=u'..')
       test.sinkIs(sink)
@@ -305,9 +309,9 @@ scope:
           self.truncln(text, width=abs(width))
         else:
           /# wrap lines at width.
-          self.widthIs(0)  # need to clear this to avoid infinite recursion
+          /# self.widthIs(0)  # need to clear this to avoid infinite recursion
           self.wrap(text, width=width, extra=self.extra())
-          self.widthIs(width)
+          /# self.widthIs(width)
     test:
       sink = test.sink()
       sink.writeln('hello')
@@ -389,10 +393,20 @@ scope:
         Additional indentation to add to all wrapped lines except the first one.
     scope:
       w = width - len(self.prefix())
+      /# print('Here with wrap width %d and prefix "%s"' % (w, self.prefix()))
       for line in textwrap.wrap(
-        text.rstrip(), width=w, initial_indent='', subsequent_indent=extra
+        text.rstrip(),
+        width=w,
+        /# breaking on hyphens isn't desired for media2.meta (a common user
+        /# of sink.wrap), but may be suitable in other use-cases.
+        /# TODO(wmh): Allow client to configure all params of textwrap.wrap,
+        /# rather than just width and subsequent_indent.
+        break_on_hyphens=False,
+        initial_indent='',
+        subsequent_indent=extra,
       ):
-        self.writeln(line)
+        /# Not using writeln() to avoid repeated processing of width.
+        self.write(line + '\n')
     test:
       sink = test.sink()
       sink.wrap(
