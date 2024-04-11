@@ -11,9 +11,13 @@ import logging
 import os
 import re
 import sys
+import time
 
 if sys.version_info.major == 3:
   import importlib.abc
+
+# When metastrap.Setup() was invoked (unix epoch float)
+TimeStamp = None
 
 Verbose = False
 
@@ -139,6 +143,10 @@ def Setup(verbose=Verbose, auto=False):
    0. the version
    1. the path from which the metax.c module should be obtained.
   """
+  global TimeStamp
+  if TimeStamp is None:
+    TimeStamp = time.time()
+
   # TODO(wmh): Pass in argv, setting to sys.argv by default.
   # TODO(wmh): Modify argv, not sys.argv (so that if a non sys.argv argv is
   # is passed in, it is modified instead of sys.argv).
