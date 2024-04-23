@@ -2148,7 +2148,7 @@ scope:
         result += self.title()
       return result
     test:
-      test.iseq('/Section 1/SubSection A', test.subsection.fulltitle())
+      test.iseq('/Section 1/SubSection A', test.subsection.fqn())
     end method fqn;
 
     method isBlock : bool #:

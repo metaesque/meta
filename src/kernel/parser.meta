@@ -16531,7 +16531,8 @@ scope:
             for namespace in metafile.construct().attrval('scope:', default=EMPTY):
               if namespace.variant() == 'user':
                 targets.append(namespace.fqn())
-          flags.rawtests = True
+          /# flags.rawtests = True
+          /# flags.rawtests2 = True
           if targets:
             self.runUnitTests(
               targets, verbose=flags.verbose, basebinary=flags.basebinary,
@@ -16813,8 +16814,8 @@ scope:
         /# We create a local compiler so that we can limit scope to the
         /# files and namespaces specified on the command, rather than all
         /# files parsed in this shell.
-        fs = self.fs()
         if False:
+          fs = self.fs()
           metac = metax.c.Compiler(
             metal=self.metalang().id(),
             basel=self.baselang().id(),
@@ -16824,9 +16825,6 @@ scope:
             repodir=self.repodir())
         else:
           metac = self
-
-        cli = metac.cli()
-        fs = metac.fs()
 
         argmap = metac._parseArgs(cli.rest)
         paths = argmap['metafiles']
@@ -17615,7 +17613,7 @@ scope:
       end command;
 
       command __default__ #:
-        Compile specified .meta files.
+        Compile specified .meta files and run unit tests.
       scope:
         /# This action is a combination of 'compile' and 'test.
         /#
