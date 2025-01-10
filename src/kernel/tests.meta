@@ -1068,9 +1068,13 @@ scope:
 
     new
     method sinkfp : metax.io.Sink #:
-      Return a metax.lib.Sink with fp=test.fp()
+      Return a metax.lib.Sink with fp=test.fp() unless |debug| is true.
+    params:
+      var debug : bool = false #:
+        If true, returns metax.io.Sink.Out() instead.
     scope:
-      return metax.io.Sink(fp=self.fp())
+      result = metax.io.Sink.Out() if debug else metax.io.Sink(fp=self.fp())
+      return result
     test:
     end method sinkfp;
 

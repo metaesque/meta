@@ -114,9 +114,10 @@ scope:
         /# How many seconds in the given time unit
         's': 1,
         'm': 60,
-        'h': 3600,
-        'd': 86400,
-        'w': 604800,
+        'h': 60*60,
+        'd': 60*60*24,
+        'w': 60*60*24*7,
+        'y': 60*60*24*365.25,
         /# We intentionally do not provide units for month or year because
         /# the number of seconds in a month or year varies.
       }
@@ -187,7 +188,7 @@ scope:
       elif mytype == 'date':
         m = re.match(
           r'^(?:to)?(?P<kind>now|sec|min(?:ute)?|hr|hour|day|week|mon(?:th)?|yr|year)'
-          r'(?:(?P<sign>[-+])(?P<adj>\d+)(?P<unit>[smhdw])?)?', value)
+          r'(?:(?P<sign>[-+])(?P<adj>\d+)(?P<unit>[smhdwy])?)?', value)
         if m:
           now = datetime.datetime.now()
           onesec = datetime.timedelta(seconds=1)
