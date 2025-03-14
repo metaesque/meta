@@ -143,6 +143,9 @@ scope:
 
       /# A line representing a table row.
       cls.Table_row_re = re.compile(r'^\s*\|')
+      /# A line representing a post-table note
+      cls.Table_note_re = re.compile(r'^\+ (?P<abbrev>.*\S)\s*=\s*(?P<title>.*\S)')
+
       /# When an html block ends.
       cls.Html_end_re = re.compile(r'^</(?P<tag>[a-zA-Z0-9]+)>')
       /# When we are in a block quote
@@ -713,6 +716,7 @@ scope:
 
       /# A line representing a table row.
       table_row_re = Parser.Table_row_re
+      table_note_re = Parser.Table_note_re
       /# When an html block ends.
       html_end_re = Parser.Html_end_re
       /# When we are in a block quote
@@ -905,6 +909,13 @@ scope:
           /# Now we advance past all lines looking like table rows.
           i = self._advancePosition(
             lines, i, matcher=table_row_re, category='table' if debug else None)
+          /# print(lines[i])
+          /# print(table_note_re.match(lines[i]))
+          j = self._advancePosition(
+            lines, i, matcher=table_note_re, category='table' if debug else None)
+          if j > i:
+            /# print('here with i=%d j=%d' % (i,j))
+            i = j
 
           /# Create the table
           terrors = []
@@ -3376,6 +3387,11 @@ scope:
     field separators : @vec<int> #:
       Indicies within self.rows() after which a separator should be printed.
 
+    field abbrevs : map #:
+      Provides abbreviation-to-title mappings. Each abbrev is found immediately
+      after data rows in lines with format:
+        |+ <abbrev> = <title>
+
     lifecycle params:
       var parent : Section #:
         The section this text object belongs to.
@@ -3386,6 +3402,7 @@ scope:
         The number of empty lines found before this block started.
       var title -> title = null;
       var csscls -> csscls = null;
+      var abbrevs -> abbrevs = null;
       var uid : str = null #:
         A unique identifier for this table.
     super (parent, prelines=prelines, uid=uid)
@@ -3427,7 +3444,9 @@ scope:
           - optional title line
           - optional empty line (required if title line is present)
           - optional column header list
-          - required column specification
+          - required data rows
+          - optional post-table entries starting with '+ ' (no blank line
+            between data rows and start of these lines).
         See https://help.github.com/articles/organizing-information-with-tables
         for the basics (the optional title is a wmh add-on).
       var errors : vec<str> = null #:
@@ -3458,12 +3477,14 @@ scope:
       try:
         data_start = i + 1
       except UnboundLocalError:
-        print('******** EHRE with %s' % lines)
+        print('******** HERE with %s' % lines)
 
       if m:
         columns = []
         /# Column delimiters are either '|' or '-+'
         delim_re = Parser.Delim_re
+        row_re = re.compile(r'^\s*\|\s*(?P<inner>.*\S)?\s*\|\s*$')
+        note_re = Parser.Table_note_re
         /# TODO(wmh): The ignore string is used to specify which chars to
         /# remove from the front and back of each table row. Having '|'
         /# in this list makes it convenient when splitting so that we don't
@@ -3563,13 +3584,18 @@ scope:
                     columns[j]['header'] = nh
             hi += 1
 
-        /# Parse the remaining lines as rows in the table.
+        /# Parse row lines
         rows = []
-        for r in range(i+1, len(lines)):
-          row = delim_re.split(lines[r].strip())[1:-1]
-          if row:
-            row[0] = row[0].lstrip()
-            row[-1] = row[-1].rstrip()
+        n = len(lines)
+        r = i + 1
+        while r < n:
+          m = row_re.match(lines[r])
+          if not m:
+            break
+          row = delim_re.split(m.group('inner'))
+          assert row
+          row[0] = row[0].lstrip()
+          row[-1] = row[-1].rstrip()
           if len(row) != numcols:
             /# print(row)
             errors.append(
@@ -3578,6 +3604,20 @@ scope:
             for line in lines:
               errors.append('  ' + line)
           rows.append(row)
+          r += 1
+
+        /# Parse post-row abbrev mappings
+        abbrevs = {}
+        while r < n:
+          m = note_re.match(lines[r])
+          if not m: break
+          abbrevs[m.group('abbrev')] = m.group('title')
+          r += 1
+
+        /# If there are any additional lines, it is an error.
+        while r < n:
+          errors.append('Unknown post-row line: ' + lines[r])
+          r += 1
       else:
         errors.append('Not a table')
         for line in lines:
@@ -3587,11 +3627,11 @@ scope:
       result = (
         None if errors
         else cls(
-          parent, columns, rows, title=title, prelines=prelines,
+          parent, columns, rows, title=title, prelines=prelines, abbrevs=abbrevs,
           csscls=csscls, uid=tblid))
       return result
     test:
-      table, errors = self.newTable()
+      table, errors = test.newTable()
       test.iseq(
         [{'minwidth': 3, 'align': '', 'header': 'Name'},
          {'minwidth': 4, 'align': 'left', 'header': 'Age'},
@@ -3604,7 +3644,7 @@ scope:
         [row.data() for row in table.rows()])
       test.iseq('Table Title', table.title())
 
-      table2, errors2 = self.newTable(
+      table2, errors2 = test.newTable(
         lines=['blahdk dkd s', 'dk skdks ks', 'skkdd s s skd', 'ds kdk s dk'])
       test.isnull(table2)
       test.iseq(
@@ -3617,7 +3657,7 @@ scope:
         ],
         errors2)
 
-      table3, errors3 = self.newTable(
+      table3, errors3 = test.newTable(
         ['| Name | Age | ', '| --- | ---| ', '| Bob | 23 | extra |', 'Alice'])
       test.isnull(table3)
       test.iseq(
@@ -3627,22 +3667,39 @@ scope:
           '  | --- | ---| ',
           '  | Bob | 23 | extra |',
           '  Alice',
-          'For row 2, found 0 columns when expecting 2: Alice ([])',
-          '  | Name | Age | ',
-          '  | --- | ---| ',
-          '  | Bob | 23 | extra |',
-          '  Alice',
+          'Unknown post-row line: Alice',
         ],
         errors3)
 
-      table4, errors4 = self.newTable(
+      table4, errors4 = test.newTable(
         ['|  .  |',
          '| :-: |',
          '| ![](http://www.google.com) |',
          '| ![](http://www.cnn.com) |'])
       /#print errors4
       /#print table4
-    end method;
+
+      table5, errors5 = test.newTable(
+        lines=[
+          'Table: Testing Abbrevs',
+          '',
+          '| Date  | A | B | C |',
+          '|-------+---+---+---|',
+          '| Feb 1 | 1 | 2 | 0 |',
+          '| Mar 1 | 3 | 1 | 1 |',
+          '+ A = Apple',
+          '+ B = Banana',
+          '+ C = Cantelope',
+        ])
+      /# table5.show()
+      test.iseq([], errors5)
+      test.iseq(
+        [
+          {'Apple': '1', 'Banana': '2', 'Cantelope': '0', 'Date': 'Feb 1'},
+          {'Apple': '3', 'Banana': '1', 'Cantelope': '1', 'Date': 'Mar 1'},
+        ],
+        table5.rowkeys(unwrap=True))
+    end method New;
 
     method keys : map #:
       The mapping from row title to Row instances.
@@ -3652,6 +3709,21 @@ scope:
       table, errors = self.newTable()
       test.iseq(['Alice', 'Bob'], sorted(table.keys()))
     end method keys;
+
+    method rowkeys : vec<map> #:
+      Returns the list of all rows converted to column-header -> cell-value dicts
+    params:
+      var unwrap : bool = false #:
+        If true, unwrap the table first. Unwrapping both merges multiple cells
+        into a single cell and renames abbreviated column headers to full
+        titles if present.
+    scope:
+      table = self
+      if unwrap:
+        table = table.unwrapped()
+      return [dict(row.keys()) for row in table.rows()]
+    test:
+    end method rowkeys;
 
     method isTable : bool scope:
       return True
@@ -3663,10 +3735,15 @@ scope:
     method unwrapped : Table #:
       Create a new Table instance with columns unwrapped.
     scope:
+      abbrevs = self.abbrevs() or {}
+
       columns = []
       for cdata in self.columns():
         newdata = copy.copy(cdata)
         newdata.pop('minwidth', None)
+        atitle = abbrevs.get(newdata['header'], None)
+        if atitle:
+          newdata['header'] = atitle
         columns.append(newdata)
       ouid = self.uid()
       uid = None if ouid is None else ouid + '-unwrapped'
@@ -5757,11 +5834,18 @@ scope:
           for row in rows:
             clist.append(row.data()[i])
           column_lists.append(clist)
-          widths.append(max([len(val) for val in clist]))
+          w = max([len(val) for val in clist])
+          if w < 1:
+            raise Error('w=%d i=%d N=%d clist=%s' % (w, i, N, clist))
+          widths.append(w)
           align = columns[i]['align'] or 'left'
           aligns.append(
             str.ljust if align == 'left' else
             (str.rjust if align == 'right' else str.center))
+
+        if False:
+          print('WIDTHS', widths)
+          print(f'{max_line_width=}')
 
         truncate = False
         target_widths = widths
@@ -5870,7 +5954,8 @@ scope:
                 (max_line_width, available, resize_available,
                  extra_width, retot, newtot, tws))
 
-        /# print(target_widths)
+        if False:
+          print('TARGET', target_widths)
 
         /# Print the header.
         WriteRow(fp, header, aligns, widths, target_widths, truncate=truncate)

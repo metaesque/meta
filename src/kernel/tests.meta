@@ -124,6 +124,7 @@ scope:
   parent<js> ^goog.testing.TestCase
   parent<cc> ^.testing.Test
   assocs<py>:
+    std assoc copy;
     std assoc shutil;
     usertest std assoc io;
     std assoc logging;
@@ -2345,17 +2346,32 @@ scope:
       var expected : any = MISSING_PTR;
       var msg : any = null;
       var width : int = 30;
+      var ignore : vec<str> = null #:
+        The list of keys in data to ignore (expected should NOT contain them)
     scope<py>:
+      if ignore:
+        data = copy.copy(data)
+        for key in ignore:
+          if isinstance(key, (list, tuple)):
+            last = key[-1]
+            d = data
+            for inner in key[:-1]:
+              d = d[inner]
+            d.pop(last)
+          else:
+            data.pop(key)
+
       if expected is MISSING_PTR:
         print('iseqmap:')
         pprint.pprint(data)
-      elif expected != data:
-        print('iseqmap: not equal!')
-        pprint.pprint(data)
-        pprint.pprint(expected)
-        fp = io.StringIO()
-        self.recursiveCompare('', data, expected, 0, fp=fp, valwidth=width)
-        self.fail(fp.getvalue())
+      else:
+        if expected != data:
+          print('iseqmap: not equal!')
+          pprint.pprint(data)
+          pprint.pprint(expected)
+          fp = io.StringIO()
+          self.recursiveCompare('', data, expected, 0, fp=fp, valwidth=width)
+          self.fail(fp.getvalue())
     test<py>:
       tc = self._tc
       tc.setUp()
