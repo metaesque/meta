@@ -16567,6 +16567,38 @@ scope:
       end command debug2;
 
       named
+      command dircmp #:
+        Compare two directory hierarchies
+      interface:
+        arg dir1 : str;
+        arg dir2 : str;
+      scope:
+        import os
+        import subprocess
+        cli = self.cli()
+        for root, dirs, files in os.walk(cli.dir1):
+          if '__init__.py' in files:
+            path1 = os.path.join(root, '__init__.py')
+            assert os.path.exists(path1)
+            path2 = cli.dir2 + path1[len(cli.dir1):]
+            print('#' * 80)
+            print(path1)
+            if os.path.exists(path2):
+              print(path2)
+              subprocess.call([
+                'diff',
+                '--width=160',
+                '--recursive',
+                '--suppress-common-lines',
+                '-y',
+                path1,
+                path2,
+              ])
+            else:
+              print('ERROR: %s does not exist' % path2)
+      end command dircmp;
+
+      named
       command doc #:
         Compile a Meta(Doc) file.
       scope:

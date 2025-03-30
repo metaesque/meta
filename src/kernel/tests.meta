@@ -373,6 +373,7 @@ scope:
       self.deblog(
         'Invoking %s finalizer for %s' % (self.name(), self.methname()))
       /# metax.io.Sink.Null().fp().close()
+      pass
     setup<py>:
       self.deblog('Invoking %s setUp for %s' % (self.name(), self.methname()));
       testname = '%s.%s' % (self.name(), self.methname())
@@ -2140,22 +2141,22 @@ scope:
       want to keep it for use in other baselangs, or if allowing it
       encourages people to use methods that won't work in <cc> and <*>.
     params:
-      var item : any;
-      var expected : any = MISSING;
+      var o : any;
+      var x : any = MISSING;
       var msg : str = null;
     scope<py>:
-      if expected is MISSING:
+      if x is MISSING:
         /# This is a request to print out the item, rather than compare against
         /# expected.
-        print('iseq: %s%s' % (str(item), ' [%s]' % msg if msg else ''))
+        print('iseq: %s%s' % (str(o), ' [%s]' % msg if msg else ''))
       else:
         if msg is None:
-          sitem = str(item)
+          sitem = str(o)
           if '\n' in sitem:
             aval = sitem.replace('\n', '\\n')
-            eval = str(expected).replace('\n', '\\n')
+            eval = str(x).replace('\n', '\\n')
             msg = u'"%s" != "%s"' % (eval, aval)
-        self.assertEqual(item, expected, msg)
+        self.assertEqual(x, o, msg)
     test<py>:
       tc = self._tc
       tc.setUp()
@@ -2163,9 +2164,9 @@ scope:
       tc.raises(AssertionError, tc.iseq, 1, 2)
     scope<js>:
       if (msg == null) {
-        assertEquals(expected, item);
+        assertEquals(x, o);
       } else {
-        assertEquals(msg, expected, item);
+        assertEquals(msg, x, o);
       }
     scope<cc>:
       throw metax::root::Error("TestCase.iseq() not yet implemented");
@@ -2342,35 +2343,37 @@ scope:
     end method iseqvec;
 
     method iseqmap params:
-      var data : any;
-      var expected : any = MISSING_PTR;
+      var o : any;
+      var x : any = MISSING_PTR;
       var msg : any = null;
       var width : int = 30;
       var ignore : vec<str> = null #:
-        The list of keys in data to ignore (expected should NOT contain them)
+        The list of keys in data to ignore (x should NOT contain them)
     scope<py>:
       if ignore:
-        data = copy.copy(data)
+        data = copy.copy(o)
         for key in ignore:
           if isinstance(key, (list, tuple)):
             last = key[-1]
             d = data
             for inner in key[:-1]:
               d = d[inner]
-            d.pop(last)
+            d.pop(last, None)
           else:
-            data.pop(key)
+            data.pop(key, None)
+      else:
+        data = o
 
-      if expected is MISSING_PTR:
+      if x is MISSING_PTR:
         print('iseqmap:')
         pprint.pprint(data)
       else:
-        if expected != data:
+        if x != data:
           print('iseqmap: not equal!')
           pprint.pprint(data)
-          pprint.pprint(expected)
+          pprint.pprint(x)
           fp = io.StringIO()
-          self.recursiveCompare('', data, expected, 0, fp=fp, valwidth=width)
+          self.recursiveCompare('', data, x, 0, fp=fp, valwidth=width)
           self.fail(fp.getvalue())
     test<py>:
       tc = self._tc

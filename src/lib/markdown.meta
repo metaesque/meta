@@ -2,6 +2,24 @@ namespace metax.lib.markdown #:
   Classes related to parsing and converting Wade's Markdown, an extension
   of the official markdown syntax.
 
+  Hierarchy
+    Book
+    Parser
+    Object
+      HR
+      Block
+        Paragraph
+        Quote
+        List
+        Code
+        HTML
+        Table
+        Row
+        Panel
+        BlockGroup
+          ListItem
+          Section
+
   Markdown descriptions:
     Basics:
       https://www.markdownguide.org/basic-syntax/
@@ -121,9 +139,8 @@ scope:
         ('empty', re.compile(r'^\s*$'), False),
         ('html', re.compile(r'^<(?P<tag>[a-zA-Z0-9]+)[ >]'), True),
         ('section', re.compile(r'^(?P<hash>#{1,6})\s*(?P<title>.*)'), True),
-        /# TODO(wmh): When I remove the space from '^> ' in the quote re,
-        /# the 'dnd sh' command hangs. Why?
-        ('quote', re.compile(r'^> '), False),
+        /# CODETANGLE(quote): see cls.Block_quote_re below which must match
+        ('quote', re.compile(r'^>(?: |$)'), False),
         ('code', re.compile(r'^    '), True),
         ('code', re.compile(r'^(?P<code>[`~]{3,})\s*(?P<lang>\S+)?'), True),
         ('table', re.compile(r'^Table:'), True),
@@ -138,18 +155,24 @@ scope:
         ('page', re.compile(r'^\{(?P<page>[ivx0-9]+)\}'), False),
         ('newcol', re.compile(r'^'), False),
         ('comment', re.compile(r'^\s*/\#\s*(?P<comment>.*)'), False),
+        /# ('eof', re.compile(r'^__EOF__$'), False),
       ]
       cls.CATMAP = {trip[0]: trip[1] for trip in cls.CATEGORIES}
 
       /# A line representing a table row.
       cls.Table_row_re = re.compile(r'^\s*\|')
+      /# A line representing a post-table abbrev
+      cls.Table_abbrev_re = re.compile(r'^\s*\=\s*(?P<abbrev>[^=]*[^=\s])\s*=\s*(?P<title>.*\S)')
       /# A line representing a post-table note
-      cls.Table_note_re = re.compile(r'^\+ (?P<abbrev>.*\S)\s*=\s*(?P<title>.*\S)')
+      cls.Table_note_re = re.compile(r'^\s*(?P<mark>[*†]+)\s+(?P<note>.*\S)')
 
       /# When an html block ends.
       cls.Html_end_re = re.compile(r'^</(?P<tag>[a-zA-Z0-9]+)>')
+
       /# When we are in a block quote
-      cls.Block_quote_re = re.compile(r'^> ')
+      /#  - CODETANGLE(quote): see 'quote' in CATEGORIES above, which must match
+      cls.Block_quote_re = re.compile(r'^>(?: |$)')
+
       /# A line representing a panel line
       cls.Panel_re = re.compile(r'^(\s{4,}|$)(.*)')
 
@@ -453,6 +476,8 @@ scope:
       i = start + 1
       while i < n:
         line = lines[i]
+        /# print('%4d: %s' % (i+1, line))
+
         nc = len(line)
         if nc == 0:
           /# Empty line
@@ -485,9 +510,9 @@ scope:
                 /# We need to insert a sham section
                 /#  - we hack this by literally inserting the sham into
                 /#    lines temporarily
-                /#  - we adjusst various fields to match with how the non-jit
+                /#  - we adjust various fields to match with how the non-jit
                 /#    parser sets things up.
-                prev = lines[i-1]
+                orig_prev = lines[i-1]
                 lines[i-1] = ('#' * (depth + 1)) + ' SHAM'
                 child, j, pagenum = self.parseSection(
                   result, lines, i-1, pagenum, empty, book)
@@ -510,7 +535,9 @@ scope:
                 if subs:
                   /# The first child section of 'child' needs its prelines updated.
                   subs[0].prelinesIs(empty)
-                lines[i-1] = prev
+
+                /# Reinstate original previous line
+                lines[i-1] = orig_prev
               else:
                 raise Error(
                   'Not supporting need for %d shams in line %d of %s' %
@@ -556,6 +583,11 @@ scope:
               elif tpkind == 'panel':
                 /# Same logic as above for table.
                 book.panels()[tptitle] = result
+
+            /# elif line == '__EOF__':
+            /#   print('NOTE: Found __EOF__ on line %d' % (i+1))
+            /#   i = n
+            /#   break
         i += 1
 
       if not delayed:
@@ -568,6 +600,8 @@ scope:
 
       return result, i, pagenum
     test:
+      /###
+      /# simple.md
       bookpath = metax.root.Object.Resource(
         'simple_md', fqn='metax.lib.markdown_test.TestCase')
       with open(bookpath, 'r') as ifp:
@@ -592,6 +626,22 @@ scope:
         [child.title() for child in section.children()])
 
       test.iseq('/A Simple Document', section.fqn())
+
+      /###
+      /# eof.md
+      if False:
+        bookpath = os.path.join(__metadir__, 'testdata', 'markdown', 'eof.md')
+        with open(bookpath, 'r') as ifp:
+          lines = ifp.read().split('\n')
+        md = metax.lib.markdown.Parser()
+        book = metax.lib.markdown.Book('Dummy', md, path=bookpath)
+        pagenum = 1
+        prelines = 1
+        start = 0
+        section, next, pagenum = md.parseSection(
+          None, lines, start, pagenum, prelines, book)
+        test.iseq('A Document', section.title())
+        test.iseq(22, next)
     end method parseSection;
 
     method parseLines : Section #:
@@ -717,6 +767,7 @@ scope:
       /# A line representing a table row.
       table_row_re = Parser.Table_row_re
       table_note_re = Parser.Table_note_re
+      table_abbrev_re = Parser.Table_abbrev_re
       /# When an html block ends.
       html_end_re = Parser.Html_end_re
       /# When we are in a block quote
@@ -861,6 +912,10 @@ scope:
           current_lines.append(line)
           i += 1
 
+        /# elif kind == 'eof':
+        /#   print('***** Here line %d EOF' % (i+1))
+        /#   i = N
+
         elif kind == 'empty':
           /# We have an empty line:
           /#  - if we are currently parsing a text block, this ends the block
@@ -910,12 +965,11 @@ scope:
           i = self._advancePosition(
             lines, i, matcher=table_row_re, category='table' if debug else None)
           /# print(lines[i])
-          /# print(table_note_re.match(lines[i]))
-          j = self._advancePosition(
+          /# print(table_abbrev_re.match(lines[i]))
+          i = self._advancePosition(
+            lines, i, matcher=table_abbrev_re, category='table' if debug else None)
+          i = self._advancePosition(
             lines, i, matcher=table_note_re, category='table' if debug else None)
-          if j > i:
-            /# print('here with i=%d j=%d' % (i,j))
-            i = j
 
           /# Create the table
           terrors = []
@@ -3364,6 +3418,9 @@ scope:
     field title : str = null #:
       The title associated with the table
 
+    field xdent : str = '' #:
+      The extra indentation that the row has relative to the title
+
     field csscls : str = null #:
       The CSS class(es) to associate with the table.
 
@@ -3392,6 +3449,12 @@ scope:
       after data rows in lines with format:
         |+ <abbrev> = <title>
 
+    field notes : map #:
+      Provides mark-to-note mappings. Each notes is found immediately
+      after data rows and abbrevs in lines with format:
+        |<mark> <note>
+      where <mark> is any number of '*' or '†'
+
     lifecycle params:
       var parent : Section #:
         The section this text object belongs to.
@@ -3403,6 +3466,8 @@ scope:
       var title -> title = null;
       var csscls -> csscls = null;
       var abbrevs -> abbrevs = null;
+      var notes -> notes = null;
+      var xdent -> xdent = '';
       var uid : str = null #:
         A unique identifier for this table.
     super (parent, prelines=prelines, uid=uid)
@@ -3445,10 +3510,12 @@ scope:
           - optional empty line (required if title line is present)
           - optional column header list
           - required data rows
-          - optional post-table entries starting with '+ ' (no blank line
+          - optional post-table abbrevs starting with '+ ' (no blank line
             between data rows and start of these lines).
+          - optional post-table notes starting with '*' or '†' (no blank line
+            between data rows or abbrev rows and start of these lines).
         See https://help.github.com/articles/organizing-information-with-tables
-        for the basics (the optional title is a wmh add-on).
+        for the basics (the optional title, abbrevs, and notes are wmh add-ons).
       var errors : vec<str> = null #:
         An optional out parameter that parsing errors are written to.
       var parent : *Section = null #:
@@ -3469,22 +3536,21 @@ scope:
       m = None
       spec = None
       tablere = cls.TableRe()
+      i = -1
       for i in range(header_start, min(10, len(lines))):
         m = tablere.match(lines[i])
         if m:
           spec = lines[i]
           break
-      try:
-        data_start = i + 1
-      except UnboundLocalError:
-        print('******** HERE with %s' % lines)
+      data_start = i + 1
 
       if m:
         columns = []
         /# Column delimiters are either '|' or '-+'
         delim_re = Parser.Delim_re
-        row_re = re.compile(r'^\s*\|\s*(?P<inner>.*\S)?\s*\|\s*$')
-        note_re = Parser.Table_note_re
+        row_re = re.compile(r'^(?P<indent>\s*)\|\s*(?P<inner>.*\S)?\s*\|\s*$')
+        table_note_re = Parser.Table_note_re
+        table_abbrev_re = Parser.Table_abbrev_re
         /# TODO(wmh): The ignore string is used to specify which chars to
         /# remove from the front and back of each table row. Having '|'
         /# in this list makes it convenient when splitting so that we don't
@@ -3585,6 +3651,7 @@ scope:
             hi += 1
 
         /# Parse row lines
+        xdent = None
         rows = []
         n = len(lines)
         r = i + 1
@@ -3592,6 +3659,11 @@ scope:
           m = row_re.match(lines[r])
           if not m:
             break
+          dent = m.group('indent')
+          if xdent is None:
+            xdent = dent
+          else:
+            assert dent == xdent, 'Table rows have differing indentation "%s" vs "%s"' % (dent, xdent)
           row = delim_re.split(m.group('inner'))
           assert row
           row[0] = row[0].lstrip()
@@ -3609,9 +3681,17 @@ scope:
         /# Parse post-row abbrev mappings
         abbrevs = {}
         while r < n:
-          m = note_re.match(lines[r])
+          m = table_abbrev_re.match(lines[r])
           if not m: break
           abbrevs[m.group('abbrev')] = m.group('title')
+          r += 1
+
+        /# Parse post-row notes
+        notes = {}
+        while r < n:
+          m = table_note_re.match(lines[r])
+          if not m: break
+          notes[m.group('mark')] = m.group('note')
           r += 1
 
         /# If there are any additional lines, it is an error.
@@ -3619,6 +3699,7 @@ scope:
           errors.append('Unknown post-row line: ' + lines[r])
           r += 1
       else:
+        abbrevs = None
         errors.append('Not a table')
         for line in lines:
           errors.append('  ' + line)
@@ -3627,7 +3708,8 @@ scope:
       result = (
         None if errors
         else cls(
-          parent, columns, rows, title=title, prelines=prelines, abbrevs=abbrevs,
+          parent, columns, rows, title=title, prelines=prelines,
+          abbrevs=abbrevs, notes=notes, xdent=xdent,
           csscls=csscls, uid=tblid))
       return result
     test:
@@ -3683,16 +3765,17 @@ scope:
         lines=[
           'Table: Testing Abbrevs',
           '',
-          '| Date  | A | B | C |',
-          '|-------+---+---+---|',
-          '| Feb 1 | 1 | 2 | 0 |',
-          '| Mar 1 | 3 | 1 | 1 |',
-          '+ A = Apple',
-          '+ B = Banana',
-          '+ C = Cantelope',
+          '  | Date  | A | B | C |',
+          '  |-------+---+---+---|',
+          '  | Feb 1 | 1 | 2 | 0 |',
+          '  | Mar 1 | 3 | 1 | 1 |',
+          '  = A = Apple',
+          '  = B = Banana',
+          '  = C = Cantelope',
+          '  * This is a test',
         ])
-      /# table5.show()
       test.iseq([], errors5)
+      table5.show()
       test.iseq(
         [
           {'Apple': '1', 'Banana': '2', 'Cantelope': '0', 'Date': 'Feb 1'},
@@ -3761,7 +3844,8 @@ scope:
               self.fqn())
           prev_row = rawrows[-1]
           for i in range(1, len(data)):
-            prev_row[i] += ' ' + data[i]
+            if data[i]:
+              prev_row[i] += ' ' + data[i]
         else:
           rawrows.append(data[:])
 
@@ -3970,10 +4054,8 @@ scope:
       var pagenum -> pagenum = 0;
       var linenum -> linenum = 0;
       var delayed -> delayed = null;
-    super (parent, prelines=prelines)
+    super (parent, prelines=prelines, uid=abbrev)
     scope:
-      /# TODO(wmh): Replace abbrev with uid in params and use super to initialize
-      /# TODO(wmh): Remove uid/abbrev entirely?
       self.uidIs(abbrev)
       self.depthIs(0 if not parent else parent.depth() + 1)
     test:
@@ -4405,11 +4487,12 @@ scope:
       /# are: title/abbrev portion of a section header
       are = Parser.Abbrev_re
 
+      /# I have not been using section abbrevs, and this is an expensive method
+      /# so I've optimized abbrev support away. However, as of 2025-03-27 I
+      /# am considering reinstating it.
       assert '[=' not in title, title
       abbrev = None
       if False:
-        /# I have not been using this, and this is an expensive method so I'm
-        /# optimizing abbrev support away.
         am = are.match(title)
         if am:
           abbrev = am.group('abbrev')
@@ -4936,16 +5019,29 @@ scope:
         What to return if the table doesn't exist. If this is False, it is a
         request to raise an exception.
     scope:
-      tables = self.tablesMatching('^' + title + '$')
-      if len(tables) > 1:
-        raise Error('Found %d tables for "%s"' % (len(tables), title))
-      elif not tables:
-        if default is False:
-          raise Error('Failed to find table matching "%s"' % title)
-        else:
-          result = None
+      if True:
+        tables = self.tables()
+        result = tables.get(title, default)
+        if result is False:
+          raise Error('Failed to find table named "%s"' % title)
+        if isinstance(result, Section):
+          /# We need to just-in-time parse the section, which will register
+          /# the table into tables properly.
+          blocks = result.blocks()
+          result = tables[title]
+          assert isinstance(result, Table)
       else:
-        result = tables[0]
+        /# What was I thinking?
+        tables = self.tablesMatching('^' + title + '$')
+        if len(tables) > 1:
+          raise Error('Found %d tables for "%s"' % (len(tables), title))
+        elif not tables:
+          if default is False:
+            raise Error('Failed to find table matching "%s"' % title)
+          else:
+            result = None
+        else:
+          result = tables[0]
       return result
     test:
       test.isinst(test.book.tableNamed('Fruit'), metax.lib.markdown.Table)
@@ -5119,6 +5215,15 @@ scope:
     end receiver Section;
 
   end behavior blobs;
+
+  behavior __repr__ #:
+    Printable representationi of object.
+  scope:
+
+    receiver Section ::
+      return '<Section %s>' % self.fqn()
+
+  end behavior __repr__;
 
   behavior show #:
     Write an object.
@@ -5821,6 +5926,9 @@ scope:
         if title:
           fp.write('%sTable: %s\n\n' % (indent, title))
 
+        xdent = self.xdent()
+        indent += xdent
+
         /# Accumulate all the entries in each column (including header)
         columns = self.columns()
         N = len(columns)
@@ -5985,6 +6093,18 @@ scope:
             fp.write(sepline)
             sepdx += 1
           WriteRow(fp, row.data(), aligns, widths, target_widths, truncate=truncate)
+
+        /# Print any abbrev rows
+        abbrevs = self.abbrevs()
+        for abbrev in sorted(abbrevs):
+          title = abbrevs[abbrev]
+          fp.write('%s= %s = %s\n' % (indent, abbrev, title))
+
+        /# Print any note rows
+        notes = self.notes()
+        for mark in sorted(notes):
+          note = notes[mark]
+          fp.write('%s%s %s\n' % (indent, mark, note))
 
         /# Everything ends with an empty line.
         fp.write('\n')
