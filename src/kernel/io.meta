@@ -35,6 +35,9 @@ scope:
     field fp : ostream #:
       Where to write.
 
+    field fpstack : @vec<ostream> #:
+      A list of streams controlled by push() and pop()
+
     field prefixes : @vec<str> #:
       prefixes[-1] is the indentation that should be added to every line
       written.
@@ -75,6 +78,7 @@ scope:
       var width -> width = 0;
       var extra -> extra = '  ';
     scope:
+      self.fpstack().append(fp)
       self.prefixes().append(indent)
       /# Important to set this to newline so that first line printed uses same
       /# logic as all other lines.
@@ -112,6 +116,58 @@ scope:
       sink2 = sink.clone()
       test.iseq(sink.prefix(), sink2.prefix())
     end method clone;
+
+    method push #:
+      Push an ostream and set fp to it.
+    params:
+      var fp : ostream #:
+        What stream to make live. If null, uses Sink.Null().fp().
+    scope:
+      if fp is None:
+        fp = Sink.Null().fp()
+      self.fpstack().append(fp)
+      self.fpIs(fp)
+    test:
+      fp1 = io.StringIO()
+      fp2 = io.StringIO()
+      fp3 = io.StringIO()
+
+      sink = metax.io.Sink(fp=fp1)
+
+      sink.writeln('testing')
+      with sink.indent():
+        sink.push(fp2)
+        sink.writeln('after first push')
+        with sink.indent():
+          sink.push(fp3)
+          sink.writeln('after second push')
+          sink.pop()
+          sink.writeln('after first pop')
+        sink.pop()
+        sink.writeln('after second pop')
+      sink.writeln('back to normal')
+
+      test.iseq(
+        'testing\n  after second pop\nback to normal\n',
+        fp1.getvalue())
+      test.iseq(
+        '  after first push\n    after first pop\n',
+        fp2.getvalue())
+      test.iseq('    after second push\n', fp3.getvalue())
+    end method push;
+
+    method pop : ostream #:
+      Pop current ostream from stack and replace with new top.
+
+      Returns the stream removed, NOT the now-active one.
+    scope:
+      fp = self.fpstack().pop()
+      assert fp is self.fp()
+      self.fpIs(self.fpstack()[-1])
+      return fp
+    test:
+      /# noop - tested in push()
+    end method pop;
 
     method prefix : str #:
       Returns current indentation prefix.

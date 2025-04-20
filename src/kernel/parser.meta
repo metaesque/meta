@@ -10039,7 +10039,7 @@ scope:
       state, and obtain the commands/flags/args resulting from parsing a
       specific metac command line.
 
-      This is useful to invoke in the setup: blocks of of testcase classes
+      This is useful to invoke in the setup: blocks of testcase classes
       that require interaction with metac.
     params:
       var argv : vec<str> #:
@@ -16385,8 +16385,6 @@ scope:
       flag countinvocations : bool = false #:
         If true, code is inserted into each method to record the number of times
         it is invoked and how long it takes.
-
-
 
       named
       command canonical #:

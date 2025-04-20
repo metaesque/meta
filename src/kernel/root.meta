@@ -106,7 +106,8 @@ scope:
     MethodCount = {}
 
     /# Client code can invoke metax.root.ShowMethodCount() in their code if
-    /# they've compiled some code with --countinvocations
+    /# they've compiled some code with --countinvocations or
+    /# used the metax.root.Timer() context manager.
     import math
     import re
     def ShowMethodCount(threshus=2, ignorere=None):
@@ -184,15 +185,20 @@ scope:
     /# A subsequent invocation of metax.root.ShowMethodCount() will print out
     /# profile details on 'a.b.A.f/block1' and 'a.b.A.f/block1' (times called,
     /# total time spent, average time spent, stddev, etc.)
+
     import time
+
     class Timer(object):
+
       def __init__(self, fqn, label):
         self._label = fqn + '/' + label
         self._ns = 0
-        self._active = True  # MetaObject._CLI.countinstances
+        self._active = True  /# MetaObject._CLI.countinstances
+
       def __enter__(self):
         if self._active:
           self._ns = time.time_ns()
+
       def __exit__(self,type, value, tb):
         if self._active:
           Object.Welford(self._label, time.time_ns() - self._ns)

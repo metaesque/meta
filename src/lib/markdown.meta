@@ -126,6 +126,19 @@ scope:
       var quiet -> quiet = false;
     scope:
     clinit:
+      /# We time the code in each 'kind' below, but only if this code was
+      /# compiled with --countinstances on.
+      cli = metax.root.MetaObject.CLI()
+      if not cli:
+        /# TODO(wmh): Meta should be generating code for this automatically!
+        print(
+          "***** metax.root.MetaObject.CLI() not initialized. Invoke\n"
+          "  metax.c.Compiler.Bootstrap(['metac', 'test']) to support!")
+        dotimes = False
+      else:
+        dotimes = cli.countinstances
+      cls.DoTimes = dotimes
+
       cls.SectionRe = re.compile(r'^(?P<hash>#{1,6})\s*(?P<title>.*)')
 
       cls.ListReIs(re.compile(
@@ -374,7 +387,9 @@ scope:
           prelines += 1
         start += 1
       if lines[start][0] != '#':
-        raise Error('Invalid input (line %d of %s): %s' % (start, book.name(), lines[start]))
+        raise Error(
+          'Invalid input (line %d of %s): %s' %
+          (start, book.name(), lines[start]))
 
       while start < n:
         child, start, pagenum = self.parseSection(
@@ -461,6 +476,7 @@ scope:
         linenum=start+1,
         /# This is initialized below!
         delayed=None)
+      /# print('%5d: %s' % (result.linenum(), result.title()))
 
       /# We mark the blocks field as null instead of the empty list, so that we
       /# can tell when a Section has been created via Parser.parseSection (not
@@ -775,6 +791,8 @@ scope:
       /# A line representing a panel line
       panel_re = Parser.Panel_re
 
+      dotimes = Parser.DoTimes
+
       /# This is a debug-only function and all calls to it have been commented
       /# out in the interests of efficiency. Delete?
       def Record(pos, msg):
@@ -881,18 +899,6 @@ scope:
               kind = nm
               break
 
-        /# We time the code in each 'kind' below, but only of this code was
-        /# compiled with --countinstances on.
-        cli = metax.root.MetaObject.CLI()
-        if not cli:
-          /# TODO(wmh): Meta should be generating code for this automatically!
-          print(
-            "***** metax.root.MetaObject.CLI() not initialized. Invoke\n"
-            "  metax.c.Compiler.Bootstrap(['metac', 'test'])"
-            "to support!")
-          dotimes = False
-        else:
-          dotimes = cli.countinstances
         if dotimes:
           _s = time.time_ns()
 
@@ -1039,7 +1045,7 @@ scope:
           /#    an error to specify a section.
           /#
           /# Note that if we are invoking Parser.parseLines() from within
-          /# Section.jitBlocks(), this should never be encountered (we only
+          /# Section.blocks(), this should never be encountered (we only
           /# parse text within a section in that method).
 
           /# Record(i, 'section start')
@@ -1684,15 +1690,18 @@ scope:
         If present, specifies how section titles should be massaged. See
         Parser.parseLines() for details.
     scope:
-      book = Book(bookname, self)
+      book = Book(bookname, self, path=[])
       root = book.root()
 
       /# metax.lib.markdown.Section(None, title=bookname, parser=self)
       for path in paths:
         if os.path.exists(path):
           section = self.parseFile(path, root, titlere=titlere)
+          book.path().append(path)
         else:
           print('WARNING: Path %s does not exist' % path)
+      if len(book.path()) == 1:
+        book.pathIs(book.path()[0])
       return book
     test:
       /# NOTE: test.parseBook() invokes test.md.loadBook()
@@ -2174,11 +2183,18 @@ scope:
     field uid : str #:
       A unique identifier for this block.
 
+    field linenum : int #:
+      The line within the source file at which this block is defined.
+      Starts at 1 (not 0!). A value of 0 means uninitialized.
+      Note that this was primarily used for Section instances, and was
+      initially defined there, but as of 2025-04-05 it was moved here.
+
     lifecycle params:
       var parent -> parent;
       var prelines : int = 0 #:
         The number of empty lines found before this block started.
       var uid -> uid = null;
+      var linenum -> linenum = 0;
     super (prelines=prelines)
     scope:
     end lifecycle;
@@ -2210,10 +2226,11 @@ scope:
       if uid:
         result += uid
       else:
-        result += self.title()
+        result += self.title() or ''
       return result
     test:
-      test.iseq('/Section 1/SubSection A', test.subsection.fqn())
+      test.iseq('//Section 1', test.section.fqn())
+      test.iseq('//Section 1/suba', test.subsection.fqn())
     end method fqn;
 
     method isBlock : bool #:
@@ -2289,7 +2306,8 @@ scope:
         The number of empty lines found before this block started.
       var uid : str = null #:
         A unique identifier for this BlockGroup
-    super (parent, prelines=prelines, uid=uid)
+      var linenum : int = 0;
+    super (parent, prelines=prelines, uid=uid, linenum=linenum)
     scope:
     setup:
       group = metax.lib.markdown.BlockGroup(test.subsection)
@@ -3775,7 +3793,7 @@ scope:
           '  * This is a test',
         ])
       test.iseq([], errors5)
-      table5.show()
+      /# table5.show()
       test.iseq(
         [
           {'Apple': '1', 'Banana': '2', 'Cantelope': '0', 'Date': 'Feb 1'},
@@ -4014,10 +4032,6 @@ scope:
     field pagenum : int #:
       The page number that this section starts on
 
-    field linenum : int #:
-      The line within the source file at which this section is defined.
-      Starts at 1 (not 0!). A value of 0 means uninitialized.
-
     field tables : map #:
       Maps table titles to Table instances in this section.
     scope:
@@ -4052,9 +4066,9 @@ scope:
       var prelines : int = 1 #:
         The number of empty lines found before this block started.
       var pagenum -> pagenum = 0;
-      var linenum -> linenum = 0;
+      var linenum : int = 0;
       var delayed -> delayed = null;
-    super (parent, prelines=prelines, uid=abbrev)
+    super (parent, prelines=prelines, uid=abbrev, linenum=linenum)
     scope:
       self.uidIs(abbrev)
       self.depthIs(0 if not parent else parent.depth() + 1)
@@ -4077,7 +4091,7 @@ scope:
         if not self.delayed():
           raise Error('blocks() and delayed() should not both be null!')
         blocks = []
-        self.blocksIs(blocks)  # parseLines expects blocks to be initialized!
+        self.blocksIs(blocks)  /# parseLines expects blocks to be initialized!
         parser = self.parser()
         lines, start, end = self.delayed()
         /# We expect both lines[start] and lines[end] to represent sections
@@ -6600,7 +6614,7 @@ scope:
         tables = self.tables()
         for table in tables.values():
           section = table.parent()
-          sink.writeln('%-40s in %s' % (table.title(), section.fulltitle()))
+          fp.write('%-40s in %s\n' % (table.title(), section.fulltitle()))
       else:
         self.root().show(
           fp=fp, indent=indent, aspect=aspect, subaspect=subaspect, parser=parser, depth=depth,
