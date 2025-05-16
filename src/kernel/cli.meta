@@ -512,7 +512,7 @@ scope:
         count = 0
         for flagname in sorted(parts):
           part = parts[flagname]
-          if part.name() != flagname: continue   # skip aliases
+          if part.name() != flagname: continue    /# skip aliases
           if part.isFlag():
             part.show(fp=fp, indent=subindent, mode=mode)
             count += 1

@@ -131,9 +131,10 @@ scope:
       cli = metax.root.MetaObject.CLI()
       if not cli:
         /# TODO(wmh): Meta should be generating code for this automatically!
-        print(
-          "***** metax.root.MetaObject.CLI() not initialized. Invoke\n"
-          "  metax.c.Compiler.Bootstrap(['metac', 'test']) to support!")
+        if False:
+          print(
+            "***** metax.root.MetaObject.CLI() not initialized. Invoke\n"
+            "  metax.c.Compiler.Bootstrap(['metac', 'test']) to support!")
         dotimes = False
       else:
         dotimes = cli.countinstances

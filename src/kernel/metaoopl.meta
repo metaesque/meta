@@ -7370,7 +7370,7 @@ namespace metax.oopl scope:
       /#
       /# 2. A method with name metax.c.METAX_ENTRY_NAME (aka 'MetaxEntry')
       /#    that accepts a collection of strings representing command-line
-      /#    arguments and identifiers a fully instantiated metax.cli.Command
+      /#    arguments and identifies a fully instantiated metax.cli.Command
       /#    instance (within the metax.cli.Command instance returned by
       /#    'MetaxCLI') based on those args. This method also invokes the
       /#    code in the 'scope:' portion of the identified 'command'.
