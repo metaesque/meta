@@ -9,6 +9,9 @@ import subprocess
 import sys
 import tempfile
 
+class Error(Exception):
+  pass
+
 
 def ValidPath(path):
   # Expand env.vars.
@@ -35,7 +38,7 @@ VARS = collections.OrderedDict([
       'Which version of the Meta source code to use.  This can be one of\n'
       "'beta', 'current', 'stable', or an explicit version like v0.7.5.59"),
     'default': 'current',
-    'type': lambda s: bool(re.match('^(beta|current|stable|v[\d+.]+)$', s)),
+    'type': lambda s: bool(re.match(r'^(beta|current|stable|v[\d+.]+)$', s)),
   }),
   ('src_root', {
     'desc': 'The path of where Meta has been installed on this computer.',
@@ -157,6 +160,10 @@ def CreateConfig(src_root, bazel_path):
 
 def InstallBazel():
   # Establish the latest version of bazel.
+
+  # OVERRIDE 2026-02-27
+  # brew install bazel
+  return '/opt/homebrew/bin/bazel'
 
   # Where the bazel executable should be installed
   print('Please specify the path within which to install bazel. You can use')
@@ -294,17 +301,24 @@ def ExtractCode(src_root):
   if os.path.exists(cdir):
     print('TRUE: %s exists' % cdir)
   else:
-    # We require link to start with 'v' and end with '.00'
-    assert link.startswith('v') and link.endswith('.00'), 'link=%s (%s)' % (link, cdir)
-    # Obtain the .tgz file (strip off .00)
-    tgzpath = cdir[:-3] + '.tgz'
+    if False:
+      # We require link to start with 'v' and end with '.00'
+      assert link.startswith('v') and link.endswith('.00'), 'link=%s (%s)' % (link, cdir)
+      # Obtain the .tgz file (strip off .00)
+      tgzpath = cdir[:-3] + '.tgz'
+    else:
+      assert re.match(r'^v0\.7\.\d+$', link), 'link=%s (%s)' % (link, cdir)
+      tgzpath = cdir + '.tgz'
+
+    print('NOTE: Here with src_root=%s link=%s tgzpath=%s' % (src_root, link, tgzpath))
     if not os.path.exists(tgzpath):
       raise Error('ERROR: Failed to find %s' % tgzpath)
     # Extract the tar file
     print('NOTE: Extracting %s into %s' % (tgzpath, vdir))
     cmd = 'tar xzf %s' % tgzpath
     print('CMD: %s' % cmd)
-    subprocess.check_output(cmd, cwd=vdir, shell=True)
+    r = subprocess.run(cmd, cwd=vdir, shell=True)
+
     basedir = tgzpath.replace('.tgz', '')
     assert os.path.exists(basedir), basedir
     basedir_00 = basedir + '.00'

@@ -14397,7 +14397,7 @@ scope:
         'py': 'defn',
         'py.map': 'map',
         'bld': 'bld',
-        'log': 'log',  /# added 2023-12-22 with little remembrance of creating this code (may be incorrect)
+        'log': 'log',  # added 2023-12-22 with little remembrance of creating this code (may be incorrect)
       }
       /# TODO(wmh): The following should be baselang-specific too.
       /# Be careful with how many things are ignored ... we want the repo

@@ -194,8 +194,8 @@ scope:
           onesec = datetime.timedelta(seconds=1)
           kind = m.group('kind')
           sign = m.group('sign') or ''
-          unit = m.group('unit')  /# This may be null, in which case defunit is used
-          defunit = None  /# initialized below
+          unit = m.group('unit')  # This may be null, in which case defunit is used
+          defunit = None  # initialized below
 
           adj = int(m.group('adj') or 0)
           if sign == '-':
@@ -512,7 +512,7 @@ scope:
         count = 0
         for flagname in sorted(parts):
           part = parts[flagname]
-          if part.name() != flagname: continue    /# skip aliases
+          if part.name() != flagname: continue    # skip aliases
           if part.isFlag():
             part.show(fp=fp, indent=subindent, mode=mode)
             count += 1
